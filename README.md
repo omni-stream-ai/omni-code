@@ -6,23 +6,23 @@ Flutter client for Omni Code. This repository now contains only the client app.
 The desktop bridge lives in a separate repository:
 `https://github.com/omni-stream-ai/omni-code-desktop-bridge`.
 
-Omni Code Client is a mobile companion for desktop agent sessions. It connects
+Omni Code Client is a cross-platform client for desktop agent sessions. It connects
 to the bridge over HTTP and SSE so you can manage projects, open sessions, send
-messages, receive reply notifications, and handle approval prompts from your
-phone.
+messages, receive reply notifications, and handle approval prompts across
+mobile and desktop devices.
 
 ## Who It's For
 
 - Developers running Codex or similar command-line agent workflows on a desktop machine.
 - Users who want to review or approve sensitive agent actions without staying at their desk.
 - Teams or individuals who prefer a self-hosted bridge they can point to their own machine or LAN.
-- Users who want voice input, speech playback, and mobile push notifications around coding sessions.
+- Users who want a cross-platform client with voice input, speech playback, and notifications around coding sessions.
 
 ## Why Use It
 
-- Mobile control for desktop sessions: check project state, continue a session, or start a new one from your phone.
-- Approval workflow on mobile: sensitive bridge requests can fall back to explicit phone approval instead of silently executing.
-- Practical mobile ergonomics: push notifications, speech-to-text, and text-to-speech reduce the need to sit in front of the terminal.
+- Cross-platform access to desktop sessions: check project state, continue a session, or start a new one from mobile or desktop clients.
+- Practical approval flow: sensitive bridge requests can fall back to explicit approval instead of silently executing.
+- Better day-to-day ergonomics: notifications, speech-to-text, and text-to-speech reduce the need to stay in front of the terminal.
 - Bridge-based architecture: bridge URL, token, and client ID are configurable, so the client is not tied to a single hosted backend.
 - Simple Android distribution: the app checks an official GitHub release manifest by default and can also use a bridge-served manifest for self-hosted updates.
 
