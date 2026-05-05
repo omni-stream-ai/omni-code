@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - pubspec.yaml
+      - .github/workflows/release.yml
 
 permissions:
   contents: write
@@ -17,7 +18,9 @@ jobs:
       should_build: ${{ steps.version.outputs.should_build }}
       should_release: ${{ steps.version.outputs.should_release }}
       tag: ${{ steps.version.outputs.tag }}
+      previous_tag: ${{ steps.version.outputs.previous_tag }}
       version_name: ${{ steps.version.outputs.version_name }}
+      version_code: ${{ steps.version.outputs.version_code }}
       prerelease: ${{ steps.version.outputs.prerelease }}
       stable: ${{ steps.version.outputs.stable }}
       branch_name: ${{ steps.version.outputs.branch_name }}
@@ -35,8 +38,13 @@ jobs:
 
           current_version="$(awk -F': ' '/^version: /{print $2}' pubspec.yaml | tr -d '[:space:]')"
           current_name="${current_version%%+*}"
+          current_code="${current_version##*+}"
           previous_version=""
           previous_name=""
+          previous_tag=""
+          workflow_changed="false"
+          version_changed="false"
+          tag_exists="false"
           should_build="false"
           should_release="false"
           prerelease="false"
@@ -55,8 +63,29 @@ jobs:
               previous_version="$(git show "${before_sha}:pubspec.yaml" | awk -F': ' '/^version: /{print $2}' | tr -d '[:space:]')"
               previous_name="${previous_version%%+*}"
             fi
+            if [[ "$before_sha" != "0000000000000000000000000000000000000000" ]]; then
+              if ! git diff --quiet "${before_sha}" "${GITHUB_SHA}" -- .github/workflows/release.yml; then
+                workflow_changed="true"
+              fi
+            else
+              if git show --pretty='' --name-only "${GITHUB_SHA}" -- .github/workflows/release.yml | grep -q .; then
+                workflow_changed="true"
+              fi
+            fi
 
             if [[ -n "$current_name" && "$current_name" != "$previous_name" ]]; then
+              version_changed="true"
+            fi
+
+            if [[ "$version_changed" == "true" || "$workflow_changed" == "true" ]]; then
+              git fetch --tags --force
+              previous_tag="$(git tag --sort=-version:refname | grep -Fxv "${tag_name}" | head -n1 || true)"
+              if git rev-parse -q --verify "refs/tags/${tag_name}" >/dev/null; then
+                tag_exists="true"
+              fi
+            fi
+
+            if [[ "$version_changed" == "true" ]]; then
               should_build="true"
               should_release="true"
 
@@ -76,11 +105,31 @@ jobs:
                 exit 1
               fi
 
-              git fetch --tags --force
-              if git rev-parse -q --verify "refs/tags/${tag_name}" >/dev/null; then
+              if [[ "$tag_exists" == "true" ]]; then
                 tagged_commit="$(git rev-list -n 1 "${tag_name}")"
                 if [[ "$tagged_commit" != "${GITHUB_SHA}" ]]; then
                   echo "Tag ${tag_name} already exists on ${tagged_commit}, expected ${GITHUB_SHA}." >&2
+                  exit 1
+                fi
+              fi
+            elif [[ "$workflow_changed" == "true" ]]; then
+              should_build="true"
+              if [[ "$tag_exists" != "true" ]]; then
+                should_release="true"
+
+                if [[ "$current_name" == *-* ]]; then
+                  prerelease="true"
+                else
+                  stable="true"
+                fi
+
+                if [[ "$is_primary_branch" == "true" && "$prerelease" == "true" ]]; then
+                  echo "${branch_name} cannot publish prerelease versions: ${current_name}" >&2
+                  exit 1
+                fi
+
+                if [[ "$is_primary_branch" != "true" && "$stable" == "true" ]]; then
+                  echo "${branch_name} must use a prerelease version suffix (for example 0.1.0-beta.1): ${current_name}" >&2
                   exit 1
                 fi
               fi
@@ -88,13 +137,17 @@ jobs:
           else
             should_build="true"
             should_release="false"
+            git fetch --tags --force
+            previous_tag="$(git tag --sort=-version:refname | grep -Fxv "${tag_name}" | head -n1 || true)"
           fi
 
           {
             echo "branch_name=${branch_name}"
             echo "version_name=${current_name}"
+            echo "version_code=${current_code}"
             echo "previous_name=${previous_name}"
             echo "tag=${tag_name}"
+            echo "previous_tag=${previous_tag}"
             echo "should_build=${should_build}"
             echo "should_release=${should_release}"
             echo "prerelease=${prerelease}"
@@ -212,11 +265,55 @@ jobs:
           path: release-assets
           merge-multiple: false
 
+      - name: Normalize APK asset name
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          apk_path="$(find release-assets -name 'app-release.apk' -print -quit)"
+          if [[ -z "$apk_path" ]]; then
+            echo "Release APK not found." >&2
+            exit 1
+          fi
+          cp "$apk_path" release-assets/app-release.apk
+
+      - name: Generate update manifest
+        env:
+          TAG: ${{ needs.detect-version-bump.outputs.tag }}
+          VERSION_NAME: ${{ needs.detect-version-bump.outputs.version_name }}
+          VERSION_CODE: ${{ needs.detect-version-bump.outputs.version_code }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > release-assets/update.json <<EOF
+          {
+            "version_name": "${VERSION_NAME}",
+            "version_code": ${VERSION_CODE},
+            "apk_url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/app-release.apk",
+            "release_notes": "GitHub release ${TAG}",
+            "force": false
+          }
+          EOF
+
+      - name: Build release notes
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v5
+        with:
+          configuration: .github/release-changelog-config.json
+          mode: COMMIT
+          toTag: ${{ needs.detect-version-bump.outputs.tag }}
+          fromTag: ${{ needs.detect-version-bump.outputs.previous_tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.detect-version-bump.outputs.tag }}
           name: ${{ needs.detect-version-bump.outputs.tag }}
+          body: ${{ steps.changelog.outputs.changelog }}
           prerelease: ${{ needs.detect-version-bump.outputs.prerelease }}
           files: |
-            release-assets/**/app-release.apk
+            release-assets/app-release.apk
+            release-assets/update.json

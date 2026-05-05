@@ -555,11 +555,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (configured.isNotEmpty) {
       return configured;
     }
-    final bridgeUri = Uri.tryParse(_bridgeUrlController.text.trim());
-    if (bridgeUri == null) {
-      return '';
-    }
-    return bridgeUri.resolve('/app-update/manifest').toString();
+    return appSettingsController.settings.updateManifestUrl.trim();
   }
 
   Future<void> _showUpdateDialog(AppUpdateCheckResult result) async {

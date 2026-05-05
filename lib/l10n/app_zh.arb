@@ -16,7 +16,7 @@
   "updateManifestUrlLabel": "更新清单 URL",
   "checkingUpdate": "检查中...",
   "checkAppUpdate": "检查 App 更新",
-  "updateHelp": "留空时默认请求当前 Bridge 的 /app-update/manifest。发现新版本后会打开下载链接，由系统完成安装。",
+  "updateHelp": "默认从官方 GitHub Release 的更新清单检查新版本。你也可以手动填写自定义清单 URL，包括自托管 Bridge 的 manifest。发现新版本后会打开下载链接，由系统完成安装。",
   "speechSection": "语音服务",
   "ttsProviderLabel": "TTS Provider",
   "asrProviderLabel": "ASR Provider",

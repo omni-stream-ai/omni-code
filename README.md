@@ -3,8 +3,28 @@
 [中文文档](README.zh-CN.md)
 
 Flutter client for Omni Code. This repository now contains only the client app.
-The desktop bridge lives in the sibling repository directory
-`../omni-code-desktop-bridge`.
+The desktop bridge lives in a separate repository:
+`https://github.com/omni-stream-ai/omni-code-desktop-bridge`.
+
+Omni Code Client is a mobile companion for desktop agent sessions. It connects
+to the bridge over HTTP and SSE so you can manage projects, open sessions, send
+messages, receive reply notifications, and handle approval prompts from your
+phone.
+
+## Who It's For
+
+- Developers running Codex or similar command-line agent workflows on a desktop machine.
+- Users who want to review or approve sensitive agent actions without staying at their desk.
+- Teams or individuals who prefer a self-hosted bridge they can point to their own machine or LAN.
+- Users who want voice input, speech playback, and mobile push notifications around coding sessions.
+
+## Why Use It
+
+- Mobile control for desktop sessions: check project state, continue a session, or start a new one from your phone.
+- Approval workflow on mobile: sensitive bridge requests can fall back to explicit phone approval instead of silently executing.
+- Practical mobile ergonomics: push notifications, speech-to-text, and text-to-speech reduce the need to sit in front of the terminal.
+- Bridge-based architecture: bridge URL, token, and client ID are configurable, so the client is not tied to a single hosted backend.
+- Simple Android distribution: the app checks an official GitHub release manifest by default and can also use a bridge-served manifest for self-hosted updates.
 
 ## Requirements
 
@@ -31,10 +51,11 @@ The client talks to the desktop bridge over HTTP and SSE. By default it uses
 the current bridge URL configured in settings or via
 `ECHO_MATE_BRIDGE_URL`.
 
-If you are running the bridge from the sibling repository:
+If you are running the bridge from the bridge repository:
 
 ```bash
-cd ../omni-code-desktop-bridge
+git clone https://github.com/omni-stream-ai/omni-code-desktop-bridge.git
+cd omni-code-desktop-bridge
 cp .env.example .env
 cargo run
 ```
@@ -44,7 +65,7 @@ If your bridge `.env` sets `ECHO_MATE_BRIDGE_TOKEN` or
 
 1. Open the client app and go to Settings.
 2. Copy the generated `Client ID`.
-3. Put it in `../omni-code-desktop-bridge/.env`.
+3. Put it in `omni-code-desktop-bridge/.env`.
 4. Put the `.env` value from `ECHO_MATE_BRIDGE_TOKEN` into the app's
    `Bridge Token` field.
 5. Restart the desktop bridge, then save the app settings.
@@ -73,12 +94,16 @@ flutter analyze
 
 This repository includes a client release workflow:
 
-- `.github/workflows/build.yml`
+- `.github/workflows/release.yml`
 - Workflow name: `Release Client`
-- Trigger: `workflow_dispatch` or pushes that change `pubspec.yaml`
-- Output: Android APK GitHub Release assets
+- Trigger: `workflow_dispatch` or pushes that change `pubspec.yaml` or `.github/workflows/release.yml`
+- Output: Android APK plus `update.json` GitHub Release assets
+- Release notes: generated from Conventional Commit messages since the previous tag
 - `main` can publish stable versions only
 - Other branches must use prerelease versions such as `0.1.0-beta.1`
+
+If `.github/workflows/release.yml` changes and the current app version tag does
+not exist yet, the workflow will still publish that version's release.
 
 The release APK currently falls back to the Android debug signing config when
 no local signing files are present. Configure signing secrets before

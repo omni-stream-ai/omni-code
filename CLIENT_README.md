@@ -22,18 +22,24 @@ Notes:
 
 ## App Update Check
 
-The client app can check an update manifest in Settings → App Update. If the
-manifest URL is empty, the app requests the current bridge at
-`/app-update/manifest`. When `version_code` is greater than the installed build
-number, the app downloads the APK in-app, shows progress, and then opens
-Android's installer.
+The client app checks updates from the official GitHub release manifest by
+default:
+
+`https://github.com/omni-stream-ai/omni-code/releases/latest/download/update.json`
+
+When `version_code` is greater than the installed build number, the app
+downloads the APK in-app, shows progress, and then opens Android's installer.
+
+If needed, you can override the manifest URL in Settings → App Update and point
+it to a self-hosted manifest, including the bridge endpoints below.
 
 The bridge serves the newest APK it can find under the local Flutter build
 outputs, for example:
 
 ```bash
 flutter build apk
-cd ../omni-code-desktop-bridge
+git clone https://github.com/omni-stream-ai/omni-code-desktop-bridge.git
+cd omni-code-desktop-bridge
 cargo run
 ```
 

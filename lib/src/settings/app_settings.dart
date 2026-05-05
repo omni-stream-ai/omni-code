@@ -5,6 +5,9 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+const _defaultUpdateManifestUrl =
+    'https://github.com/omni-stream-ai/omni-code/releases/latest/download/update.json';
+
 enum TtsProvider { bridge, zhipu }
 
 enum AsrProvider { bridge, zhipu, whisper }
@@ -53,6 +56,7 @@ class AppSettings {
     const configuredUrl = String.fromEnvironment('ECHO_MATE_BRIDGE_URL');
     const updateManifestUrl = String.fromEnvironment(
       'ECHO_MATE_UPDATE_MANIFEST_URL',
+      defaultValue: _defaultUpdateManifestUrl,
     );
     return AppSettings(
       bridgeUrl:
@@ -65,7 +69,9 @@ class AppSettings {
       zhipuApiKey: '',
       whisperApiKey: '',
       whisperBaseUrl: 'https://api.openai.com/v1',
-      updateManifestUrl: updateManifestUrl,
+      updateManifestUrl: updateManifestUrl.trim().isNotEmpty
+          ? updateManifestUrl.trim()
+          : _defaultUpdateManifestUrl,
       aiApprovalEnabled: false,
       aiApprovalBaseUrl: 'https://api.openai.com/v1',
       aiApprovalApiKey: '',
@@ -161,7 +167,9 @@ class AppSettings {
       whisperBaseUrl:
           _readString(json, 'whisper_base_url', defaults.whisperBaseUrl),
       updateManifestUrl:
-          _readString(json, 'update_manifest_url', defaults.updateManifestUrl),
+          _readString(json, 'update_manifest_url').trim().isNotEmpty
+          ? _readString(json, 'update_manifest_url').trim()
+          : defaults.updateManifestUrl,
       aiApprovalEnabled:
           _readBool(json, 'ai_approval_enabled', defaults.aiApprovalEnabled),
       aiApprovalBaseUrl: _readString(
@@ -284,7 +292,9 @@ class AppSettingsController extends ChangeNotifier {
         if (json['compress_assistant_replies'] == null) {
           shouldPersist = true;
         }
-        if (json['update_manifest_url'] == null) {
+        final updateManifestUrl =
+            (json['update_manifest_url'] as String?)?.trim() ?? '';
+        if (json['update_manifest_url'] == null || updateManifestUrl.isEmpty) {
           shouldPersist = true;
         }
         if (json['ai_approval_enabled'] == null) {

@@ -13,7 +13,11 @@ Flutter client:
 ```bash
 flutter pub get
 flutter analyze
+sh scripts/setup-git-hooks.sh
 ```
+
+Run `sh scripts/setup-git-hooks.sh` once after cloning to enable the local
+`commit-msg` hook.
 
 ## Pull Requests
 
@@ -23,6 +27,16 @@ Before opening a PR:
 - Update documentation when setup, configuration, or user-visible behavior changes.
 - Do not commit local secrets, signing files, Firebase credentials, build outputs, or IDE state.
 - Include manual verification notes for client flows, push notification changes, or approval behavior.
+
+## Commit Messages
+
+This repo validates commit messages with a shell-based `commit-msg` hook.
+Use Conventional Commits. GitHub release notes are generated from these commit
+messages:
+
+- `feat: add mobile approval flow`
+- `fix(android): guard missing bridge token`
+- `docs: update bridge setup`
 
 ## Security-Sensitive Changes
 

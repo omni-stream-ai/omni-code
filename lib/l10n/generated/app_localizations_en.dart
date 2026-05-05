@@ -59,7 +59,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get updateHelp =>
-      'If empty, /app-update/manifest from the current Bridge is used. When a new version is found, the system opens the download link and handles installation.';
+      'By default, updates are checked from the official GitHub release manifest. You can override it with a custom manifest URL, including a self-hosted Bridge manifest. When a new version is found, the system opens the download link and handles installation.';
 
   @override
   String get speechSection => 'Speech';

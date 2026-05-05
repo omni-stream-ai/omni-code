@@ -59,7 +59,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get updateHelp =>
-      '留空时默认请求当前 Bridge 的 /app-update/manifest。发现新版本后会打开下载链接，由系统完成安装。';
+      '默认从官方 GitHub Release 的更新清单检查新版本。你也可以手动填写自定义清单 URL，包括自托管 Bridge 的 manifest。发现新版本后会打开下载链接，由系统完成安装。';
 
   @override
   String get speechSection => '语音服务';

@@ -1,7 +1,26 @@
 # Omni Code Client
 
-Flutter 客户端仓库。现在这个仓库只包含客户端代码，桌面 bridge 已拆到同级目录
-`../omni-code-desktop-bridge`。
+Flutter 客户端仓库。现在这个仓库只包含客户端代码，桌面 bridge 已拆到独立仓库：
+`https://github.com/omni-stream-ai/omni-code-desktop-bridge`。
+
+Omni Code Client 是桌面 agent 会话的移动端配套客户端。它通过 HTTP 和 SSE
+连接 bridge，让你可以在手机上管理项目、打开会话、发送消息、接收回复通知，
+以及处理需要人工确认的审批请求。
+
+## 适合谁
+
+- 在桌面上运行 Codex 或类似命令行 agent 工作流的开发者。
+- 不想一直守在电脑前，但又需要审核敏感操作的用户。
+- 希望把 bridge 部署在自己电脑或局域网内、自己掌控访问方式的个人或团队。
+- 需要语音输入、语音播报、移动端推送通知来配合编码会话的用户。
+
+## 这个客户端的优势
+
+- 把桌面会话带到手机上：可以查看项目状态、继续已有会话，或新开会话。
+- 审批链路更实用：bridge 遇到敏感请求时，可以回退到手机人工确认，而不是直接执行。
+- 更适合移动端使用：推送通知、语音转文字、文字转语音，减少必须守着终端的时间。
+- Bridge 架构更可控：bridge URL、token、client ID 都可配置，不绑定单一托管后端。
+- Android 分发简单：客户端默认检查官方 GitHub Release 更新清单，也可以改成 bridge 提供的自托管更新清单。
 
 ## 环境要求
 
@@ -26,10 +45,11 @@ flutter run --dart-define=ECHO_MATE_BRIDGE_URL=http://127.0.0.1:8787
 客户端通过 HTTP 和 SSE 访问桌面 bridge，地址可以在设置页里填写，也可以通过
 `ECHO_MATE_BRIDGE_URL` 传入。
 
-如果你使用同级目录里的 bridge 仓库：
+如果你使用独立 bridge 仓库：
 
 ```bash
-cd ../omni-code-desktop-bridge
+git clone https://github.com/omni-stream-ai/omni-code-desktop-bridge.git
+cd omni-code-desktop-bridge
 cp .env.example .env
 cargo run
 ```
@@ -39,7 +59,7 @@ cargo run
 
 1. 打开客户端设置页。
 2. 复制自动生成的 `Client ID`。
-3. 写入 `../omni-code-desktop-bridge/.env`。
+3. 写入 `omni-code-desktop-bridge/.env`。
 4. 把 `.env` 里的 `ECHO_MATE_BRIDGE_TOKEN` 填到客户端的 `Bridge Token`。
 5. 重启 bridge，然后在客户端保存设置。
 
@@ -67,12 +87,16 @@ flutter analyze
 
 当前仓库包含一个客户端发布 workflow：
 
-- `.github/workflows/build.yml`
+- `.github/workflows/release.yml`
 - Workflow 名称：`Release Client`
-- 触发方式：手动 `workflow_dispatch`，或 `pubspec.yaml` 发生变更
-- 产物：Android APK GitHub Release
+- 触发方式：手动 `workflow_dispatch`，或 `pubspec.yaml` / `.github/workflows/release.yml` 发生变更
+- 产物：Android APK 和 `update.json` GitHub Release
+- Release notes：基于上一个 tag 之后的 Conventional Commit 提交消息生成
 - `main` 只允许 stable 版本
 - 其他分支必须使用 prerelease 版本号，例如 `0.1.0-beta.1`
+
+如果 `.github/workflows/release.yml` 发生变更，且当前 app 版本对应的 tag
+还不存在，workflow 仍会发布这个版本的 release。
 
 当前 release APK 在没有本地签名文件时会回退到 Android debug signing
 config。真正分发给用户前，需要先配置 release signing secrets。
