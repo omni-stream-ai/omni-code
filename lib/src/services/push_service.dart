@@ -19,7 +19,12 @@ class PushService {
   final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
   bool _backgroundHandlerRegistered = false;
 
+  bool get _isSupportedPlatform => Platform.isAndroid || Platform.isIOS;
+
   Future<void> initialize() async {
+    if (!_isSupportedPlatform) {
+      return;
+    }
     try {
       if (Firebase.apps.isEmpty) {
         await Firebase.initializeApp();

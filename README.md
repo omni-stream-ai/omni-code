@@ -97,7 +97,7 @@ This repository includes a client release workflow:
 - `.github/workflows/release.yml`
 - Workflow name: `Release Client`
 - Trigger: `workflow_dispatch` or pushes that change `pubspec.yaml` or `.github/workflows/release.yml`
-- Output: release Android APK plus `update.json` GitHub Release assets
+- Output: release Android APK, Windows zip, Linux tar.gz, plus `update.json` GitHub Release assets
 - Release notes: generated from Conventional Commit messages since the previous tag
 - `main` can publish stable versions only
 - Other branches must use prerelease versions such as `0.1.0-beta.1`
