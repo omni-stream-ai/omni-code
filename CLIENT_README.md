@@ -38,8 +38,8 @@ outputs, for example:
 
 ```bash
 flutter build apk
-git clone https://github.com/omni-stream-ai/omni-code-desktop-bridge.git
-cd omni-code-desktop-bridge
+git clone https://github.com/omni-stream-ai/omni-code-bridge.git
+cd omni-code-bridge
 cargo run
 ```
 

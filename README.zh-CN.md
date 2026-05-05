@@ -1,7 +1,7 @@
 # Omni Code Client
 
 Flutter 客户端仓库。现在这个仓库只包含客户端代码，桌面 bridge 已拆到独立仓库：
-`https://github.com/omni-stream-ai/omni-code-desktop-bridge`。
+`https://github.com/omni-stream-ai/omni-code-bridge`。
 
 Omni Code Client 是桌面 agent 会话的跨平台客户端。它通过 HTTP 和 SSE
 连接 bridge，让你可以在移动端和桌面端管理项目、打开会话、发送消息、接收
@@ -48,8 +48,8 @@ flutter run --dart-define=ECHO_MATE_BRIDGE_URL=http://127.0.0.1:8787
 如果你使用独立 bridge 仓库：
 
 ```bash
-git clone https://github.com/omni-stream-ai/omni-code-desktop-bridge.git
-cd omni-code-desktop-bridge
+git clone https://github.com/omni-stream-ai/omni-code-bridge.git
+cd omni-code-bridge
 cp .env.example .env
 cargo run
 ```
@@ -59,7 +59,7 @@ cargo run
 
 1. 打开客户端设置页。
 2. 复制自动生成的 `Client ID`。
-3. 写入 `omni-code-desktop-bridge/.env`。
+3. 写入 `omni-code-bridge/.env`。
 4. 把 `.env` 里的 `ECHO_MATE_BRIDGE_TOKEN` 填到客户端的 `Bridge Token`。
 5. 重启 bridge，然后在客户端保存设置。
 

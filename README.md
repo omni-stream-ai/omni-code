@@ -4,7 +4,7 @@
 
 Flutter client for Omni Code. This repository now contains only the client app.
 The desktop bridge lives in a separate repository:
-`https://github.com/omni-stream-ai/omni-code-desktop-bridge`.
+`https://github.com/omni-stream-ai/omni-code-bridge`.
 
 Omni Code Client is a cross-platform client for desktop agent sessions. It connects
 to the bridge over HTTP and SSE so you can manage projects, open sessions, send
@@ -54,8 +54,8 @@ the current bridge URL configured in settings or via
 If you are running the bridge from the bridge repository:
 
 ```bash
-git clone https://github.com/omni-stream-ai/omni-code-desktop-bridge.git
-cd omni-code-desktop-bridge
+git clone https://github.com/omni-stream-ai/omni-code-bridge.git
+cd omni-code-bridge
 cp .env.example .env
 cargo run
 ```
@@ -65,7 +65,7 @@ If your bridge `.env` sets `ECHO_MATE_BRIDGE_TOKEN` or
 
 1. Open the client app and go to Settings.
 2. Copy the generated `Client ID`.
-3. Put it in `omni-code-desktop-bridge/.env`.
+3. Put it in `omni-code-bridge/.env`.
 4. Put the `.env` value from `ECHO_MATE_BRIDGE_TOKEN` into the app's
    `Bridge Token` field.
 5. Restart the desktop bridge, then save the app settings.
