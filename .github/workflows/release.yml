@@ -216,7 +216,7 @@ jobs:
             exit 1
           fi
           cat > android/key.properties <<EOF
-          storeFile=app/release-keystore.jks
+          storeFile=release-keystore.jks
           keyAlias=${ANDROID_KEY_ALIAS}
           keyPassword=${ANDROID_KEY_PASSWORD}
           storePassword=${ANDROID_STORE_PASSWORD}
