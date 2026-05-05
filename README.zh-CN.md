@@ -103,11 +103,11 @@ config。真正分发给用户前，需要先配置 release signing secrets。
 
 建议配置的 GitHub Actions secrets：
 
-- `ANDROID_KEYSTORE_BASE64`：base64 编码后的 Android keystore 文件
+- `ANDROID_KEYSTORE_BASE64`：base64 编码后的 Android keystore 文件，要求是单行内容，且不要带引号或 `data:...;base64,` 前缀
 - `ANDROID_KEY_ALIAS`：Android 签名 key alias
 - `ANDROID_KEY_PASSWORD`：Android 签名 key password
 - `ANDROID_STORE_PASSWORD`：Android keystore password
-- `ANDROID_GOOGLE_SERVICES_JSON_BASE64`：base64 编码后的 `android/app/google-services.json`
+- `ANDROID_GOOGLE_SERVICES_JSON_BASE64`：base64 编码后的 `android/app/google-services.json`，要求是单行内容，且不要带引号或 `data:...;base64,` 前缀
 
 ## 文档
 

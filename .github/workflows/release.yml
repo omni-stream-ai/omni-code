@@ -185,9 +185,34 @@ jobs:
         if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEY_ALIAS != '' && env.ANDROID_KEY_PASSWORD != '' && env.ANDROID_STORE_PASSWORD != '' }}
         shell: bash
         run: |
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n\t ' | base64 --decode > android/app/release-keystore.jks
+          decode_base64_secret() {
+            local input="$1"
+            local output_path="$2"
+            local normalized
+
+            normalized="$(printf '%s' "$input" | tr -d '\r\n\t ' )"
+            normalized="${normalized#base64,}"
+            normalized="${normalized#data:application/octet-stream;base64,}"
+            normalized="${normalized#data:application/x-java-keystore;base64,}"
+            normalized="${normalized#data:application/json;base64,}"
+            normalized="${normalized#\"}"
+            normalized="${normalized%\"}"
+            normalized="${normalized//-/+}"
+            normalized="${normalized//_/\/}"
+
+            if ! printf '%s' "$normalized" | base64 --decode > "$output_path"; then
+              echo "Failed to decode base64 secret. Make sure the GitHub secret contains raw base64 only, not a file path or malformed data URL." >&2
+              exit 1
+            fi
+          }
+
+          decode_base64_secret "$ANDROID_KEYSTORE_BASE64" android/app/release-keystore.jks
           if [[ ! -s android/app/release-keystore.jks ]]; then
             echo "Decoded Android keystore is empty." >&2
+            exit 1
+          fi
+          if ! keytool -list -keystore android/app/release-keystore.jks -storepass "$ANDROID_STORE_PASSWORD" >/dev/null 2>&1; then
+            echo "Decoded keystore file is unreadable. Recreate ANDROID_KEYSTORE_BASE64 from the binary keystore and verify ANDROID_STORE_PASSWORD." >&2
             exit 1
           fi
           cat > android/key.properties <<EOF
@@ -201,7 +226,28 @@ jobs:
         if: ${{ env.ANDROID_GOOGLE_SERVICES_JSON_BASE64 != '' }}
         shell: bash
         run: |
-          printf '%s' "$ANDROID_GOOGLE_SERVICES_JSON_BASE64" | tr -d '\r\n\t ' | base64 --decode > android/app/google-services.json
+          decode_base64_secret() {
+            local input="$1"
+            local output_path="$2"
+            local normalized
+
+            normalized="$(printf '%s' "$input" | tr -d '\r\n\t ' )"
+            normalized="${normalized#base64,}"
+            normalized="${normalized#data:application/octet-stream;base64,}"
+            normalized="${normalized#data:application/x-java-keystore;base64,}"
+            normalized="${normalized#data:application/json;base64,}"
+            normalized="${normalized#\"}"
+            normalized="${normalized%\"}"
+            normalized="${normalized//-/+}"
+            normalized="${normalized//_/\/}"
+
+            if ! printf '%s' "$normalized" | base64 --decode > "$output_path"; then
+              echo "Failed to decode base64 secret. Make sure the GitHub secret contains raw base64 only, not a file path or malformed data URL." >&2
+              exit 1
+            fi
+          }
+
+          decode_base64_secret "$ANDROID_GOOGLE_SERVICES_JSON_BASE64" android/app/google-services.json
 
       - name: Flutter pub get
         run: flutter pub get

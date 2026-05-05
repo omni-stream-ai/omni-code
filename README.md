@@ -111,11 +111,11 @@ distributing release builds to users.
 
 Recommended GitHub Actions secrets:
 
-- `ANDROID_KEYSTORE_BASE64`: base64-encoded Android keystore file
+- `ANDROID_KEYSTORE_BASE64`: base64-encoded Android keystore file in a single line, without quotes or `data:...;base64,` prefixes
 - `ANDROID_KEY_ALIAS`: Android signing key alias
 - `ANDROID_KEY_PASSWORD`: Android signing key password
 - `ANDROID_STORE_PASSWORD`: Android keystore password
-- `ANDROID_GOOGLE_SERVICES_JSON_BASE64`: base64-encoded `android/app/google-services.json`
+- `ANDROID_GOOGLE_SERVICES_JSON_BASE64`: base64-encoded `android/app/google-services.json` in a single line, without quotes or `data:...;base64,` prefixes
 
 ## Documentation
 
