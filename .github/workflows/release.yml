@@ -295,7 +295,15 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -q
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libgtk-3-dev \
+            liblzma-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev
 
       - name: Flutter pub get
         run: flutter pub get
@@ -378,6 +386,18 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Normalize Android release asset name
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          apk_path="$(find release-assets -name 'app-release.apk' -print -quit)"
+          if [[ -z "$apk_path" ]]; then
+            echo "Release APK not found." >&2
+            exit 1
+          fi
+          cp "$apk_path" release-assets/omni-code-android.apk
+
       - name: Generate update manifest
         env:
           TAG: ${{ needs.detect-version-bump.outputs.tag }}
@@ -391,7 +411,7 @@ jobs:
           {
             "version_name": "${VERSION_NAME}",
             "version_code": ${VERSION_CODE},
-            "apk_url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/app-release.apk",
+            "apk_url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/omni-code-android.apk",
             "release_notes": "GitHub release ${TAG}",
             "force": false
           }
@@ -416,7 +436,7 @@ jobs:
           body: ${{ steps.changelog.outputs.changelog }}
           prerelease: ${{ needs.detect-version-bump.outputs.prerelease }}
           files: |
-            release-assets/app-release.apk
+            release-assets/omni-code-android.apk
             release-assets/omni-code-windows-x86_64.zip
             release-assets/omni-code-linux-x86_64.tar.gz
             release-assets/update.json
