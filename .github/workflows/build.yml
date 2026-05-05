@@ -1,0 +1,216 @@
+name: Release Client
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - pubspec.yaml
+
+permissions:
+  contents: write
+
+jobs:
+  detect-version-bump:
+    name: Detect Client Version Bump
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.version.outputs.should_build }}
+      should_release: ${{ steps.version.outputs.should_release }}
+      tag: ${{ steps.version.outputs.tag }}
+      version_name: ${{ steps.version.outputs.version_name }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      stable: ${{ steps.version.outputs.stable }}
+      branch_name: ${{ steps.version.outputs.branch_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read app version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          current_version="$(awk -F': ' '/^version: /{print $2}' pubspec.yaml | tr -d '[:space:]')"
+          current_name="${current_version%%+*}"
+          previous_version=""
+          previous_name=""
+          should_build="false"
+          should_release="false"
+          prerelease="false"
+          stable="false"
+          branch_name="${GITHUB_REF_NAME}"
+          is_primary_branch="false"
+          tag_name="v${current_name}"
+
+          if [[ "$branch_name" == "main" ]]; then
+            is_primary_branch="true"
+          fi
+
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            before_sha="${{ github.event.before }}"
+            if [[ "$before_sha" != "0000000000000000000000000000000000000000" ]] && git cat-file -e "${before_sha}:pubspec.yaml" 2>/dev/null; then
+              previous_version="$(git show "${before_sha}:pubspec.yaml" | awk -F': ' '/^version: /{print $2}' | tr -d '[:space:]')"
+              previous_name="${previous_version%%+*}"
+            fi
+
+            if [[ -n "$current_name" && "$current_name" != "$previous_name" ]]; then
+              should_build="true"
+              should_release="true"
+
+              if [[ "$current_name" == *-* ]]; then
+                prerelease="true"
+              else
+                stable="true"
+              fi
+
+              if [[ "$is_primary_branch" == "true" && "$prerelease" == "true" ]]; then
+                echo "${branch_name} cannot publish prerelease versions: ${current_name}" >&2
+                exit 1
+              fi
+
+              if [[ "$is_primary_branch" != "true" && "$stable" == "true" ]]; then
+                echo "${branch_name} must use a prerelease version suffix (for example 0.1.0-beta.1): ${current_name}" >&2
+                exit 1
+              fi
+
+              git fetch --tags --force
+              if git rev-parse -q --verify "refs/tags/${tag_name}" >/dev/null; then
+                tagged_commit="$(git rev-list -n 1 "${tag_name}")"
+                if [[ "$tagged_commit" != "${GITHUB_SHA}" ]]; then
+                  echo "Tag ${tag_name} already exists on ${tagged_commit}, expected ${GITHUB_SHA}." >&2
+                  exit 1
+                fi
+              fi
+            fi
+          else
+            should_build="true"
+            should_release="false"
+          fi
+
+          {
+            echo "branch_name=${branch_name}"
+            echo "version_name=${current_name}"
+            echo "previous_name=${previous_name}"
+            echo "tag=${tag_name}"
+            echo "should_build=${should_build}"
+            echo "should_release=${should_release}"
+            echo "prerelease=${prerelease}"
+            echo "stable=${stable}"
+          } >> "$GITHUB_OUTPUT"
+
+  android-apk:
+    name: Android Client APK
+    runs-on: ubuntu-latest
+    needs: detect-version-bump
+    if: needs.detect-version-bump.outputs.should_build == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Restore Android release signing files
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' && secrets.ANDROID_STORE_PASSWORD != '' }}
+        shell: bash
+        run: |
+          printf '%s' "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/release-keystore.jks
+          cat > android/key.properties <<'EOF'
+          storeFile=app/release-keystore.jks
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}
+          EOF
+
+      - name: Restore Firebase config
+        if: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON_BASE64 != '' }}
+        shell: bash
+        run: |
+          printf '%s' "${{ secrets.ANDROID_GOOGLE_SERVICES_JSON_BASE64 }}" | base64 --decode > android/app/google-services.json
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build debug APK
+        run: flutter build apk --debug
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: omni-code-android-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: omni-code-android-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish Client Release
+    runs-on: ubuntu-latest
+    needs:
+      - detect-version-bump
+      - android-apk
+    if: needs.detect-version-bump.outputs.should_release == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create and push tag
+        env:
+          TAG: ${{ needs.detect-version-bump.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --tags --force
+
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            tagged_commit="$(git rev-list -n 1 "${TAG}")"
+            if [[ "$tagged_commit" != "${GITHUB_SHA}" ]]; then
+              echo "Tag ${TAG} already exists on ${tagged_commit}, expected ${GITHUB_SHA}." >&2
+              exit 1
+            fi
+            echo "Tag ${TAG} already exists on the current commit."
+          else
+            git tag -a "${TAG}" -m "Release ${TAG}"
+            git push origin "${TAG}"
+          fi
+
+      - name: Download Android artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: omni-code-android-release-apk
+          path: release-assets
+          merge-multiple: false
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.detect-version-bump.outputs.tag }}
+          name: ${{ needs.detect-version-bump.outputs.tag }}
+          prerelease: ${{ needs.detect-version-bump.outputs.prerelease }}
+          files: |
+            release-assets/**/app-release.apk

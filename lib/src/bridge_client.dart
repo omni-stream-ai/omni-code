@@ -1,0 +1,553 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
+
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+
+import 'models.dart';
+import 'settings/app_settings.dart';
+
+class BridgeClient {
+  BridgeClient({
+    http.Client? httpClient,
+  }) : _httpClient = httpClient ?? http.Client();
+
+  static const Duration _listCacheTtl = Duration(seconds: 15);
+
+  final http.Client _httpClient;
+  _CacheEntry<List<ProjectSummary>>? _projectsCache;
+  final Map<String, _CacheEntry<List<SessionSummary>>> _projectSessionsCache =
+      {};
+
+  @visibleForTesting
+  static List<ProjectSummary> sortProjectsForDisplay(
+    Iterable<ProjectSummary> projects,
+  ) {
+    final sorted = projects.toList()
+      ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
+    return sorted;
+  }
+
+  String get baseUrl {
+    final configured = appSettingsController.settings.bridgeUrl.trim();
+    if (configured.isNotEmpty) {
+      return configured;
+    }
+    if (kIsWeb) {
+      return 'http://127.0.0.1:8787';
+    }
+    return defaultTargetPlatform == TargetPlatform.android
+        ? 'http://127.0.0.1:8787'
+        : 'http://127.0.0.1:8787';
+  }
+
+  Map<String, String> get _defaultHeaders {
+    final settings = appSettingsController.settings;
+    final headers = <String, String>{
+      'X-Omni-Code-Client-Id': settings.clientId,
+    };
+    if (settings.bridgeToken.trim().isNotEmpty) {
+      headers['Authorization'] = 'Bearer ${settings.bridgeToken.trim()}';
+    }
+    return headers;
+  }
+
+  Future<List<SessionSummary>> listSessions() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/sessions'),
+      headers: _defaultHeaders,
+    );
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = payload['data'] as List<dynamic>;
+    return items
+        .map((item) => SessionSummary.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  List<ProjectSummary>? peekProjects() => _projectsCache?.value;
+
+  List<SessionSummary>? peekProjectSessions(String projectId) {
+    return _projectSessionsCache[projectId]?.value;
+  }
+
+  Future<List<ProjectSummary>> listProjects({bool forceRefresh = false}) async {
+    final cache = _projectsCache;
+    if (!forceRefresh && cache != null && cache.isFresh) {
+      return cache.value;
+    }
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/projects'),
+      headers: _defaultHeaders,
+    );
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = payload['data'] as List<dynamic>;
+    final projects = sortProjectsForDisplay(
+      items.map(
+        (item) => ProjectSummary.fromJson(item as Map<String, dynamic>),
+      ),
+    );
+    final mergedProjects = _mergeProjects(
+      cached: _projectsCache?.value ?? const <ProjectSummary>[],
+      incoming: projects,
+    );
+    _projectsCache = _CacheEntry(mergedProjects);
+    return mergedProjects;
+  }
+
+  Future<List<ChatMessage>> listMessages(String sessionId) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/sessions/$sessionId/messages'),
+      headers: _defaultHeaders,
+    );
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = payload['data'] as List<dynamic>;
+    return items
+        .map((item) => ChatMessage.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<SessionSummary>> listProjectSessions(
+    String projectId, {
+    bool forceRefresh = false,
+  }) async {
+    final cached = _projectSessionsCache[projectId];
+    if (!forceRefresh && cached != null && cached.isFresh) {
+      return cached.value;
+    }
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/projects/$projectId/sessions'),
+      headers: _defaultHeaders,
+    );
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = payload['data'] as List<dynamic>;
+    final sessions = items
+        .map((item) => SessionSummary.fromJson(item as Map<String, dynamic>))
+        .toList();
+    final mergedSessions = _mergeSessions(
+      cached: cached?.value ?? const <SessionSummary>[],
+      incoming: sessions,
+    );
+    _projectSessionsCache[projectId] = _CacheEntry(mergedSessions);
+    return mergedSessions;
+  }
+
+  Future<SendMessageResult> sendMessage(
+    String sessionId,
+    String content, {
+    String inputMode = 'text',
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/sessions/$sessionId/messages'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'content': content, 'input_mode': inputMode}),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'send message failed (${response.statusCode}): ${response.body}',
+      );
+    }
+
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = payload['data'] as Map<String, dynamic>;
+    return SendMessageResult(
+      userMessage: ChatMessage.fromJson(
+        data['user_message'] as Map<String, dynamic>,
+      ),
+      reply: ChatMessage.fromJson(data['reply'] as Map<String, dynamic>),
+    );
+  }
+
+  Future<void> cancelReply(String sessionId) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/sessions/$sessionId/cancel'),
+      headers: _defaultHeaders,
+    );
+
+    if (response.statusCode != 204) {
+      throw Exception(
+        'cancel request failed (${response.statusCode}): ${response.body}',
+      );
+    }
+  }
+
+  Future<void> submitApproval(
+    String sessionId,
+    String requestId,
+    String choice,
+  ) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/sessions/$sessionId/approvals/$requestId'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'choice': choice}),
+    );
+
+    if (response.statusCode != 204) {
+      throw Exception(
+        'approval request failed (${response.statusCode}): ${response.body}',
+      );
+    }
+  }
+
+  Future<void> updateBridgeSettings(AppSettings settings) async {
+    final response = await _httpClient.put(
+      Uri.parse('$baseUrl/settings'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'ai_approval': {
+          'enabled': settings.aiApprovalEnabled,
+          'base_url': settings.aiApprovalBaseUrl.trim(),
+          'api_key': settings.aiApprovalApiKey.trim(),
+          'model': settings.aiApprovalModel.trim(),
+          'max_risk': settings.aiApprovalMaxRisk.trim(),
+        },
+      }),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'update settings failed (${response.statusCode}): ${response.body}',
+      );
+    }
+  }
+
+  Future<SessionSummary> createSession({
+    required String projectId,
+    String? title,
+    String agent = 'codex',
+    bool? briefReplyMode,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/sessions'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'project_id': projectId,
+        'title': title,
+        'agent': agent,
+        'brief_reply_mode':
+            briefReplyMode ?? appSettingsController.settings.compressAssistantReplies,
+      }),
+    );
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final session =
+        SessionSummary.fromJson(payload['data'] as Map<String, dynamic>);
+    _upsertSession(session);
+    return session;
+  }
+
+  Future<ProjectSummary> createProject({
+    required String name,
+    required String rootPath,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/projects'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'name': name, 'root_path': rootPath}),
+    );
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final project =
+        ProjectSummary.fromJson(payload['data'] as Map<String, dynamic>);
+    _upsertProject(project);
+    return project;
+  }
+
+  Future<void> registerPushDevice({
+    required String platform,
+    String? manufacturer,
+    String? model,
+    String? appVersion,
+    String? fcmToken,
+    String? miPushRegId,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/devices/register'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'platform': platform,
+        'manufacturer': manufacturer,
+        'model': model,
+        'app_version': appVersion,
+        'fcm_token': fcmToken,
+        'mi_push_reg_id': miPushRegId,
+      }),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'register push device failed (${response.statusCode}): ${response.body}',
+      );
+    }
+  }
+
+  Future<String> transcribeAudio(File audioFile) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/audio/transcriptions'),
+    );
+    request.headers.addAll(_defaultHeaders);
+    request.files
+        .add(await http.MultipartFile.fromPath('file', audioFile.path));
+
+    final response = await _httpClient.send(request);
+    final body = await response.stream.bytesToString();
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('ASR request failed (${response.statusCode}): $body');
+    }
+
+    final payload = jsonDecode(body) as Map<String, dynamic>;
+    final data = payload['data'] as Map<String, dynamic>;
+    return data['text'] as String;
+  }
+
+  Future<SynthesizedSpeech> synthesizeSpeech(
+    String text, {
+    String voice = 'female',
+    double speed = 1.0,
+    double volume = 1.0,
+    String responseFormat = 'wav',
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/audio/speech'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'input': text,
+        'voice': voice,
+        'speed': speed,
+        'volume': volume,
+        'response_format': responseFormat,
+      }),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'TTS request failed (${response.statusCode}): ${response.body}',
+      );
+    }
+
+    return SynthesizedSpeech(
+      bytes: response.bodyBytes,
+      contentType: response.headers['content-type'] ?? 'audio/wav',
+    );
+  }
+
+  Stream<Map<String, dynamic>> subscribeToSessionEvents(
+    String sessionId,
+  ) async* {
+    final request = http.Request(
+      'GET',
+      Uri.parse('$baseUrl/sessions/$sessionId/events'),
+    );
+    request.headers['Accept'] = 'text/event-stream';
+    request.headers.addAll(_defaultHeaders);
+
+    final response = await _httpClient.send(request);
+    final lines =
+        response.stream.transform(utf8.decoder).transform(const LineSplitter());
+
+    String? eventName;
+    final dataBuffer = <String>[];
+
+    await for (final line in lines) {
+      if (line.isEmpty) {
+        if (eventName != null && dataBuffer.isNotEmpty) {
+          yield {
+            'event': eventName,
+            'data': jsonDecode(dataBuffer.join('\n')) as Map<String, dynamic>,
+          };
+        }
+        eventName = null;
+        dataBuffer.clear();
+        continue;
+      }
+
+      if (line.startsWith('event:')) {
+        eventName = line.substring(6).trim();
+      } else if (line.startsWith('data:')) {
+        dataBuffer.add(line.substring(5).trim());
+      }
+    }
+  }
+
+  void _upsertProject(ProjectSummary project) {
+    final current = _projectsCache?.value ?? const <ProjectSummary>[];
+    final next = sortProjectsForDisplay([
+      ...current.where((item) => item.id != project.id),
+      project,
+    ]);
+    _projectsCache = _CacheEntry(next);
+  }
+
+  void _upsertSession(SessionSummary session) {
+    final current = _projectSessionsCache[session.projectId]?.value ??
+        const <SessionSummary>[];
+    final next = current.where((item) => item.id != session.id).toList()
+      ..add(session)
+      ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
+    _projectSessionsCache[session.projectId] = _CacheEntry(next);
+
+    ProjectSummary? project;
+    for (final item in _projectsCache?.value ?? const <ProjectSummary>[]) {
+      if (item.id == session.projectId) {
+        project = item;
+        break;
+      }
+    }
+    if (project == null) {
+      return;
+    }
+    _upsertProject(
+      project.copyWith(
+        updatedAt: session.updatedAt,
+        sessionCount: next.length,
+        lastSessionPreview:
+            session.lastMessagePreview?.trim().isNotEmpty == true
+                ? session.lastMessagePreview
+                : project.lastSessionPreview,
+      ),
+    );
+  }
+
+  void syncSessionSummary(SessionSummary session) {
+    _upsertSession(session);
+  }
+
+  @visibleForTesting
+  void debugSeedProjects(Iterable<ProjectSummary> projects) {
+    _projectsCache = _CacheEntry(sortProjectsForDisplay(projects));
+  }
+
+  static List<ProjectSummary> _mergeProjects({
+    required Iterable<ProjectSummary> cached,
+    required Iterable<ProjectSummary> incoming,
+  }) {
+    final merged = <String, ProjectSummary>{};
+
+    for (final project in cached) {
+      merged[project.id] = project;
+    }
+
+    for (final project in incoming) {
+      final existing = merged[project.id];
+      if (existing == null || project.updatedAt.isAfter(existing.updatedAt)) {
+        merged[project.id] = project;
+        continue;
+      }
+
+      if (project.updatedAt.isAtSameMomentAs(existing.updatedAt)) {
+        merged[project.id] = ProjectSummary(
+          id: project.id,
+          name: project.name,
+          rootPath: project.rootPath,
+          updatedAt: project.updatedAt,
+          sessionCount: max(project.sessionCount, existing.sessionCount),
+          lastSessionPreview: _preferNonEmptyPreview(
+            project.lastSessionPreview,
+            existing.lastSessionPreview,
+          ),
+        );
+      }
+    }
+
+    return sortProjectsForDisplay(merged.values);
+  }
+
+  static String? _preferNonEmptyPreview(String? primary, String? fallback) {
+    if (primary?.trim().isNotEmpty == true) {
+      return primary;
+    }
+    if (fallback?.trim().isNotEmpty == true) {
+      return fallback;
+    }
+    return null;
+  }
+
+  static List<SessionSummary> _mergeSessions({
+    required Iterable<SessionSummary> cached,
+    required Iterable<SessionSummary> incoming,
+  }) {
+    final merged = <String, SessionSummary>{};
+
+    for (final session in cached) {
+      merged[session.id] = session;
+    }
+
+    for (final session in incoming) {
+      final existing = merged[session.id];
+      if (existing == null || session.updatedAt.isAfter(existing.updatedAt)) {
+        merged[session.id] = session;
+        continue;
+      }
+
+      if (session.updatedAt.isAtSameMomentAs(existing.updatedAt)) {
+        merged[session.id] = session.copyWith(
+          unreadCount: max(session.unreadCount, existing.unreadCount),
+          lastMessagePreview: _preferNonEmptyPreview(
+            session.lastMessagePreview,
+            existing.lastMessagePreview,
+          ),
+          pendingApproval: session.pendingApproval ?? existing.pendingApproval,
+        );
+      }
+    }
+
+    final sorted = merged.values.toList()
+      ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
+    return sorted;
+  }
+}
+
+class _CacheEntry<T> {
+  _CacheEntry(this.value) : storedAt = DateTime.now();
+
+  final T value;
+  final DateTime storedAt;
+
+  bool get isFresh =>
+      DateTime.now().difference(storedAt) < BridgeClient._listCacheTtl;
+}
+
+final bridgeClient = BridgeClient();
+
+class SynthesizedSpeech {
+  const SynthesizedSpeech({
+    required this.bytes,
+    required this.contentType,
+  });
+
+  final Uint8List bytes;
+  final String contentType;
+}
+
+class SendMessageResult {
+  const SendMessageResult({
+    required this.userMessage,
+    required this.reply,
+  });
+
+  final ChatMessage userMessage;
+  final ChatMessage reply;
+}

@@ -1,0 +1,366 @@
+{
+  "@@locale": "zh",
+  "appTitle": "Omni Code",
+  "settingsTitle": "设置",
+  "save": "保存",
+  "saving": "保存中...",
+  "languageSection": "语言",
+  "languageLabel": "应用语言",
+  "languageSystem": "跟随系统",
+  "languageEnglish": "English",
+  "languageChinese": "中文",
+  "bridgeSection": "Bridge",
+  "bridgeUrlLabel": "Bridge 地址",
+  "bridgeHelp": "真机通过 adb reverse 时可直接用 127.0.0.1:8787；局域网访问时填电脑 IP。服务端可按 token 和 client id 放行。",
+  "appUpdateSection": "App 更新",
+  "updateManifestUrlLabel": "更新清单 URL",
+  "checkingUpdate": "检查中...",
+  "checkAppUpdate": "检查 App 更新",
+  "updateHelp": "留空时默认请求当前 Bridge 的 /app-update/manifest。发现新版本后会打开下载链接，由系统完成安装。",
+  "speechSection": "语音服务",
+  "ttsProviderLabel": "TTS Provider",
+  "asrProviderLabel": "ASR Provider",
+  "bridgeCloudProxy": "Bridge / 云端中转",
+  "whisperCompatible": "Whisper / OpenAI Compatible",
+  "apiKey": "API Key",
+  "baseUrl": "Base URL",
+  "aiApprovalSection": "AI 审批",
+  "enableAiApproval": "启用 AI 辅助审批",
+  "enableAiApprovalSubtitle": "通过 OpenAI-compatible endpoint 判断低风险命令",
+  "aiApprovalMaxRisk": "自动放行最高风险",
+  "aiApprovalHelp": "保存后会同步到当前 Bridge。建议保持 Low；高风险、调用失败或命中硬阻断规则仍会回退到手机人工审批。",
+  "riskLow": "Low",
+  "riskMedium": "Medium",
+  "riskHigh": "High",
+  "autoSpeakReplies": "自动播报 Agent 回复",
+  "autoSpeakRepliesSubtitle": "AI 回复完成后自动开始播报",
+  "compressReplies": "压缩 AI 回复",
+  "compressRepliesSubtitle": "开启后，新建会话会要求 AI 简短说明做了什么，尽量不超过 50 字",
+  "settingsSaved": "设置已保存",
+  "settingsSaveFailed": "保存设置失败：{error}",
+  "@settingsSaveFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "alreadyLatestVersion": "已是最新版本：{version}",
+  "@alreadyLatestVersion": {
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "newVersionFound": "发现新版本 {versionName}",
+  "@newVersionFound": {
+    "placeholders": {
+      "versionName": {}
+    }
+  },
+  "currentVersion": "当前版本：{version}",
+  "@currentVersion": {
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "later": "稍后",
+  "updateNow": "立即更新",
+  "downloadingUpdate": "正在下载更新",
+  "downloadedBytes": "已下载 {received}",
+  "@downloadedBytes": {
+    "placeholders": {
+      "received": {}
+    }
+  },
+  "downloadProgress": "{received} / {total}",
+  "@downloadProgress": {
+    "placeholders": {
+      "received": {},
+      "total": {}
+    }
+  },
+  "homeManageByProject": "按项目管理 Codex",
+  "homeBridgeAddress": "当前 bridge 地址：{address}",
+  "@homeBridgeAddress": {
+    "placeholders": {
+      "address": {}
+    }
+  },
+  "homeIntro": "先进入项目，再选择已有会话或在该项目下新开 Codex 会话。",
+  "projectsTitle": "项目",
+  "createProject": "创建项目",
+  "newProject": "新建项目",
+  "retry": "重试",
+  "projectCount": "{count} 个会话",
+  "@projectCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "projectUpdatedAt": "最近更新 {time}",
+  "@projectUpdatedAt": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "loadProjectsFailed": "加载项目失败：{error}",
+  "@loadProjectsFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "noProjectsYet": "当前没有项目",
+  "noProjectsHelp": "先创建一个项目，填写本机代码目录，然后在项目内新开或恢复 Codex 会话。",
+  "projectName": "项目名",
+  "localPath": "本机目录路径",
+  "cancel": "取消",
+  "projectIntro": "进入任一会话即可继续历史上下文，也可以在当前项目下创建一个新的 Codex 会话。",
+  "searchSessions": "搜索会话标题或摘要",
+  "sessionsTitle": "会话",
+  "loadSessionsFailed": "加载会话失败：{error}",
+  "@loadSessionsFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "sessionUpdatedAtWithAgent": "{agent} · 最近更新 {time}",
+  "@sessionUpdatedAtWithAgent": {
+    "placeholders": {
+      "agent": {},
+      "time": {}
+    }
+  },
+  "loadMoreSessions": "加载更多 ({count} 条)",
+  "@loadMoreSessions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "newSession": "新会话",
+  "sessionStatusIdle": "空闲",
+  "sessionStatusRunning": "回复中",
+  "sessionStatusAwaitingApproval": "待审批",
+  "sessionStatusWaiting": "等待中",
+  "sessionStatusFailed": "失败",
+  "noSessionsYet": "当前项目还没有会话",
+  "noSessionsHelp": "新开一个 Codex 会话后，后续可以回到这个项目继续进入同一条历史会话。",
+  "noSessionsMatched": "没有匹配的会话，换个关键词试试。",
+  "sessionTitleOptional": "会话标题（可选）",
+  "agentLabel": "Agent",
+  "create": "创建",
+  "refreshNativeSessions": "刷新原生会话",
+  "creatingSession": "正在创建会话...",
+  "waitingApprovalProcessing": "正在等待审批处理...",
+  "turnPausedWaiting": "本轮已暂停，正在等待后续结果...",
+  "speechReadyStatus": "录音转写已就绪",
+  "waitingProcessApproval": "等待处理审批...",
+  "stopReply": "停止回答",
+  "messageInputHint": "输入任务，例如：帮我检查最近一次构建失败原因",
+  "stopVoice": "停止语音",
+  "voiceInput": "语音输入",
+  "send": "发送",
+  "agentAwaitingPermission": "{agent} 等待权限确认",
+  "@agentAwaitingPermission": {
+    "placeholders": {
+      "agent": {}
+    }
+  },
+  "desktopOnlyApproval": "这个请求当前只能在桌面端处理。",
+  "approve": "允许",
+  "approveForSession": "本会话允许",
+  "reject": "拒绝",
+  "processing": "处理中...",
+  "toolActivity": "工具过程",
+  "working": "工作中...",
+  "stopPlayback": "停止播报",
+  "playback": "播报",
+  "createSessionFailed": "创建会话失败：{error}",
+  "@createSessionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "loadMessagesFailed": "加载消息失败：{error}",
+  "@loadMessagesFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "restoreSessionFailed": "恢复会话失败：{error}",
+  "@restoreSessionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "approvalSubmitFailed": "审批提交失败：{error}",
+  "@approvalSubmitFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "approvalAccepted": "审批已允许",
+  "approvalAcceptedForSession": "当前会话已允许后续同类请求",
+  "approvalAlwaysAllow": "已永久允许此类请求",
+  "approvalRejected": "审批已拒绝",
+  "approvalCancelled": "审批已取消",
+  "microphonePermissionMissing": "当前设备没有录音权限",
+  "recordingInitFailed": "录音初始化超时或失败：{error}",
+  "@recordingInitFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "ttsFailed": "TTS 失败：{error}",
+  "@ttsFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "ttsInitFailed": "TTS 初始化超时或失败：{error}",
+  "@ttsInitFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "reinitializingRecording": "正在重新初始化录音...",
+  "recordingInProgress": "正在录音，点击一次停止并转写...",
+  "startRecordingFailed": "启动录音失败：{error}",
+  "@startRecordingFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "stopRecordingFailed": "停止录音失败：{error}",
+  "@stopRecordingFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "uploadingAudio": "正在上传音频并转写...",
+  "recordingFileMissing": "没有拿到录音文件",
+  "voiceTranscriptionComplete": "语音转写完成",
+  "voiceTranscriptionFailed": "语音转写失败：{error}",
+  "@voiceTranscriptionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "reinitializingTts": "正在重新初始化 TTS...",
+  "requestingTts": "正在请求 TTS 播报...",
+  "ttsPlaybackFailed": "TTS 播报失败：{error}",
+  "@ttsPlaybackFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "sessionStillCreating": "会话还在创建中，请稍候",
+  "sessionStillRunning": "当前会话还在处理中，请等这一轮结束后再发送",
+  "messageInputRequired": "请先输入内容或使用语音识别",
+  "sendFailed": "发送失败：{error}",
+  "@sendFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "replyStopped": "已停止本次回答",
+  "allToolActivity": "全部工具过程",
+  "close": "关闭",
+  "toolActivityDetail": "工具过程详情",
+  "detailType": "类型",
+  "detailPhase": "阶段",
+  "detailContent": "内容",
+  "detailItems": "条目",
+  "detailExtra": "补充",
+  "detailRawContent": "原始内容",
+  "toolKindCommand": "命令",
+  "toolKindFile": "文件变更",
+  "toolKindTodo": "Todo",
+  "toolKindPlan": "计划",
+  "toolKindSearch": "搜索",
+  "toolKindFetch": "抓取",
+  "toolKindReasoning": "推理",
+  "toolKindThread": "线程状态",
+  "toolKindTurn": "轮次状态",
+  "toolKindApproval": "审批",
+  "toolKindDebug": "调试事件",
+  "toolPrimaryCommand": "命令",
+  "toolSecondaryResult": "结果",
+  "toolExitCode": "退出码 {code}",
+  "@toolExitCode": {
+    "placeholders": {
+      "code": {}
+    }
+  },
+  "toolPrimaryFile": "文件",
+  "toolSecondaryOtherFiles": "其他文件",
+  "toolMoreFiles": "还有 {count} 个文件未展开",
+  "@toolMoreFiles": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "toolPrimaryTodoItems": "条目",
+  "toolSecondaryOtherItems": "其他条目",
+  "toolPrimarySteps": "步骤",
+  "toolSecondaryOtherSteps": "其他步骤",
+  "toolPrimaryIdentifier": "标识",
+  "toolSecondaryDetail": "详情",
+  "phaseRunning": "进行中",
+  "phaseCompleted": "已完成",
+  "phaseStarted": "已开始",
+  "draftPending": "待同步",
+  "draftFailed": "发送失败，点击重发",
+  "zhipuApiKeyRequired": "请先在设置中填写智谱 API Key",
+  "zhipuAsrRequestFailed": "智谱 ASR 请求失败 ({statusCode}): {body}",
+  "@zhipuAsrRequestFailed": {
+    "placeholders": {
+      "statusCode": {},
+      "body": {}
+    }
+  },
+  "zhipuAsrMissingText": "智谱 ASR 响应缺少 text",
+  "whisperApiKeyRequired": "请先在设置中填写 Whisper/OpenAI API Key",
+  "whisperAsrRequestFailed": "Whisper ASR 请求失败 ({statusCode}): {body}",
+  "@whisperAsrRequestFailed": {
+    "placeholders": {
+      "statusCode": {},
+      "body": {}
+    }
+  },
+  "whisperAsrMissingText": "Whisper ASR 响应缺少 text",
+  "zhipuTtsRequestFailed": "智谱 TTS 请求失败 ({statusCode}): {body}",
+  "@zhipuTtsRequestFailed": {
+    "placeholders": {
+      "statusCode": {},
+      "body": {}
+    }
+  },
+  "updateManifestUrlRequired": "请先填写更新清单 URL",
+  "updateManifestUrlInvalid": "更新清单 URL 无效",
+  "updateCheckHttpFailed": "更新检查失败：HTTP {statusCode}",
+  "@updateCheckHttpFailed": {
+    "placeholders": {
+      "statusCode": {}
+    }
+  },
+  "updateManifestMustBeJson": "更新清单必须是 JSON 对象",
+  "updateCheckFailed": "更新检查失败：{error}",
+  "@updateCheckFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "apkUrlInvalid": "APK 下载地址无效",
+  "apkDownloadHttpFailed": "APK 下载失败：HTTP {statusCode}",
+  "@apkDownloadHttpFailed": {
+    "placeholders": {
+      "statusCode": {}
+    }
+  },
+  "cannotOpenInstaller": "无法打开系统安装器",
+  "updateManifestMissingVersionName": "更新清单缺少 version_name",
+  "updateManifestInvalidVersionCode": "更新清单 version_code 无效",
+  "updateManifestMissingApkUrl": "更新清单缺少 apk_url"
+}

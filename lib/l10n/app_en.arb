@@ -1,0 +1,366 @@
+{
+  "@@locale": "en",
+  "appTitle": "Omni Code",
+  "settingsTitle": "Settings",
+  "save": "Save",
+  "saving": "Saving...",
+  "languageSection": "Language",
+  "languageLabel": "App language",
+  "languageSystem": "Follow system",
+  "languageEnglish": "English",
+  "languageChinese": "Chinese",
+  "bridgeSection": "Bridge",
+  "bridgeUrlLabel": "Bridge URL",
+  "bridgeHelp": "Use 127.0.0.1:8787 with adb reverse. For LAN access, enter your computer IP. The server can allow requests by token and client ID.",
+  "appUpdateSection": "App Update",
+  "updateManifestUrlLabel": "Manifest URL",
+  "checkingUpdate": "Checking...",
+  "checkAppUpdate": "Check app update",
+  "updateHelp": "If empty, /app-update/manifest from the current Bridge is used. When a new version is found, the system opens the download link and handles installation.",
+  "speechSection": "Speech",
+  "ttsProviderLabel": "TTS Provider",
+  "asrProviderLabel": "ASR Provider",
+  "bridgeCloudProxy": "Bridge / Cloud relay",
+  "whisperCompatible": "Whisper / OpenAI Compatible",
+  "apiKey": "API Key",
+  "baseUrl": "Base URL",
+  "aiApprovalSection": "AI Approval",
+  "enableAiApproval": "Enable AI-assisted approval",
+  "enableAiApprovalSubtitle": "Use an OpenAI-compatible endpoint to approve low-risk commands",
+  "aiApprovalMaxRisk": "Highest auto-approval risk",
+  "aiApprovalHelp": "Saved settings sync to the current Bridge. Keeping Low is recommended. High-risk commands, failed calls, or hard-blocked rules still fall back to manual approval on the phone.",
+  "riskLow": "Low",
+  "riskMedium": "Medium",
+  "riskHigh": "High",
+  "autoSpeakReplies": "Auto-play agent replies",
+  "autoSpeakRepliesSubtitle": "Start playback automatically after the AI reply finishes",
+  "compressReplies": "Compress AI replies",
+  "compressRepliesSubtitle": "When enabled, new sessions ask the AI to summarize what it did briefly, ideally within 50 characters",
+  "settingsSaved": "Settings saved",
+  "settingsSaveFailed": "Failed to save settings: {error}",
+  "@settingsSaveFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "alreadyLatestVersion": "Already up to date: {version}",
+  "@alreadyLatestVersion": {
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "newVersionFound": "New version {versionName}",
+  "@newVersionFound": {
+    "placeholders": {
+      "versionName": {}
+    }
+  },
+  "currentVersion": "Current version: {version}",
+  "@currentVersion": {
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "later": "Later",
+  "updateNow": "Update now",
+  "downloadingUpdate": "Downloading update",
+  "downloadedBytes": "Downloaded {received}",
+  "@downloadedBytes": {
+    "placeholders": {
+      "received": {}
+    }
+  },
+  "downloadProgress": "{received} / {total}",
+  "@downloadProgress": {
+    "placeholders": {
+      "received": {},
+      "total": {}
+    }
+  },
+  "homeManageByProject": "Manage Codex by project",
+  "homeBridgeAddress": "Current Bridge: {address}",
+  "@homeBridgeAddress": {
+    "placeholders": {
+      "address": {}
+    }
+  },
+  "homeIntro": "Open a project first, then choose an existing session or start a new Codex session under that project.",
+  "projectsTitle": "Projects",
+  "createProject": "Create project",
+  "newProject": "New project",
+  "retry": "Retry",
+  "projectCount": "{count} sessions",
+  "@projectCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "projectUpdatedAt": "Updated {time}",
+  "@projectUpdatedAt": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "loadProjectsFailed": "Failed to load projects: {error}",
+  "@loadProjectsFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "noProjectsYet": "No projects yet",
+  "noProjectsHelp": "Create a project first, fill in the local code directory, then start or resume a Codex session inside it.",
+  "projectName": "Project name",
+  "localPath": "Local directory path",
+  "cancel": "Cancel",
+  "projectIntro": "Open any session to continue the existing context, or create a new Codex session under this project.",
+  "searchSessions": "Search session title or summary",
+  "sessionsTitle": "Sessions",
+  "loadSessionsFailed": "Failed to load sessions: {error}",
+  "@loadSessionsFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "sessionUpdatedAtWithAgent": "{agent} · Updated {time}",
+  "@sessionUpdatedAtWithAgent": {
+    "placeholders": {
+      "agent": {},
+      "time": {}
+    }
+  },
+  "loadMoreSessions": "Load more ({count})",
+  "@loadMoreSessions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "newSession": "New session",
+  "sessionStatusIdle": "Idle",
+  "sessionStatusRunning": "Running",
+  "sessionStatusAwaitingApproval": "Awaiting approval",
+  "sessionStatusWaiting": "Waiting",
+  "sessionStatusFailed": "Failed",
+  "noSessionsYet": "No sessions in this project yet",
+  "noSessionsHelp": "After starting a Codex session, you can return to this project and reopen the same conversation later.",
+  "noSessionsMatched": "No matching sessions. Try a different keyword.",
+  "sessionTitleOptional": "Session title (optional)",
+  "agentLabel": "Agent",
+  "create": "Create",
+  "refreshNativeSessions": "Refresh native sessions",
+  "creatingSession": "Creating session...",
+  "waitingApprovalProcessing": "Waiting for approval processing...",
+  "turnPausedWaiting": "This turn is paused and waiting for follow-up results...",
+  "speechReadyStatus": "Voice transcription ready",
+  "waitingProcessApproval": "Waiting to process approval...",
+  "stopReply": "Stop reply",
+  "messageInputHint": "Enter a task, for example: Help me inspect why the latest build failed",
+  "stopVoice": "Stop voice",
+  "voiceInput": "Voice input",
+  "send": "Send",
+  "agentAwaitingPermission": "{agent} is waiting for permission",
+  "@agentAwaitingPermission": {
+    "placeholders": {
+      "agent": {}
+    }
+  },
+  "desktopOnlyApproval": "This request can currently only be handled on desktop.",
+  "approve": "Approve",
+  "approveForSession": "Allow for this session",
+  "reject": "Reject",
+  "processing": "Processing...",
+  "toolActivity": "Tool activity",
+  "working": "Working...",
+  "stopPlayback": "Stop playback",
+  "playback": "Play",
+  "createSessionFailed": "Failed to create session: {error}",
+  "@createSessionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "loadMessagesFailed": "Failed to load messages: {error}",
+  "@loadMessagesFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "restoreSessionFailed": "Failed to restore session: {error}",
+  "@restoreSessionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "approvalSubmitFailed": "Failed to submit approval: {error}",
+  "@approvalSubmitFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "approvalAccepted": "Approval granted",
+  "approvalAcceptedForSession": "Similar future requests are allowed in this session",
+  "approvalAlwaysAllow": "This kind of request is always allowed",
+  "approvalRejected": "Approval rejected",
+  "approvalCancelled": "Approval cancelled",
+  "microphonePermissionMissing": "This device does not have microphone permission",
+  "recordingInitFailed": "Recording init timed out or failed: {error}",
+  "@recordingInitFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "ttsFailed": "TTS failed: {error}",
+  "@ttsFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "ttsInitFailed": "TTS init timed out or failed: {error}",
+  "@ttsInitFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "reinitializingRecording": "Reinitializing recording...",
+  "recordingInProgress": "Recording. Tap once to stop and transcribe...",
+  "startRecordingFailed": "Failed to start recording: {error}",
+  "@startRecordingFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "stopRecordingFailed": "Failed to stop recording: {error}",
+  "@stopRecordingFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "uploadingAudio": "Uploading audio and transcribing...",
+  "recordingFileMissing": "No recording file was produced",
+  "voiceTranscriptionComplete": "Voice transcription complete",
+  "voiceTranscriptionFailed": "Voice transcription failed: {error}",
+  "@voiceTranscriptionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "reinitializingTts": "Reinitializing TTS...",
+  "requestingTts": "Requesting TTS playback...",
+  "ttsPlaybackFailed": "TTS playback failed: {error}",
+  "@ttsPlaybackFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "sessionStillCreating": "The session is still being created. Please wait.",
+  "sessionStillRunning": "This session is still processing. Wait for this turn to finish before sending again.",
+  "messageInputRequired": "Enter text or use voice recognition first",
+  "sendFailed": "Send failed: {error}",
+  "@sendFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "replyStopped": "Stopped this reply",
+  "allToolActivity": "All tool activity",
+  "close": "Close",
+  "toolActivityDetail": "Tool activity detail",
+  "detailType": "Type",
+  "detailPhase": "Phase",
+  "detailContent": "Content",
+  "detailItems": "Items",
+  "detailExtra": "Extra",
+  "detailRawContent": "Raw content",
+  "toolKindCommand": "Command",
+  "toolKindFile": "File change",
+  "toolKindTodo": "Todo",
+  "toolKindPlan": "Plan",
+  "toolKindSearch": "Search",
+  "toolKindFetch": "Fetch",
+  "toolKindReasoning": "Reasoning",
+  "toolKindThread": "Thread status",
+  "toolKindTurn": "Turn status",
+  "toolKindApproval": "Approval",
+  "toolKindDebug": "Debug event",
+  "toolPrimaryCommand": "Command",
+  "toolSecondaryResult": "Result",
+  "toolExitCode": "Exit code {code}",
+  "@toolExitCode": {
+    "placeholders": {
+      "code": {}
+    }
+  },
+  "toolPrimaryFile": "File",
+  "toolSecondaryOtherFiles": "Other files",
+  "toolMoreFiles": "{count} more files not expanded",
+  "@toolMoreFiles": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "toolPrimaryTodoItems": "Items",
+  "toolSecondaryOtherItems": "Other items",
+  "toolPrimarySteps": "Steps",
+  "toolSecondaryOtherSteps": "Other steps",
+  "toolPrimaryIdentifier": "Identifier",
+  "toolSecondaryDetail": "Detail",
+  "phaseRunning": "Running",
+  "phaseCompleted": "Completed",
+  "phaseStarted": "Started",
+  "draftPending": "Pending sync",
+  "draftFailed": "Send failed, tap to retry",
+  "zhipuApiKeyRequired": "Fill in the Zhipu API key in settings first",
+  "zhipuAsrRequestFailed": "Zhipu ASR request failed ({statusCode}): {body}",
+  "@zhipuAsrRequestFailed": {
+    "placeholders": {
+      "statusCode": {},
+      "body": {}
+    }
+  },
+  "zhipuAsrMissingText": "Zhipu ASR response is missing text",
+  "whisperApiKeyRequired": "Fill in the Whisper/OpenAI API key in settings first",
+  "whisperAsrRequestFailed": "Whisper ASR request failed ({statusCode}): {body}",
+  "@whisperAsrRequestFailed": {
+    "placeholders": {
+      "statusCode": {},
+      "body": {}
+    }
+  },
+  "whisperAsrMissingText": "Whisper ASR response is missing text",
+  "zhipuTtsRequestFailed": "Zhipu TTS request failed ({statusCode}): {body}",
+  "@zhipuTtsRequestFailed": {
+    "placeholders": {
+      "statusCode": {},
+      "body": {}
+    }
+  },
+  "updateManifestUrlRequired": "Enter the manifest URL first",
+  "updateManifestUrlInvalid": "Manifest URL is invalid",
+  "updateCheckHttpFailed": "Update check failed: HTTP {statusCode}",
+  "@updateCheckHttpFailed": {
+    "placeholders": {
+      "statusCode": {}
+    }
+  },
+  "updateManifestMustBeJson": "Update manifest must be a JSON object",
+  "updateCheckFailed": "Update check failed: {error}",
+  "@updateCheckFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "apkUrlInvalid": "APK download URL is invalid",
+  "apkDownloadHttpFailed": "APK download failed: HTTP {statusCode}",
+  "@apkDownloadHttpFailed": {
+    "placeholders": {
+      "statusCode": {}
+    }
+  },
+  "cannotOpenInstaller": "Unable to open system installer",
+  "updateManifestMissingVersionName": "Update manifest is missing version_name",
+  "updateManifestInvalidVersionCode": "Update manifest version_code is invalid",
+  "updateManifestMissingApkUrl": "Update manifest is missing apk_url"
+}

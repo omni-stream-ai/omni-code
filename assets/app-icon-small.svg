@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="118" y1="92" x2="906" y2="932" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#06131F"/>
+      <stop offset="0.55" stop-color="#0C2436"/>
+      <stop offset="1" stop-color="#123C64"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="226" y1="194" x2="802" y2="840" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D7FFF6"/>
+      <stop offset="0.46" stop-color="#63E6C9"/>
+      <stop offset="1" stop-color="#2196F3"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
+  <circle cx="512" cy="512" r="286" stroke="url(#ring)" stroke-width="88"/>
+  <path
+    d="M596 354H456C395 354 350 390 350 442C350 484 382 514 442 528L552 554C599 566 623 592 623 636C623 706 568 754 488 754H390V670H516C552 670 574 657 574 632C574 611 558 599 522 590L420 566C349 549 306 510 306 448C306 388 356 354 442 354H596Z"
+    fill="#F7FFFD"
+  />
+</svg>
