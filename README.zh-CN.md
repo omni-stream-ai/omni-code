@@ -90,7 +90,7 @@ flutter analyze
 - `.github/workflows/release.yml`
 - Workflow 名称：`Release Client`
 - 触发方式：手动 `workflow_dispatch`，或 `pubspec.yaml` / `.github/workflows/release.yml` 发生变更
-- 产物：release Android APK、Windows zip、Linux tar.gz，以及 `update.json` GitHub Release
+- 产物：通用 Android APK、按 ABI 拆分的 Android APK、Windows zip、Linux tar.gz，以及 `update.json` GitHub Release
 - Release notes：基于上一个 tag 之后的 Conventional Commit 提交消息生成
 - `main` 只允许 stable 版本
 - 其他分支必须使用 prerelease 版本号，例如 `0.1.0-beta.1`

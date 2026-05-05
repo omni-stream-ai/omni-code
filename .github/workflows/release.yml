@@ -255,11 +255,24 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release
 
+      - name: Build split-per-abi APKs
+        run: flutter build apk --release --split-per-abi
+
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
           name: omni-code-android-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      - name: Upload split-per-abi APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: omni-code-android-split-apks
+          path: |
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-x86_64-release.apk
           if-no-files-found: error
 
   desktop-bundles:
@@ -391,12 +404,26 @@ jobs:
         run: |
           set -euo pipefail
 
-          apk_path="$(find release-assets -name 'app-release.apk' -print -quit)"
-          if [[ -z "$apk_path" ]]; then
+          universal_apk_path="$(find release-assets -name 'app-release.apk' -print -quit)"
+          if [[ -z "$universal_apk_path" ]]; then
             echo "Release APK not found." >&2
             exit 1
           fi
-          cp "$apk_path" release-assets/omni-code-android.apk
+          cp "$universal_apk_path" release-assets/omni-code-android.apk
+
+          armv7_apk_path="$(find release-assets -name 'app-armeabi-v7a-release.apk' -print -quit)"
+          arm64_apk_path="$(find release-assets -name 'app-arm64-v8a-release.apk' -print -quit)"
+          x64_apk_path="$(find release-assets -name 'app-x86_64-release.apk' -print -quit)"
+
+          if [[ -n "$armv7_apk_path" ]]; then
+            cp "$armv7_apk_path" release-assets/omni-code-android-armeabi-v7a.apk
+          fi
+          if [[ -n "$arm64_apk_path" ]]; then
+            cp "$arm64_apk_path" release-assets/omni-code-android-arm64-v8a.apk
+          fi
+          if [[ -n "$x64_apk_path" ]]; then
+            cp "$x64_apk_path" release-assets/omni-code-android-x86_64.apk
+          fi
 
       - name: Generate update manifest
         env:
@@ -412,6 +439,11 @@ jobs:
             "version_name": "${VERSION_NAME}",
             "version_code": ${VERSION_CODE},
             "apk_url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/omni-code-android.apk",
+            "apk_urls": {
+              "armeabi-v7a": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/omni-code-android-armeabi-v7a.apk",
+              "arm64-v8a": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/omni-code-android-arm64-v8a.apk",
+              "x86_64": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/omni-code-android-x86_64.apk"
+            },
             "release_notes": "GitHub release ${TAG}",
             "force": false
           }
@@ -437,6 +469,9 @@ jobs:
           prerelease: ${{ needs.detect-version-bump.outputs.prerelease }}
           files: |
             release-assets/omni-code-android.apk
+            release-assets/omni-code-android-armeabi-v7a.apk
+            release-assets/omni-code-android-arm64-v8a.apk
+            release-assets/omni-code-android-x86_64.apk
             release-assets/omni-code-windows-x86_64.zip
             release-assets/omni-code-linux-x86_64.tar.gz
             release-assets/update.json

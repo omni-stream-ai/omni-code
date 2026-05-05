@@ -57,12 +57,19 @@ The manifest response is generated automatically:
   "version_name": "0.1.1",
   "version_code": 1710000000,
   "apk_url": "/app-update/apk",
+  "apk_urls": {
+    "armeabi-v7a": "/app-update/apk?abi=armeabi-v7a",
+    "arm64-v8a": "/app-update/apk?abi=arm64-v8a",
+    "x86_64": "/app-update/apk?abi=x86_64"
+  },
   "release_notes": "Bridge 自动提供的 APK：.../app-release.apk",
   "force": false
 }
 ```
 
 Notes:
+- When `apk_urls` is present, the Android client prefers the matching ABI APK and
+  falls back to `apk_url` as the universal package.
 - Android users may need to allow installs from unknown sources.
 - New APKs must be signed with the same certificate as the installed app.
 - This is a full APK update flow, not binary diff patching.

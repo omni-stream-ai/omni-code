@@ -362,5 +362,5 @@
   "cannotOpenInstaller": "Unable to open system installer",
   "updateManifestMissingVersionName": "Update manifest is missing version_name",
   "updateManifestInvalidVersionCode": "Update manifest version_code is invalid",
-  "updateManifestMissingApkUrl": "Update manifest is missing apk_url"
+  "updateManifestMissingApkUrl": "Update manifest is missing apk_url or apk_urls"
 }

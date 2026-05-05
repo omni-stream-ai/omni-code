@@ -362,5 +362,5 @@
   "cannotOpenInstaller": "无法打开系统安装器",
   "updateManifestMissingVersionName": "更新清单缺少 version_name",
   "updateManifestInvalidVersionCode": "更新清单 version_code 无效",
-  "updateManifestMissingApkUrl": "更新清单缺少 apk_url"
+  "updateManifestMissingApkUrl": "更新清单缺少 apk_url 或 apk_urls"
 }

@@ -630,5 +630,5 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateManifestInvalidVersionCode => '更新清单 version_code 无效';
 
   @override
-  String get updateManifestMissingApkUrl => '更新清单缺少 apk_url';
+  String get updateManifestMissingApkUrl => '更新清单缺少 apk_url 或 apk_urls';
 }

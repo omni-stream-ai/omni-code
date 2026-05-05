@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
@@ -15,6 +16,7 @@ class AppUpdateService {
   static const MethodChannel _channel = MethodChannel('omni_code/app_update');
 
   final http.Client _httpClient;
+  final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
 
   Future<AppUpdateCheckResult> checkForUpdate(
       {required String manifestUrl}) async {
@@ -46,7 +48,11 @@ class AppUpdateService {
         throw AppUpdateException(currentL10n().updateManifestMustBeJson);
       }
 
-      final update = AppUpdateInfo.fromJson(decoded).resolveAgainst(uri);
+      final parsedUpdate = await AppUpdateInfo.fromJson(
+        decoded,
+        deviceInfo: _deviceInfo,
+      );
+      final update = parsedUpdate.resolveAgainst(uri);
       return AppUpdateCheckResult(
         currentVersionName: packageInfo.version,
         currentVersionCode: currentBuildNumber,
@@ -135,6 +141,7 @@ class AppUpdateInfo {
     required this.versionName,
     required this.versionCode,
     required this.apkUrl,
+    required this.apkUrls,
     required this.releaseNotes,
     required this.force,
   });
@@ -142,13 +149,30 @@ class AppUpdateInfo {
   final String versionName;
   final int versionCode;
   final String apkUrl;
+  final Map<String, String> apkUrls;
   final String releaseNotes;
   final bool force;
 
-  factory AppUpdateInfo.fromJson(Map<String, dynamic> json) {
+  static const List<String> _androidAbiPriority = [
+    'arm64-v8a',
+    'armeabi-v7a',
+    'x86_64',
+  ];
+
+  static const Map<String, List<String>> _androidAbiAliases = {
+    'arm64-v8a': ['arm64-v8a', 'arm64', 'aarch64'],
+    'armeabi-v7a': ['armeabi-v7a', 'armeabi', 'arm32', 'armv7'],
+    'x86_64': ['x86_64', 'x64'],
+  };
+
+  static Future<AppUpdateInfo> fromJson(
+    Map<String, dynamic> json, {
+    required DeviceInfoPlugin deviceInfo,
+  }) async {
     final versionName = (json['version_name'] as String?)?.trim() ?? '';
-    final apkUrl = (json['apk_url'] as String?)?.trim() ?? '';
+    final fallbackApkUrl = (json['apk_url'] as String?)?.trim() ?? '';
     final versionCode = _parseVersionCode(json['version_code']);
+    final apkUrls = _parseApkUrls(json['apk_urls']);
 
     if (versionName.isEmpty) {
       throw AppUpdateException(currentL10n().updateManifestMissingVersionName);
@@ -156,31 +180,111 @@ class AppUpdateInfo {
     if (versionCode <= 0) {
       throw AppUpdateException(currentL10n().updateManifestInvalidVersionCode);
     }
-    if (apkUrl.isEmpty) {
+    if (fallbackApkUrl.isEmpty && apkUrls.isEmpty) {
       throw AppUpdateException(currentL10n().updateManifestMissingApkUrl);
     }
+
+    final selectedApkUrl = await _selectBestApkUrl(
+      deviceInfo: deviceInfo,
+      fallbackApkUrl: fallbackApkUrl,
+      apkUrls: apkUrls,
+    );
 
     return AppUpdateInfo(
       versionName: versionName,
       versionCode: versionCode,
-      apkUrl: apkUrl,
+      apkUrl: selectedApkUrl,
+      apkUrls: apkUrls,
       releaseNotes: (json['release_notes'] as String?) ?? '',
       force: (json['force'] as bool?) ?? false,
     );
   }
 
   AppUpdateInfo resolveAgainst(Uri manifestUri) {
+    final resolvedApkUrls = <String, String>{};
+    for (final entry in apkUrls.entries) {
+      final rawUri = Uri.parse(entry.value);
+      resolvedApkUrls[entry.key] =
+          rawUri.hasScheme && rawUri.hasAuthority
+              ? entry.value
+              : manifestUri.resolveUri(rawUri).toString();
+    }
+
     final rawUri = Uri.parse(apkUrl);
-    if (rawUri.hasScheme && rawUri.hasAuthority) {
+    final resolvedApkUrl =
+        rawUri.hasScheme && rawUri.hasAuthority
+            ? apkUrl
+            : manifestUri.resolveUri(rawUri).toString();
+
+    if (resolvedApkUrls.isEmpty && resolvedApkUrl == apkUrl) {
       return this;
     }
+
     return AppUpdateInfo(
       versionName: versionName,
       versionCode: versionCode,
-      apkUrl: manifestUri.resolveUri(rawUri).toString(),
+      apkUrl: resolvedApkUrl,
+      apkUrls: resolvedApkUrls,
       releaseNotes: releaseNotes,
       force: force,
     );
+  }
+
+  static Map<String, String> _parseApkUrls(Object? raw) {
+    if (raw is! Map) {
+      return const {};
+    }
+
+    final normalized = <String, String>{};
+    for (final entry in raw.entries) {
+      final key = entry.key is String ? (entry.key as String).trim() : '';
+      final value =
+          entry.value is String ? (entry.value as String).trim() : '';
+      if (key.isEmpty || value.isEmpty) {
+        continue;
+      }
+      normalized[key] = value;
+    }
+    return normalized;
+  }
+
+  static Future<String> _selectBestApkUrl({
+    required DeviceInfoPlugin deviceInfo,
+    required String fallbackApkUrl,
+    required Map<String, String> apkUrls,
+  }) async {
+    if (!Platform.isAndroid || apkUrls.isEmpty) {
+      return fallbackApkUrl.isNotEmpty ? fallbackApkUrl : apkUrls.values.first;
+    }
+
+    try {
+      final info = await deviceInfo.androidInfo;
+      final supportedAbis = {
+        ...info.supported64BitAbis,
+        ...info.supported32BitAbis,
+        ...info.supportedAbis,
+      }.map((abi) => abi.trim().toLowerCase()).where((abi) => abi.isNotEmpty);
+
+      for (final candidate in _androidAbiPriority) {
+        if (!apkUrls.containsKey(candidate)) {
+          continue;
+        }
+
+        final aliases = _androidAbiAliases[candidate] ?? const <String>[];
+        if (aliases.any(supportedAbis.contains)) {
+          return apkUrls[candidate]!;
+        }
+      }
+    } catch (_) {
+      // Fall back to the universal APK when device ABI detection fails.
+    }
+
+    return fallbackApkUrl.isNotEmpty
+        ? fallbackApkUrl
+        : (apkUrls['arm64-v8a'] ??
+              apkUrls['armeabi-v7a'] ??
+              apkUrls['x86_64'] ??
+              apkUrls.values.first);
   }
 
   static int _parseVersionCode(Object? raw) {

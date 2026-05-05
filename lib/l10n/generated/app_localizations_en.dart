@@ -652,5 +652,5 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get updateManifestMissingApkUrl =>
-      'Update manifest is missing apk_url';
+      'Update manifest is missing apk_url or apk_urls';
 }
