@@ -197,7 +197,7 @@ abstract class AppLocalizations {
   /// No description provided for @updateHelp.
   ///
   /// In en, this message translates to:
-  /// **'If empty, /app-update/manifest from the current Bridge is used. When a new version is found, the system opens the download link and handles installation.'**
+  /// **'By default, updates are checked from the official GitHub release manifest. You can override it with a custom manifest URL, including a self-hosted Bridge manifest. When a new version is found, the system opens the download link and handles installation.'**
   String get updateHelp;
 
   /// No description provided for @speechSection.
@@ -1199,7 +1199,7 @@ abstract class AppLocalizations {
   /// No description provided for @updateManifestMissingApkUrl.
   ///
   /// In en, this message translates to:
-  /// **'Update manifest is missing apk_url'**
+  /// **'Update manifest is missing apk_url or apk_urls'**
   String get updateManifestMissingApkUrl;
 }
 
