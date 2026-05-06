@@ -59,6 +59,29 @@ class ApprovalRequest {
   }
 }
 
+class ClientAuthRequest {
+  const ClientAuthRequest({
+    required this.requestId,
+    required this.status,
+    this.token,
+  });
+
+  final String requestId;
+  final String status;
+  final String? token;
+
+  bool get isPending => status == 'pending';
+  bool get isApproved => token != null && token!.isNotEmpty;
+
+  factory ClientAuthRequest.fromJson(Map<String, dynamic> json) {
+    return ClientAuthRequest(
+      requestId: (json['request_id'] as String?) ?? '',
+      status: (json['status'] as String?) ?? 'pending',
+      token: json['token'] as String?,
+    );
+  }
+}
+
 class ProjectSummary {
   const ProjectSummary({
     required this.id,

@@ -41,7 +41,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    final settings = appSettingsController.settings;
+    _syncFromSettings(appSettingsController.settings);
+    appSettingsController.addListener(_onSettingsChanged);
+  }
+
+  @override
+  void dispose() {
+    appSettingsController.removeListener(_onSettingsChanged);
+    _bridgeUrlController.dispose();
+    _bridgeTokenController.dispose();
+    _clientIdController.dispose();
+    _zhipuApiKeyController.dispose();
+    _whisperApiKeyController.dispose();
+    _whisperBaseUrlController.dispose();
+    _updateManifestUrlController.dispose();
+    _aiApprovalBaseUrlController.dispose();
+    _aiApprovalApiKeyController.dispose();
+    _aiApprovalModelController.dispose();
+    super.dispose();
+  }
+
+  void _syncFromSettings(AppSettings settings) {
     _bridgeUrlController.text = settings.bridgeUrl;
     _bridgeTokenController.text = settings.bridgeToken;
     _clientIdController.text = settings.clientId;
@@ -61,19 +81,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _compressAssistantReplies = settings.compressAssistantReplies;
   }
 
-  @override
-  void dispose() {
-    _bridgeUrlController.dispose();
-    _bridgeTokenController.dispose();
-    _clientIdController.dispose();
-    _zhipuApiKeyController.dispose();
-    _whisperApiKeyController.dispose();
-    _whisperBaseUrlController.dispose();
-    _updateManifestUrlController.dispose();
-    _aiApprovalBaseUrlController.dispose();
-    _aiApprovalApiKeyController.dispose();
-    _aiApprovalModelController.dispose();
-    super.dispose();
+  void _onSettingsChanged() {
+    if (!mounted) return;
+    setState(() {
+      _syncFromSettings(appSettingsController.settings);
+    });
   }
 
   @override

@@ -21,6 +21,21 @@ class BridgeClient {
   final Map<String, _CacheEntry<List<SessionSummary>>> _projectSessionsCache =
       {};
 
+  void _assertJsonResponse(http.Response response) {
+    final contentType = response.headers['content-type'] ?? '';
+    if (!contentType.contains('application/json') &&
+        response.statusCode >= 400) {
+      throw Exception(
+        'Bridge error (${response.statusCode}): ${response.body}',
+      );
+    }
+    if (response.statusCode >= 400) {
+      throw Exception(
+        'Bridge error (${response.statusCode}): ${response.body}',
+      );
+    }
+  }
+
   @visibleForTesting
   static List<ProjectSummary> sortProjectsForDisplay(
     Iterable<ProjectSummary> projects,
@@ -54,6 +69,73 @@ class BridgeClient {
     return headers;
   }
 
+  bool _isUnauthorized(http.Response response) {
+    return response.statusCode == 401 || response.statusCode == 403;
+  }
+
+  Future<ClientAuthRequest> registerClient() async {
+    final settings = appSettingsController.settings;
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/client-auth/requests'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'client_id': settings.clientId,
+        'device_name': _deviceName(),
+      }),
+    );
+    debugPrint('[auth] registerClient response (${response.statusCode}): ${response.body}');
+    if (response.statusCode >= 400) {
+      throw Exception(
+        'Register client failed (${response.statusCode}): ${response.body}',
+      );
+    }
+    try {
+      final payload = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = payload['data'] as Map<String, dynamic>? ?? payload;
+      debugPrint('[auth] registerClient payload keys: ${data.keys.toList()}');
+      return ClientAuthRequest.fromJson(data);
+    } catch (e) {
+      throw Exception('Invalid response from server: ${response.body}');
+    }
+  }
+
+  Future<ClientAuthRequest> checkClientAuthStatus(String requestId) async {
+    final url = '$baseUrl/client-auth/requests/$requestId';
+    debugPrint('[auth] Polling URL: $url');
+    final response = await _httpClient.get(Uri.parse(url));
+    debugPrint('[auth] Poll response (${response.statusCode}): ${response.body}');
+    if (response.statusCode >= 400) {
+      throw Exception(
+        'Check auth status failed (${response.statusCode}): ${response.body}',
+      );
+    }
+    try {
+      final payload = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = payload['data'] as Map<String, dynamic>? ?? payload;
+      return ClientAuthRequest.fromJson(data);
+    } catch (e) {
+      throw Exception('Invalid response from server: ${response.body}');
+    }
+  }
+
+  String _deviceName() {
+    if (kIsWeb) return 'Web Browser';
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'Android Device';
+      case TargetPlatform.iOS:
+        return 'iOS Device';
+      case TargetPlatform.macOS:
+        return 'macOS';
+      case TargetPlatform.windows:
+        return 'Windows';
+      case TargetPlatform.linux:
+        return 'Linux';
+      default:
+        return 'Unknown Device';
+    }
+  }
+
   Future<List<SessionSummary>> listSessions() async {
     final response = await _httpClient.get(
       Uri.parse('$baseUrl/sessions'),
@@ -81,6 +163,10 @@ class BridgeClient {
       Uri.parse('$baseUrl/projects'),
       headers: _defaultHeaders,
     );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
     final items = payload['data'] as List<dynamic>;
     final projects = sortProjectsForDisplay(
@@ -550,4 +636,12 @@ class SendMessageResult {
 
   final ChatMessage userMessage;
   final ChatMessage reply;
+}
+
+class ClientUnauthorizedException implements Exception {
+  const ClientUnauthorizedException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
 }
