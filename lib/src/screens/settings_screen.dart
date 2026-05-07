@@ -1,11 +1,16 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../services/app_update_service.dart';
 import '../settings/app_settings.dart';
+import '../widgets/copyable_message.dart';
+import '../../l10n/generated/app_localizations.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -119,8 +124,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   value: 'system',
                   child: Text(l10n.languageSystem),
                 ),
-                DropdownMenuItem(value: 'en', child: Text(l10n.languageEnglish)),
-                DropdownMenuItem(value: 'zh', child: Text(l10n.languageChinese)),
+                DropdownMenuItem(
+                    value: 'en', child: Text(l10n.languageEnglish)),
+                DropdownMenuItem(
+                    value: 'zh', child: Text(l10n.languageChinese)),
               ],
               onChanged: (value) {
                 if (value != null) {
@@ -180,48 +187,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          _Section(
-            title: l10n.appUpdateSection,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: _updateManifestUrlController,
-                  decoration: InputDecoration(
-                    labelText: l10n.updateManifestUrlLabel,
-                    hintText: 'https://example.com/omni-code-update.json',
-                    filled: true,
-                    fillColor: const Color(0xFF111827),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed:
-                        _saving || _checkingUpdate ? null : _checkAppUpdate,
-                    icon: _checkingUpdate
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.system_update_alt),
-                    label: Text(
-                      _checkingUpdate
-                          ? l10n.checkingUpdate
-                          : l10n.checkAppUpdate,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  l10n.updateHelp,
-                  style: TextStyle(color: Color(0xFF94A3B8), height: 1.4),
-                ),
-              ],
-            ),
-          ),
+          _buildAppUpdateSection(l10n),
           const SizedBox(height: 16),
           _Section(
             title: l10n.speechSection,
@@ -237,8 +203,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   items: [
                     DropdownMenuItem(
-                      value: TtsProvider.bridge,
-                      child: Text(l10n.bridgeCloudProxy),
+                      value: TtsProvider.system,
+                      child: Text(l10n.speechSystem),
                     ),
                     DropdownMenuItem(
                       value: TtsProvider.zhipu,
@@ -263,8 +229,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   items: [
                     DropdownMenuItem(
-                      value: AsrProvider.bridge,
-                      child: Text(l10n.bridgeCloudProxy),
+                      value: AsrProvider.system,
+                      child: Text(l10n.speechSystem),
                     ),
                     DropdownMenuItem(
                       value: AsrProvider.zhipu,
@@ -282,6 +248,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       });
                     }
                   },
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.speechSystemPreferredHelp,
+                  style: TextStyle(color: Color(0xFF94A3B8), height: 1.4),
                 ),
               ],
             ),
@@ -443,6 +414,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildAppUpdateSection(AppLocalizations l10n) {
+    if (kIsWeb) {
+      return _Section(
+        title: l10n.appDownloadSection,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              l10n.appDownloadHelp,
+              style: const TextStyle(color: Color(0xFF94A3B8), height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _openGithubReleases,
+                icon: const Icon(Icons.open_in_new),
+                label: Text(l10n.openGithubReleases),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return _Section(
+      title: l10n.appUpdateSection,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _updateManifestUrlController,
+            decoration: InputDecoration(
+              labelText: l10n.updateManifestUrlLabel,
+              hintText: 'https://example.com/omni-code-update.json',
+              filled: true,
+              fillColor: const Color(0xFF111827),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _saving || _checkingUpdate ? null : _checkAppUpdate,
+              icon: _checkingUpdate
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.system_update_alt),
+              label: Text(
+                _checkingUpdate ? l10n.checkingUpdate : l10n.checkAppUpdate,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            l10n.updateHelp,
+            style: const TextStyle(color: Color(0xFF94A3B8), height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _save() async {
     setState(() {
       _saving = true;
@@ -507,7 +544,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(
-        SnackBar(content: Text(context.l10n.settingsSaveFailed('$error'))),
+        SnackBar(
+          content: CopyableMessage(
+            message: context.l10n.settingsSaveFailed('$error'),
+            copyLabel: context.l10n.copy,
+            copiedLabel: context.l10n.copied,
+            showCopyButton: false,
+            backgroundColor: Colors.transparent,
+            borderColor: Colors.transparent,
+            iconColor: const Color(0xFFFCA5A5),
+            textColor: const Color(0xFFFECACA),
+          ),
+          action: SnackBarAction(
+            label: context.l10n.copy,
+            onPressed: () {
+              Clipboard.setData(
+                ClipboardData(text: context.l10n.settingsSaveFailed('$error')),
+              );
+            },
+          ),
+        ),
       );
     }
   }
@@ -551,7 +607,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
+        SnackBar(
+          content: CopyableMessage(
+            message: error.toString(),
+            copyLabel: context.l10n.copy,
+            copiedLabel: context.l10n.copied,
+            showCopyButton: false,
+            backgroundColor: Colors.transparent,
+            borderColor: Colors.transparent,
+            iconColor: const Color(0xFFFCA5A5),
+            textColor: const Color(0xFFFECACA),
+          ),
+          action: SnackBarAction(
+            label: context.l10n.copy,
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: error.toString()));
+            },
+          ),
+        ),
       );
     } finally {
       if (mounted) {
@@ -560,6 +633,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
     }
+  }
+
+  Future<void> _openGithubReleases() async {
+    final uri = Uri.parse(
+      'https://github.com/omni-stream-ai/omni-code/releases/latest',
+    );
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   String _resolvedUpdateManifestUrl() {
@@ -671,7 +751,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Navigator.of(context, rootNavigator: true).pop();
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
+        SnackBar(
+          content: CopyableMessage(
+            message: error.toString(),
+            copyLabel: context.l10n.copy,
+            copiedLabel: context.l10n.copied,
+            showCopyButton: false,
+            backgroundColor: Colors.transparent,
+            borderColor: Colors.transparent,
+            iconColor: const Color(0xFFFCA5A5),
+            textColor: const Color(0xFFFECACA),
+          ),
+          action: SnackBarAction(
+            label: context.l10n.copy,
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: error.toString()));
+            },
+          ),
+        ),
       );
     } finally {
       progress.dispose();

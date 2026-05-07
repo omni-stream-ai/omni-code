@@ -18,6 +18,7 @@ class BridgeClient {
 
   final http.Client _httpClient;
   _CacheEntry<List<ProjectSummary>>? _projectsCache;
+  _CacheEntry<List<SessionSummary>>? _sessionsCache;
   final Map<String, _CacheEntry<List<SessionSummary>>> _projectSessionsCache =
       {};
 
@@ -41,6 +42,15 @@ class BridgeClient {
     Iterable<ProjectSummary> projects,
   ) {
     final sorted = projects.toList()
+      ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
+    return sorted;
+  }
+
+  @visibleForTesting
+  static List<SessionSummary> sortSessionsForDisplay(
+    Iterable<SessionSummary> sessions,
+  ) {
+    final sorted = sessions.toList()
       ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
     return sorted;
   }
@@ -83,7 +93,8 @@ class BridgeClient {
         'device_name': _deviceName(),
       }),
     );
-    debugPrint('[auth] registerClient response (${response.statusCode}): ${response.body}');
+    debugPrint(
+        '[auth] registerClient response (${response.statusCode}): ${response.body}');
     if (response.statusCode >= 400) {
       throw Exception(
         'Register client failed (${response.statusCode}): ${response.body}',
@@ -103,7 +114,8 @@ class BridgeClient {
     final url = '$baseUrl/client-auth/requests/$requestId';
     debugPrint('[auth] Polling URL: $url');
     final response = await _httpClient.get(Uri.parse(url));
-    debugPrint('[auth] Poll response (${response.statusCode}): ${response.body}');
+    debugPrint(
+        '[auth] Poll response (${response.statusCode}): ${response.body}');
     if (response.statusCode >= 400) {
       throw Exception(
         'Check auth status failed (${response.statusCode}): ${response.body}',
@@ -136,22 +148,55 @@ class BridgeClient {
     }
   }
 
-  Future<List<SessionSummary>> listSessions() async {
+  Future<List<SessionSummary>> listSessions({bool forceRefresh = false}) async {
+    final cache = _sessionsCache;
+    if (!forceRefresh && cache != null && cache.isFresh) {
+      return cache.value;
+    }
     final response = await _httpClient.get(
       Uri.parse('$baseUrl/sessions'),
       headers: _defaultHeaders,
     );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
     final items = payload['data'] as List<dynamic>;
-    return items
-        .map((item) => SessionSummary.fromJson(item as Map<String, dynamic>))
-        .toList();
+    final sessions = sortSessionsForDisplay(
+      items
+          .map((item) => SessionSummary.fromJson(item as Map<String, dynamic>)),
+    );
+    final mergedSessions = _mergeSessions(
+      cached: _sessionsCache?.value ?? const <SessionSummary>[],
+      incoming: sessions,
+    );
+    _sessionsCache = _CacheEntry(mergedSessions);
+    for (final session in mergedSessions) {
+      _upsertProjectSessionCache(session);
+    }
+    return mergedSessions;
   }
 
   List<ProjectSummary>? peekProjects() => _projectsCache?.value;
 
+  List<SessionSummary>? peekSessions() => _sessionsCache?.value;
+
+  ProjectSummary? peekProject(String projectId) {
+    return _projectsCache?.value
+        .where((project) => project.id == projectId)
+        .firstOrNull;
+  }
+
   List<SessionSummary>? peekProjectSessions(String projectId) {
     return _projectSessionsCache[projectId]?.value;
+  }
+
+  SessionSummary? peekSession(String projectId, String sessionId) {
+    return _projectSessionsCache[projectId]
+        ?.value
+        .where((session) => session.id == sessionId)
+        .firstOrNull;
   }
 
   Future<List<ProjectSummary>> listProjects({bool forceRefresh = false}) async {
@@ -180,6 +225,25 @@ class BridgeClient {
     );
     _projectsCache = _CacheEntry(mergedProjects);
     return mergedProjects;
+  }
+
+  Future<ProjectSummary> getProject(
+    String projectId, {
+    bool forceRefresh = false,
+  }) async {
+    final cachedProject = peekProject(projectId);
+    if (cachedProject != null && !forceRefresh) {
+      return cachedProject;
+    }
+
+    final projects = await listProjects(forceRefresh: true);
+    final project = projects
+        .where((item) => item.id == projectId)
+        .firstOrNull;
+    if (project == null) {
+      throw StateError('Project not found: $projectId');
+    }
+    return project;
   }
 
   Future<List<ChatMessage>> listMessages(String sessionId) async {
@@ -216,7 +280,36 @@ class BridgeClient {
       incoming: sessions,
     );
     _projectSessionsCache[projectId] = _CacheEntry(mergedSessions);
+    _sessionsCache = _CacheEntry(
+      _mergeSessions(
+        cached: _sessionsCache?.value ?? const <SessionSummary>[],
+        incoming: mergedSessions,
+      ),
+    );
     return mergedSessions;
+  }
+
+  Future<SessionSummary> getProjectSession(
+    String projectId,
+    String sessionId, {
+    bool forceRefresh = false,
+  }) async {
+    final cachedSession = peekSession(projectId, sessionId);
+    if (cachedSession != null && !forceRefresh) {
+      return cachedSession;
+    }
+
+    final sessions = await listProjectSessions(
+      projectId,
+      forceRefresh: true,
+    );
+    final session = sessions
+        .where((item) => item.id == sessionId)
+        .firstOrNull;
+    if (session == null) {
+      throw StateError('Session not found: $sessionId');
+    }
+    return session;
   }
 
   Future<SendMessageResult> sendMessage(
@@ -324,8 +417,8 @@ class BridgeClient {
         'project_id': projectId,
         'title': title,
         'agent': agent,
-        'brief_reply_mode':
-            briefReplyMode ?? appSettingsController.settings.compressAssistantReplies,
+        'brief_reply_mode': briefReplyMode ??
+            appSettingsController.settings.compressAssistantReplies,
       }),
     );
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
@@ -488,12 +581,13 @@ class BridgeClient {
   }
 
   void _upsertSession(SessionSummary session) {
-    final current = _projectSessionsCache[session.projectId]?.value ??
-        const <SessionSummary>[];
-    final next = current.where((item) => item.id != session.id).toList()
-      ..add(session)
-      ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
-    _projectSessionsCache[session.projectId] = _CacheEntry(next);
+    final current = _sessionsCache?.value ?? const <SessionSummary>[];
+    final next = _mergeSessions(
+      cached: current,
+      incoming: [session],
+    );
+    _sessionsCache = _CacheEntry(next);
+    _upsertProjectSessionCache(session);
 
     ProjectSummary? project;
     for (final item in _projectsCache?.value ?? const <ProjectSummary>[]) {
@@ -517,6 +611,16 @@ class BridgeClient {
     );
   }
 
+  void _upsertProjectSessionCache(SessionSummary session) {
+    final current = _projectSessionsCache[session.projectId]?.value ??
+        const <SessionSummary>[];
+    final next = _mergeSessions(
+      cached: current,
+      incoming: [session],
+    );
+    _projectSessionsCache[session.projectId] = _CacheEntry(next);
+  }
+
   void syncSessionSummary(SessionSummary session) {
     _upsertSession(session);
   }
@@ -524,6 +628,15 @@ class BridgeClient {
   @visibleForTesting
   void debugSeedProjects(Iterable<ProjectSummary> projects) {
     _projectsCache = _CacheEntry(sortProjectsForDisplay(projects));
+  }
+
+  @visibleForTesting
+  void debugSeedSessions(Iterable<SessionSummary> sessions) {
+    final sorted = sortSessionsForDisplay(sessions);
+    _sessionsCache = _CacheEntry(sorted);
+    for (final session in sorted) {
+      _upsertProjectSessionCache(session);
+    }
   }
 
   static List<ProjectSummary> _mergeProjects({

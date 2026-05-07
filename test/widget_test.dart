@@ -7,6 +7,6 @@ void main() {
     await tester.pumpWidget(const OmniCodeApp());
 
     expect(find.text('Omni Code'), findsWidgets);
-    expect(find.text('活跃会话'), findsOneWidget);
+    expect(find.text('Project Library'), findsOneWidget);
   });
 }

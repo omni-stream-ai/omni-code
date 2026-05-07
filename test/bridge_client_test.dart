@@ -110,6 +110,163 @@ void main() {
       },
     );
   });
+
+  group('BridgeClient createSession', () {
+    test('sends the requested agent id in the request body', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/sessions');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'id': 'session-1',
+                'project_id': 'project-1',
+                'title': 'Test',
+                'agent': 'claude_code',
+                'brief_reply_mode': false,
+                'status': 'idle',
+                'updated_at': '2026-05-05T11:00:00.000',
+                'unread_count': 0,
+                'last_message_preview': null,
+                'pending_approval': null,
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final session = await client.createSession(
+        projectId: 'project-1',
+        title: 'Test',
+        agent: AgentKind.claudecode.id,
+        briefReplyMode: false,
+      );
+
+      expect(body['project_id'], 'project-1');
+      expect(body['title'], 'Test');
+      expect(body['agent'], AgentKind.claudecode.id);
+      expect(session.agent, AgentKind.claudecode);
+    });
+  });
+
+  group('BridgeClient listSessions', () {
+    test('sorts sessions by updatedAt descending and seeds cache', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.url.path, '/sessions');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'session-oldest',
+                  'project_id': 'project-1',
+                  'title': 'Oldest',
+                  'agent': 'codex',
+                  'brief_reply_mode': false,
+                  'status': 'idle',
+                  'updated_at': '2026-05-05T09:00:00.000',
+                  'unread_count': 0,
+                  'last_message_preview': null,
+                  'pending_approval': null,
+                },
+                {
+                  'id': 'session-newest',
+                  'project_id': 'project-1',
+                  'title': 'Newest',
+                  'agent': 'codex',
+                  'brief_reply_mode': false,
+                  'status': 'idle',
+                  'updated_at': '2026-05-05T11:00:00.000',
+                  'unread_count': 0,
+                  'last_message_preview': null,
+                  'pending_approval': null,
+                },
+                {
+                  'id': 'session-middle',
+                  'project_id': 'project-2',
+                  'title': 'Middle',
+                  'agent': 'codex',
+                  'brief_reply_mode': false,
+                  'status': 'idle',
+                  'updated_at': '2026-05-05T10:00:00.000',
+                  'unread_count': 0,
+                  'last_message_preview': null,
+                  'pending_approval': null,
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final sessions = await client.listSessions();
+
+      expect(
+        sessions.map((item) => item.id).toList(),
+        ['session-newest', 'session-middle', 'session-oldest'],
+      );
+      expect(
+        client.peekSessions()?.map((item) => item.id).toList(),
+        ['session-newest', 'session-middle', 'session-oldest'],
+      );
+    });
+  });
+
+  group('BridgeClient route lookups', () {
+    test('getProject returns a cached project by id', () async {
+      final client = BridgeClient();
+      final project = _project(
+        id: 'alpha',
+        updatedAt: DateTime(2026, 5, 5, 11),
+      );
+      client.debugSeedProjects([project]);
+
+      final result = await client.getProject('alpha');
+
+      expect(result.id, 'alpha');
+    });
+
+    test('getProjectSession loads a session by project and session id',
+        () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.url.path, '/projects/project-1/sessions');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'session-1',
+                  'project_id': 'project-1',
+                  'title': 'Test Session',
+                  'agent': 'codex',
+                  'brief_reply_mode': false,
+                  'status': 'idle',
+                  'updated_at': '2026-05-05T11:00:00.000',
+                  'unread_count': 0,
+                  'last_message_preview': null,
+                  'pending_approval': null,
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final session = await client.getProjectSession('project-1', 'session-1');
+
+      expect(session.id, 'session-1');
+      expect(session.projectId, 'project-1');
+    });
+  });
 }
 
 ProjectSummary _project({
@@ -155,6 +312,10 @@ class _FakeHttpClient extends http.BaseClient {
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final nextRequest = http.Request(request.method, request.url)
       ..headers.addAll(request.headers);
+    if (request is http.Request) {
+      nextRequest.body = request.body;
+      nextRequest.encoding = request.encoding;
+    }
     final response = await _handler(nextRequest);
     return http.StreamedResponse(
       Stream.value(response.bodyBytes),

@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../app_routes.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
 import '../settings/app_settings.dart';
+import '../widgets/copyable_message.dart';
 import 'session_detail_screen.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
@@ -135,201 +137,212 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         label: Text(l10n.newSession),
         icon: const Icon(Icons.add_comment_outlined),
       ),
-      body: RefreshIndicator(
-        onRefresh: _reloadSessions,
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            if (_isRefreshing)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: LinearProgressIndicator(minHeight: 3),
-              ),
-            Container(
+      body: Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: _reloadSessions,
+            child: ListView(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF111827),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0xFF1E293B)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _project.name,
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                    ),
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF111827),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: const Color(0xFF1E293B)),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _project.rootPath,
-                    style: const TextStyle(
-                      color: Color(0xFF38BDF8),
-                      height: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    l10n.projectIntro,
-                    style: TextStyle(
-                      color: Color(0xFF94A3B8),
-                      height: 1.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            TextField(
-              controller: _searchController,
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value.trim().toLowerCase();
-                  _visibleCount = _pageSize;
-                });
-              },
-              decoration: InputDecoration(
-                hintText: l10n.searchSessions,
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchQuery.isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {
-                            _searchQuery = '';
-                            _visibleCount = _pageSize;
-                          });
-                        },
-                        icon: const Icon(Icons.close),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _project.name,
+                        style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                filled: true,
-                fillColor: const Color(0xFF0F172A),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: const BorderSide(color: Color(0xFF1E293B)),
+                      const SizedBox(height: 8),
+                      Text(
+                        _project.rootPath,
+                        style: const TextStyle(
+                          color: Color(0xFF38BDF8),
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        l10n.projectIntro,
+                        style: TextStyle(
+                          color: Color(0xFF94A3B8),
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              l10n.sessionsTitle,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-            if (_isLoading)
-              const Padding(
-                padding: EdgeInsets.only(top: 24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_error != null &&
-                (_sessions == null || _sessions!.isEmpty))
-              _ProjectErrorCard(
-                message: l10n.loadSessionsFailed('$_error'),
-                onRetry: _reloadSessions,
-              )
-            else if (_sessions == null || _sessions!.isEmpty)
-              _ProjectEmptyCard(onCreateSession: _createSession)
-            else if (_filterSessions(_sessions!).isEmpty)
-              const _ProjectSearchEmptyCard()
-            else ...[
-              ..._visibleSessions(_filterSessions(_sessions!)).map(
-                (session) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: InkWell(
-                    onTap: () async {
-                      await Navigator.of(context).pushNamed(
-                        SessionDetailScreen.routeName,
-                        arguments: session,
-                      );
-                      if (!mounted) {
-                        return;
-                      }
-                      unawaited(_reloadSessions());
-                    },
-                    borderRadius: BorderRadius.circular(18),
-                    child: Ink(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: _searchController,
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value.trim().toLowerCase();
+                      _visibleCount = _pageSize;
+                    });
+                  },
+                  decoration: InputDecoration(
+                    hintText: l10n.searchSessions,
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchQuery.isEmpty
+                        ? null
+                        : IconButton(
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _searchQuery = '';
+                                _visibleCount = _pageSize;
+                              });
+                            },
+                            icon: const Icon(Icons.close),
+                          ),
+                    filled: true,
+                    fillColor: const Color(0xFF0F172A),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      borderSide: const BorderSide(color: Color(0xFF1E293B)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  l10n.sessionsTitle,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                if (_isLoading)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_error != null &&
+                    (_sessions == null || _sessions!.isEmpty))
+                  _ProjectErrorCard(
+                    message: l10n.loadSessionsFailed('$_error'),
+                    onRetry: _reloadSessions,
+                  )
+                else if (_sessions == null || _sessions!.isEmpty)
+                  _ProjectEmptyCard(onCreateSession: _createSession)
+                else if (_filterSessions(_sessions!).isEmpty)
+                  const _ProjectSearchEmptyCard()
+                else ...[
+                  ..._visibleSessions(_filterSessions(_sessions!)).map(
+                    (session) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: InkWell(
+                        onTap: () async {
+                          await Navigator.of(context).pushNamed(
+                            AppRoutes.session(_project.id, session.id),
+                            arguments: session,
+                          );
+                          if (!mounted) {
+                            return;
+                          }
+                          unawaited(_reloadSessions());
+                        },
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: const Color(0xFF1E293B)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                        child: Ink(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F172A),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: const Color(0xFF1E293B)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  session.title,
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      session.title,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    _statusLabel(session.status),
+                                    style: TextStyle(
+                                      color: _statusColor(session.status),
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                l10n.sessionUpdatedAtWithAgent(
+                                  session.agent.name,
+                                  _formatSessionUpdatedAt(session.updatedAt),
+                                ),
+                                style: const TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontSize: 12,
+                                ),
+                              ),
+                              if (session.lastMessagePreview
+                                      ?.trim()
+                                      .isNotEmpty ==
+                                  true) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  session.lastMessagePreview!,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF94A3B8),
+                                    height: 1.4,
                                   ),
                                 ),
-                              ),
-                              Text(
-                                _statusLabel(session.status),
-                                style: TextStyle(
-                                  color: _statusColor(session.status),
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                              ],
                             ],
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            l10n.sessionUpdatedAtWithAgent(
-                              session.agent.name,
-                              _formatSessionUpdatedAt(session.updatedAt),
-                            ),
-                            style: const TextStyle(
-                              color: Color(0xFF64748B),
-                              fontSize: 12,
-                            ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (_shouldShowLoadMore(_filterSessions(_sessions!)))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, bottom: 24),
+                      child: OutlinedButton(
+                        onPressed: () {
+                          setState(() {
+                            _visibleCount += _pageSize;
+                          });
+                        },
+                        child: Text(
+                          l10n.loadMoreSessions(
+                            _filterSessions(_sessions!).length -
+                                _visibleSessions(_filterSessions(_sessions!))
+                                    .length,
                           ),
-                          if (session.lastMessagePreview?.trim().isNotEmpty ==
-                              true) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              session.lastMessagePreview!,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF94A3B8),
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
+                ],
+              ],
+            ),
+          ),
+          if (_isRefreshing)
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: LinearProgressIndicator(minHeight: 3),
               ),
-              if (_shouldShowLoadMore(_filterSessions(_sessions!)))
-                Padding(
-                  padding: const EdgeInsets.only(top: 4, bottom: 24),
-                  child: OutlinedButton(
-                    onPressed: () {
-                      setState(() {
-                        _visibleCount += _pageSize;
-                      });
-                    },
-                    child: Text(
-                      l10n.loadMoreSessions(
-                        _filterSessions(_sessions!).length -
-                            _visibleSessions(_filterSessions(_sessions!)).length,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -451,7 +464,15 @@ class _ProjectErrorCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(message),
+          CopyableMessage(
+            message: message,
+            copyLabel: context.l10n.copy,
+            copiedLabel: context.l10n.copied,
+            backgroundColor: const Color(0xFF3F1D1D),
+            borderColor: const Color(0xFF7F1D1D),
+            iconColor: const Color(0xFFFCA5A5),
+            textColor: const Color(0xFFFECACA),
+          ),
           const SizedBox(height: 12),
           FilledButton(onPressed: onRetry, child: Text(context.l10n.retry)),
         ],
@@ -523,7 +544,7 @@ class _CreateSessionDialog extends StatefulWidget {
 
 class _CreateSessionDialogState extends State<_CreateSessionDialog> {
   final _titleController = TextEditingController();
-  String _agent = 'codex';
+  String _agent = AgentKind.codex.id;
 
   @override
   void dispose() {
@@ -548,11 +569,14 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: _agent,
-            items: const [
-              DropdownMenuItem(value: 'codex', child: Text('Codex')),
-              DropdownMenuItem(
-                  value: 'claude_code', child: Text('Claude Code')),
-            ],
+            items: AgentKind.selectableValues
+                .map(
+                  (agent) => DropdownMenuItem(
+                    value: agent.id,
+                    child: Text(agent.label),
+                  ),
+                )
+                .toList(),
             onChanged: (value) {
               if (value == null) {
                 return;

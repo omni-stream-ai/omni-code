@@ -1,16 +1,20 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../app_routes.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
 import '../services/cloud_speech_service.dart';
 import '../services/notification_service.dart';
 import '../services/audio_recording_service.dart';
+import '../services/speech_input_service.dart';
 import '../services/tts_service.dart';
 import '../settings/app_settings.dart';
+import '../widgets/copyable_message.dart';
 
 class SessionDetailScreen extends StatefulWidget {
   const SessionDetailScreen({
@@ -34,6 +38,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
   final _audioRecordingService = AudioRecordingService();
+  final _speechInputService = SpeechInputService();
   final _ttsService = TtsService();
   final Set<String> _autoSpokenAssistantMessageIds = <String>{};
   final Set<String> _notifiedAssistantMessageIds = <String>{};
@@ -44,6 +49,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Timer? _eventsReconnectTimer;
 
   String? _recordingPath;
+  String _recognizedSpeech = '';
+  String? _systemAsrLocaleId;
+  bool _systemAsrUnavailable = false;
   bool _loadingMessages = true;
   bool _speechReady = false;
   bool _ttsReady = false;
@@ -87,7 +95,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     WidgetsBinding.instance.removeObserver(this);
     _eventsSubscription?.cancel();
     _eventsReconnectTimer?.cancel();
-    _audioRecordingService.cancel();
+    unawaited(_audioRecordingService.cancel());
+    unawaited(_speechInputService.cancel());
     _ttsService.stop();
     _controller.dispose();
     _scrollController.dispose();
@@ -173,42 +182,26 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 style: const TextStyle(height: 1.4),
               ),
             ),
-          if (_session.status == SessionStatus.waiting &&
-              _pendingApproval == null)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1F2937),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFF475569)),
-              ),
-              child: Text(
-                l10n.turnPausedWaiting,
-                style: const TextStyle(height: 1.4),
-              ),
-            ),
           if (_speechError != null ||
               (_speechStatus != null && !_isSpeechReadyStatus))
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _speechError == null
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: CopyableMessage(
+                message: _speechError ?? _speechStatus!,
+                copyLabel: context.l10n.copy,
+                copiedLabel: context.l10n.copied,
+                backgroundColor: _speechError == null
                     ? const Color(0xFF0F172A)
                     : const Color(0xFF3F1D1D),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: _speechError == null
-                      ? const Color(0xFF1E293B)
-                      : const Color(0xFF7F1D1D),
-                ),
-              ),
-              child: Text(
-                _speechError ?? _speechStatus!,
-                style: const TextStyle(height: 1.4),
+                borderColor: _speechError == null
+                    ? const Color(0xFF1E293B)
+                    : const Color(0xFF7F1D1D),
+                iconColor: _speechError == null
+                    ? const Color(0xFFCBD5E1)
+                    : const Color(0xFFFCA5A5),
+                textColor: _speechError == null
+                    ? const Color(0xFFE2E8F0)
+                    : const Color(0xFFFECACA),
               ),
             ),
           if (_pendingApproval != null)
@@ -217,19 +210,19 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             child: _creatingSession
                 ? const Center(child: CircularProgressIndicator())
                 : _loadingMessages
-                ? const Center(child: CircularProgressIndicator())
-                : NotificationListener<ScrollNotification>(
-                    onNotification: _handleScrollNotification,
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(16),
-                      itemCount: turns.length,
-                      itemBuilder: (context, index) {
-                        final turn = turns[index];
-                        return _buildTurn(context, turn);
-                      },
-                    ),
-                  ),
+                    ? const Center(child: CircularProgressIndicator())
+                    : NotificationListener<ScrollNotification>(
+                        onNotification: _handleScrollNotification,
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.all(16),
+                          itemCount: turns.length,
+                          itemBuilder: (context, index) {
+                            final turn = turns[index];
+                            return _buildTurn(context, turn);
+                          },
+                        ),
+                      ),
           ),
           Container(
             padding: const EdgeInsets.all(16),
@@ -331,16 +324,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   String _agentLabel(AgentKind agent) {
-    switch (agent) {
-      case AgentKind.codex:
-        return 'Codex';
-      case AgentKind.claudecode:
-        return 'Claude Code';
-      case AgentKind.opencode:
-        return 'OpenCode';
-      case AgentKind.custom:
-        return 'Agent';
-    }
+    return agent.label;
   }
 
   Widget _buildPendingApprovalCard(double maxHeight) {
@@ -487,8 +471,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (turn.userMessage != null)
-            _buildUserMessage(turn.userMessage!),
+          if (turn.userMessage != null) _buildUserMessage(turn.userMessage!),
           if (turn.toolMessages.isNotEmpty)
             _buildToolEntry(
               count: turn.toolMessages.length,
@@ -663,7 +646,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 ),
                 child: Text(
-                  _isSpeaking ? context.l10n.stopPlayback : context.l10n.playback,
+                  _isSpeaking
+                      ? context.l10n.stopPlayback
+                      : context.l10n.playback,
                 ),
               ),
             ],
@@ -715,6 +700,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     try {
       final session = await initializer;
       if (!mounted) {
+        return;
+      }
+      if (kIsWeb) {
+        Navigator.of(context).pushReplacementNamed(
+          AppRoutes.session(session.projectId, session.id),
+          arguments: session,
+        );
         return;
       }
       setState(() {
@@ -1061,6 +1053,53 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Future<void> _initializeSpeech() async {
     try {
+      final useSystemSpeech =
+          appSettingsController.settings.asrProvider == AsrProvider.system;
+      _systemAsrUnavailable = false;
+      if (useSystemSpeech) {
+        try {
+          final ready = await _speechInputService.initialize(
+            onStatus: (status) {
+              if (!mounted) {
+                return;
+              }
+              if (status == 'done' || status == 'notListening') {
+                setState(() {
+                  _isListening = false;
+                });
+              }
+            },
+            onError: (error, permanent) {
+              if (!mounted) {
+                return;
+              }
+              setState(() {
+                _isListening = false;
+                _speechError = context.l10n.voiceTranscriptionFailed(error);
+              });
+              if (permanent || kIsWeb) {
+                _systemAsrUnavailable = true;
+              }
+            },
+          ).timeout(const Duration(seconds: 6));
+          if (ready) {
+            _systemAsrLocaleId = await _resolveSystemAsrLocaleId();
+            if (!mounted) {
+              return;
+            }
+            setState(() {
+              _speechReady = true;
+              _speechStatus = null;
+              _speechError = null;
+            });
+            return;
+          }
+          _systemAsrUnavailable = true;
+        } catch (_) {
+          _systemAsrUnavailable = true;
+        }
+      }
+      _systemAsrLocaleId = null;
       final ready = await _audioRecordingService.hasPermission().timeout(
             const Duration(seconds: 6),
           );
@@ -1080,7 +1119,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
       setState(() {
         _speechReady = false;
-        _speechError = context.l10n.recordingInitFailed('$error');
+        _speechError = context.l10n.voiceInputInitFailed('$error');
       });
     }
   }
@@ -1141,9 +1180,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Future<void> _toggleListening() async {
+    final useSystemSpeech = _useSystemSpeech();
     if (!_speechReady) {
       setState(() {
-        _speechStatus = context.l10n.reinitializingRecording;
+        _speechStatus = context.l10n.reinitializingVoiceInput;
         _speechError = null;
       });
       await _initializeSpeech();
@@ -1153,27 +1193,134 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     if (_isListening) {
-      await _stopRecordingAndTranscribe();
+      if (useSystemSpeech) {
+        await _stopSystemListening();
+      } else {
+        await _stopRecordingAndTranscribe();
+      }
       return;
     }
 
     setState(() {
       _speechError = null;
-      _speechStatus = context.l10n.recordingInProgress;
+      _speechStatus = context.l10n.voiceInputInProgress;
       _isListening = true;
+      _recognizedSpeech = '';
     });
 
     try {
-      _recordingPath = await _audioRecordingService.start();
+      if (useSystemSpeech) {
+        await _speechInputService.startListening(
+          localeId: _systemAsrLocaleId,
+          onResult: (words, isFinal) {
+            if (!mounted) {
+              return;
+            }
+            setState(() {
+              _recognizedSpeech = words;
+              _controller.text = words;
+              _controller.selection = TextSelection.fromPosition(
+                TextPosition(offset: _controller.text.length),
+              );
+              if (isFinal) {
+                _speechStatus = context.l10n.voiceTranscriptionComplete;
+                _speechError = null;
+              }
+            });
+          },
+        );
+      } else {
+        _recordingPath = await _audioRecordingService.start();
+      }
     } catch (error) {
       if (!mounted) {
         return;
       }
       setState(() {
         _isListening = false;
-        _speechError = context.l10n.startRecordingFailed('$error');
+        _speechError = context.l10n.startVoiceInputFailed('$error');
       });
     }
+  }
+
+  Future<void> _stopSystemListening() async {
+    try {
+      await _speechInputService.stopListening();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isListening = false;
+        _speechError = context.l10n.stopVoiceInputFailed('$error');
+      });
+      return;
+    }
+
+    final transcript = _recognizedSpeech.trim();
+    _recognizedSpeech = '';
+    if (!mounted) {
+      return;
+    }
+    if (transcript.isEmpty) {
+      setState(() {
+        _isListening = false;
+        _speechError = context.l10n.voiceTranscriptionNoResult;
+      });
+      return;
+    }
+    setState(() {
+      _isListening = false;
+      _controller.text = transcript;
+      _controller.selection = TextSelection.fromPosition(
+        TextPosition(offset: _controller.text.length),
+      );
+      _speechStatus = context.l10n.voiceTranscriptionComplete;
+      _speechError = null;
+    });
+  }
+
+  Future<String?> _resolveSystemAsrLocaleId() async {
+    final locale = preferredLocaleFromSetting(
+      appSettingsController.settings.appLanguage,
+    );
+    final targetLocaleId = _localeIdFor(locale);
+    final availableLocales = await _speechInputService.availableLocales();
+    if (availableLocales.isEmpty) {
+      return targetLocaleId;
+    }
+
+    String? exactMatch;
+    String? languageMatch;
+    for (final available in availableLocales) {
+      final normalized = _normalizeLocaleId(available.localeId);
+      if (normalized == _normalizeLocaleId(targetLocaleId)) {
+        exactMatch = available.localeId;
+        break;
+      }
+      if (languageMatch == null &&
+          normalized.startsWith(locale.languageCode.toLowerCase())) {
+        languageMatch = available.localeId;
+      }
+    }
+    return exactMatch ?? languageMatch ?? availableLocales.first.localeId;
+  }
+
+  String? _localeIdFor(Locale locale) {
+    final countryCode = locale.countryCode;
+    if (countryCode == null || countryCode.trim().isEmpty) {
+      return locale.languageCode;
+    }
+    return '${locale.languageCode}_${countryCode.trim().toUpperCase()}';
+  }
+
+  String _normalizeLocaleId(String? localeId) {
+    return (localeId ?? '').trim().replaceAll('-', '_').toLowerCase();
+  }
+
+  bool _useSystemSpeech() {
+    return appSettingsController.settings.asrProvider == AsrProvider.system &&
+        !_systemAsrUnavailable;
   }
 
   Future<void> _stopRecordingAndTranscribe() async {
@@ -1186,7 +1333,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
       setState(() {
         _isListening = false;
-        _speechError = context.l10n.stopRecordingFailed('$error');
+        _speechError = context.l10n.stopVoiceInputFailed('$error');
       });
       return;
     }
@@ -1789,10 +1936,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         primaryLabel: context.l10n.toolPrimaryCommand,
         primary: exitMatch?.group(1)?.trim() ?? remainder,
         secondaryLabel: context.l10n.toolSecondaryResult,
-        secondaryItems:
-            exitMatch == null
-                ? const []
-                : [context.l10n.toolExitCode(exitMatch.group(2)!)],
+        secondaryItems: exitMatch == null
+            ? const []
+            : [context.l10n.toolExitCode(exitMatch.group(2)!)],
       );
     }
 
@@ -1816,10 +1962,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         secondaryItems: files.length <= 1
             ? const []
             : files.skip(1).toList(growable: false),
-        trailingNote:
-            moreMatch == null
-                ? null
-                : context.l10n.toolMoreFiles(moreMatch.group(1)!),
+        trailingNote: moreMatch == null
+            ? null
+            : context.l10n.toolMoreFiles(moreMatch.group(1)!),
       );
     }
 
