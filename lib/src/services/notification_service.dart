@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../app_routes.dart';
 import '../models.dart';
-import '../screens/session_detail_screen.dart';
 
 @pragma('vm:entry-point')
 void notificationTapBackground(NotificationResponse response) {
@@ -74,7 +74,7 @@ class NotificationService {
       return;
     }
     navigator.pushNamed(
-      SessionDetailScreen.routeName,
+      AppRoutes.session(session.projectId, session.id),
       arguments: session,
     );
   }
@@ -87,7 +87,7 @@ class NotificationService {
     }
     _pendingSession = null;
     navigator.pushNamed(
-      SessionDetailScreen.routeName,
+      AppRoutes.session(session.projectId, session.id),
       arguments: session,
     );
   }
@@ -147,8 +147,9 @@ class NotificationService {
       json['session'] as Map<String, dynamic>,
     );
     final trimmedBody = body?.trim();
-    final notificationBody =
-        trimmedBody?.isNotEmpty == true ? trimmedBody! : session.lastMessagePreview;
+    final notificationBody = trimmedBody?.isNotEmpty == true
+        ? trimmedBody!
+        : session.lastMessagePreview;
     if (notificationBody == null || notificationBody.trim().isEmpty) {
       return;
     }
