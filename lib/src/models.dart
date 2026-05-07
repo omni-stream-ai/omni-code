@@ -2,7 +2,7 @@ enum AgentKind {
   codex('codex', 'Codex', ['codex']),
   claudecode('claude_code', 'Claude Code', ['claude_code', 'claudecode']),
   opencode('open_code', 'OpenCode'),
-  custom('custom', 'Agent', const []);
+  custom('custom', 'Agent', []);
 
   const AgentKind(this.id, this.label, [this.aliases = const []]);
 
