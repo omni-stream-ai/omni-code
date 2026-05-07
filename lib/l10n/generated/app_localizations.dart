@@ -479,7 +479,7 @@ abstract class AppLocalizations {
   /// No description provided for @sessionsTitle.
   ///
   /// In en, this message translates to:
-  /// **'Sessions'**
+  /// **'Recent'**
   String get sessionsTitle;
 
   /// No description provided for @loadSessionsFailed.
@@ -1201,6 +1201,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Update manifest is missing apk_url or apk_urls'**
   String get updateManifestMissingApkUrl;
+
+  /// No description provided for @copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get copy;
+
+  /// No description provided for @copied.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get copied;
+
+  /// No description provided for @waitingApprovalTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for approval'**
+  String get waitingApprovalTitle;
+
+  /// No description provided for @waitingApprovalInstallHint.
+  ///
+  /// In en, this message translates to:
+  /// **'If the Bridge service is not running yet, download it from GitHub and start it first.'**
+  String get waitingApprovalInstallHint;
+
+  /// No description provided for @waitingApprovalDownloadBridge.
+  ///
+  /// In en, this message translates to:
+  /// **'Download Bridge service on GitHub'**
+  String get waitingApprovalDownloadBridge;
+
+  /// No description provided for @waitingApprovalRunCommand.
+  ///
+  /// In en, this message translates to:
+  /// **'Run this command on the Bridge host:'**
+  String get waitingApprovalRunCommand;
+
+  /// No description provided for @voiceInputInitFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice input init timed out or failed: {error}'**
+  String voiceInputInitFailed(Object error);
+
+  /// No description provided for @startVoiceInputFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to start voice input: {error}'**
+  String startVoiceInputFailed(Object error);
+
+  /// No description provided for @stopVoiceInputFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to stop voice input: {error}'**
+  String stopVoiceInputFailed(Object error);
+
+  /// No description provided for @voiceInputInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening. Tap once to stop and transcribe...'**
+  String get voiceInputInProgress;
+
+  /// No description provided for @reinitializingVoiceInput.
+  ///
+  /// In en, this message translates to:
+  /// **'Reinitializing voice input...'**
+  String get reinitializingVoiceInput;
+
+  /// No description provided for @voiceTranscriptionNoResult.
+  ///
+  /// In en, this message translates to:
+  /// **'No speech was recognized'**
+  String get voiceTranscriptionNoResult;
+
+  /// No description provided for @speechSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get speechSystem;
+
+  /// No description provided for @speechSystemPreferredHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'System is used by default when available. Switch to cloud providers if you need a fallback.'**
+  String get speechSystemPreferredHelp;
+
+  /// No description provided for @appDownloadSection.
+  ///
+  /// In en, this message translates to:
+  /// **'App Download'**
+  String get appDownloadSection;
+
+  /// No description provided for @appDownloadHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Download the latest release from GitHub.'**
+  String get appDownloadHelp;
+
+  /// No description provided for @openGithubReleases.
+  ///
+  /// In en, this message translates to:
+  /// **'Open GitHub Releases'**
+  String get openGithubReleases;
 }
 
 class _AppLocalizationsDelegate

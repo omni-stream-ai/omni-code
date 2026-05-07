@@ -222,7 +222,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchSessions => '搜索会话标题或摘要';
 
   @override
-  String get sessionsTitle => '会话';
+  String get sessionsTitle => '最近';
 
   @override
   String loadSessionsFailed(Object error) {
@@ -631,4 +631,61 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get updateManifestMissingApkUrl => '更新清单缺少 apk_url 或 apk_urls';
+
+  @override
+  String get copy => '复制';
+
+  @override
+  String get copied => '已复制';
+
+  @override
+  String get waitingApprovalTitle => '等待批准';
+
+  @override
+  String get waitingApprovalInstallHint => '如果 Bridge 服务尚未运行，请先从 GitHub 下载并启动。';
+
+  @override
+  String get waitingApprovalDownloadBridge => '在 GitHub 下载 Bridge 服务';
+
+  @override
+  String get waitingApprovalRunCommand => '在 Bridge 主机上运行此命令：';
+
+  @override
+  String voiceInputInitFailed(Object error) {
+    return '语音输入初始化超时或失败：$error';
+  }
+
+  @override
+  String startVoiceInputFailed(Object error) {
+    return '启动语音输入失败：$error';
+  }
+
+  @override
+  String stopVoiceInputFailed(Object error) {
+    return '停止语音输入失败：$error';
+  }
+
+  @override
+  String get voiceInputInProgress => '正在聆听。点击一次停止并转写...';
+
+  @override
+  String get reinitializingVoiceInput => '正在重新初始化语音输入...';
+
+  @override
+  String get voiceTranscriptionNoResult => '未识别到语音';
+
+  @override
+  String get speechSystem => '系统';
+
+  @override
+  String get speechSystemPreferredHelp => '系统可用时默认使用。如需备份可切换到云服务商。';
+
+  @override
+  String get appDownloadSection => '应用下载';
+
+  @override
+  String get appDownloadHelp => '从 GitHub 下载最新版本。';
+
+  @override
+  String get openGithubReleases => '打开 GitHub Releases';
 }

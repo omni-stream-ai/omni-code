@@ -116,7 +116,7 @@
   "cancel": "Cancel",
   "projectIntro": "Open any session to continue the existing context, or create a new Codex session under this project.",
   "searchSessions": "Search session title or summary",
-  "sessionsTitle": "Sessions",
+  "sessionsTitle": "Recent",
   "loadSessionsFailed": "Failed to load sessions: {error}",
   "@loadSessionsFailed": {
     "placeholders": {
@@ -362,5 +362,22 @@
   "cannotOpenInstaller": "Unable to open system installer",
   "updateManifestMissingVersionName": "Update manifest is missing version_name",
   "updateManifestInvalidVersionCode": "Update manifest version_code is invalid",
-  "updateManifestMissingApkUrl": "Update manifest is missing apk_url or apk_urls"
+  "updateManifestMissingApkUrl": "Update manifest is missing apk_url or apk_urls",
+  "copy": "Copy",
+  "copied": "Copied",
+  "waitingApprovalTitle": "Waiting for approval",
+  "waitingApprovalInstallHint": "If the Bridge service is not running yet, download it from GitHub and start it first.",
+  "waitingApprovalDownloadBridge": "Download Bridge service on GitHub",
+  "waitingApprovalRunCommand": "Run this command on the Bridge host:",
+  "voiceInputInitFailed": "Voice input init timed out or failed: {error}",
+  "startVoiceInputFailed": "Failed to start voice input: {error}",
+  "stopVoiceInputFailed": "Failed to stop voice input: {error}",
+  "voiceInputInProgress": "Listening. Tap once to stop and transcribe...",
+  "reinitializingVoiceInput": "Reinitializing voice input...",
+  "voiceTranscriptionNoResult": "No speech was recognized",
+  "speechSystem": "System",
+  "speechSystemPreferredHelp": "System is used by default when available. Switch to cloud providers if you need a fallback.",
+  "appDownloadSection": "App Download",
+  "appDownloadHelp": "Download the latest release from GitHub.",
+  "openGithubReleases": "Open GitHub Releases"
 }

@@ -116,7 +116,7 @@
   "cancel": "取消",
   "projectIntro": "进入任一会话即可继续历史上下文，也可以在当前项目下创建一个新的 Codex 会话。",
   "searchSessions": "搜索会话标题或摘要",
-  "sessionsTitle": "会话",
+  "sessionsTitle": "最近",
   "loadSessionsFailed": "加载会话失败：{error}",
   "@loadSessionsFailed": {
     "placeholders": {
@@ -362,5 +362,22 @@
   "cannotOpenInstaller": "无法打开系统安装器",
   "updateManifestMissingVersionName": "更新清单缺少 version_name",
   "updateManifestInvalidVersionCode": "更新清单 version_code 无效",
-  "updateManifestMissingApkUrl": "更新清单缺少 apk_url 或 apk_urls"
+  "updateManifestMissingApkUrl": "更新清单缺少 apk_url 或 apk_urls",
+  "copy": "复制",
+  "copied": "已复制",
+  "waitingApprovalTitle": "等待批准",
+  "waitingApprovalInstallHint": "如果 Bridge 服务尚未运行，请先从 GitHub 下载并启动。",
+  "waitingApprovalDownloadBridge": "在 GitHub 下载 Bridge 服务",
+  "waitingApprovalRunCommand": "在 Bridge 主机上运行此命令：",
+  "voiceInputInitFailed": "语音输入初始化超时或失败：{error}",
+  "startVoiceInputFailed": "启动语音输入失败：{error}",
+  "stopVoiceInputFailed": "停止语音输入失败：{error}",
+  "voiceInputInProgress": "正在聆听。点击一次停止并转写...",
+  "reinitializingVoiceInput": "正在重新初始化语音输入...",
+  "voiceTranscriptionNoResult": "未识别到语音",
+  "speechSystem": "系统",
+  "speechSystemPreferredHelp": "系统可用时默认使用。如需备份可切换到云服务商。",
+  "appDownloadSection": "应用下载",
+  "appDownloadHelp": "从 GitHub 下载最新版本。",
+  "openGithubReleases": "打开 GitHub Releases"
 }

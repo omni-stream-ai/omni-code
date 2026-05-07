@@ -12,3 +12,17 @@ Locale? localeFromSetting(String languageCode) {
     _ => null,
   };
 }
+
+Locale preferredLocaleFromSetting(String languageCode) {
+  return localeFromSetting(languageCode) ??
+      WidgetsBinding.instance.platformDispatcher.locale;
+}
+
+String preferredLocaleTagFromSetting(String languageCode) {
+  final locale = preferredLocaleFromSetting(languageCode);
+  final countryCode = locale.countryCode;
+  if (countryCode == null || countryCode.trim().isEmpty) {
+    return locale.languageCode;
+  }
+  return '${locale.languageCode}_${countryCode.trim().toUpperCase()}';
+}

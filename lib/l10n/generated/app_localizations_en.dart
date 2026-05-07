@@ -227,7 +227,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchSessions => 'Search session title or summary';
 
   @override
-  String get sessionsTitle => 'Sessions';
+  String get sessionsTitle => 'Recent';
 
   @override
   String loadSessionsFailed(Object error) {
@@ -653,4 +653,66 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get updateManifestMissingApkUrl =>
       'Update manifest is missing apk_url or apk_urls';
+
+  @override
+  String get copy => 'Copy';
+
+  @override
+  String get copied => 'Copied';
+
+  @override
+  String get waitingApprovalTitle => 'Waiting for approval';
+
+  @override
+  String get waitingApprovalInstallHint =>
+      'If the Bridge service is not running yet, download it from GitHub and start it first.';
+
+  @override
+  String get waitingApprovalDownloadBridge =>
+      'Download Bridge service on GitHub';
+
+  @override
+  String get waitingApprovalRunCommand =>
+      'Run this command on the Bridge host:';
+
+  @override
+  String voiceInputInitFailed(Object error) {
+    return 'Voice input init timed out or failed: $error';
+  }
+
+  @override
+  String startVoiceInputFailed(Object error) {
+    return 'Failed to start voice input: $error';
+  }
+
+  @override
+  String stopVoiceInputFailed(Object error) {
+    return 'Failed to stop voice input: $error';
+  }
+
+  @override
+  String get voiceInputInProgress =>
+      'Listening. Tap once to stop and transcribe...';
+
+  @override
+  String get reinitializingVoiceInput => 'Reinitializing voice input...';
+
+  @override
+  String get voiceTranscriptionNoResult => 'No speech was recognized';
+
+  @override
+  String get speechSystem => 'System';
+
+  @override
+  String get speechSystemPreferredHelp =>
+      'System is used by default when available. Switch to cloud providers if you need a fallback.';
+
+  @override
+  String get appDownloadSection => 'App Download';
+
+  @override
+  String get appDownloadHelp => 'Download the latest release from GitHub.';
+
+  @override
+  String get openGithubReleases => 'Open GitHub Releases';
 }
