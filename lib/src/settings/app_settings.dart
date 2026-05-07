@@ -1,16 +1,16 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
+
+import 'app_settings_store.dart';
 
 const _defaultUpdateManifestUrl =
     'https://github.com/omni-stream-ai/omni-code/releases/latest/download/update.json';
 
-enum TtsProvider { bridge, zhipu }
+enum TtsProvider { system, zhipu }
 
-enum AsrProvider { bridge, zhipu, whisper }
+enum AsrProvider { system, zhipu, whisper }
 
 @immutable
 class AppSettings {
@@ -18,6 +18,7 @@ class AppSettings {
     required this.bridgeUrl,
     required this.bridgeToken,
     required this.clientId,
+    required this.pendingClientAuthRequestId,
     required this.appLanguage,
     required this.ttsProvider,
     required this.asrProvider,
@@ -37,6 +38,7 @@ class AppSettings {
   final String bridgeUrl;
   final String bridgeToken;
   final String clientId;
+  final String pendingClientAuthRequestId;
   final String appLanguage;
   final TtsProvider ttsProvider;
   final AsrProvider asrProvider;
@@ -63,9 +65,10 @@ class AppSettings {
           configuredUrl.isNotEmpty ? configuredUrl : 'http://127.0.0.1:8787',
       bridgeToken: '',
       clientId: _generateClientId(),
+      pendingClientAuthRequestId: '',
       appLanguage: 'system',
-      ttsProvider: TtsProvider.bridge,
-      asrProvider: AsrProvider.bridge,
+      ttsProvider: TtsProvider.system,
+      asrProvider: AsrProvider.system,
       zhipuApiKey: '',
       whisperApiKey: '',
       whisperBaseUrl: 'https://api.openai.com/v1',
@@ -86,6 +89,7 @@ class AppSettings {
     String? bridgeUrl,
     String? bridgeToken,
     String? clientId,
+    String? pendingClientAuthRequestId,
     String? appLanguage,
     TtsProvider? ttsProvider,
     AsrProvider? asrProvider,
@@ -105,6 +109,8 @@ class AppSettings {
       bridgeUrl: bridgeUrl ?? this.bridgeUrl,
       bridgeToken: bridgeToken ?? this.bridgeToken,
       clientId: clientId ?? this.clientId,
+      pendingClientAuthRequestId:
+          pendingClientAuthRequestId ?? this.pendingClientAuthRequestId,
       appLanguage: _normalizeLanguage(appLanguage ?? this.appLanguage),
       ttsProvider: ttsProvider ?? this.ttsProvider,
       asrProvider: asrProvider ?? this.asrProvider,
@@ -128,6 +134,7 @@ class AppSettings {
       'bridge_url': bridgeUrl,
       'bridge_token': bridgeToken,
       'client_id': clientId,
+      'pending_client_auth_request_id': pendingClientAuthRequestId,
       'app_language': appLanguage,
       'tts_provider': ttsProvider.name,
       'asr_provider': asrProvider.name,
@@ -155,6 +162,8 @@ class AppSettings {
       clientId: _readString(json, 'client_id').trim().isNotEmpty
           ? _readString(json, 'client_id').trim()
           : _generateClientId(),
+      pendingClientAuthRequestId:
+          _readString(json, 'pending_client_auth_request_id').trim(),
       appLanguage: _normalizeLanguage(
         _readString(json, 'app_language', defaults.appLanguage),
       ),
@@ -168,8 +177,8 @@ class AppSettings {
           _readString(json, 'whisper_base_url', defaults.whisperBaseUrl),
       updateManifestUrl:
           _readString(json, 'update_manifest_url').trim().isNotEmpty
-          ? _readString(json, 'update_manifest_url').trim()
-          : defaults.updateManifestUrl,
+              ? _readString(json, 'update_manifest_url').trim()
+              : defaults.updateManifestUrl,
       aiApprovalEnabled:
           _readBool(json, 'ai_approval_enabled', defaults.aiApprovalEnabled),
       aiApprovalBaseUrl: _readString(
@@ -247,6 +256,9 @@ class AppSettings {
   }
 
   static TtsProvider _parseTtsProvider(String? raw, TtsProvider fallback) {
+    if (raw == 'bridge') {
+      return fallback;
+    }
     for (final item in TtsProvider.values) {
       if (item.name == raw) {
         return item;
@@ -256,6 +268,9 @@ class AppSettings {
   }
 
   static AsrProvider _parseAsrProvider(String? raw, AsrProvider fallback) {
+    if (raw == 'bridge') {
+      return fallback;
+    }
     for (final item in AsrProvider.values) {
       if (item.name == raw) {
         return item;
@@ -267,18 +282,24 @@ class AppSettings {
 
 class AppSettingsController extends ChangeNotifier {
   AppSettings _settings = AppSettings.defaults();
+  final AppSettingsStore _store = createAppSettingsStore();
 
   AppSettings get settings => _settings;
+
+  @visibleForTesting
+  void debugReplaceSettings(AppSettings next) {
+    _settings = next;
+    notifyListeners();
+  }
 
   Future<void> load() async {
     var shouldPersist = false;
     try {
-      final file = await _settingsFile();
-      if (!await file.exists()) {
+      final body = await _store.read();
+      if (body == null) {
         _settings = AppSettings.defaults();
         shouldPersist = true;
       } else {
-        final body = await file.readAsString();
         final json = jsonDecode(body) as Map<String, dynamic>;
         if ((json['client_id'] as String?)?.trim().isEmpty ?? true) {
           shouldPersist = true;
@@ -286,10 +307,19 @@ class AppSettingsController extends ChangeNotifier {
         if (json['bridge_token'] == null) {
           shouldPersist = true;
         }
+        if (json['pending_client_auth_request_id'] == null) {
+          shouldPersist = true;
+        }
         if (json['app_language'] == null) {
           shouldPersist = true;
         }
         if (json['compress_assistant_replies'] == null) {
+          shouldPersist = true;
+        }
+        if (json['tts_provider'] == 'bridge') {
+          shouldPersist = true;
+        }
+        if (json['asr_provider'] == 'bridge') {
           shouldPersist = true;
         }
         final updateManifestUrl =
@@ -309,10 +339,8 @@ class AppSettingsController extends ChangeNotifier {
     }
     if (shouldPersist) {
       try {
-        final file = await _settingsFile();
-        await file.writeAsString(
+        await _store.write(
           const JsonEncoder.withIndent('  ').convert(_settings.toJson()),
-          flush: true,
         );
       } catch (_) {
         // Best effort migration for local settings file.
@@ -322,18 +350,10 @@ class AppSettingsController extends ChangeNotifier {
   }
 
   Future<void> save(AppSettings next) async {
-    final file = await _settingsFile();
-    await file.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(next.toJson()),
-      flush: true,
-    );
+    await _store
+        .write(const JsonEncoder.withIndent('  ').convert(next.toJson()));
     _settings = next;
     notifyListeners();
-  }
-
-  Future<File> _settingsFile() async {
-    final directory = await getApplicationDocumentsDirectory();
-    return File('${directory.path}/omni-code-settings.json');
   }
 }
 
