@@ -10,6 +10,10 @@ class SpeechInputService {
 
   bool get isListening => _speech.isListening;
 
+  Future<List<LocaleName>> availableLocales() {
+    return _speech.locales();
+  }
+
   Future<bool> initialize({
     void Function(String status)? onStatus,
     void Function(String error, bool permanent)? onError,
@@ -25,7 +29,7 @@ class SpeechInputService {
 
   Future<void> startListening({
     required void Function(String words, bool isFinal) onResult,
-    String localeId = 'zh_CN',
+    String? localeId,
   }) async {
     await _speech.listen(
       localeId: localeId,

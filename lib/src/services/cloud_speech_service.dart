@@ -8,39 +8,31 @@ import '../l10n/current_l10n.dart';
 import '../settings/app_settings.dart';
 
 class CloudSpeechService {
-  CloudSpeechService({
-    http.Client? httpClient,
-    BridgeClient? bridge,
-  })  : _httpClient = httpClient ?? http.Client(),
-        _bridge = bridge ?? bridgeClient;
+  CloudSpeechService({http.Client? httpClient})
+      : _httpClient = httpClient ?? http.Client();
 
   final http.Client _httpClient;
-  final BridgeClient _bridge;
 
   Future<String> transcribeAudio(File audioFile) async {
     final settings = appSettingsController.settings;
-    switch (settings.asrProvider) {
-      case AsrProvider.bridge:
-        return _bridge.transcribeAudio(audioFile);
-      case AsrProvider.zhipu:
-        return _transcribeWithZhipu(audioFile, settings.zhipuApiKey);
-      case AsrProvider.whisper:
-        return _transcribeWithWhisper(
-          audioFile,
-          apiKey: settings.whisperApiKey,
-          baseUrl: settings.whisperBaseUrl,
-        );
+    if (settings.asrProvider == AsrProvider.system) {
+      throw StateError(
+        'System ASR should be handled by SpeechInputService, not CloudSpeechService.',
+      );
     }
+    if (settings.asrProvider == AsrProvider.whisper) {
+      return _transcribeWithWhisper(
+        audioFile,
+        apiKey: settings.whisperApiKey,
+        baseUrl: settings.whisperBaseUrl,
+      );
+    }
+    return _transcribeWithZhipu(audioFile, settings.zhipuApiKey);
   }
 
   Future<SynthesizedSpeech> synthesizeSpeech(String text) async {
     final settings = appSettingsController.settings;
-    switch (settings.ttsProvider) {
-      case TtsProvider.bridge:
-        return _bridge.synthesizeSpeech(text);
-      case TtsProvider.zhipu:
-        return _synthesizeWithZhipu(text, settings.zhipuApiKey);
-    }
+    return _synthesizeWithZhipu(text, settings.zhipuApiKey);
   }
 
   Future<String> _transcribeWithZhipu(File audioFile, String apiKey) async {
@@ -54,7 +46,8 @@ class CloudSpeechService {
     );
     request.headers['Authorization'] = 'Bearer $apiKey';
     request.fields['model'] = 'glm-asr-2512';
-    request.files.add(await http.MultipartFile.fromPath('file', audioFile.path));
+    request.files
+        .add(await http.MultipartFile.fromPath('file', audioFile.path));
 
     final response = await _httpClient.send(request);
     final body = await response.stream.bytesToString();
@@ -86,7 +79,8 @@ class CloudSpeechService {
     );
     request.headers['Authorization'] = 'Bearer $apiKey';
     request.fields['model'] = 'whisper-1';
-    request.files.add(await http.MultipartFile.fromPath('file', audioFile.path));
+    request.files
+        .add(await http.MultipartFile.fromPath('file', audioFile.path));
 
     final response = await _httpClient.send(request);
     final body = await response.stream.bytesToString();
@@ -103,7 +97,8 @@ class CloudSpeechService {
     return text;
   }
 
-  Future<SynthesizedSpeech> _synthesizeWithZhipu(String text, String apiKey) async {
+  Future<SynthesizedSpeech> _synthesizeWithZhipu(
+      String text, String apiKey) async {
     if (apiKey.trim().isEmpty) {
       throw Exception(currentL10n().zhipuApiKeyRequired);
     }
