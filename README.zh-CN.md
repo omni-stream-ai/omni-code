@@ -40,6 +40,23 @@ flutter run
 flutter run --dart-define=ECHO_MATE_BRIDGE_URL=http://127.0.0.1:8787
 ```
 
+## Web 路由
+
+Web 端现在使用不带 `#` 的 history 路由，例如：
+
+- `/projects/<projectId>`
+- `/projects/<projectId>/<sessionId>`
+
+部署 web 构建产物时，HTTP 服务器必须把未知路径回退到 `index.html`。否则直接打开
+或刷新深链接时会返回 `404`。
+
+如果应用不是部署在根路径 `/` 下，而是在某个子路径下，需要用对应的 base href
+构建：
+
+```bash
+flutter build web --base-href /your-path/
+```
+
 ## 连接 Bridge
 
 客户端通过 HTTP 和 SSE 访问桌面 bridge，地址可以在设置页里填写，也可以通过

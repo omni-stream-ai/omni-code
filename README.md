@@ -45,6 +45,24 @@ define:
 flutter run --dart-define=ECHO_MATE_BRIDGE_URL=http://127.0.0.1:8787
 ```
 
+## Web Routing
+
+The web client uses history-based URLs without `#`, for example:
+
+- `/projects/<projectId>`
+- `/projects/<projectId>/<sessionId>`
+
+When deploying the web build, your HTTP server must rewrite unknown paths back
+to `index.html`. Without that fallback, directly opening or refreshing a deep
+link will return `404`.
+
+If you serve the app from a subpath instead of `/`, build with the matching
+base href:
+
+```bash
+flutter build web --base-href /your-path/
+```
+
 ## Connect To The Bridge
 
 The client talks to the desktop bridge over HTTP and SSE. By default it uses
