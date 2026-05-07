@@ -1,4 +1,24 @@
-enum AgentKind { codex, claudecode, opencode, custom }
+enum AgentKind {
+  codex('codex', 'Codex', ['codex']),
+  claudecode('claude_code', 'Claude Code', ['claude_code', 'claudecode']),
+  opencode('open_code', 'OpenCode'),
+  custom('custom', 'Agent', const []);
+
+  const AgentKind(this.id, this.label, [this.aliases = const []]);
+
+  final String id;
+  final String label;
+  final List<String> aliases;
+
+  bool get isSelectable => this != AgentKind.custom;
+
+  bool matches(String value) {
+    return value == id || aliases.contains(value);
+  }
+
+  static List<AgentKind> get selectableValues =>
+      AgentKind.values.where((kind) => kind.isSelectable).toList();
+}
 
 enum SessionStatus { idle, running, awaitingApproval, waiting, failed }
 
@@ -13,18 +33,12 @@ enum ApprovalChoice {
 }
 
 AgentKind parseAgentKind(String value) {
-  switch (value) {
-    case 'codex':
-      return AgentKind.codex;
-    case 'claude_code':
-    case 'claudecode':
-      return AgentKind.claudecode;
-    case 'open_code':
-    case 'opencode':
-      return AgentKind.opencode;
-    default:
-      return AgentKind.custom;
+  for (final kind in AgentKind.values) {
+    if (kind.matches(value)) {
+      return kind;
+    }
   }
+  return AgentKind.custom;
 }
 
 class ApprovalRequest {
