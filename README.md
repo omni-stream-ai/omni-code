@@ -11,6 +11,14 @@ to the bridge over HTTP and SSE so you can manage projects, open sessions, send
 messages, receive reply notifications, and handle approval prompts across
 mobile and desktop devices.
 
+## TODO Board
+
+The current project TODO board lives in GitHub Projects:
+
+- [omni-code Todo](https://github.com/orgs/omni-stream-ai/projects/2)
+
+Use it as the current task board for planning and execution.
+
 ## Who It's For
 
 - Developers running Codex or similar command-line agent workflows on a desktop machine.
@@ -137,6 +145,7 @@ Recommended GitHub Actions secrets:
 
 ## Documentation
 
+- [TODO board](https://github.com/orgs/omni-stream-ai/projects/2)
 - [中文文档](README.zh-CN.md)
 - [Design assets and theme board](designs/README.md)
 - [Client app notes](CLIENT_README.md)

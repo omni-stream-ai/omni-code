@@ -14,12 +14,14 @@ Use this skill to keep the `omni-code` GitHub Project organized and consistent. 
 - One task per card.
 - Use `Backlog` for draft items only.
 - Create a GitHub Issue only when the item moves to `Todo`.
+- Do not create a branch in `Todo`.
+- Create a linked branch only when the item moves to `In Progress`.
 - Keep active work limited; `In Progress` should usually have one owner.
 
 ## Status Flow
 - `Backlog`: draft only, not yet an issue.
-- `Todo`: ready to become an issue and be worked on.
-- `In Progress`: actively being worked on.
+- `Todo`: real issue exists, but no branch yet.
+- `In Progress`: actively being worked on and should usually have a linked branch.
 - `Review`: waiting for review or verification.
 - `Blocked`: waiting on a dependency.
 - `Done`: complete and verified.
@@ -41,14 +43,29 @@ Use these base labels:
 ## Common Workflow
 1. Read current project state with `gh project item-list 2 --owner omni-stream-ai --format json`.
 2. Add a backlog draft with `gh project item-create 2 --owner omni-stream-ai --title ... --body ...`.
-3. When the item is ready, create the GitHub Issue in `omni-stream-ai/omni-code`, add it to the project, and move `Status` to `Todo`.
-4. Use `gh project item-edit` to change title, body, status, and priority.
-5. Resolve current field and option IDs with `gh project field-list 2 --owner omni-stream-ai --format json` before editing if needed.
+3. When the item is ready, create the GitHub Issue in `omni-stream-ai/omni-code`, add labels, and move `Status` to `Todo`.
+4. When actual coding starts, move the issue to `In Progress`, create a linked branch from the issue's `Development` relationship, and fetch that branch into the local repository.
+5. Use `gh project item-edit` to change title, body, status, and priority.
+6. Resolve current field and option IDs with `gh project field-list 2 --owner omni-stream-ai --format json` before editing if needed.
+
+## Scripts
+Use the bundled scripts for the recurring operations:
+- `scripts/create_backlog_draft.sh "<title>" "<body>" [priority]`
+- `scripts/promote_draft_to_todo.sh <project-item-id-or-exact-title> [labels]`
+- `scripts/start_issue_work.sh <issue-number> [branch-name] [--checkout]`
+- `scripts/list_project_items.sh [status]`
+
+The scripts intentionally follow the current workflow:
+- backlog is draft-only
+- Todo has an issue but no branch
+- In Progress creates a linked branch and fetches it locally
+- `--checkout` additionally switches the local worktree to that branch
 
 ## Notes
 - Draft content IDs start with `DI_`.
 - Project item IDs start with `PVTI_`.
 - See `references/project-facts.md` for current field and option IDs.
+- Branch names should usually include the issue number, for example `feat/2-continuous-voice-conversations`.
 - Current recurring themes:
   - continuous voice conversations
   - switching agents mid-session

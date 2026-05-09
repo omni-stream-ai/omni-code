@@ -37,5 +37,10 @@
 ## Working Rules
 - Backlog items stay as draft cards.
 - Create a GitHub Issue only when an item moves to `Todo`.
+- `Todo` does not create a branch.
+- `In Progress` should usually create a linked branch in the issue `Development` section.
+- Default `In Progress` behavior should also fetch the new branch locally.
+- Switching the local worktree should be explicit, not automatic.
 - Keep titles and descriptions in English.
 - Keep one task per card.
+- Branch names should include the issue number when possible.
