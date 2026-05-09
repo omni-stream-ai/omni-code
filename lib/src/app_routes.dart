@@ -1,4 +1,4 @@
-enum AppRouteKind { home, settings, project, session, unknown }
+enum AppRouteKind { home, settings, projects, project, session, unknown }
 
 class AppRouteMatch {
   const AppRouteMatch._({
@@ -10,6 +10,8 @@ class AppRouteMatch {
   const AppRouteMatch.home() : this._(kind: AppRouteKind.home);
 
   const AppRouteMatch.settings() : this._(kind: AppRouteKind.settings);
+
+  const AppRouteMatch.projects() : this._(kind: AppRouteKind.projects);
 
   const AppRouteMatch.project(String projectId)
       : this._(kind: AppRouteKind.project, projectId: projectId);
@@ -66,7 +68,7 @@ abstract final class AppRoutes {
     }
 
     if (segments.length == 1 && segments.first == 'projects') {
-      return const AppRouteMatch.home();
+      return const AppRouteMatch.projects();
     }
 
     if (segments.length == 2 && segments.first == 'projects') {

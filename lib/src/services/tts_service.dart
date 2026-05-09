@@ -31,6 +31,8 @@ class TtsService {
   void Function()? _onCancel;
   void Function(String message)? _onError;
 
+  bool get isSystemTtsAvailable => _systemTtsReady && !_systemTtsUnavailable;
+
   Future<void> initialize({
     void Function()? onStart,
     void Function()? onComplete,

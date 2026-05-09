@@ -1,6 +1,6 @@
 # Omni Code Client
 
-## Firebase Push Setup
+## Push And Desktop Notifications
 
 Android remote push now uses the standard Firebase Android setup instead of
 manual `--dart-define` values.
@@ -19,6 +19,14 @@ Notes:
 - `google-services.json` is intentionally gitignored.
 - The bridge still needs server-side FCM credentials to send pushes:
   `ECHO_MATE_FCM_SERVICE_ACCOUNT_PATH=/path/to/service-account.json`.
+
+Desktop support now works as follows:
+
+- `macOS`: local desktop notifications are supported while the app is running.
+- `Linux`: local desktop notifications are supported while the app is running.
+- `Windows`: local toast notifications are supported while the app is running.
+- `Linux` and `Windows` are currently local-notification only. No remote push
+  transport is wired for desktop platforms in this client.
 
 ## App Update Check
 

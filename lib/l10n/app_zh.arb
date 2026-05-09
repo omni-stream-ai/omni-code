@@ -4,6 +4,7 @@
   "settingsTitle": "设置",
   "save": "保存",
   "saving": "保存中...",
+  "systemSection": "系统",
   "languageSection": "语言",
   "languageLabel": "应用语言",
   "languageSystem": "跟随系统",
@@ -36,6 +37,7 @@
   "autoSpeakRepliesSubtitle": "AI 回复完成后自动开始播报",
   "compressReplies": "压缩 AI 回复",
   "compressRepliesSubtitle": "开启后，新建会话会要求 AI 简短说明做了什么，尽量不超过 50 字",
+  "notificationPreviewMaxChars": "通知最大字符数",
   "settingsSaved": "设置已保存",
   "settingsSaveFailed": "保存设置失败：{error}",
   "@settingsSaveFailed": {
@@ -86,11 +88,29 @@
   },
   "homeIntro": "先进入项目，再选择已有会话或在该项目下新开 Codex 会话。",
   "projectsTitle": "项目",
+  "selectProject": "选择项目",
   "createProject": "创建项目",
+  "createNewProject": "创建新项目",
   "newProject": "新建项目",
   "retry": "重试",
   "projectCount": "{count} 个会话",
   "@projectCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sessionCount": "{count} 个会话",
+  "@sessionCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "projectsCount": "{count} 个项目",
+  "@projectsCount": {
     "placeholders": {
       "count": {
         "type": "int"
@@ -115,8 +135,17 @@
   "localPath": "本机目录路径",
   "cancel": "取消",
   "projectIntro": "进入任一会话即可继续历史上下文，也可以在当前项目下创建一个新的 Codex 会话。",
+  "homePrompt": "远程代理控制台",
+  "homeCreateProjectHint": "添加本地代码目录",
+  "homeBrowseProjects": "浏览全部",
   "searchSessions": "搜索会话标题或摘要",
+  "searchProjects": "搜索项目名或路径",
+  "themeSection": "主题",
+  "themeFollowSystem": "跟随系统",
+  "themeLight": "浅色",
+  "themeDark": "深色",
   "sessionsTitle": "最近",
+  "recentSessionsTitle": "最近会话",
   "loadSessionsFailed": "加载会话失败：{error}",
   "@loadSessionsFailed": {
     "placeholders": {
@@ -138,6 +167,10 @@
       }
     }
   },
+  "loadMoreSessionsLabel": "加载更多",
+  "@loadMoreSessionsLabel": {
+    "description": "不显示数量的加载更多按钮文案。"
+  },
   "newSession": "新会话",
   "sessionStatusIdle": "空闲",
   "sessionStatusRunning": "回复中",
@@ -153,6 +186,20 @@
   "refreshNativeSessions": "刷新原生会话",
   "creatingSession": "正在创建会话...",
   "waitingApprovalProcessing": "正在等待审批处理...",
+  "waitingApprovalListening": "正在等待批准...",
+  "connectHeader": "连接 Bridge",
+  "connectPrompt": "先连接 Bridge 再开始。",
+  "connectWelcomeTitle": "欢迎使用 Omni Code",
+  "connectWelcomeBody": "先在电脑上运行 Bridge 服务，然后授权此设备，以便打开项目并继续会话。",
+  "connectBridgeHint": "如果手机和电脑在同一个局域网，请使用电脑 IP。",
+  "connectDownloadTitle": "下载 Bridge 服务",
+  "connectDownloadBody": "请在托管本地项目的电脑上，从 GitHub 获取该服务。",
+  "connectDownloadRepo": "github.com/omni-stream-ai/omni-code-bridge",
+  "authorizeThisDevice": "授权当前设备",
+  "connectNextStep": "下一步：审批页",
+  "backToWelcome": "返回欢迎页",
+  "waitingApprovalHeader": "授权",
+  "waitingApprovalHeaderSubtitle": "在 Bridge 主机上批准此设备。",
   "turnPausedWaiting": "本轮已暂停，正在等待后续结果...",
   "speechReadyStatus": "录音转写已就绪",
   "waitingProcessApproval": "等待处理审批...",
@@ -366,9 +413,11 @@
   "copy": "复制",
   "copied": "已复制",
   "waitingApprovalTitle": "等待批准",
+  "waitingApprovalBody": "请在 Bridge 主机上批准这次请求。批准后应用会自动继续。",
   "waitingApprovalInstallHint": "如果 Bridge 服务尚未运行，请先从 GitHub 下载并启动。",
   "waitingApprovalDownloadBridge": "在 GitHub 下载 Bridge 服务",
   "waitingApprovalRunCommand": "在 Bridge 主机上运行此命令：",
+  "waitingApprovalRequestAgain": "重新请求",
   "voiceInputInitFailed": "语音输入初始化超时或失败：{error}",
   "startVoiceInputFailed": "启动语音输入失败：{error}",
   "stopVoiceInputFailed": "停止语音输入失败：{error}",
@@ -377,7 +426,14 @@
   "voiceTranscriptionNoResult": "未识别到语音",
   "speechSystem": "系统",
   "speechSystemPreferredHelp": "系统可用时默认使用。如需备份可切换到云服务商。",
+  "systemTtsUnavailableOnLinux": "Linux 当前还不支持系统 TTS。请切换到云端服务商后再启用播报。",
+  "systemAsrUnavailableOnLinux": "Linux 当前还不支持系统 ASR。请切换到云端服务商后再启用语音输入。",
+  "systemAsrMacosPermissionHint": "macOS 的系统 ASR 需要麦克风和语音识别权限。",
+  "systemSpeechUnavailable": "当前设备不支持系统语音。请到设置中切换服务商后再使用云端语音。",
   "appDownloadSection": "应用下载",
   "appDownloadHelp": "从 GitHub 下载最新版本。",
-  "openGithubReleases": "打开 GitHub Releases"
+  "openGithubReleases": "打开 GitHub Releases",
+  "signOut": "退出",
+  "signOutConfirmTitle": "退出并重新授权？",
+  "signOutConfirmBody": "退出后会清除当前设备授权并返回欢迎页。你需要重新连接 Bridge 并再次授权此设备。"
 }

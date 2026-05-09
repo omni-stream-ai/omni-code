@@ -1,8 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../app_routes.dart';
 import '../bridge_client.dart';
@@ -14,6 +18,10 @@ import '../services/audio_recording_service.dart';
 import '../services/speech_input_service.dart';
 import '../services/tts_service.dart';
 import '../settings/app_settings.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../widgets/app_back_header.dart';
+import '../widgets/app_skeleton.dart';
 import '../widgets/copyable_message.dart';
 
 class SessionDetailScreen extends StatefulWidget {
@@ -21,12 +29,22 @@ class SessionDetailScreen extends StatefulWidget {
     super.key,
     required this.session,
     this.sessionInitializer,
+    this.client,
+    this.enableSpeechServices = true,
+    this.audioRecordingService,
+    this.speechInputService,
+    this.ttsService,
   });
 
   static const routeName = '/session';
 
   final SessionSummary session;
   final Future<SessionSummary>? sessionInitializer;
+  final BridgeClient? client;
+  final bool enableSpeechServices;
+  final AudioRecordingService? audioRecordingService;
+  final SpeechInputService? speechInputService;
+  final TtsService? ttsService;
 
   @override
   State<SessionDetailScreen> createState() => _SessionDetailScreenState();
@@ -35,11 +53,13 @@ class SessionDetailScreen extends StatefulWidget {
 class _SessionDetailScreenState extends State<SessionDetailScreen>
     with WidgetsBindingObserver {
   static const double _bottomAutoScrollThreshold = 96;
+  static const double _messageBubbleMaxWidth = 320;
+  static const double _assistantMessageBubbleWidthFactor = 0.82;
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
-  final _audioRecordingService = AudioRecordingService();
-  final _speechInputService = SpeechInputService();
-  final _ttsService = TtsService();
+  late final AudioRecordingService _audioRecordingService;
+  late final SpeechInputService _speechInputService;
+  late final TtsService _ttsService;
   final Set<String> _autoSpokenAssistantMessageIds = <String>{};
   final Set<String> _notifiedAssistantMessageIds = <String>{};
   final Map<String, _LocalMessageDraft> _localMessageStates = {};
@@ -66,21 +86,86 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _creatingSession = false;
   bool _submittingApproval = false;
   String? _submittingApprovalChoice;
+  String? _submittedApprovalRequestId;
   bool _cancellingReply = false;
 
   bool get _isSpeechReadyStatus => _speechStatus == _readySpeechStatusLabel();
+  BridgeClient get _client => widget.client ?? bridgeClient;
 
   String _readySpeechStatusLabel() => context.l10n.speechReadyStatus;
+  String _systemSpeechUnavailableLabel() =>
+      context.l10n.systemSpeechUnavailable;
+  String? get _systemSpeechUnavailableStatus =>
+      _speechError == null && _speechStatus == _systemSpeechUnavailableLabel()
+          ? _speechStatus
+          : null;
+  String? get _speechBannerMessage {
+    if (_speechError != null) {
+      return _speechError;
+    }
+    final status = _speechStatus;
+    if (status == null ||
+        _isSpeechReadyStatus ||
+        status == _systemSpeechUnavailableLabel()) {
+      return null;
+    }
+    return status;
+  }
+
+  String _reinitializingTtsLabel() => context.l10n.reinitializingTts;
+
+  bool get _isAwaitingSubmittedApprovalResolution {
+    final requestId = _submittedApprovalRequestId;
+    if (requestId == null ||
+        _session.status != SessionStatus.awaitingApproval) {
+      return false;
+    }
+    final approval = _pendingApproval;
+    return approval == null || approval.requestId == requestId;
+  }
+
+  void _reconcileSubmittedApprovalState() {
+    final requestId = _submittedApprovalRequestId;
+    if (requestId == null) {
+      return;
+    }
+    if (_session.status != SessionStatus.awaitingApproval) {
+      _submittedApprovalRequestId = null;
+      return;
+    }
+    final approval = _pendingApproval;
+    if (approval != null && approval.requestId != requestId) {
+      _submittedApprovalRequestId = null;
+    }
+  }
+
+  bool get _isMessageInputComposing {
+    final composing = _controller.value.composing;
+    return composing.isValid && !composing.isCollapsed;
+  }
+
+  void _clearTransientTtsStatus() {
+    if (_speechStatus == _reinitializingTtsLabel() ||
+        _speechStatus == context.l10n.requestingTts) {
+      _speechStatus = null;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _audioRecordingService =
+        widget.audioRecordingService ?? AudioRecordingService();
+    _speechInputService = widget.speechInputService ?? SpeechInputService();
+    _ttsService = widget.ttsService ?? TtsService();
     _session = widget.session;
     _pendingApproval = _session.pendingApproval;
     _creatingSession = widget.sessionInitializer != null;
-    _initializeSpeech();
-    _initializeTts();
+    if (widget.enableSpeechServices) {
+      _initializeSpeech();
+      _initializeTts();
+    }
     if (_creatingSession) {
       _loadingMessages = false;
       unawaited(_createSessionAndHydrate());
@@ -117,12 +202,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   void _syncSessionSummaryCache() {
-    bridgeClient.syncSessionSummary(_session);
+    _client.syncSessionSummary(_session);
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
     final isSessionBusy = _session.status == SessionStatus.running;
     final hasActiveTurn = _session.status == SessionStatus.running ||
         _session.status == SessionStatus.awaitingApproval ||
@@ -130,23 +217,44 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final canCancelReply = hasActiveTurn && !_cancellingReply;
     final turns = _turns;
     final approvalCardMaxHeight = MediaQuery.of(context).size.height * 0.42;
+    final isAwaitingSubmittedApprovalResolution =
+        _isAwaitingSubmittedApprovalResolution;
+    final speechBannerMessage = _speechBannerMessage;
+    final systemSpeechUnavailableMessage = _systemSpeechUnavailableStatus;
+    final showVoiceInputUnavailableTooltip =
+        systemSpeechUnavailableMessage != null &&
+            !isSessionBusy &&
+            !_speechReady &&
+            !_isListening;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_session.title),
-        backgroundColor: const Color(0xFF0F172A),
+        automaticallyImplyLeading: false,
+        titleSpacing: AppSpacing.compact,
+        title: AppBackHeader(
+          title: _session.title,
+          titleStyle: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+            height: 1.1,
+          ),
+        ),
       ),
       body: Column(
         children: [
           if (_creatingSession)
             Container(
               width: double.infinity,
-              margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.fromLTRB(
+                AppSpacing.block,
+                AppSpacing.block,
+                AppSpacing.block,
+                0,
+              ),
+              padding: AppSpacing.tilePadding,
               decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFF1E293B)),
+                color: AppColors.surfaceFor(brightness),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+                border: Border.all(color: AppColors.outlineFor(brightness)),
               ),
               child: Row(
                 children: [
@@ -155,7 +263,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     height: 14,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: AppSpacing.tileY),
                   Expanded(
                     child: Text(
                       l10n.creatingSession,
@@ -167,67 +275,81 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             ),
           if ((_session.status == SessionStatus.awaitingApproval ||
                   _pendingApproval != null) &&
-              _pendingApproval == null)
+              (_pendingApproval == null ||
+                  isAwaitingSubmittedApprovalResolution))
             Container(
               width: double.infinity,
-              margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.fromLTRB(
+                AppSpacing.block,
+                AppSpacing.block,
+                AppSpacing.block,
+                0,
+              ),
+              padding: AppSpacing.tilePadding,
               decoration: BoxDecoration(
-                color: const Color(0xFF2A2111),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFF92400E)),
+                color: AppColors.warningSurfaceFor(brightness),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+                border:
+                    Border.all(color: AppColors.warningBorderFor(brightness)),
               ),
               child: Text(
                 l10n.waitingApprovalProcessing,
                 style: const TextStyle(height: 1.4),
               ),
             ),
-          if (_speechError != null ||
-              (_speechStatus != null && !_isSpeechReadyStatus))
+          if (speechBannerMessage != null)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.block,
+                AppSpacing.block,
+                AppSpacing.block,
+                0,
+              ),
               child: CopyableMessage(
-                message: _speechError ?? _speechStatus!,
+                message: speechBannerMessage,
                 copyLabel: context.l10n.copy,
                 copiedLabel: context.l10n.copied,
                 backgroundColor: _speechError == null
-                    ? const Color(0xFF0F172A)
-                    : const Color(0xFF3F1D1D),
+                    ? AppColors.surfaceFor(brightness)
+                    : AppColors.errorBgFor(brightness),
                 borderColor: _speechError == null
-                    ? const Color(0xFF1E293B)
-                    : const Color(0xFF7F1D1D),
+                    ? AppColors.outlineFor(brightness)
+                    : AppColors.errorBorderFor(brightness),
                 iconColor: _speechError == null
-                    ? const Color(0xFFCBD5E1)
-                    : const Color(0xFFFCA5A5),
+                    ? AppColors.mutedFor(brightness)
+                    : AppColors.errorIconFor(brightness),
                 textColor: _speechError == null
-                    ? const Color(0xFFE2E8F0)
-                    : const Color(0xFFFECACA),
+                    ? AppColors.onSurfaceFor(brightness)
+                    : AppColors.errorTextFor(brightness),
               ),
             ),
-          if (_pendingApproval != null)
+          if (_pendingApproval != null &&
+              !isAwaitingSubmittedApprovalResolution)
             _buildPendingApprovalCard(approvalCardMaxHeight),
           Expanded(
-            child: _creatingSession
-                ? const Center(child: CircularProgressIndicator())
-                : _loadingMessages
-                    ? const Center(child: CircularProgressIndicator())
-                    : NotificationListener<ScrollNotification>(
-                        onNotification: _handleScrollNotification,
-                        child: ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.all(16),
-                          itemCount: turns.length,
-                          itemBuilder: (context, index) {
-                            final turn = turns[index];
-                            return _buildTurn(context, turn);
-                          },
-                        ),
-                      ),
+            child: (_creatingSession || _loadingMessages)
+                ? const _SessionMessagesSkeleton(
+                    key: Key('session-chat-skeleton'),
+                  )
+                : NotificationListener<ScrollNotification>(
+                    onNotification: _handleScrollNotification,
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      padding: AppSpacing.blockPadding,
+                      itemCount: turns.length,
+                      itemBuilder: (context, index) {
+                        final turn = turns[index];
+                        return _buildTurn(context, turn);
+                      },
+                    ),
+                  ),
           ),
           Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: Color(0xFF1E293B))),
+            padding: AppSpacing.blockPadding,
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: AppColors.outlineFor(brightness)),
+              ),
             ),
             child: hasActiveTurn
                 ? Column(
@@ -244,17 +366,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                                 strokeWidth: 2,
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            const SizedBox(width: AppSpacing.tileY),
                             Text(
                               l10n.waitingProcessApproval,
-                              style: const TextStyle(
-                                color: Color(0xFF94A3B8),
+                              style: TextStyle(
+                                color: AppColors.mutedSoftFor(brightness),
                                 height: 1.4,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: AppSpacing.stack),
                       ],
                       SizedBox(
                         width: double.infinity,
@@ -275,37 +397,40 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   )
                 : Column(
                     children: [
-                      TextField(
-                        controller: _controller,
-                        enabled: !isSessionBusy,
-                        maxLines: 4,
-                        minLines: 3,
-                        decoration: InputDecoration(
-                          hintText: l10n.messageInputHint,
-                          filled: true,
-                          fillColor: const Color(0xFF0F172A),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(18),
-                            borderSide:
-                                const BorderSide(color: Color(0xFF1E293B)),
+                      Focus(
+                        onKeyEvent: _handleMessageInputKeyEvent,
+                        child: TextField(
+                          controller: _controller,
+                          enabled: !isSessionBusy,
+                          maxLines: 4,
+                          minLines: 3,
+                          decoration: InputDecoration(
+                            hintText: l10n.messageInputHint,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: AppSpacing.stack),
                       Row(
                         children: [
                           Expanded(
-                            child: OutlinedButton(
-                              onPressed: (isSessionBusy ||
-                                      (!_speechReady && !_isListening))
-                                  ? null
-                                  : _toggleListening,
-                              child: Text(
-                                _isListening ? l10n.stopVoice : l10n.voiceInput,
+                            child: _withUnavailableTooltip(
+                              message: showVoiceInputUnavailableTooltip
+                                  ? systemSpeechUnavailableMessage
+                                  : null,
+                              child: OutlinedButton(
+                                onPressed: (isSessionBusy ||
+                                        (!_speechReady && !_isListening))
+                                    ? null
+                                    : _toggleListening,
+                                child: Text(
+                                  _isListening
+                                      ? l10n.stopVoice
+                                      : l10n.voiceInput,
+                                ),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: AppSpacing.tileY),
                           Expanded(
                             child: FilledButton(
                               onPressed:
@@ -323,6 +448,24 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
+  Widget _withUnavailableTooltip({
+    required String? message,
+    required Widget child,
+  }) {
+    if (message == null || message.isEmpty) {
+      return child;
+    }
+
+    return Tooltip(
+      message: message,
+      triggerMode: TooltipTriggerMode.tap,
+      waitDuration: Duration.zero,
+      showDuration: const Duration(seconds: 2),
+      exitDuration: const Duration(milliseconds: 100),
+      child: child,
+    );
+  }
+
   String _agentLabel(AgentKind agent) {
     return agent.label;
   }
@@ -331,15 +474,22 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final approval = _pendingApproval!;
     final summary = approval.reason ?? approval.command ?? approval.kind;
     final isSubmitting = _submittingApproval;
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(
+        AppSpacing.block,
+        AppSpacing.block,
+        AppSpacing.block,
+        0,
+      ),
+      padding: AppSpacing.tilePadding,
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2111),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF92400E)),
+        color: AppColors.warningSurfaceFor(brightness),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+        border: Border.all(color: AppColors.warningBorderFor(brightness)),
       ),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: maxHeight),
@@ -349,9 +499,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           children: [
             Text(
               context.l10n.agentAwaitingPermission(_agentLabel(_session.agent)),
-              style: const TextStyle(fontWeight: FontWeight.w700),
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: AppColors.warningTextFor(brightness),
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.compact),
             Flexible(
               fit: FlexFit.loose,
               child: SingleChildScrollView(
@@ -359,41 +511,50 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(summary, style: const TextStyle(height: 1.4)),
+                    Text(
+                      summary,
+                      style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
+                    ),
                     if (approval.command != null) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppSpacing.compact),
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(AppSpacing.tileY),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1C1917),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFF78350F)),
+                          color: AppColors.panelDeepFor(brightness),
+                          borderRadius: BorderRadius.circular(
+                            AppSpacing.radiusControl,
+                          ),
+                          border: Border.all(
+                            color: AppColors.warningBorderFor(brightness),
+                          ),
                         ),
                         child: SelectableText(
                           approval.command!,
-                          style: const TextStyle(
-                            color: Color(0xFFFDE68A),
+                          style: TextStyle(
+                            color: AppColors.warningTextFor(brightness),
                             height: 1.4,
                           ),
                         ),
                       ),
                     ],
                     if (!approval.resolvable) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppSpacing.compact),
                       Text(
                         context.l10n.desktopOnlyApproval,
-                        style: const TextStyle(color: Color(0xFFFDE68A)),
+                        style: TextStyle(
+                          color: AppColors.warningTextFor(brightness),
+                        ),
                       ),
                     ],
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.stack),
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: AppSpacing.compact,
+              runSpacing: AppSpacing.compact,
               children: [
                 FilledButton(
                   onPressed: approval.resolvable && !isSubmitting
@@ -447,15 +608,21 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (!isSubmittingThisChoice) {
       return Text(label);
     }
+    final brightness = Theme.of(context).brightness;
+    final spinnerColor =
+        choice == 'accept' ? AppColors.onPrimaryFor(brightness) : null;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
           width: 16,
           height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2),
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: spinnerColor,
+          ),
         ),
-        SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.compact),
         Text(context.l10n.processing),
       ],
     );
@@ -466,55 +633,90 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final unreadCount = _unreadToolCounts[turnId] ?? 0;
     final hasHighlight = unreadCount > 0 && turnId == _activeTurnId;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (turn.userMessage != null) _buildUserMessage(turn.userMessage!),
-          if (turn.toolMessages.isNotEmpty)
-            _buildToolEntry(
-              count: turn.toolMessages.length,
-              highlighted: hasHighlight,
-              onTap: () => _showAllSystemMessages(turn),
-            ),
-          ...turn.assistantMessages.map(_buildAssistantMessage),
-        ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final messageBubbleMaxWidth =
+            _messageBubbleMaxWidthFor(constraints.maxWidth);
+        return Container(
+          margin: const EdgeInsets.only(bottom: AppSpacing.screenBottom),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (turn.userMessage != null)
+                _buildUserMessage(
+                  turn.userMessage!,
+                  maxWidth: messageBubbleMaxWidth,
+                ),
+              ...turn.assistantMessages.map(
+                (message) => _buildAssistantMessage(
+                  message,
+                  maxWidth: messageBubbleMaxWidth,
+                ),
+              ),
+              if (turn.toolMessages.isNotEmpty)
+                _buildToolEntry(
+                  count: turn.toolMessages.length,
+                  highlighted: hasHighlight,
+                  onTap: () => _showAllSystemMessages(turn),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  double _messageBubbleMaxWidthFor(double availableWidth) {
+    final preferredWidth = availableWidth * _assistantMessageBubbleWidthFactor;
+    return math.min(
+      availableWidth,
+      math.min(
+        AppSpacing.contentMaxWidth,
+        math.max(_messageBubbleMaxWidth, preferredWidth),
       ),
     );
   }
 
-  Widget _buildUserMessage(ChatMessage message) {
+  Widget _buildUserMessage(
+    ChatMessage message, {
+    required double maxWidth,
+  }) {
     final localState = _localMessageStates[message.id];
     final canRetry = localState?.state == _LocalMessageState.failed;
+    final brightness = Theme.of(context).brightness;
+    final bubbleTextColor = AppColors.accentBlueOnFor(brightness);
     return Align(
       alignment: Alignment.centerRight,
       child: GestureDetector(
         onTap: canRetry ? () => _retryLocalMessage(message.id) : null,
         child: Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(14),
-          constraints: const BoxConstraints(maxWidth: 320),
+          key: ValueKey('user-message-bubble-${message.id}'),
+          margin: const EdgeInsets.only(bottom: AppSpacing.stack),
+          padding: AppSpacing.cardPadding,
+          constraints: BoxConstraints(maxWidth: maxWidth),
           decoration: BoxDecoration(
-            color: const Color(0xFF1D4ED8),
-            borderRadius: BorderRadius.circular(18),
+            color: AppColors.accentBlueFor(brightness),
+            borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SelectableText(
                 message.content,
-                style: const TextStyle(height: 1.45),
+                style: TextStyle(
+                  height: 1.45,
+                  color: bubbleTextColor,
+                ),
               ),
               if (localState != null) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.compact),
                 Text(
                   localState.label(context),
                   style: TextStyle(
                     fontSize: 11,
                     color: localState.state == _LocalMessageState.failed
-                        ? const Color(0xFFFCA5A5)
-                        : const Color(0xFFBFDBFE),
+                        ? AppColors.errorTextFor(brightness)
+                        : bubbleTextColor.withValues(alpha: 0.78),
                   ),
                 ),
               ],
@@ -530,26 +732,52 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required bool highlighted,
     required VoidCallback onTap,
   }) {
+    final brightness = Theme.of(context).brightness;
+    final baseSurface = AppColors.panelDeepFor(brightness);
+    final backgroundColor = highlighted
+        ? AppColors.tintSurfaceFor(
+            brightness,
+            AppColors.signalFor(brightness),
+            base: baseSurface,
+            darkAlpha: 0.30,
+            lightAlpha: 0.18,
+          )
+        : baseSurface;
+    final borderColor = highlighted
+        ? AppColors.tintBorderFor(
+            brightness,
+            AppColors.signalFor(brightness),
+            base: baseSurface,
+            darkAlpha: 0.56,
+            lightAlpha: 0.30,
+          )
+        : AppColors.outlineStrongFor(brightness);
+    final labelColor = highlighted
+        ? AppColors.textFor(brightness)
+        : AppColors.mutedSoftFor(brightness);
+    final countColor = highlighted
+        ? AppColors.textSoftFor(brightness)
+        : AppColors.mutedFor(brightness);
+
     return Align(
       alignment: Alignment.centerLeft,
       child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.only(bottom: AppSpacing.compact),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.compact,
+                vertical: AppSpacing.iconTight,
+              ),
               decoration: BoxDecoration(
-                color: highlighted
-                    ? const Color(0xFF0C4A6E)
-                    : const Color(0xFF111827),
-                borderRadius: BorderRadius.circular(999),
+                color: backgroundColor,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
                 border: Border.all(
-                  color: highlighted
-                      ? const Color(0xFF7DD3FC)
-                      : const Color(0xFF334155),
+                  color: borderColor,
                 ),
               ),
               child: Row(
@@ -558,28 +786,22 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   Icon(
                     Icons.build_outlined,
                     size: 12,
-                    color: highlighted
-                        ? const Color(0xFFE0F2FE)
-                        : const Color(0xFFCBD5E1),
+                    color: labelColor,
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: AppSpacing.micro),
                   Text(
                     context.l10n.toolActivity,
                     style: TextStyle(
-                      color: highlighted
-                          ? const Color(0xFFE0F2FE)
-                          : const Color(0xFFCBD5E1),
+                      color: labelColor,
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: AppSpacing.micro),
                   Text(
                     count > 99 ? '99+' : '$count',
                     style: TextStyle(
-                      color: highlighted
-                          ? const Color(0xFFE0F2FE)
-                          : const Color(0xFF94A3B8),
+                      color: countColor,
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
                     ),
@@ -593,20 +815,28 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
-  Widget _buildAssistantMessage(ChatMessage message) {
+  Widget _buildAssistantMessage(
+    ChatMessage message, {
+    required double maxWidth,
+  }) {
     final displayContent = _displayContentForMessage(message);
     final isLoadingReply = message.content.trim().isEmpty &&
         _session.status == SessionStatus.running;
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final ttsUnavailableMessage =
+        !_ttsReady && !_isSpeaking ? _systemSpeechUnavailableStatus : null;
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(14),
-        constraints: const BoxConstraints(maxWidth: 320),
+        key: ValueKey('assistant-message-bubble-${message.id}'),
+        margin: const EdgeInsets.only(bottom: AppSpacing.stack),
+        padding: AppSpacing.cardPadding,
+        constraints: BoxConstraints(maxWidth: maxWidth),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F172A),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFF1E293B)),
+          color: AppColors.panelDeepFor(brightness),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+          border: Border.all(color: AppColors.outlineFor(brightness)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -620,35 +850,51 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     height: 14,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: AppSpacing.tileY),
                   Text(
                     context.l10n.working,
-                    style: const TextStyle(
+                    style: TextStyle(
                       height: 1.45,
-                      color: Color(0xFF94A3B8),
+                      color: AppColors.mutedSoftFor(brightness),
                     ),
                   ),
                 ],
               )
             else ...[
-              SelectableText(
-                displayContent,
-                style: const TextStyle(height: 1.45),
+              MarkdownBody(
+                data: displayContent,
+                fitContent: true,
+                selectable: true,
+                shrinkWrap: true,
+                softLineBreak: true,
+                styleSheet: _assistantMarkdownStyleSheet(theme),
+                syntaxHighlighter: _AssistantCodeSyntaxHighlighter(theme),
+                onTapLink: (text, href, title) =>
+                    _handleAssistantMarkdownLinkTap(href),
               ),
-              const SizedBox(height: 10),
-              OutlinedButton(
-                onPressed: _isSpeaking
-                    ? _stopSpeaking
-                    : () => _speakMessage(message.content),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFF334155)),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                ),
-                child: Text(
-                  _isSpeaking
-                      ? context.l10n.stopPlayback
-                      : context.l10n.playback,
+              const SizedBox(height: AppSpacing.tileY),
+              _withUnavailableTooltip(
+                message: ttsUnavailableMessage,
+                child: OutlinedButton(
+                  onPressed: _isSpeaking
+                      ? _stopSpeaking
+                      : (_ttsReady
+                          ? () => _speakMessage(message.content)
+                          : null),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                      color: AppColors.outlineStrongFor(brightness),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.tileX,
+                      vertical: AppSpacing.tileY,
+                    ),
+                  ),
+                  child: Text(
+                    _isSpeaking
+                        ? context.l10n.stopPlayback
+                        : context.l10n.playback,
+                  ),
                 ),
               ),
             ],
@@ -656,6 +902,106 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ),
       ),
     );
+  }
+
+  MarkdownStyleSheet _assistantMarkdownStyleSheet(ThemeData theme) {
+    final brightness = theme.brightness;
+    final bodyStyle = theme.textTheme.bodyLarge?.copyWith(
+      height: 1.45,
+      color: AppColors.textFor(brightness),
+    );
+    final headingColor = AppColors.textFor(brightness);
+    final codeSurfaceColor = AppColors.tintSurfaceFor(
+      brightness,
+      AppColors.signalFor(brightness),
+      base: AppColors.panelFor(brightness),
+      darkAlpha: 0.16,
+      lightAlpha: 0.09,
+    );
+    final outlineColor = AppColors.tintBorderFor(
+      brightness,
+      AppColors.signalFor(brightness),
+      base: AppColors.outlineFor(brightness),
+      darkAlpha: 0.34,
+      lightAlpha: 0.18,
+    );
+    final linkColor = AppColors.signalFor(brightness);
+    final inlineCodeBackground = AppColors.tintSurfaceFor(
+      brightness,
+      AppColors.signalFor(brightness),
+      base: AppColors.surfaceFor(brightness),
+      darkAlpha: 0.12,
+      lightAlpha: 0.07,
+    );
+    final codeStyle = theme.textTheme.bodyMedium?.copyWith(
+      fontSize: (bodyStyle?.fontSize ?? 14) * 0.93,
+      height: 1.55,
+      color: AppColors.textFor(brightness),
+      fontFamily: 'JetBrains Mono',
+      fontFamilyFallback: const <String>['monospace'],
+      letterSpacing: 0.1,
+    );
+
+    return MarkdownStyleSheet.fromTheme(theme).copyWith(
+      p: bodyStyle,
+      a: bodyStyle?.copyWith(
+        color: linkColor,
+        decoration: TextDecoration.underline,
+        decorationColor: linkColor,
+      ),
+      code: codeStyle?.copyWith(
+        backgroundColor: inlineCodeBackground,
+      ),
+      strong: bodyStyle?.copyWith(fontWeight: FontWeight.w700),
+      em: bodyStyle?.copyWith(fontStyle: FontStyle.italic),
+      listBullet: bodyStyle,
+      blockquote: bodyStyle?.copyWith(
+        color: AppColors.textSoftFor(brightness),
+      ),
+      pPadding: const EdgeInsets.symmetric(vertical: 1),
+      blockSpacing: AppSpacing.compact,
+      codeblockPadding: const EdgeInsets.fromLTRB(
+        AppSpacing.tileX,
+        AppSpacing.tileY,
+        AppSpacing.tileX,
+        AppSpacing.tileX,
+      ),
+      codeblockDecoration: BoxDecoration(
+        color: codeSurfaceColor,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+        border: Border.all(color: outlineColor),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.boardFor(brightness).withValues(alpha: 0.18),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      blockquotePadding: AppSpacing.tilePadding,
+      blockquoteDecoration: BoxDecoration(
+        color: AppColors.surfaceFor(brightness),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+        border: Border.all(color: outlineColor),
+      ),
+      horizontalRuleDecoration: BoxDecoration(
+        border: Border(top: BorderSide(color: outlineColor)),
+      ),
+      h1: theme.textTheme.titleLarge?.copyWith(color: headingColor),
+      h2: theme.textTheme.titleMedium?.copyWith(color: headingColor),
+      h3: theme.textTheme.titleSmall?.copyWith(color: headingColor),
+      h4: bodyStyle?.copyWith(fontWeight: FontWeight.w700),
+      h5: bodyStyle?.copyWith(fontWeight: FontWeight.w700),
+      h6: bodyStyle?.copyWith(fontWeight: FontWeight.w700),
+    );
+  }
+
+  void _handleAssistantMarkdownLinkTap(String? href) {
+    final uri = href == null ? null : Uri.tryParse(href);
+    if (uri == null) {
+      return;
+    }
+    unawaited(launchUrl(uri));
   }
 
   String _toolMessagePreview(ChatMessage message) {
@@ -712,6 +1058,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       setState(() {
         _session = session;
         _pendingApproval = session.pendingApproval;
+        _reconcileSubmittedApprovalState();
         _creatingSession = false;
         _loadingMessages = true;
         _speechError = null;
@@ -734,7 +1081,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     try {
-      final messages = await bridgeClient.listMessages(_session.id);
+      final messages = await _client.listMessages(_session.id);
       if (!mounted) {
         return;
       }
@@ -762,13 +1109,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     _eventsSubscription?.cancel();
     _eventsReconnectTimer?.cancel();
-    _eventsSubscription =
-        bridgeClient.subscribeToSessionEvents(_session.id).listen(
-              _handleBridgeEvent,
-              onError: (_) => _scheduleEventReconnect(),
-              onDone: _scheduleEventReconnect,
-              cancelOnError: true,
-            );
+    _eventsSubscription = _client.subscribeToSessionEvents(_session.id).listen(
+          _handleBridgeEvent,
+          onError: (_) => _scheduleEventReconnect(),
+          onDone: _scheduleEventReconnect,
+          cancelOnError: true,
+        );
   }
 
   void _scheduleEventReconnect() {
@@ -797,9 +1143,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _subscribeToEvents();
 
       final results = await Future.wait<Object?>([
-        bridgeClient.listMessages(_session.id),
-        bridgeClient.listProjectSessions(_session.projectId,
-            forceRefresh: true),
+        _client.listMessages(_session.id),
+        _client.listProjectSessions(_session.projectId, forceRefresh: true),
       ]);
       if (!mounted) {
         return;
@@ -825,6 +1170,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         if (refreshedSession != null) {
           _session = refreshedSession;
         }
+        _reconcileSubmittedApprovalState();
       });
       _maybeAutoScrollToBottom();
     } catch (error) {
@@ -853,6 +1199,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         setState(() {
           _session = SessionSummary.fromJson(payload);
           _pendingApproval = _session.pendingApproval;
+          _reconcileSubmittedApprovalState();
         });
         _syncSessionSummaryCache();
         _maybeAutoScrollToBottom();
@@ -867,6 +1214,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           if (status != SessionStatus.awaitingApproval) {
             _pendingApproval = null;
           }
+          _reconcileSubmittedApprovalState();
         });
         _syncSessionSummaryCache();
         final latestAssistantMessage = _messages
@@ -970,13 +1318,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             updatedAt: DateTime.now(),
             pendingApproval: approval,
           );
+          _reconcileSubmittedApprovalState();
         });
         _syncSessionSummaryCache();
         break;
       case 'approval_resolved':
         final requestId = payload['request_id'] as String? ?? '';
-        final choice = parseApprovalChoice(payload['choice'] as String? ?? '');
-        final preview = _approvalResolvedLabel(choice);
         debugPrint(
           '[approval] resolved session=${_session.id} request=$requestId '
           'choice=${payload["choice"]}',
@@ -986,10 +1333,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           _session = _session.copyWith(
             status: SessionStatus.running,
             updatedAt: DateTime.now(),
-            lastMessagePreview: preview,
             clearPendingApproval: true,
           );
-          _speechStatus = preview;
+          _submittedApprovalRequestId = null;
+          _submittingApproval = false;
+          _submittingApprovalChoice = null;
           _speechError = null;
         });
         _syncSessionSummaryCache();
@@ -1014,16 +1362,22 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         '[approval] submit session=${_session.id} request=${approval.requestId} '
         'choice=$choice',
       );
-      await bridgeClient.submitApproval(
-          _session.id, approval.requestId, choice);
+      await _client.submitApproval(_session.id, approval.requestId, choice);
       if (!mounted) {
         return;
       }
       setState(() {
+        _pendingApproval = null;
+        _session = _session.copyWith(
+          updatedAt: DateTime.now(),
+          clearPendingApproval: true,
+        );
         _submittingApproval = false;
         _submittingApprovalChoice = null;
+        _submittedApprovalRequestId = approval.requestId;
         _speechError = null;
       });
+      _syncSessionSummaryCache();
     } catch (error) {
       if (!mounted) {
         return;
@@ -1031,23 +1385,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       setState(() {
         _submittingApproval = false;
         _submittingApprovalChoice = null;
+        _submittedApprovalRequestId = null;
         _speechError = context.l10n.approvalSubmitFailed('$error');
       });
-    }
-  }
-
-  String _approvalResolvedLabel(ApprovalChoice choice) {
-    switch (choice) {
-      case ApprovalChoice.accept:
-        return context.l10n.approvalAccepted;
-      case ApprovalChoice.acceptForSession:
-        return context.l10n.approvalAcceptedForSession;
-      case ApprovalChoice.alwaysAllow:
-        return context.l10n.approvalAlwaysAllow;
-      case ApprovalChoice.decline:
-        return context.l10n.approvalRejected;
-      case ApprovalChoice.cancel:
-        return context.l10n.approvalCancelled;
     }
   }
 
@@ -1055,8 +1395,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     try {
       final useSystemSpeech =
           appSettingsController.settings.asrProvider == AsrProvider.system;
-      _systemAsrUnavailable = false;
       if (useSystemSpeech) {
+        _systemAsrUnavailable = false;
         try {
           final ready = await _speechInputService.initialize(
             onStatus: (status) {
@@ -1089,7 +1429,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             }
             setState(() {
               _speechReady = true;
-              _speechStatus = null;
+              if (_speechStatus == _systemSpeechUnavailableLabel()) {
+                _speechStatus = null;
+              }
               _speechError = null;
             });
             return;
@@ -1098,6 +1440,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         } catch (_) {
           _systemAsrUnavailable = true;
         }
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _systemAsrLocaleId = null;
+          _speechReady = false;
+          _speechStatus = _systemSpeechUnavailableLabel();
+          _speechError = null;
+        });
+        return;
       }
       _systemAsrLocaleId = null;
       final ready = await _audioRecordingService.hasPermission().timeout(
@@ -1133,6 +1485,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           }
           setState(() {
             _isSpeaking = true;
+            _clearTransientTtsStatus();
           });
         },
         onComplete: () {
@@ -1141,6 +1494,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           }
           setState(() {
             _isSpeaking = false;
+            _clearTransientTtsStatus();
           });
         },
         onCancel: () {
@@ -1149,6 +1503,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           }
           setState(() {
             _isSpeaking = false;
+            _clearTransientTtsStatus();
           });
         },
         onError: (message) {
@@ -1165,8 +1520,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       if (!mounted) {
         return;
       }
+      final provider = appSettingsController.settings.ttsProvider;
       setState(() {
-        _ttsReady = true;
+        _ttsReady = provider == TtsProvider.system
+            ? _ttsService.isSystemTtsAvailable
+            : true;
+        if (!_ttsReady && provider == TtsProvider.system) {
+          _speechStatus = _systemSpeechUnavailableLabel();
+          _speechError = null;
+        }
       });
     } catch (error) {
       if (!mounted) {
@@ -1403,7 +1765,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     setState(() {
       _speechError = null;
-      _speechStatus = context.l10n.requestingTts;
+      _clearTransientTtsStatus();
     });
     try {
       await _ttsService.speak(content);
@@ -1418,7 +1780,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   void _maybeAutoSpeakAssistantMessage(String messageId) {
-    if (!appSettingsController.settings.autoSpeakReplies || _isSpeaking) {
+    if (!appSettingsController.settings.autoSpeakReplies ||
+        _isSpeaking ||
+        !_ttsReady) {
       return;
     }
     final message = _messages
@@ -1479,6 +1843,25 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     setState(() {
       _isSpeaking = false;
     });
+  }
+
+  KeyEventResult _handleMessageInputKeyEvent(FocusNode _, KeyEvent event) {
+    final isEnterKey = event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    if (!isEnterKey || HardwareKeyboard.instance.isShiftPressed) {
+      return KeyEventResult.ignored;
+    }
+    if (_isMessageInputComposing) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyRepeatEvent) {
+      return KeyEventResult.handled;
+    }
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    unawaited(_sendTextMessage());
+    return KeyEventResult.handled;
   }
 
   Future<void> _sendTextMessage() async {
@@ -1558,7 +1941,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _jumpToBottom();
 
     try {
-      final result = await bridgeClient.sendMessage(
+      final result = await _client.sendMessage(
         _session.id,
         content,
         inputMode: inputMode,
@@ -1643,7 +2026,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _speechError = null;
     });
     try {
-      await bridgeClient.cancelReply(_session.id);
+      await _client.cancelReply(_session.id);
       if (!mounted) {
         return;
       }
@@ -1712,11 +2095,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (systemMessages.isEmpty) {
       return;
     }
+    final brightness = Theme.of(context).brightness;
 
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: AppColors.panelFor(brightness),
         title: Text(context.l10n.allToolActivity),
         content: SizedBox(
           width: 360,
@@ -1725,9 +2109,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             itemCount: systemMessages.length,
             itemBuilder: (context, index) => InkWell(
               onTap: () => _showToolMessageDetail(systemMessages[index]),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                padding: const EdgeInsets.symmetric(
+                  vertical: AppSpacing.micro,
+                  horizontal: AppSpacing.textStack,
+                ),
                 child: Text(
                   _toolMessagePreview(systemMessages[index]),
                   maxLines: 2,
@@ -1736,9 +2123,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 ),
               ),
             ),
-            separatorBuilder: (_, __) => const Divider(
+            separatorBuilder: (_, __) => Divider(
               height: 16,
-              color: Color(0xFF1E293B),
+              color: AppColors.outlineFor(brightness),
             ),
           ),
         ),
@@ -1759,10 +2146,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Future<void> _showToolMessageDetail(ChatMessage message) async {
     final parsed = _parseToolMessage(message.content);
+    final brightness = Theme.of(context).brightness;
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: AppColors.panelFor(brightness),
         title: Text(context.l10n.toolActivityDetail),
         content: SizedBox(
           width: 360,
@@ -1789,6 +2177,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _ParsedToolMessage parsed,
     String rawContent,
   ) {
+    final brightness = Theme.of(context).brightness;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1811,18 +2200,18 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             parsed.secondaryItems,
           ),
         if (parsed.trailingNote != null && parsed.trailingNote!.isNotEmpty) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.fieldGap),
           _detailRow(context.l10n.detailExtra, parsed.trailingNote!),
         ],
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.block),
         Text(
           context.l10n.detailRawContent,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w700,
-            color: Color(0xFF94A3B8),
+            color: AppColors.mutedSoftFor(brightness),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.compact),
         SelectableText(
           rawContent,
           style: const TextStyle(height: 1.5),
@@ -1832,8 +2221,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Widget _detailRow(String label, String value) {
+    final brightness = Theme.of(context).brightness;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: AppSpacing.fieldGap),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1841,8 +2231,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             width: 52,
             child: Text(
               label,
-              style: const TextStyle(
-                color: Color(0xFF94A3B8),
+              style: TextStyle(
+                color: AppColors.mutedSoftFor(brightness),
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -1856,49 +2246,51 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Widget _detailBlock(String label, String value) {
+    final brightness = Theme.of(context).brightness;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: Color(0xFF94A3B8),
+          style: TextStyle(
+            color: AppColors.mutedSoftFor(brightness),
             fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: AppSpacing.stackTight),
         SelectableText(value, style: const TextStyle(height: 1.5)),
       ],
     );
   }
 
   Widget _detailList(String label, List<String> items) {
+    final brightness = Theme.of(context).brightness;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: Color(0xFF94A3B8),
+          style: TextStyle(
+            color: AppColors.mutedSoftFor(brightness),
             fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: AppSpacing.stackTight),
         ...items.map(
           (item) => Padding(
-            padding: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.only(bottom: AppSpacing.stackTight),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Padding(
-                  padding: EdgeInsets.only(top: 6),
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.stackTight),
                   child: Icon(
                     Icons.circle,
-                    size: 6,
-                    color: Color(0xFF94A3B8),
+                    size: AppSpacing.stackTight,
+                    color: AppColors.mutedSoftFor(brightness),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.compact),
                 Expanded(
                   child: SelectableText(
                     item,
@@ -2129,6 +2521,182 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         curve: Curves.easeOut,
       );
     });
+  }
+}
+
+class _SessionMessagesSkeleton extends StatelessWidget {
+  const _SessionMessagesSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: ListView(
+        padding: AppSpacing.blockPadding,
+        children: const [
+          _MessageBubbleSkeleton(
+            alignment: Alignment.centerLeft,
+            width: 236,
+            lineWidths: [188, 144],
+          ),
+          SizedBox(height: AppSpacing.stack),
+          _MessageBubbleSkeleton(
+            alignment: Alignment.centerRight,
+            width: 204,
+            lineWidths: [132, 164],
+            emphasized: true,
+          ),
+          SizedBox(height: AppSpacing.stack),
+          _MessageBubbleSkeleton(
+            alignment: Alignment.centerLeft,
+            width: 262,
+            lineWidths: [214, 190, 124],
+          ),
+          SizedBox(height: AppSpacing.stack),
+          _MessageBubbleSkeleton(
+            alignment: Alignment.centerRight,
+            width: 176,
+            lineWidths: [124, 96],
+            emphasized: true,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MessageBubbleSkeleton extends StatelessWidget {
+  const _MessageBubbleSkeleton({
+    required this.alignment,
+    required this.width,
+    required this.lineWidths,
+    this.emphasized = false,
+  });
+
+  final Alignment alignment;
+  final double width;
+  final List<double> lineWidths;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final bubbleColor = emphasized
+        ? AppColors.tintSurfaceFor(
+            brightness,
+            AppColors.accentBlueFor(brightness),
+            darkAlpha: 0.18,
+            lightAlpha: 0.10,
+          )
+        : AppColors.surfaceFor(brightness);
+    final borderColor = emphasized
+        ? AppColors.tintBorderFor(
+            brightness,
+            AppColors.accentBlueFor(brightness),
+          )
+        : AppColors.outlineFor(brightness);
+
+    return Align(
+      alignment: alignment,
+      child: Container(
+        width: width,
+        padding: AppSpacing.tilePadding,
+        decoration: BoxDecoration(
+          color: bubbleColor,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
+          border: Border.all(color: borderColor),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var index = 0; index < lineWidths.length; index++) ...[
+              AppSkeletonBlock(width: lineWidths[index], height: 10),
+              if (index < lineWidths.length - 1)
+                const SizedBox(height: AppSpacing.textStack),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AssistantCodeSyntaxHighlighter extends SyntaxHighlighter {
+  _AssistantCodeSyntaxHighlighter(this.theme);
+
+  final ThemeData theme;
+
+  static final RegExp _tokenPattern = RegExp(
+    r'''(?<comment>//.*$|#.*$)|(?<string>"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(?<keyword>\b(?:abstract|async|await|break|case|catch|class|const|continue|def|default|else|enum|export|extends|false|final|finally|for|from|function|if|import|in|interface|let|new|null|override|print|return|static|super|switch|this|throw|true|try|var|void|while|with|yield)\b)|(?<number>\b\d+(?:\.\d+)?\b)''',
+    multiLine: true,
+  );
+
+  @override
+  TextSpan format(String source) {
+    final brightness = theme.brightness;
+    final baseStyle = theme.textTheme.bodyMedium?.copyWith(
+      color: AppColors.textFor(brightness),
+      fontSize: (theme.textTheme.bodyLarge?.fontSize ?? 14) * 0.93,
+      fontFamily: 'JetBrains Mono',
+      fontFamilyFallback: const <String>['monospace'],
+      height: 1.55,
+      letterSpacing: 0.1,
+    );
+    final commentStyle = baseStyle?.copyWith(
+      color: AppColors.mutedSoftFor(brightness),
+      fontStyle: FontStyle.italic,
+    );
+    final stringStyle = baseStyle?.copyWith(
+      color: brightness == Brightness.dark
+          ? const Color(0xFFFFC47A)
+          : const Color(0xFF9A5200),
+    );
+    final keywordStyle = baseStyle?.copyWith(
+      color: brightness == Brightness.dark
+          ? const Color(0xFF8ED0FF)
+          : const Color(0xFF005CC5),
+      fontWeight: FontWeight.w700,
+    );
+    final numberStyle = baseStyle?.copyWith(
+      color: brightness == Brightness.dark
+          ? const Color(0xFFB7F287)
+          : const Color(0xFF2F7D32),
+    );
+
+    final spans = <TextSpan>[];
+    var currentIndex = 0;
+    for (final match in _tokenPattern.allMatches(source)) {
+      if (match.start > currentIndex) {
+        spans.add(
+          TextSpan(
+            text: source.substring(currentIndex, match.start),
+            style: baseStyle,
+          ),
+        );
+      }
+
+      final token = match.group(0)!;
+      TextStyle? style = baseStyle;
+      if (match.namedGroup('comment') != null) {
+        style = commentStyle;
+      } else if (match.namedGroup('string') != null) {
+        style = stringStyle;
+      } else if (match.namedGroup('keyword') != null) {
+        style = keywordStyle;
+      } else if (match.namedGroup('number') != null) {
+        style = numberStyle;
+      }
+
+      spans.add(TextSpan(text: token, style: style));
+      currentIndex = match.end;
+    }
+
+    if (currentIndex < source.length) {
+      spans.add(
+        TextSpan(text: source.substring(currentIndex), style: baseStyle),
+      );
+    }
+
+    return TextSpan(style: baseStyle, children: spans);
   }
 }
 

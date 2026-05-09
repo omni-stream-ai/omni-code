@@ -122,6 +122,12 @@ abstract class AppLocalizations {
   /// **'Saving...'**
   String get saving;
 
+  /// No description provided for @systemSection.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get systemSection;
+
   /// No description provided for @languageSection.
   ///
   /// In en, this message translates to:
@@ -314,6 +320,12 @@ abstract class AppLocalizations {
   /// **'When enabled, new sessions ask the AI to summarize what it did briefly, ideally within 50 characters'**
   String get compressRepliesSubtitle;
 
+  /// No description provided for @notificationPreviewMaxChars.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification max chars'**
+  String get notificationPreviewMaxChars;
+
   /// No description provided for @settingsSaved.
   ///
   /// In en, this message translates to:
@@ -398,11 +410,23 @@ abstract class AppLocalizations {
   /// **'Projects'**
   String get projectsTitle;
 
+  /// No description provided for @selectProject.
+  ///
+  /// In en, this message translates to:
+  /// **'Select project'**
+  String get selectProject;
+
   /// No description provided for @createProject.
   ///
   /// In en, this message translates to:
   /// **'Create project'**
   String get createProject;
+
+  /// No description provided for @createNewProject.
+  ///
+  /// In en, this message translates to:
+  /// **'Create new project'**
+  String get createNewProject;
 
   /// No description provided for @newProject.
   ///
@@ -421,6 +445,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} sessions'**
   String projectCount(int count);
+
+  /// No description provided for @sessionCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} sessions'**
+  String sessionCount(int count);
+
+  /// No description provided for @projectsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} projects'**
+  String projectsCount(int count);
 
   /// No description provided for @projectUpdatedAt.
   ///
@@ -470,17 +506,71 @@ abstract class AppLocalizations {
   /// **'Open any session to continue the existing context, or create a new Codex session under this project.'**
   String get projectIntro;
 
+  /// No description provided for @homePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote agent cockpit'**
+  String get homePrompt;
+
+  /// No description provided for @homeCreateProjectHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add local codebase'**
+  String get homeCreateProjectHint;
+
+  /// No description provided for @homeBrowseProjects.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse all'**
+  String get homeBrowseProjects;
+
   /// No description provided for @searchSessions.
   ///
   /// In en, this message translates to:
   /// **'Search session title or summary'**
   String get searchSessions;
 
+  /// No description provided for @searchProjects.
+  ///
+  /// In en, this message translates to:
+  /// **'Search project name or path'**
+  String get searchProjects;
+
+  /// No description provided for @themeSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme'**
+  String get themeSection;
+
+  /// No description provided for @themeFollowSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow system'**
+  String get themeFollowSystem;
+
+  /// No description provided for @themeLight.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get themeLight;
+
+  /// No description provided for @themeDark.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get themeDark;
+
   /// No description provided for @sessionsTitle.
   ///
   /// In en, this message translates to:
   /// **'Recent'**
   String get sessionsTitle;
+
+  /// No description provided for @recentSessionsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent sessions'**
+  String get recentSessionsTitle;
 
   /// No description provided for @loadSessionsFailed.
   ///
@@ -499,6 +589,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Load more ({count})'**
   String loadMoreSessions(int count);
+
+  /// Label for loading more recent sessions without showing a count.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more'**
+  String get loadMoreSessionsLabel;
 
   /// No description provided for @newSession.
   ///
@@ -589,6 +685,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Waiting for approval processing...'**
   String get waitingApprovalProcessing;
+
+  /// No description provided for @waitingApprovalListening.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening for approval...'**
+  String get waitingApprovalListening;
+
+  /// No description provided for @connectHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Bridge'**
+  String get connectHeader;
+
+  /// No description provided for @connectPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect your Bridge to get started.'**
+  String get connectPrompt;
+
+  /// No description provided for @connectWelcomeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to Omni Code'**
+  String get connectWelcomeTitle;
+
+  /// No description provided for @connectWelcomeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Run the Bridge service on your computer, then authorize this device to open projects and continue sessions.'**
+  String get connectWelcomeBody;
+
+  /// No description provided for @connectBridgeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Use your computer IP if the phone is on the same LAN.'**
+  String get connectBridgeHint;
+
+  /// No description provided for @connectDownloadTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Download Bridge service'**
+  String get connectDownloadTitle;
+
+  /// No description provided for @connectDownloadBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Get the service from GitHub on the computer that hosts your local projects.'**
+  String get connectDownloadBody;
+
+  /// No description provided for @connectDownloadRepo.
+  ///
+  /// In en, this message translates to:
+  /// **'github.com/omni-stream-ai/omni-code-bridge'**
+  String get connectDownloadRepo;
+
+  /// No description provided for @authorizeThisDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorize this device'**
+  String get authorizeThisDevice;
+
+  /// No description provided for @connectNextStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Next: approval screen'**
+  String get connectNextStep;
+
+  /// No description provided for @backToWelcome.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to welcome'**
+  String get backToWelcome;
+
+  /// No description provided for @waitingApprovalHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorization'**
+  String get waitingApprovalHeader;
+
+  /// No description provided for @waitingApprovalHeaderSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Approve this device on your Bridge host.'**
+  String get waitingApprovalHeaderSubtitle;
 
   /// No description provided for @turnPausedWaiting.
   ///
@@ -1220,6 +1400,12 @@ abstract class AppLocalizations {
   /// **'Waiting for approval'**
   String get waitingApprovalTitle;
 
+  /// No description provided for @waitingApprovalBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Approve this request on the Bridge host. The app continues automatically after approval.'**
+  String get waitingApprovalBody;
+
   /// No description provided for @waitingApprovalInstallHint.
   ///
   /// In en, this message translates to:
@@ -1237,6 +1423,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Run this command on the Bridge host:'**
   String get waitingApprovalRunCommand;
+
+  /// No description provided for @waitingApprovalRequestAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Request again'**
+  String get waitingApprovalRequestAgain;
 
   /// No description provided for @voiceInputInitFailed.
   ///
@@ -1286,6 +1478,30 @@ abstract class AppLocalizations {
   /// **'System is used by default when available. Switch to cloud providers if you need a fallback.'**
   String get speechSystemPreferredHelp;
 
+  /// No description provided for @systemTtsUnavailableOnLinux.
+  ///
+  /// In en, this message translates to:
+  /// **'System TTS is not available on Linux yet. Choose a cloud provider to enable playback.'**
+  String get systemTtsUnavailableOnLinux;
+
+  /// No description provided for @systemAsrUnavailableOnLinux.
+  ///
+  /// In en, this message translates to:
+  /// **'System ASR is not available on Linux yet. Choose a cloud provider to enable voice input.'**
+  String get systemAsrUnavailableOnLinux;
+
+  /// No description provided for @systemAsrMacosPermissionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'System ASR on macOS requires microphone and speech recognition permissions.'**
+  String get systemAsrMacosPermissionHint;
+
+  /// No description provided for @systemSpeechUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'System speech is unavailable on this device. Switch providers in Settings to use cloud speech.'**
+  String get systemSpeechUnavailable;
+
   /// No description provided for @appDownloadSection.
   ///
   /// In en, this message translates to:
@@ -1303,6 +1519,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open GitHub Releases'**
   String get openGithubReleases;
+
+  /// No description provided for @signOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out'**
+  String get signOut;
+
+  /// No description provided for @signOutConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out and reauthorize?'**
+  String get signOutConfirmTitle;
+
+  /// No description provided for @signOutConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This clears the current device authorization and returns you to the welcome screen. You will need to reconnect Bridge and authorize this device again.'**
+  String get signOutConfirmBody;
 }
 
 class _AppLocalizationsDelegate

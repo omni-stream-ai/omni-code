@@ -5,10 +5,22 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../app_routes.dart';
 import '../models.dart';
+import '../settings/app_settings.dart';
 
 @pragma('vm:entry-point')
 void notificationTapBackground(NotificationResponse response) {
   notificationService.handleNotificationPayload(response.payload);
+}
+
+String truncateNotificationBody(String body, int maxChars) {
+  final trimmed = body.trim();
+  if (trimmed.isEmpty || maxChars <= 0 || trimmed.length <= maxChars) {
+    return trimmed;
+  }
+  if (maxChars <= 3) {
+    return trimmed.substring(0, maxChars);
+  }
+  return '${trimmed.substring(0, maxChars - 3)}...';
 }
 
 class NotificationService {
@@ -16,6 +28,10 @@ class NotificationService {
   static const _replyChannelName = 'Agent Replies';
   static const _replyChannelDescription =
       'Omni Code assistant reply notifications';
+  static const _replyThreadId = 'omni_code_replies';
+  static const _defaultActionName = 'Open Omni Code';
+  static const _windowsAppUserModelId = 'OmniStreamAI.OmniCode.Client';
+  static const _windowsGuid = 'b24469ed-9ea8-4dd6-b2b1-f52a92e10983';
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -26,12 +42,34 @@ class NotificationService {
   Future<void> initialize() async {
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
+    const darwinSettings = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+      defaultPresentAlert: true,
+      defaultPresentBadge: true,
+      defaultPresentSound: true,
+      defaultPresentBanner: true,
+      defaultPresentList: true,
+    );
+    const linuxSettings = LinuxInitializationSettings(
+      defaultActionName: _defaultActionName,
+    );
+    const windowsSettings = WindowsInitializationSettings(
+      appName: 'Omni Code',
+      appUserModelId: _windowsAppUserModelId,
+      guid: _windowsGuid,
+    );
     const initializationSettings = InitializationSettings(
       android: androidSettings,
+      iOS: darwinSettings,
+      macOS: darwinSettings,
+      linux: linuxSettings,
+      windows: windowsSettings,
     );
 
     await _plugin.initialize(
-      initializationSettings,
+      settings: initializationSettings,
       onDidReceiveNotificationResponse: (response) {
         handleNotificationPayload(response.payload);
       },
@@ -50,6 +88,20 @@ class NotificationService {
         playSound: true,
         enableVibration: true,
       ),
+    );
+    final iosPlugin = _plugin.resolvePlatformSpecificImplementation<
+        IOSFlutterLocalNotificationsPlugin>();
+    await iosPlugin?.requestPermissions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    final macosPlugin = _plugin.resolvePlatformSpecificImplementation<
+        MacOSFlutterLocalNotificationsPlugin>();
+    await macosPlugin?.requestPermissions(
+      alert: true,
+      badge: true,
+      sound: true,
     );
 
     final launchDetails = await _plugin.getNotificationAppLaunchDetails();
@@ -96,15 +148,18 @@ class NotificationService {
     SessionSummary session,
     String body,
   ) async {
-    final trimmedBody = body.trim();
+    final trimmedBody = truncateNotificationBody(
+      body,
+      appSettingsController.settings.notificationMaxChars,
+    );
     if (trimmedBody.isEmpty) {
       return;
     }
     await _plugin.show(
-      session.id.hashCode,
-      session.title,
-      trimmedBody,
-      const NotificationDetails(
+      id: session.id.hashCode,
+      title: session.title,
+      body: trimmedBody,
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           _replyChannelId,
           _replyChannelName,
@@ -119,6 +174,26 @@ class NotificationService {
           autoCancel: true,
           ongoing: false,
         ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+          presentBanner: true,
+          presentList: true,
+          threadIdentifier: _replyThreadId,
+        ),
+        macOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+          presentBanner: true,
+          presentList: true,
+          threadIdentifier: _replyThreadId,
+        ),
+        linux: LinuxNotificationDetails(
+          defaultActionName: _defaultActionName,
+        ),
+        windows: WindowsNotificationDetails(),
       ),
       payload: jsonEncode({
         'session': {

@@ -21,6 +21,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get saving => '保存中...';
 
   @override
+  String get systemSection => '系统';
+
+  @override
   String get languageSection => '语言';
 
   @override
@@ -121,6 +124,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get compressRepliesSubtitle => '开启后，新建会话会要求 AI 简短说明做了什么，尽量不超过 50 字';
 
   @override
+  String get notificationPreviewMaxChars => '通知最大字符数';
+
+  @override
   String get settingsSaved => '设置已保存';
 
   @override
@@ -177,7 +183,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get projectsTitle => '项目';
 
   @override
+  String get selectProject => '选择项目';
+
+  @override
   String get createProject => '创建项目';
+
+  @override
+  String get createNewProject => '创建新项目';
 
   @override
   String get newProject => '新建项目';
@@ -188,6 +200,16 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String projectCount(int count) {
     return '$count 个会话';
+  }
+
+  @override
+  String sessionCount(int count) {
+    return '$count 个会话';
+  }
+
+  @override
+  String projectsCount(int count) {
+    return '$count 个项目';
   }
 
   @override
@@ -219,10 +241,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get projectIntro => '进入任一会话即可继续历史上下文，也可以在当前项目下创建一个新的 Codex 会话。';
 
   @override
+  String get homePrompt => '远程代理控制台';
+
+  @override
+  String get homeCreateProjectHint => '添加本地代码目录';
+
+  @override
+  String get homeBrowseProjects => '浏览全部';
+
+  @override
   String get searchSessions => '搜索会话标题或摘要';
 
   @override
+  String get searchProjects => '搜索项目名或路径';
+
+  @override
+  String get themeSection => '主题';
+
+  @override
+  String get themeFollowSystem => '跟随系统';
+
+  @override
+  String get themeLight => '浅色';
+
+  @override
+  String get themeDark => '深色';
+
+  @override
   String get sessionsTitle => '最近';
+
+  @override
+  String get recentSessionsTitle => '最近会话';
 
   @override
   String loadSessionsFailed(Object error) {
@@ -238,6 +287,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String loadMoreSessions(int count) {
     return '加载更多 ($count 条)';
   }
+
+  @override
+  String get loadMoreSessionsLabel => '加载更多';
 
   @override
   String get newSession => '新会话';
@@ -283,6 +335,49 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get waitingApprovalProcessing => '正在等待审批处理...';
+
+  @override
+  String get waitingApprovalListening => '正在等待批准...';
+
+  @override
+  String get connectHeader => '连接 Bridge';
+
+  @override
+  String get connectPrompt => '先连接 Bridge 再开始。';
+
+  @override
+  String get connectWelcomeTitle => '欢迎使用 Omni Code';
+
+  @override
+  String get connectWelcomeBody => '先在电脑上运行 Bridge 服务，然后授权此设备，以便打开项目并继续会话。';
+
+  @override
+  String get connectBridgeHint => '如果手机和电脑在同一个局域网，请使用电脑 IP。';
+
+  @override
+  String get connectDownloadTitle => '下载 Bridge 服务';
+
+  @override
+  String get connectDownloadBody => '请在托管本地项目的电脑上，从 GitHub 获取该服务。';
+
+  @override
+  String get connectDownloadRepo =>
+      'github.com/omni-stream-ai/omni-code-bridge';
+
+  @override
+  String get authorizeThisDevice => '授权当前设备';
+
+  @override
+  String get connectNextStep => '下一步：审批页';
+
+  @override
+  String get backToWelcome => '返回欢迎页';
+
+  @override
+  String get waitingApprovalHeader => '授权';
+
+  @override
+  String get waitingApprovalHeaderSubtitle => '在 Bridge 主机上批准此设备。';
 
   @override
   String get turnPausedWaiting => '本轮已暂停，正在等待后续结果...';
@@ -642,6 +737,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get waitingApprovalTitle => '等待批准';
 
   @override
+  String get waitingApprovalBody => '请在 Bridge 主机上批准这次请求。批准后应用会自动继续。';
+
+  @override
   String get waitingApprovalInstallHint => '如果 Bridge 服务尚未运行，请先从 GitHub 下载并启动。';
 
   @override
@@ -649,6 +747,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get waitingApprovalRunCommand => '在 Bridge 主机上运行此命令：';
+
+  @override
+  String get waitingApprovalRequestAgain => '重新请求';
 
   @override
   String voiceInputInitFailed(Object error) {
@@ -681,6 +782,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speechSystemPreferredHelp => '系统可用时默认使用。如需备份可切换到云服务商。';
 
   @override
+  String get systemTtsUnavailableOnLinux =>
+      'Linux 当前还不支持系统 TTS。请切换到云端服务商后再启用播报。';
+
+  @override
+  String get systemAsrUnavailableOnLinux =>
+      'Linux 当前还不支持系统 ASR。请切换到云端服务商后再启用语音输入。';
+
+  @override
+  String get systemAsrMacosPermissionHint => 'macOS 的系统 ASR 需要麦克风和语音识别权限。';
+
+  @override
+  String get systemSpeechUnavailable => '当前设备不支持系统语音。请到设置中切换服务商后再使用云端语音。';
+
+  @override
   String get appDownloadSection => '应用下载';
 
   @override
@@ -688,4 +803,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get openGithubReleases => '打开 GitHub Releases';
+
+  @override
+  String get signOut => '退出';
+
+  @override
+  String get signOutConfirmTitle => '退出并重新授权？';
+
+  @override
+  String get signOutConfirmBody =>
+      '退出后会清除当前设备授权并返回欢迎页。你需要重新连接 Bridge 并再次授权此设备。';
 }

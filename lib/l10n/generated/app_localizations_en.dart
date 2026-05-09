@@ -21,6 +21,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get saving => 'Saving...';
 
   @override
+  String get systemSection => 'System';
+
+  @override
   String get languageSection => 'Language';
 
   @override
@@ -123,6 +126,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'When enabled, new sessions ask the AI to summarize what it did briefly, ideally within 50 characters';
 
   @override
+  String get notificationPreviewMaxChars => 'Notification max chars';
+
+  @override
   String get settingsSaved => 'Settings saved';
 
   @override
@@ -180,7 +186,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get projectsTitle => 'Projects';
 
   @override
+  String get selectProject => 'Select project';
+
+  @override
   String get createProject => 'Create project';
+
+  @override
+  String get createNewProject => 'Create new project';
 
   @override
   String get newProject => 'New project';
@@ -191,6 +203,16 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String projectCount(int count) {
     return '$count sessions';
+  }
+
+  @override
+  String sessionCount(int count) {
+    return '$count sessions';
+  }
+
+  @override
+  String projectsCount(int count) {
+    return '$count projects';
   }
 
   @override
@@ -224,10 +246,37 @@ class AppLocalizationsEn extends AppLocalizations {
       'Open any session to continue the existing context, or create a new Codex session under this project.';
 
   @override
+  String get homePrompt => 'Remote agent cockpit';
+
+  @override
+  String get homeCreateProjectHint => 'Add local codebase';
+
+  @override
+  String get homeBrowseProjects => 'Browse all';
+
+  @override
   String get searchSessions => 'Search session title or summary';
 
   @override
+  String get searchProjects => 'Search project name or path';
+
+  @override
+  String get themeSection => 'Theme';
+
+  @override
+  String get themeFollowSystem => 'Follow system';
+
+  @override
+  String get themeLight => 'Light';
+
+  @override
+  String get themeDark => 'Dark';
+
+  @override
   String get sessionsTitle => 'Recent';
+
+  @override
+  String get recentSessionsTitle => 'Recent sessions';
 
   @override
   String loadSessionsFailed(Object error) {
@@ -243,6 +292,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String loadMoreSessions(int count) {
     return 'Load more ($count)';
   }
+
+  @override
+  String get loadMoreSessionsLabel => 'Load more';
 
   @override
   String get newSession => 'New session';
@@ -290,6 +342,53 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get waitingApprovalProcessing => 'Waiting for approval processing...';
+
+  @override
+  String get waitingApprovalListening => 'Listening for approval...';
+
+  @override
+  String get connectHeader => 'Connect Bridge';
+
+  @override
+  String get connectPrompt => 'Connect your Bridge to get started.';
+
+  @override
+  String get connectWelcomeTitle => 'Welcome to Omni Code';
+
+  @override
+  String get connectWelcomeBody =>
+      'Run the Bridge service on your computer, then authorize this device to open projects and continue sessions.';
+
+  @override
+  String get connectBridgeHint =>
+      'Use your computer IP if the phone is on the same LAN.';
+
+  @override
+  String get connectDownloadTitle => 'Download Bridge service';
+
+  @override
+  String get connectDownloadBody =>
+      'Get the service from GitHub on the computer that hosts your local projects.';
+
+  @override
+  String get connectDownloadRepo =>
+      'github.com/omni-stream-ai/omni-code-bridge';
+
+  @override
+  String get authorizeThisDevice => 'Authorize this device';
+
+  @override
+  String get connectNextStep => 'Next: approval screen';
+
+  @override
+  String get backToWelcome => 'Back to welcome';
+
+  @override
+  String get waitingApprovalHeader => 'Authorization';
+
+  @override
+  String get waitingApprovalHeaderSubtitle =>
+      'Approve this device on your Bridge host.';
 
   @override
   String get turnPausedWaiting =>
@@ -664,6 +763,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get waitingApprovalTitle => 'Waiting for approval';
 
   @override
+  String get waitingApprovalBody =>
+      'Approve this request on the Bridge host. The app continues automatically after approval.';
+
+  @override
   String get waitingApprovalInstallHint =>
       'If the Bridge service is not running yet, download it from GitHub and start it first.';
 
@@ -674,6 +777,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get waitingApprovalRunCommand =>
       'Run this command on the Bridge host:';
+
+  @override
+  String get waitingApprovalRequestAgain => 'Request again';
 
   @override
   String voiceInputInitFailed(Object error) {
@@ -708,6 +814,22 @@ class AppLocalizationsEn extends AppLocalizations {
       'System is used by default when available. Switch to cloud providers if you need a fallback.';
 
   @override
+  String get systemTtsUnavailableOnLinux =>
+      'System TTS is not available on Linux yet. Choose a cloud provider to enable playback.';
+
+  @override
+  String get systemAsrUnavailableOnLinux =>
+      'System ASR is not available on Linux yet. Choose a cloud provider to enable voice input.';
+
+  @override
+  String get systemAsrMacosPermissionHint =>
+      'System ASR on macOS requires microphone and speech recognition permissions.';
+
+  @override
+  String get systemSpeechUnavailable =>
+      'System speech is unavailable on this device. Switch providers in Settings to use cloud speech.';
+
+  @override
   String get appDownloadSection => 'App Download';
 
   @override
@@ -715,4 +837,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get openGithubReleases => 'Open GitHub Releases';
+
+  @override
+  String get signOut => 'Sign out';
+
+  @override
+  String get signOutConfirmTitle => 'Sign out and reauthorize?';
+
+  @override
+  String get signOutConfirmBody =>
+      'This clears the current device authorization and returns you to the welcome screen. You will need to reconnect Bridge and authorize this device again.';
 }

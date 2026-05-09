@@ -10,11 +10,15 @@ import 'l10n/app_locale.dart';
 import 'models.dart';
 import 'screens/project_detail_screen.dart';
 import 'screens/session_detail_screen.dart';
-import 'screens/session_list_screen.dart';
+import 'screens/home_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/speech_settings_screen.dart';
 import 'services/notification_service.dart';
+import 'theme/app_colors.dart';
+import 'theme/app_spacing.dart';
 import 'theme/app_theme.dart';
 import 'settings/app_settings.dart';
+import 'widgets/app_skeleton.dart';
 
 class OmniCodeApp extends StatefulWidget {
   const OmniCodeApp({super.key});
@@ -40,6 +44,11 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
         final locale = localeFromSetting(
           appSettingsController.settings.appLanguage,
         );
+        final themeMode = switch (appSettingsController.settings.themeMode) {
+          AppThemeModeSetting.system => ThemeMode.system,
+          AppThemeModeSetting.light => ThemeMode.light,
+          AppThemeModeSetting.dark => ThemeMode.dark,
+        };
         return MaterialApp(
           onGenerateTitle: (context) => context.l10n.appTitle,
           debugShowCheckedModeBanner: false,
@@ -52,7 +61,9 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          theme: AppTheme.darkTheme,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeMode,
           onGenerateInitialRoutes: _generateInitialRoutes,
           onGenerateRoute: _buildRoute,
           onUnknownRoute: _buildUnknownRoute,
@@ -97,13 +108,18 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
         SessionDetailScreen(session: arguments),
       );
     }
+    if (settings.name == SpeechSettingsScreen.routeName) {
+      return _pageRoute(settings, const SpeechSettingsScreen());
+    }
 
     final match = AppRoutes.parse(settings.name);
     switch (match.kind) {
       case AppRouteKind.home:
-        return _pageRoute(settings, const SessionListScreen());
+        return _pageRoute(settings, const HomeScreen());
       case AppRouteKind.settings:
         return _pageRoute(settings, const SettingsScreen());
+      case AppRouteKind.projects:
+        return _pageRoute(settings, const ProjectsScreen());
       case AppRouteKind.project:
         final projectId = match.projectId!;
         if (arguments is ProjectSummary && arguments.id == projectId) {
@@ -305,10 +321,16 @@ class _RouteStateScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (progress) {
+      return Scaffold(
+        appBar: AppBar(title: Text(title)),
+        body: const _RouteLoadingSkeleton(key: Key('route-loading-skeleton')),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
-        backgroundColor: const Color(0xFF0F172A),
       ),
       body: Center(
         child: Padding(
@@ -318,9 +340,7 @@ class _RouteStateScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (progress)
-                  const CircularProgressIndicator()
-                else if (message != null) ...[
+                if (message != null) ...[
                   Text(
                     message!,
                     textAlign: TextAlign.center,
@@ -338,6 +358,65 @@ class _RouteStateScreen extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _RouteLoadingSkeleton extends StatelessWidget {
+  const _RouteLoadingSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: AppColors.boardGradientFor(brightness),
+      ),
+      child: ListView(
+        padding: AppSpacing.screenPadding,
+        children: const [
+          AppSkeletonBlock(width: 160, height: 26),
+          SizedBox(height: AppSpacing.compact),
+          AppSkeletonBlock(width: 220, height: 10),
+          SizedBox(height: AppSpacing.section),
+          AppSkeletonCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppSkeletonBlock(width: 104, height: 10),
+                SizedBox(height: AppSpacing.compact),
+                AppSkeletonBlock(height: 12),
+                SizedBox(height: AppSpacing.textStack),
+                AppSkeletonBlock(width: 180, height: 10),
+              ],
+            ),
+          ),
+          SizedBox(height: AppSpacing.compact),
+          AppSkeletonCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppSkeletonBlock(height: 12),
+                SizedBox(height: AppSpacing.textStack),
+                AppSkeletonBlock(height: 10),
+                SizedBox(height: AppSpacing.textStack),
+                AppSkeletonBlock(width: 140, height: 10),
+              ],
+            ),
+          ),
+          SizedBox(height: AppSpacing.compact),
+          AppSkeletonCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppSkeletonBlock(height: 12),
+                SizedBox(height: AppSpacing.textStack),
+                AppSkeletonBlock(width: 200, height: 10),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

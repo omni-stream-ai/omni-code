@@ -7,10 +7,13 @@ import 'app_settings_store.dart';
 
 const _defaultUpdateManifestUrl =
     'https://github.com/omni-stream-ai/omni-code/releases/latest/download/update.json';
+const _defaultNotificationMaxChars = 160;
 
 enum TtsProvider { system, zhipu }
 
 enum AsrProvider { system, zhipu, whisper }
+
+enum AppThemeModeSetting { system, light, dark }
 
 @immutable
 class AppSettings {
@@ -20,6 +23,7 @@ class AppSettings {
     required this.clientId,
     required this.pendingClientAuthRequestId,
     required this.appLanguage,
+    required this.themeMode,
     required this.ttsProvider,
     required this.asrProvider,
     required this.zhipuApiKey,
@@ -31,6 +35,7 @@ class AppSettings {
     required this.aiApprovalApiKey,
     required this.aiApprovalModel,
     required this.aiApprovalMaxRisk,
+    required this.notificationMaxChars,
     required this.autoSpeakReplies,
     required this.compressAssistantReplies,
   });
@@ -40,6 +45,7 @@ class AppSettings {
   final String clientId;
   final String pendingClientAuthRequestId;
   final String appLanguage;
+  final AppThemeModeSetting themeMode;
   final TtsProvider ttsProvider;
   final AsrProvider asrProvider;
   final String zhipuApiKey;
@@ -51,6 +57,7 @@ class AppSettings {
   final String aiApprovalApiKey;
   final String aiApprovalModel;
   final String aiApprovalMaxRisk;
+  final int notificationMaxChars;
   final bool autoSpeakReplies;
   final bool compressAssistantReplies;
 
@@ -67,6 +74,7 @@ class AppSettings {
       clientId: _generateClientId(),
       pendingClientAuthRequestId: '',
       appLanguage: 'system',
+      themeMode: AppThemeModeSetting.system,
       ttsProvider: TtsProvider.system,
       asrProvider: AsrProvider.system,
       zhipuApiKey: '',
@@ -80,7 +88,8 @@ class AppSettings {
       aiApprovalApiKey: '',
       aiApprovalModel: 'gpt-4.1-mini',
       aiApprovalMaxRisk: 'low',
-      autoSpeakReplies: true,
+      notificationMaxChars: _defaultNotificationMaxChars,
+      autoSpeakReplies: false,
       compressAssistantReplies: false,
     );
   }
@@ -91,6 +100,7 @@ class AppSettings {
     String? clientId,
     String? pendingClientAuthRequestId,
     String? appLanguage,
+    AppThemeModeSetting? themeMode,
     TtsProvider? ttsProvider,
     AsrProvider? asrProvider,
     String? zhipuApiKey,
@@ -102,6 +112,7 @@ class AppSettings {
     String? aiApprovalApiKey,
     String? aiApprovalModel,
     String? aiApprovalMaxRisk,
+    int? notificationMaxChars,
     bool? autoSpeakReplies,
     bool? compressAssistantReplies,
   }) {
@@ -112,6 +123,7 @@ class AppSettings {
       pendingClientAuthRequestId:
           pendingClientAuthRequestId ?? this.pendingClientAuthRequestId,
       appLanguage: _normalizeLanguage(appLanguage ?? this.appLanguage),
+      themeMode: themeMode ?? this.themeMode,
       ttsProvider: ttsProvider ?? this.ttsProvider,
       asrProvider: asrProvider ?? this.asrProvider,
       zhipuApiKey: zhipuApiKey ?? this.zhipuApiKey,
@@ -123,6 +135,7 @@ class AppSettings {
       aiApprovalApiKey: aiApprovalApiKey ?? this.aiApprovalApiKey,
       aiApprovalModel: aiApprovalModel ?? this.aiApprovalModel,
       aiApprovalMaxRisk: aiApprovalMaxRisk ?? this.aiApprovalMaxRisk,
+      notificationMaxChars: notificationMaxChars ?? this.notificationMaxChars,
       autoSpeakReplies: autoSpeakReplies ?? this.autoSpeakReplies,
       compressAssistantReplies:
           compressAssistantReplies ?? this.compressAssistantReplies,
@@ -136,6 +149,7 @@ class AppSettings {
       'client_id': clientId,
       'pending_client_auth_request_id': pendingClientAuthRequestId,
       'app_language': appLanguage,
+      'theme_mode': themeMode.name,
       'tts_provider': ttsProvider.name,
       'asr_provider': asrProvider.name,
       'zhipu_api_key': zhipuApiKey,
@@ -147,6 +161,7 @@ class AppSettings {
       'ai_approval_api_key': aiApprovalApiKey,
       'ai_approval_model': aiApprovalModel,
       'ai_approval_max_risk': aiApprovalMaxRisk,
+      'notification_max_chars': notificationMaxChars,
       'auto_speak_replies': autoSpeakReplies,
       'compress_assistant_replies': compressAssistantReplies,
     };
@@ -166,6 +181,10 @@ class AppSettings {
           _readString(json, 'pending_client_auth_request_id').trim(),
       appLanguage: _normalizeLanguage(
         _readString(json, 'app_language', defaults.appLanguage),
+      ),
+      themeMode: _parseThemeMode(
+        _readNullableString(json, 'theme_mode'),
+        defaults.themeMode,
       ),
       ttsProvider: _parseTtsProvider(
           _readNullableString(json, 'tts_provider'), defaults.ttsProvider),
@@ -193,6 +212,14 @@ class AppSettings {
         _readString(json, 'ai_approval_max_risk', defaults.aiApprovalMaxRisk),
         defaults.aiApprovalMaxRisk,
       ),
+      notificationMaxChars: _normalizeNotificationMaxChars(
+        _readInt(
+          json,
+          'notification_max_chars',
+          defaults.notificationMaxChars,
+        ),
+        defaults.notificationMaxChars,
+      ),
       autoSpeakReplies:
           _readBool(json, 'auto_speak_replies', defaults.autoSpeakReplies),
       compressAssistantReplies: _readBool(
@@ -215,6 +242,24 @@ class AppSettings {
   static String? _readNullableString(Map<String, dynamic> json, String key) {
     final value = json[key];
     return value is String ? value : null;
+  }
+
+  static int _readInt(
+    Map<String, dynamic> json,
+    String key, [
+    int fallback = 0,
+  ]) {
+    final value = json[key];
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    if (value is String) {
+      return int.tryParse(value.trim()) ?? fallback;
+    }
+    return fallback;
   }
 
   static bool _readBool(Map<String, dynamic> json, String key, bool fallback) {
@@ -245,6 +290,10 @@ class AppSettings {
       'low' || 'medium' || 'high' => normalized,
       _ => fallback,
     };
+  }
+
+  static int _normalizeNotificationMaxChars(int value, int fallback) {
+    return value > 0 ? value : fallback;
   }
 
   static String _normalizeLanguage(String value) {
@@ -278,11 +327,23 @@ class AppSettings {
     }
     return fallback;
   }
+
+  static AppThemeModeSetting _parseThemeMode(
+    String? raw,
+    AppThemeModeSetting fallback,
+  ) {
+    for (final item in AppThemeModeSetting.values) {
+      if (item.name == raw) {
+        return item;
+      }
+    }
+    return fallback;
+  }
 }
 
 class AppSettingsController extends ChangeNotifier {
   AppSettings _settings = AppSettings.defaults();
-  final AppSettingsStore _store = createAppSettingsStore();
+  AppSettingsStore _store = createAppSettingsStore();
 
   AppSettings get settings => _settings;
 
@@ -290,6 +351,11 @@ class AppSettingsController extends ChangeNotifier {
   void debugReplaceSettings(AppSettings next) {
     _settings = next;
     notifyListeners();
+  }
+
+  @visibleForTesting
+  void debugReplaceStore(AppSettingsStore store) {
+    _store = store;
   }
 
   Future<void> load() async {
@@ -313,6 +379,9 @@ class AppSettingsController extends ChangeNotifier {
         if (json['app_language'] == null) {
           shouldPersist = true;
         }
+        if (json['theme_mode'] == null) {
+          shouldPersist = true;
+        }
         if (json['compress_assistant_replies'] == null) {
           shouldPersist = true;
         }
@@ -328,6 +397,9 @@ class AppSettingsController extends ChangeNotifier {
           shouldPersist = true;
         }
         if (json['ai_approval_enabled'] == null) {
+          shouldPersist = true;
+        }
+        if (json['notification_max_chars'] == null) {
           shouldPersist = true;
         }
         _settings = AppSettings.fromJson(json);

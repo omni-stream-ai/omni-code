@@ -4,6 +4,7 @@
   "settingsTitle": "Settings",
   "save": "Save",
   "saving": "Saving...",
+  "systemSection": "System",
   "languageSection": "Language",
   "languageLabel": "App language",
   "languageSystem": "Follow system",
@@ -36,6 +37,7 @@
   "autoSpeakRepliesSubtitle": "Start playback automatically after the AI reply finishes",
   "compressReplies": "Compress AI replies",
   "compressRepliesSubtitle": "When enabled, new sessions ask the AI to summarize what it did briefly, ideally within 50 characters",
+  "notificationPreviewMaxChars": "Notification max chars",
   "settingsSaved": "Settings saved",
   "settingsSaveFailed": "Failed to save settings: {error}",
   "@settingsSaveFailed": {
@@ -86,11 +88,29 @@
   },
   "homeIntro": "Open a project first, then choose an existing session or start a new Codex session under that project.",
   "projectsTitle": "Projects",
+  "selectProject": "Select project",
   "createProject": "Create project",
+  "createNewProject": "Create new project",
   "newProject": "New project",
   "retry": "Retry",
   "projectCount": "{count} sessions",
   "@projectCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sessionCount": "{count} sessions",
+  "@sessionCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "projectsCount": "{count} projects",
+  "@projectsCount": {
     "placeholders": {
       "count": {
         "type": "int"
@@ -115,8 +135,17 @@
   "localPath": "Local directory path",
   "cancel": "Cancel",
   "projectIntro": "Open any session to continue the existing context, or create a new Codex session under this project.",
+  "homePrompt": "Remote agent cockpit",
+  "homeCreateProjectHint": "Add local codebase",
+  "homeBrowseProjects": "Browse all",
   "searchSessions": "Search session title or summary",
+  "searchProjects": "Search project name or path",
+  "themeSection": "Theme",
+  "themeFollowSystem": "Follow system",
+  "themeLight": "Light",
+  "themeDark": "Dark",
   "sessionsTitle": "Recent",
+  "recentSessionsTitle": "Recent sessions",
   "loadSessionsFailed": "Failed to load sessions: {error}",
   "@loadSessionsFailed": {
     "placeholders": {
@@ -138,6 +167,10 @@
       }
     }
   },
+  "loadMoreSessionsLabel": "Load more",
+  "@loadMoreSessionsLabel": {
+    "description": "Label for loading more recent sessions without showing a count."
+  },
   "newSession": "New session",
   "sessionStatusIdle": "Idle",
   "sessionStatusRunning": "Running",
@@ -153,6 +186,20 @@
   "refreshNativeSessions": "Refresh native sessions",
   "creatingSession": "Creating session...",
   "waitingApprovalProcessing": "Waiting for approval processing...",
+  "waitingApprovalListening": "Listening for approval...",
+  "connectHeader": "Connect Bridge",
+  "connectPrompt": "Connect your Bridge to get started.",
+  "connectWelcomeTitle": "Welcome to Omni Code",
+  "connectWelcomeBody": "Run the Bridge service on your computer, then authorize this device to open projects and continue sessions.",
+  "connectBridgeHint": "Use your computer IP if the phone is on the same LAN.",
+  "connectDownloadTitle": "Download Bridge service",
+  "connectDownloadBody": "Get the service from GitHub on the computer that hosts your local projects.",
+  "connectDownloadRepo": "github.com/omni-stream-ai/omni-code-bridge",
+  "authorizeThisDevice": "Authorize this device",
+  "connectNextStep": "Next: approval screen",
+  "backToWelcome": "Back to welcome",
+  "waitingApprovalHeader": "Authorization",
+  "waitingApprovalHeaderSubtitle": "Approve this device on your Bridge host.",
   "turnPausedWaiting": "This turn is paused and waiting for follow-up results...",
   "speechReadyStatus": "Voice transcription ready",
   "waitingProcessApproval": "Waiting to process approval...",
@@ -366,9 +413,11 @@
   "copy": "Copy",
   "copied": "Copied",
   "waitingApprovalTitle": "Waiting for approval",
+  "waitingApprovalBody": "Approve this request on the Bridge host. The app continues automatically after approval.",
   "waitingApprovalInstallHint": "If the Bridge service is not running yet, download it from GitHub and start it first.",
   "waitingApprovalDownloadBridge": "Download Bridge service on GitHub",
   "waitingApprovalRunCommand": "Run this command on the Bridge host:",
+  "waitingApprovalRequestAgain": "Request again",
   "voiceInputInitFailed": "Voice input init timed out or failed: {error}",
   "startVoiceInputFailed": "Failed to start voice input: {error}",
   "stopVoiceInputFailed": "Failed to stop voice input: {error}",
@@ -377,7 +426,14 @@
   "voiceTranscriptionNoResult": "No speech was recognized",
   "speechSystem": "System",
   "speechSystemPreferredHelp": "System is used by default when available. Switch to cloud providers if you need a fallback.",
+  "systemTtsUnavailableOnLinux": "System TTS is not available on Linux yet. Choose a cloud provider to enable playback.",
+  "systemAsrUnavailableOnLinux": "System ASR is not available on Linux yet. Choose a cloud provider to enable voice input.",
+  "systemAsrMacosPermissionHint": "System ASR on macOS requires microphone and speech recognition permissions.",
+  "systemSpeechUnavailable": "System speech is unavailable on this device. Switch providers in Settings to use cloud speech.",
   "appDownloadSection": "App Download",
   "appDownloadHelp": "Download the latest release from GitHub.",
-  "openGithubReleases": "Open GitHub Releases"
+  "openGithubReleases": "Open GitHub Releases",
+  "signOut": "Sign out",
+  "signOutConfirmTitle": "Sign out and reauthorize?",
+  "signOutConfirmBody": "This clears the current device authorization and returns you to the welcome screen. You will need to reconnect Bridge and authorize this device again."
 }

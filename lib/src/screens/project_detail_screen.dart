@@ -7,6 +7,12 @@ import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
 import '../settings/app_settings.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_theme.dart';
+import '../widgets/app_back_header.dart';
+import '../widgets/app_card.dart';
+import '../widgets/app_skeleton.dart';
 import '../widgets/copyable_message.dart';
 import 'session_detail_screen.dart';
 
@@ -25,6 +31,7 @@ class ProjectDetailScreen extends StatefulWidget {
 class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   static const _pageSize = 7;
   static const _autoRefreshInterval = Duration(seconds: 5);
+  static const _progressMinHeight = AppSpacing.textStack + AppSpacing.hairline;
 
   late ProjectSummary _project;
   List<SessionSummary>? _sessions;
@@ -32,6 +39,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   bool _isLoading = true;
   bool _isRefreshing = false;
   final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode();
   String _searchQuery = '';
   int _visibleCount = _pageSize;
   Timer? _autoRefreshTimer;
@@ -41,6 +49,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   @override
   void dispose() {
     _autoRefreshTimer?.cancel();
+    _searchFocusNode.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -120,190 +129,159 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final sessions = _sessions ?? const <SessionSummary>[];
+    final filteredSessions = _filteredSessions(sessions);
+    final visibleSessions = _visibleSessions(filteredSessions);
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_project.name),
-        backgroundColor: const Color(0xFF0F172A),
-        actions: [
-          IconButton(
-            onPressed: _reloadSessions,
-            icon: const Icon(Icons.refresh),
-            tooltip: l10n.refreshNativeSessions,
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _createSession,
-        label: Text(l10n.newSession),
-        icon: const Icon(Icons.add_comment_outlined),
-      ),
-      body: Stack(
-        children: [
-          RefreshIndicator(
-            onRefresh: _reloadSessions,
-            child: ListView(
-              padding: const EdgeInsets.all(20),
+      backgroundColor: AppColors.boardFor(brightness),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return Stack(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF111827),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: const Color(0xFF1E293B)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _project.name,
-                        style: const TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _project.rootPath,
-                        style: const TextStyle(
-                          color: Color(0xFF38BDF8),
-                          height: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        l10n.projectIntro,
-                        style: TextStyle(
-                          color: Color(0xFF94A3B8),
-                          height: 1.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                TextField(
-                  controller: _searchController,
-                  onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value.trim().toLowerCase();
-                      _visibleCount = _pageSize;
-                    });
-                  },
-                  decoration: InputDecoration(
-                    hintText: l10n.searchSessions,
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchQuery.isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {
-                                _searchQuery = '';
-                                _visibleCount = _pageSize;
-                              });
-                            },
-                            icon: const Icon(Icons.close),
-                          ),
-                    filled: true,
-                    fillColor: const Color(0xFF0F172A),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18),
-                      borderSide: const BorderSide(color: Color(0xFF1E293B)),
+                RefreshIndicator(
+                  onRefresh: _reloadSessions,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.screenX,
+                      AppSpacing.card,
+                      AppSpacing.screenX,
+                      AppSpacing.block,
                     ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  l10n.sessionsTitle,
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 12),
-                if (_isLoading)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 24),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (_error != null &&
-                    (_sessions == null || _sessions!.isEmpty))
-                  _ProjectErrorCard(
-                    message: l10n.loadSessionsFailed('$_error'),
-                    onRetry: _reloadSessions,
-                  )
-                else if (_sessions == null || _sessions!.isEmpty)
-                  _ProjectEmptyCard(onCreateSession: _createSession)
-                else if (_filterSessions(_sessions!).isEmpty)
-                  const _ProjectSearchEmptyCard()
-                else ...[
-                  ..._visibleSessions(_filterSessions(_sessions!)).map(
-                    (session) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: InkWell(
-                        onTap: () async {
-                          await Navigator.of(context).pushNamed(
-                            AppRoutes.session(_project.id, session.id),
-                            arguments: session,
-                          );
-                          if (!mounted) {
-                            return;
-                          }
-                          unawaited(_reloadSessions());
-                        },
-                        borderRadius: BorderRadius.circular(18),
-                        child: Ink(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F172A),
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: const Color(0xFF1E293B)),
+                    child: ConstrainedBox(
+                      constraints:
+                          BoxConstraints(minHeight: constraints.maxHeight),
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: AppSpacing.contentMaxWidth,
                           ),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      session.title,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
+                              _buildHeader(context),
+                              const SizedBox(height: AppSpacing.card),
+                              AppCard(
+                                padding: AppSpacing.cardPadding,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _project.name,
+                                      style: theme.textTheme.titleLarge
+                                          ?.copyWith(fontSize: 14),
+                                    ),
+                                    const SizedBox(height: AppSpacing.compact),
+                                    Text(
+                                      _project.rootPath,
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
+                                        fontFamily: AppTheme.bodyFontFamily,
+                                        fontFamilyFallback:
+                                            AppTheme.monoFontFamilyFallback,
+                                        color: AppColors.mutedFor(brightness),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.card),
+                              _buildSearchBar(
+                                context,
+                                controller: _searchController,
+                                focusNode: _searchFocusNode,
+                                hintText: l10n.searchSessions,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _searchQuery = value.trim().toLowerCase();
+                                    _visibleCount = _pageSize;
+                                  });
+                                },
+                                onClear: () {
+                                  _searchController.clear();
+                                  setState(() {
+                                    _searchQuery = '';
+                                    _visibleCount = _pageSize;
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: AppSpacing.tileY),
+                              if (_isLoading)
+                                const Padding(
+                                  padding: EdgeInsets.only(
+                                    top: AppSpacing.compact,
+                                  ),
+                                  child: _ProjectSessionListSkeleton(
+                                    key: Key('project-sessions-skeleton'),
+                                  ),
+                                )
+                              else if (_error != null &&
+                                  (_sessions == null || _sessions!.isEmpty))
+                                _ProjectErrorCard(
+                                  message: l10n.loadSessionsFailed('$_error'),
+                                  onRetry: _reloadSessions,
+                                )
+                              else if (_sessions == null || _sessions!.isEmpty)
+                                _ProjectEmptyCard(
+                                  onCreateSession: _createSession,
+                                )
+                              else if (filteredSessions.isEmpty)
+                                const _ProjectSearchEmptyCard()
+                              else ...[
+                                ...visibleSessions.map(
+                                  (session) => Padding(
+                                    padding: const EdgeInsets.only(
+                                      bottom: AppSpacing.compact,
+                                    ),
+                                    child: _SessionSummaryCard(
+                                      session: session,
+                                      statusLabel: _statusLabel(
+                                        session.status,
+                                      ),
+                                      statusColor: _statusColor(
+                                        session.status,
+                                        brightness,
+                                      ),
+                                      updatedAtLabel: _formatSessionUpdatedAt(
+                                        session.updatedAt,
+                                      ),
+                                      onTap: () async {
+                                        await Navigator.of(context).pushNamed(
+                                          AppRoutes.session(
+                                            _project.id,
+                                            session.id,
+                                          ),
+                                          arguments: session,
+                                        );
+                                        if (!mounted) {
+                                          return;
+                                        }
+                                        unawaited(_reloadSessions());
+                                      },
+                                    ),
+                                  ),
+                                ),
+                                if (_shouldShowLoadMore(filteredSessions))
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      top: AppSpacing.micro,
+                                    ),
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            _visibleCount += _pageSize;
+                                          });
+                                        },
+                                        child: Text(l10n.loadMoreSessionsLabel),
                                       ),
                                     ),
                                   ),
-                                  Text(
-                                    _statusLabel(session.status),
-                                    style: TextStyle(
-                                      color: _statusColor(session.status),
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                l10n.sessionUpdatedAtWithAgent(
-                                  session.agent.name,
-                                  _formatSessionUpdatedAt(session.updatedAt),
-                                ),
-                                style: const TextStyle(
-                                  color: Color(0xFF64748B),
-                                  fontSize: 12,
-                                ),
-                              ),
-                              if (session.lastMessagePreview
-                                      ?.trim()
-                                      .isNotEmpty ==
-                                  true) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  session.lastMessagePreview!,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Color(0xFF94A3B8),
-                                    height: 1.4,
-                                  ),
-                                ),
                               ],
                             ],
                           ),
@@ -311,38 +289,162 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                       ),
                     ),
                   ),
-                  if (_shouldShowLoadMore(_filterSessions(_sessions!)))
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4, bottom: 24),
-                      child: OutlinedButton(
-                        onPressed: () {
-                          setState(() {
-                            _visibleCount += _pageSize;
-                          });
-                        },
-                        child: Text(
-                          l10n.loadMoreSessions(
-                            _filterSessions(_sessions!).length -
-                                _visibleSessions(_filterSessions(_sessions!))
-                                    .length,
-                          ),
-                        ),
+                ),
+                if (_isRefreshing)
+                  const Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: IgnorePointer(
+                      child: LinearProgressIndicator(
+                        minHeight: _progressMinHeight,
                       ),
                     ),
-                ],
+                  ),
               ],
-            ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final titleStyle = theme.textTheme.headlineMedium?.copyWith(
+      fontSize: 24,
+      fontWeight: FontWeight.w800,
+      height: 1.1,
+      letterSpacing: 0.6,
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: AppBackHeader(
+            title: 'SESSIONS',
+            titleStyle: titleStyle,
           ),
-          if (_isRefreshing)
-            const Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: IgnorePointer(
-                child: LinearProgressIndicator(minHeight: 3),
+        ),
+        SizedBox(
+          width: 34,
+          height: 34,
+          child: IconButton(
+            style: IconButton.styleFrom(
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: theme.colorScheme.onPrimary,
+              side: BorderSide.none,
+              minimumSize: const Size.square(34),
+              padding: EdgeInsets.zero,
+              shape: const CircleBorder(),
+            ),
+            onPressed: _createSession,
+            tooltip: context.l10n.newSession,
+            icon: const Icon(Icons.add_rounded, size: 18),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.compact),
+        SizedBox(
+          width: 34,
+          height: 34,
+          child: IconButton(
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.panelDeepFor(brightness),
+              side: BorderSide.none,
+              minimumSize: const Size.square(34),
+              padding: EdgeInsets.zero,
+              shape: const CircleBorder(),
+            ),
+            onPressed: _reloadSessions,
+            tooltip: context.l10n.refreshNativeSessions,
+            icon: const Icon(Icons.refresh, size: 17),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchBar(
+    BuildContext context, {
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required String hintText,
+    required ValueChanged<String> onChanged,
+    required VoidCallback onClear,
+  }) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    return AppCard(
+      color: AppColors.panelDeepFor(brightness),
+      borderSide: BorderSide(color: AppColors.outlineFor(brightness)),
+      padding: EdgeInsets.zero,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+      child: SizedBox(
+        height: 40,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.only(
+                  left: AppSpacing.insetWide,
+                  right: AppSpacing.insetWide,
+                ),
+                child: Center(
+                  child: TextField(
+                    focusNode: focusNode,
+                    controller: controller,
+                    onChanged: onChanged,
+                    cursorColor: theme.colorScheme.onSurface,
+                    decoration: InputDecoration(
+                      hintText: hintText,
+                      hintStyle: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.mutedFor(brightness),
+                      ),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      isDense: true,
+                      filled: false,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    textAlignVertical: TextAlignVertical.center,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ),
               ),
             ),
-        ],
+            Positioned(
+              left: AppSpacing.tileX,
+              top: 0,
+              bottom: 0,
+              child: IgnorePointer(
+                child: Center(
+                  child: Icon(
+                    Icons.search_rounded,
+                    size: 14,
+                    color: AppColors.mutedFor(brightness),
+                  ),
+                ),
+              ),
+            ),
+            if (controller.text.isNotEmpty)
+              Positioned(
+                right: AppSpacing.compact,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: _SearchClearButton(
+                    onTap: onClear,
+                    iconColor: AppColors.mutedFor(brightness),
+                    hoverColor: AppColors.textSoftFor(brightness),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -407,42 +509,196 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     }
   }
 
-  Color _statusColor(SessionStatus status) {
+  Color _statusColor(SessionStatus status, Brightness brightness) {
     switch (status) {
       case SessionStatus.idle:
-        return const Color(0xFF22C55E);
+        return AppColors.successFor(brightness);
       case SessionStatus.running:
-        return const Color(0xFF38BDF8);
+        return AppColors.primaryFor(brightness);
       case SessionStatus.awaitingApproval:
-        return const Color(0xFFF59E0B);
+        return AppColors.warningFor(brightness);
       case SessionStatus.waiting:
-        return const Color(0xFF94A3B8);
+        return AppColors.mutedFor(brightness);
       case SessionStatus.failed:
-        return const Color(0xFFEF4444);
+        return AppColors.errorFor(brightness);
     }
   }
 
-  List<SessionSummary> _filterSessions(List<SessionSummary> sessions) {
-    if (_searchQuery.isEmpty) {
+  List<SessionSummary> _filteredSessions(List<SessionSummary> sessions) {
+    final query = _searchQuery;
+    if (query.isEmpty) {
       return sessions;
     }
-
     return sessions.where((session) {
       final haystack =
-          '${session.title} ${session.lastMessagePreview ?? ''}'.toLowerCase();
-      return haystack.contains(_searchQuery);
-    }).toList();
+          '${session.title} ${session.lastMessagePreview ?? ''} ${session.agent.label}'
+              .toLowerCase();
+      return haystack.contains(query);
+    }).toList(growable: false);
   }
 
   List<SessionSummary> _visibleSessions(List<SessionSummary> sessions) {
     if (_searchQuery.isNotEmpty) {
       return sessions;
     }
-    return sessions.take(_visibleCount).toList();
+    return sessions.take(_visibleCount).toList(growable: false);
   }
 
   bool _shouldShowLoadMore(List<SessionSummary> sessions) {
     return _searchQuery.isEmpty && sessions.length > _visibleCount;
+  }
+}
+
+class _SessionSummaryCard extends StatelessWidget {
+  const _SessionSummaryCard({
+    required this.session,
+    required this.statusLabel,
+    required this.statusColor,
+    required this.updatedAtLabel,
+    required this.onTap,
+  });
+
+  final SessionSummary session;
+  final String statusLabel;
+  final Color statusColor;
+  final String updatedAtLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final theme = Theme.of(context);
+
+    return AppCard(
+      padding: AppSpacing.tilePadding,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
+      onTap: onTap,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: AppSpacing.stackTight,
+            height: AppSpacing.section,
+            margin: const EdgeInsets.only(top: AppSpacing.textStack),
+            decoration: BoxDecoration(
+              color: statusColor,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.tileY),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        session.title,
+                        style: textTheme.labelMedium?.copyWith(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      statusLabel,
+                      style: textTheme.labelSmall?.copyWith(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        color: statusColor,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.textTight),
+                Text(
+                  '${session.agent.label} · $updatedAtLabel',
+                  style: textTheme.labelSmall?.copyWith(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.mutedFor(theme.brightness),
+                  ),
+                ),
+                if (session.lastMessagePreview?.trim().isNotEmpty == true) ...[
+                  const SizedBox(height: AppSpacing.textTight),
+                  Text(
+                    session.lastMessagePreview!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.bodySmall?.copyWith(fontSize: 10),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProjectSessionListSkeleton extends StatelessWidget {
+  const _ProjectSessionListSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: const [
+        _ProjectSessionCardSkeleton(),
+        SizedBox(height: AppSpacing.compact),
+        _ProjectSessionCardSkeleton(),
+        SizedBox(height: AppSpacing.compact),
+        _ProjectSessionCardSkeleton(),
+        SizedBox(height: AppSpacing.compact),
+        _ProjectSessionCardSkeleton(),
+      ],
+    );
+  }
+}
+
+class _ProjectSessionCardSkeleton extends StatelessWidget {
+  const _ProjectSessionCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return AppSkeletonCard(
+      padding: AppSpacing.tilePadding,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: AppSpacing.stackTight,
+            height: AppSpacing.section,
+            margin: const EdgeInsets.only(top: AppSpacing.textStack),
+            decoration: BoxDecoration(
+              color: AppColors.skeletonHighlightFor(brightness),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.tileY),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: AppSkeletonBlock(height: 12)),
+                    SizedBox(width: AppSpacing.tileY),
+                    AppSkeletonBlock(width: 60, height: 9),
+                  ],
+                ),
+                SizedBox(height: AppSpacing.textTight),
+                AppSkeletonBlock(width: 180, height: 9),
+                SizedBox(height: AppSpacing.textTight),
+                AppSkeletonBlock(height: 10),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -454,12 +710,13 @@ class _ProjectErrorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: AppSpacing.blockPadding,
       decoration: BoxDecoration(
-        color: const Color(0xFF3F1D1D),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF7F1D1D)),
+        color: AppColors.errorBgFor(brightness),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+        border: Border.all(color: AppColors.errorBorderFor(brightness)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -468,12 +725,12 @@ class _ProjectErrorCard extends StatelessWidget {
             message: message,
             copyLabel: context.l10n.copy,
             copiedLabel: context.l10n.copied,
-            backgroundColor: const Color(0xFF3F1D1D),
-            borderColor: const Color(0xFF7F1D1D),
-            iconColor: const Color(0xFFFCA5A5),
-            textColor: const Color(0xFFFECACA),
+            backgroundColor: AppColors.errorBgFor(brightness),
+            borderColor: AppColors.errorBorderFor(brightness),
+            iconColor: AppColors.errorIconFor(brightness),
+            textColor: AppColors.errorTextFor(brightness),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.stack),
           FilledButton(onPressed: onRetry, child: Text(context.l10n.retry)),
         ],
       ),
@@ -488,23 +745,27 @@ class _ProjectEmptyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: AppSpacing.blockPadding,
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF1E293B)),
+        color: AppColors.panelDeepFor(brightness),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+        border: Border.all(color: AppColors.outlineFor(brightness)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(context.l10n.noSessionsYet),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.compact),
           Text(
             context.l10n.noSessionsHelp,
-            style: TextStyle(color: Color(0xFF94A3B8), height: 1.4),
+            style: TextStyle(
+              color: AppColors.mutedSoftFor(brightness),
+              height: 1.4,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.stack),
           FilledButton(
             onPressed: onCreateSession,
             child: Text(context.l10n.newSession),
@@ -520,16 +781,68 @@ class _ProjectSearchEmptyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: AppSpacing.blockPadding,
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF1E293B)),
+        color: AppColors.panelDeepFor(brightness),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+        border: Border.all(color: AppColors.outlineFor(brightness)),
       ),
       child: Text(
         context.l10n.noSessionsMatched,
-        style: TextStyle(color: Color(0xFF94A3B8), height: 1.4),
+        style: TextStyle(
+          color: AppColors.mutedSoftFor(brightness),
+          height: 1.4,
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchClearButton extends StatefulWidget {
+  const _SearchClearButton({
+    required this.onTap,
+    required this.iconColor,
+    required this.hoverColor,
+  });
+
+  final VoidCallback onTap;
+  final Color iconColor;
+  final Color hoverColor;
+
+  @override
+  State<_SearchClearButton> createState() => _SearchClearButtonState();
+}
+
+class _SearchClearButtonState extends State<_SearchClearButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) {
+        setState(() {
+          _hovered = true;
+        });
+      },
+      onExit: (_) {
+        setState(() {
+          _hovered = false;
+        });
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.controlTight),
+          child: Icon(
+            Icons.close_rounded,
+            size: 16,
+            color: _hovered ? widget.hoverColor : widget.iconColor,
+          ),
+        ),
       ),
     );
   }
@@ -554,8 +867,9 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
     return AlertDialog(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: AppColors.panelFor(brightness),
       title: Text(context.l10n.newSession),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -566,7 +880,7 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
               labelText: context.l10n.sessionTitleOptional,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.stack),
           DropdownButtonFormField<String>(
             initialValue: _agent,
             items: AgentKind.selectableValues

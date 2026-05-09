@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+
 class CopyableMessage extends StatelessWidget {
   const CopyableMessage({
     super.key,
@@ -25,17 +28,20 @@ class CopyableMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final resolvedTextColor = textColor ?? const Color(0xFFF8FAFC);
-    final resolvedIconColor = iconColor ?? const Color(0xFFCBD5E1);
-    final resolvedBackgroundColor = backgroundColor ?? const Color(0xFF0F172A);
-    final resolvedBorderColor = borderColor ?? const Color(0xFF1E293B);
+    final brightness = Theme.of(context).brightness;
+    final resolvedTextColor =
+        textColor ?? Theme.of(context).colorScheme.onSurface;
+    final resolvedIconColor = iconColor ?? AppColors.textSoftFor(brightness);
+    final resolvedBackgroundColor =
+        backgroundColor ?? AppColors.panelFor(brightness);
+    final resolvedBorderColor = borderColor ?? AppColors.outlineFor(brightness);
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: AppSpacing.tilePadding,
       decoration: BoxDecoration(
         color: resolvedBackgroundColor,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
         border: Border.all(color: resolvedBorderColor),
       ),
       child: Row(
@@ -51,7 +57,7 @@ class CopyableMessage extends StatelessWidget {
             ),
           ),
           if (showCopyButton) ...[
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.compact),
             IconButton(
               tooltip: copyLabel,
               onPressed: () {

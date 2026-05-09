@@ -1,13 +1,14 @@
 {
-    "name": "omni_code",
-    "short_name": "omni_code",
+    "name": "Omni Code",
+    "short_name": "Omni Code",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Client console for managing desktop coding agents.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
+    "categories": ["productivity", "developer tools"],
     "icons": [
         {
             "src": "icons/Icon-192.png",

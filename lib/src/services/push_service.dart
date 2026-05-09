@@ -19,10 +19,8 @@ class PushService {
   final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
   bool _backgroundHandlerRegistered = false;
 
-  bool get _isSupportedPlatform => Platform.isAndroid || Platform.isIOS;
-
   Future<void> initialize() async {
-    if (!_isSupportedPlatform) {
+    if (!Platform.isAndroid && !Platform.isIOS) {
       return;
     }
     try {
@@ -30,7 +28,8 @@ class PushService {
         await Firebase.initializeApp();
       }
       if (!_backgroundHandlerRegistered) {
-        FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+        FirebaseMessaging.onBackgroundMessage(
+            firebaseMessagingBackgroundHandler);
         _backgroundHandlerRegistered = true;
       }
 

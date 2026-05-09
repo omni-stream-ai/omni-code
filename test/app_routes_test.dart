@@ -43,6 +43,7 @@ void main() {
 
     test('parses root and settings paths', () {
       expect(AppRoutes.parse('/').kind, AppRouteKind.home);
+      expect(AppRoutes.parse('/projects').kind, AppRouteKind.projects);
       expect(AppRoutes.parse('/settings').kind, AppRouteKind.settings);
     });
 
