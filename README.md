@@ -138,6 +138,7 @@ Recommended GitHub Actions secrets:
 ## Documentation
 
 - [中文文档](README.zh-CN.md)
+- [Design assets and theme board](designs/README.md)
 - [Client app notes](CLIENT_README.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)

@@ -128,6 +128,7 @@ config。真正分发给用户前，需要先配置 release signing secrets。
 
 ## 文档
 
+- [设计稿与主题看板](designs/README.md)
 - [客户端说明](CLIENT_README.md)
 - [贡献指南](CONTRIBUTING.md)
 - [安全策略](SECURITY.md)
