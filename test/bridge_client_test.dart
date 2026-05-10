@@ -154,6 +154,55 @@ void main() {
     });
   });
 
+  group('BridgeClient readFile', () {
+    test('uses session_id for relative paths', () async {
+      late Uri requestUri;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          requestUri = request.url;
+          return http.Response.bytes(
+            [1, 2, 3],
+            200,
+            headers: {'content-type': 'image/png'},
+          );
+        }),
+      );
+
+      final response = await client.readFile(
+        'assets/logo.png',
+        sessionId: 'session-1',
+      );
+
+      expect(requestUri.path, '/files');
+      expect(requestUri.queryParameters, {
+        'path': 'assets/logo.png',
+        'session_id': 'session-1',
+      });
+      expect(response.contentType, 'image/png');
+      expect(response.bytes, [1, 2, 3]);
+    });
+
+    test('does not send session_id for absolute paths', () async {
+      late Uri requestUri;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          requestUri = request.url;
+          return http.Response.bytes(
+            [1],
+            200,
+            headers: {'content-type': 'image/jpeg'},
+          );
+        }),
+      );
+
+      await client.readFile('/tmp/output.jpg', sessionId: 'session-1');
+
+      expect(requestUri.queryParameters, {
+        'path': '/tmp/output.jpg',
+      });
+    });
+  });
+
   group('BridgeClient listSessions', () {
     test('sorts sessions by updatedAt descending and seeds cache', () async {
       final client = BridgeClient(
@@ -217,6 +266,79 @@ void main() {
         ['session-newest', 'session-middle', 'session-oldest'],
       );
     });
+
+    test('force refresh replaces removed sessions instead of keeping stale cache',
+        () async {
+      var requestCount = 0;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.url.path, '/sessions');
+          requestCount += 1;
+          if (requestCount == 1) {
+            return http.Response(
+              jsonEncode({
+                'data': [
+                  {
+                    'id': 'session-a',
+                    'project_id': 'project-1',
+                    'title': 'Session A',
+                    'agent': 'codex',
+                    'brief_reply_mode': false,
+                    'status': 'idle',
+                    'updated_at': '2026-05-05T11:00:00.000',
+                    'unread_count': 0,
+                    'last_message_preview': 'A',
+                    'pending_approval': null,
+                  },
+                  {
+                    'id': 'session-b',
+                    'project_id': 'project-1',
+                    'title': 'Session B',
+                    'agent': 'codex',
+                    'brief_reply_mode': false,
+                    'status': 'idle',
+                    'updated_at': '2026-05-05T10:00:00.000',
+                    'unread_count': 0,
+                    'last_message_preview': 'B',
+                    'pending_approval': null,
+                  },
+                ],
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'session-c',
+                  'project_id': 'project-1',
+                  'title': 'Session C',
+                  'agent': 'codex',
+                  'brief_reply_mode': false,
+                  'status': 'idle',
+                  'updated_at': '2026-05-05T12:00:00.000',
+                  'unread_count': 0,
+                  'last_message_preview': 'C',
+                  'pending_approval': null,
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      await client.listSessions();
+      final refreshed = await client.listSessions(forceRefresh: true);
+
+      expect(refreshed.map((item) => item.id).toList(), ['session-c']);
+      expect(client.peekSessions()?.map((item) => item.id).toList(), [
+        'session-c',
+      ]);
+    });
   });
 
   group('BridgeClient route lookups', () {
@@ -266,6 +388,87 @@ void main() {
       expect(session.id, 'session-1');
       expect(session.projectId, 'project-1');
     });
+  });
+
+  group('BridgeClient listProjectSessions', () {
+    test(
+      'force refresh replaces removed project sessions instead of keeping stale cache',
+      () async {
+        var requestCount = 0;
+        final client = BridgeClient(
+          httpClient: _FakeHttpClient((request) async {
+            expect(request.url.path, '/projects/project-1/sessions');
+            requestCount += 1;
+            if (requestCount == 1) {
+              return http.Response(
+                jsonEncode({
+                  'data': [
+                    {
+                      'id': 'session-a',
+                      'project_id': 'project-1',
+                      'title': 'Session A',
+                      'agent': 'codex',
+                      'brief_reply_mode': false,
+                      'status': 'idle',
+                      'updated_at': '2026-05-05T11:00:00.000',
+                      'unread_count': 0,
+                      'last_message_preview': 'A',
+                      'pending_approval': null,
+                    },
+                    {
+                      'id': 'session-b',
+                      'project_id': 'project-1',
+                      'title': 'Session B',
+                      'agent': 'codex',
+                      'brief_reply_mode': false,
+                      'status': 'idle',
+                      'updated_at': '2026-05-05T10:00:00.000',
+                      'unread_count': 0,
+                      'last_message_preview': 'B',
+                      'pending_approval': null,
+                    },
+                  ],
+                }),
+                200,
+                headers: {'content-type': 'application/json'},
+              );
+            }
+            return http.Response(
+              jsonEncode({
+                'data': [
+                  {
+                    'id': 'session-c',
+                    'project_id': 'project-1',
+                    'title': 'Session C',
+                    'agent': 'codex',
+                    'brief_reply_mode': false,
+                    'status': 'idle',
+                    'updated_at': '2026-05-05T12:00:00.000',
+                    'unread_count': 0,
+                    'last_message_preview': 'C',
+                    'pending_approval': null,
+                  },
+                ],
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }),
+        );
+
+        await client.listProjectSessions('project-1');
+        final refreshed = await client.listProjectSessions(
+          'project-1',
+          forceRefresh: true,
+        );
+
+        expect(refreshed.map((item) => item.id).toList(), ['session-c']);
+        expect(
+          client.peekProjectSessions('project-1')?.map((item) => item.id).toList(),
+          ['session-c'],
+        );
+      },
+    );
   });
 }
 

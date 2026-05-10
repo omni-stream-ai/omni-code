@@ -70,9 +70,15 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   }
 
   Future<void> _loadSessions({bool forceRefresh = false}) async {
+    final previousVisibleCount = _visibleCount;
     setState(() {
       _error = null;
-      _visibleCount = _pageSize;
+      final availableCount = _sessions?.length ?? previousVisibleCount;
+      _visibleCount = availableCount == 0
+          ? 0
+          : availableCount < _pageSize
+              ? availableCount
+              : previousVisibleCount;
       if (_sessions == null) {
         _isLoading = true;
       } else {
@@ -89,6 +95,12 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       }
       setState(() {
         _sessions = sessions;
+        final availableCount = sessions.length;
+        _visibleCount = availableCount == 0
+            ? 0
+            : availableCount < _pageSize
+                ? availableCount
+                : previousVisibleCount;
         final activeProject = _client
             .peekProjects()
             ?.where((project) => project.id == _project.id)

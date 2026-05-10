@@ -167,15 +167,15 @@ class BridgeClient {
       items
           .map((item) => SessionSummary.fromJson(item as Map<String, dynamic>)),
     );
-    final mergedSessions = _mergeSessions(
+    final syncedSessions = _syncSessions(
+      current: sessions,
       cached: _sessionsCache?.value ?? const <SessionSummary>[],
-      incoming: sessions,
     );
-    _sessionsCache = _CacheEntry(mergedSessions);
-    for (final session in mergedSessions) {
+    _sessionsCache = _CacheEntry(syncedSessions);
+    for (final session in syncedSessions) {
       _upsertProjectSessionCache(session);
     }
-    return mergedSessions;
+    return syncedSessions;
   }
 
   List<ProjectSummary>? peekProjects() => _projectsCache?.value;
@@ -237,9 +237,7 @@ class BridgeClient {
     }
 
     final projects = await listProjects(forceRefresh: true);
-    final project = projects
-        .where((item) => item.id == projectId)
-        .firstOrNull;
+    final project = projects.where((item) => item.id == projectId).firstOrNull;
     if (project == null) {
       throw StateError('Project not found: $projectId');
     }
@@ -256,6 +254,56 @@ class BridgeClient {
     return items
         .map((item) => ChatMessage.fromJson(item as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<BridgeFileResponse> readFile(
+    String path, {
+    String? projectId,
+    String? sessionId,
+  }) async {
+    if (projectId != null && sessionId != null) {
+      throw ArgumentError(
+        'projectId and sessionId cannot be set at the same time.',
+      );
+    }
+
+    final trimmedPath = path.trim();
+    if (trimmedPath.isEmpty) {
+      throw ArgumentError('path cannot be empty.');
+    }
+
+    final queryParameters = <String, String>{
+      'path': trimmedPath,
+    };
+    if (!isAbsoluteFilePath(trimmedPath)) {
+      final trimmedSessionId = sessionId?.trim();
+      final trimmedProjectId = projectId?.trim();
+      if (trimmedSessionId != null && trimmedSessionId.isNotEmpty) {
+        queryParameters['session_id'] = trimmedSessionId;
+      } else if (trimmedProjectId != null && trimmedProjectId.isNotEmpty) {
+        queryParameters['project_id'] = trimmedProjectId;
+      }
+    }
+
+    final request = http.Request(
+      'GET',
+      Uri.parse('$baseUrl/files').replace(queryParameters: queryParameters),
+    )..headers.addAll(_defaultHeaders);
+    final response = await _httpClient.send(request);
+    final bytes = await response.stream.toBytes();
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'file request failed (${response.statusCode}): '
+        '${utf8.decode(bytes, allowMalformed: true)}',
+      );
+    }
+
+    return BridgeFileResponse(
+      bytes: bytes,
+      contentType:
+          response.headers['content-type'] ?? _guessContentType(trimmedPath),
+    );
   }
 
   Future<List<SessionSummary>> listProjectSessions(
@@ -275,18 +323,18 @@ class BridgeClient {
     final sessions = items
         .map((item) => SessionSummary.fromJson(item as Map<String, dynamic>))
         .toList();
-    final mergedSessions = _mergeSessions(
+    final syncedSessions = _syncSessions(
+      current: sessions,
       cached: cached?.value ?? const <SessionSummary>[],
-      incoming: sessions,
     );
-    _projectSessionsCache[projectId] = _CacheEntry(mergedSessions);
+    _projectSessionsCache[projectId] = _CacheEntry(syncedSessions);
     _sessionsCache = _CacheEntry(
       _mergeSessions(
         cached: _sessionsCache?.value ?? const <SessionSummary>[],
-        incoming: mergedSessions,
+        incoming: syncedSessions,
       ),
     );
-    return mergedSessions;
+    return syncedSessions;
   }
 
   Future<SessionSummary> getProjectSession(
@@ -303,9 +351,7 @@ class BridgeClient {
       projectId,
       forceRefresh: true,
     );
-    final session = sessions
-        .where((item) => item.id == sessionId)
-        .firstOrNull;
+    final session = sessions.where((item) => item.id == sessionId).firstOrNull;
     if (session == null) {
       throw StateError('Session not found: $sessionId');
     }
@@ -717,6 +763,99 @@ class BridgeClient {
       ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
     return sorted;
   }
+
+  static List<SessionSummary> _syncSessions({
+    required Iterable<SessionSummary> current,
+    required Iterable<SessionSummary> cached,
+  }) {
+    final cachedById = {
+      for (final session in cached) session.id: session,
+    };
+    final synced = current.map((session) {
+      final existing = cachedById[session.id];
+      if (existing == null) {
+        return session;
+      }
+      if (existing.updatedAt.isAfter(session.updatedAt)) {
+        return existing;
+      }
+      if (existing.updatedAt.isAtSameMomentAs(session.updatedAt)) {
+        return session.copyWith(
+          unreadCount: max(session.unreadCount, existing.unreadCount),
+          lastMessagePreview: _preferNonEmptyPreview(
+            session.lastMessagePreview,
+            existing.lastMessagePreview,
+          ),
+          pendingApproval: session.pendingApproval ?? existing.pendingApproval,
+        );
+      }
+      return session;
+    }).toList(growable: false)
+      ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
+    return synced;
+  }
+
+  static bool isAbsoluteFilePath(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return false;
+    }
+
+    final uri = Uri.tryParse(trimmed);
+    if (uri != null && uri.scheme.eq('file')) {
+      return true;
+    }
+
+    return trimmed.startsWith('/') ||
+        trimmed.startsWith(r'\\') ||
+        RegExp(r'^[A-Za-z]:[\\/]').hasMatch(trimmed);
+  }
+
+  static bool isSupportedImagePath(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return false;
+    }
+
+    final uri = Uri.tryParse(trimmed);
+    if (uri != null &&
+        uri.hasScheme &&
+        !uri.scheme.eq('http') &&
+        !uri.scheme.eq('https') &&
+        !uri.scheme.eq('file')) {
+      return false;
+    }
+
+    final normalizedPath =
+        uri != null && uri.hasScheme ? uri.path : trimmed.split('?').first;
+    return RegExp(
+      r'\.(png|jpe?g|gif|webp|bmp|svg)$',
+      caseSensitive: false,
+    ).hasMatch(normalizedPath);
+  }
+
+  static String _guessContentType(String path) {
+    final normalized = path.toLowerCase();
+    if (normalized.endsWith('.png')) {
+      return 'image/png';
+    }
+    if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg')) {
+      return 'image/jpeg';
+    }
+    if (normalized.endsWith('.gif')) {
+      return 'image/gif';
+    }
+    if (normalized.endsWith('.webp')) {
+      return 'image/webp';
+    }
+    if (normalized.endsWith('.bmp')) {
+      return 'image/bmp';
+    }
+    if (normalized.endsWith('.svg')) {
+      return 'image/svg+xml';
+    }
+    return 'application/octet-stream';
+  }
 }
 
 class _CacheEntry<T> {
@@ -741,6 +880,16 @@ class SynthesizedSpeech {
   final String contentType;
 }
 
+class BridgeFileResponse {
+  const BridgeFileResponse({
+    required this.bytes,
+    required this.contentType,
+  });
+
+  final Uint8List bytes;
+  final String contentType;
+}
+
 class SendMessageResult {
   const SendMessageResult({
     required this.userMessage,
@@ -757,4 +906,8 @@ class ClientUnauthorizedException implements Exception {
 
   @override
   String toString() => message;
+}
+
+extension on String {
+  bool eq(String other) => toLowerCase() == other;
 }

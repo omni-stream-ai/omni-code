@@ -404,6 +404,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get send => '发送';
 
   @override
+  String get imageAttachment => '图片附件';
+
+  @override
+  String get previewImage => '预览';
+
+  @override
+  String get imagePreviewTitle => '图片预览';
+
+  @override
+  String get imagePreviewLoadFailed => '加载图片预览失败';
+
+  @override
+  String get imagePreviewBgDark => '深色';
+
+  @override
+  String get imagePreviewBgLight => '浅色';
+
+  @override
+  String get imagePreviewBgChecker => '棋盘格';
+
+  @override
   String agentAwaitingPermission(Object agent) {
     return '$agent 等待权限确认';
   }

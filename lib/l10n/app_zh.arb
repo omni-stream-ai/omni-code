@@ -208,6 +208,13 @@
   "stopVoice": "停止语音",
   "voiceInput": "语音输入",
   "send": "发送",
+  "imageAttachment": "图片附件",
+  "previewImage": "预览",
+  "imagePreviewTitle": "图片预览",
+  "imagePreviewLoadFailed": "加载图片预览失败",
+  "imagePreviewBgDark": "深色",
+  "imagePreviewBgLight": "浅色",
+  "imagePreviewBgChecker": "棋盘格",
   "agentAwaitingPermission": "{agent} 等待权限确认",
   "@agentAwaitingPermission": {
     "placeholders": {
