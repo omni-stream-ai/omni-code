@@ -61,6 +61,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   BridgeClient get _client => widget.client ?? bridgeClient;
   DateTime Function() get _now => widget.now ?? DateTime.now;
 
+  int _resolvedVisibleRecentCount(int totalCount) {
+    if (totalCount <= 0) {
+      return 0;
+    }
+    return min(max(_visibleRecentCount, _recentPageSize), totalCount);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -119,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _projects = cachedProjects ?? _projects;
       _recentSessions = cachedSessions ?? _recentSessions;
       _visibleRecentCount =
-          min(_recentPageSize, _recentSessions?.length ?? _visibleRecentCount);
+          _resolvedVisibleRecentCount(_recentSessions?.length ?? 0);
       if (_projects == null && _recentSessions == null) {
         _isLoading = true;
       } else {
@@ -150,7 +157,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _projects = projects;
         _recentSessions = sessions ?? _client.peekSessions() ?? _recentSessions;
         _visibleRecentCount =
-            min(_recentPageSize, _recentSessions?.length ?? 0);
+            _resolvedVisibleRecentCount(_recentSessions?.length ?? 0);
         _recentSessionsError = sessionsError;
         _needsAuthorization = false;
         _isWaitingAuth = false;
