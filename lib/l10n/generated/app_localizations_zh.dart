@@ -80,7 +80,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whisperCompatible => 'Whisper / OpenAI Compatible';
 
   @override
+  String get volcengineStreamingAsr => '火山引擎流式识别';
+
+  @override
   String get apiKey => 'API Key';
+
+  @override
+  String get appId => 'App ID';
+
+  @override
+  String get accessToken => 'Access Token';
+
+  @override
+  String get cluster => 'Cluster';
 
   @override
   String get baseUrl => 'Base URL';
@@ -401,6 +413,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get voiceInput => '语音输入';
 
   @override
+  String get startCallMode => '开启通话模式';
+
+  @override
+  String get stopCallMode => '停止通话模式';
+
+  @override
+  String get callModeUnavailable => '语音服务尚未初始化完成，暂时无法使用通话模式。';
+
+  @override
+  String get callModeRequiresStreamingAsr => '通话模式当前仅支持系统语音识别或火山引擎流式识别。';
+
+  @override
   String get send => '发送';
 
   @override
@@ -682,6 +706,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get whisperAsrMissingText => 'Whisper ASR 响应缺少 text';
+
+  @override
+  String get volcengineAppIdRequired => '请先在设置中填写火山引擎 App ID';
+
+  @override
+  String get volcengineAccessTokenRequired => '请先在设置中填写火山引擎 Access Token';
+
+  @override
+  String get volcengineClusterRequired => '请先在设置中填写火山引擎 Cluster';
 
   @override
   String zhipuTtsRequestFailed(Object statusCode, Object body) {

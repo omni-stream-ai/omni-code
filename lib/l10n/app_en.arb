@@ -23,7 +23,11 @@
   "asrProviderLabel": "ASR Provider",
   "bridgeCloudProxy": "Bridge / Cloud relay",
   "whisperCompatible": "Whisper / OpenAI Compatible",
+  "volcengineStreamingAsr": "Volcengine Streaming",
   "apiKey": "API Key",
+  "appId": "App ID",
+  "accessToken": "Access Token",
+  "cluster": "Cluster",
   "baseUrl": "Base URL",
   "aiApprovalSection": "AI Approval",
   "enableAiApproval": "Enable AI-assisted approval",
@@ -207,6 +211,10 @@
   "messageInputHint": "Enter a task, for example: Help me inspect why the latest build failed",
   "stopVoice": "Stop voice",
   "voiceInput": "Voice input",
+  "startCallMode": "Start call mode",
+  "stopCallMode": "Stop call mode",
+  "callModeUnavailable": "Call mode is unavailable until speech services finish initializing.",
+  "callModeRequiresStreamingAsr": "Call mode currently requires either the System ASR provider or Volcengine Streaming.",
   "send": "Send",
   "agentAwaitingPermission": "{agent} is waiting for permission",
   "@agentAwaitingPermission": {
@@ -377,6 +385,9 @@
     }
   },
   "whisperAsrMissingText": "Whisper ASR response is missing text",
+  "volcengineAppIdRequired": "Fill in the Volcengine App ID in settings first",
+  "volcengineAccessTokenRequired": "Fill in the Volcengine access token in settings first",
+  "volcengineClusterRequired": "Fill in the Volcengine cluster in settings first",
   "zhipuTtsRequestFailed": "Zhipu TTS request failed ({statusCode}): {body}",
   "@zhipuTtsRequestFailed": {
     "placeholders": {

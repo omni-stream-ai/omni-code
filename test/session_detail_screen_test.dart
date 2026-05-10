@@ -440,9 +440,13 @@ void main() {
         find.widgetWithText(OutlinedButton, 'Voice input'));
     final playButton = tester
         .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Play'));
+    final callModeButton = tester.widget<IconButton>(
+      find.byKey(const Key('session-call-mode-button')),
+    );
 
     expect(voiceButton.onPressed, isNull);
     expect(playButton.onPressed, isNull);
+    expect(callModeButton.onPressed, isNull);
     expect(audioService.hasPermissionCalls, 0);
     expect(
       find.text(
@@ -499,6 +503,45 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text(message), findsNothing);
+  });
+
+  testWidgets('call mode entry is shown in the app bar instead of composer',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        asrProvider: AsrProvider.volcengineStreaming,
+      ),
+    );
+    final audioService = _FakeAudioRecordingService(hasPermissionResult: true);
+    final ttsService = _FakeTtsService(systemAvailable: false);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages([
+            _messageJson(
+              id: 'assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'Reply ready',
+              createdAt: '2026-05-09T10:00:01.000',
+            ),
+          ]),
+          audioRecordingService: audioService,
+          ttsService: ttsService,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final callModeButton = tester.widget<IconButton>(
+      find.byKey(const Key('session-call-mode-button')),
+    );
+
+    expect(find.byKey(const Key('session-call-mode-button')), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Start call mode'), findsNothing);
+    expect(callModeButton.onPressed, isNotNull);
   });
 
   testWidgets('cloud speech can be enabled explicitly from settings',

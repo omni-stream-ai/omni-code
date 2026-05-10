@@ -1,5 +1,6 @@
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'dart:typed_data';
 
 class AudioRecordingService {
   AudioRecordingService({AudioRecorder? recorder})
@@ -26,6 +27,16 @@ class AudioRecordingService {
     );
 
     return filePath;
+  }
+
+  Future<Stream<Uint8List>> startStream() {
+    return _recorder.startStream(
+      const RecordConfig(
+        encoder: AudioEncoder.pcm16bits,
+        sampleRate: 16000,
+        numChannels: 1,
+      ),
+    );
   }
 
   Future<String?> stop() {

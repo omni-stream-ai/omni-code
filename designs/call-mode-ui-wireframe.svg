@@ -1,0 +1,67 @@
+<svg width="1600" height="1000" viewBox="0 0 1600 1000" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="1000" fill="#F3EFE6"/>
+  <rect x="44" y="44" width="912" height="912" rx="36" fill="#FFFDF8" stroke="#D7D0C2" stroke-width="2"/>
+  <rect x="1000" y="44" width="556" height="912" rx="36" fill="#11261F" stroke="#1F473C" stroke-width="2"/>
+
+  <text x="88" y="92" fill="#23322D" font-family="Arial, sans-serif" font-size="28" font-weight="700">Session Detail Screen</text>
+  <text x="1044" y="92" fill="#EAF3EF" font-family="Arial, sans-serif" font-size="28" font-weight="700">Speech Settings Screen</text>
+
+  <rect x="88" y="118" width="824" height="70" rx="22" fill="#F7F2E8" stroke="#D9D1C5"/>
+  <circle cx="132" cy="153" r="14" fill="#254E43"/>
+  <rect x="162" y="136" width="260" height="14" rx="7" fill="#26443B"/>
+  <rect x="162" y="158" width="180" height="10" rx="5" fill="#7B8B84"/>
+
+  <rect x="88" y="214" width="824" height="86" rx="24" fill="#FFF4D9" stroke="#E3C98E"/>
+  <text x="120" y="252" fill="#70561E" font-family="Arial, sans-serif" font-size="20" font-weight="700">Speech / call mode banner area</text>
+  <text x="120" y="280" fill="#8A7441" font-family="Arial, sans-serif" font-size="18">Listening, transcription ready, or error messages appear here.</text>
+
+  <rect x="88" y="332" width="824" height="430" rx="28" fill="#F9F6EE" stroke="#DED5C8"/>
+  <rect x="120" y="372" width="260" height="96" rx="24" fill="#1C5DFF"/>
+  <rect x="430" y="500" width="330" height="132" rx="28" fill="#19332C"/>
+  <rect x="430" y="648" width="180" height="44" rx="18" fill="#F9F6EE" stroke="#5D736B"/>
+  <text x="493" y="676" fill="#425851" font-family="Arial, sans-serif" font-size="18" font-weight="700">Play</text>
+  <rect x="120" y="520" width="220" height="32" rx="16" fill="#E6ECE8" stroke="#C5D0CB"/>
+  <text x="120" y="344" fill="#243530" font-family="Arial, sans-serif" font-size="20" font-weight="700">Conversation</text>
+  <text x="120" y="396" fill="#EAF2FF" font-family="Arial, sans-serif" font-size="20">User message bubble</text>
+  <text x="458" y="536" fill="#EAF3EF" font-family="Arial, sans-serif" font-size="20" font-weight="700">Assistant reply bubble</text>
+  <text x="458" y="566" fill="#B8C8C2" font-family="Arial, sans-serif" font-size="18">Markdown reply + TTS play/stop action</text>
+  <text x="120" y="542" fill="#667A72" font-family="Arial, sans-serif" font-size="16">Tool activity chip</text>
+
+  <rect x="88" y="794" width="824" height="118" rx="28" fill="#FFFDF9" stroke="#DCD3C7"/>
+  <rect x="120" y="824" width="760" height="16" rx="8" fill="#5F706A" fill-opacity="0.22"/>
+  <rect x="120" y="852" width="760" height="56" rx="18" fill="#FFF9EE" stroke="#D4CABB"/>
+  <text x="146" y="887" fill="#495D56" font-family="Arial, sans-serif" font-size="20">Text input area</text>
+
+  <rect x="88" y="930" width="824" height="0" stroke="#D5CCC0"/>
+
+  <rect x="120" y="924" width="760" height="52" rx="20" fill="#F5F1E9" stroke="#CFC5B7"/>
+  <text x="362" y="956" fill="#31453E" font-family="Arial, sans-serif" font-size="20" font-weight="700">Start call mode / Stop call mode</text>
+  <text x="120" y="1000" fill="#7A8B84" font-family="Arial, sans-serif" font-size="16">Full-width toggle placed between text input and one-shot actions</text>
+
+  <rect x="120" y="988" width="366" height="56" rx="20" fill="#F5F1E9" stroke="#CFC5B7"/>
+  <rect x="514" y="988" width="366" height="56" rx="20" fill="#26443B"/>
+  <text x="255" y="1022" fill="#31453E" font-family="Arial, sans-serif" font-size="20" font-weight="700">Voice input</text>
+  <text x="662" y="1022" fill="#F2F7F5" font-family="Arial, sans-serif" font-size="20" font-weight="700">Send</text>
+
+  <text x="1044" y="132" fill="#B8C8C2" font-family="Arial, sans-serif" font-size="18">ASR provider selection now includes Volcengine Streaming</text>
+  <rect x="1044" y="168" width="468" height="226" rx="28" fill="#15342A" stroke="#2B584A"/>
+  <text x="1080" y="208" fill="#EAF3EF" font-family="Arial, sans-serif" font-size="20" font-weight="700">SPEECH</text>
+  <rect x="1080" y="230" width="396" height="56" rx="18" fill="#10271F" stroke="#3D6A5B"/>
+  <text x="1106" y="264" fill="#88A99D" font-family="Arial, sans-serif" font-size="18">TTS Provider</text>
+  <rect x="1080" y="304" width="396" height="56" rx="18" fill="#10271F" stroke="#3D6A5B"/>
+  <text x="1106" y="338" fill="#88A99D" font-family="Arial, sans-serif" font-size="18">ASR Provider: System / Zhipu / Whisper / Volcengine Streaming</text>
+
+  <rect x="1044" y="430" width="468" height="260" rx="28" fill="#15342A" stroke="#2B584A"/>
+  <text x="1080" y="470" fill="#EAF3EF" font-family="Arial, sans-serif" font-size="20" font-weight="700">VOLCENGINE STREAMING ASR</text>
+  <rect x="1080" y="496" width="396" height="56" rx="18" fill="#10271F" stroke="#3D6A5B"/>
+  <text x="1106" y="530" fill="#88A99D" font-family="Arial, sans-serif" font-size="18">App ID</text>
+  <rect x="1080" y="572" width="396" height="56" rx="18" fill="#10271F" stroke="#3D6A5B"/>
+  <text x="1106" y="606" fill="#88A99D" font-family="Arial, sans-serif" font-size="18">Access Token</text>
+  <rect x="1080" y="648" width="396" height="56" rx="18" fill="#10271F" stroke="#3D6A5B"/>
+  <text x="1106" y="682" fill="#88A99D" font-family="Arial, sans-serif" font-size="18">Cluster (default: volcengine_input_common)</text>
+
+  <rect x="1044" y="734" width="468" height="118" rx="28" fill="#15342A" stroke="#2B584A"/>
+  <text x="1080" y="774" fill="#EAF3EF" font-family="Arial, sans-serif" font-size="20" font-weight="700">Design Intent</text>
+  <text x="1080" y="808" fill="#B8C8C2" font-family="Arial, sans-serif" font-size="18">Session page exposes only one persistent call-mode toggle.</text>
+  <text x="1080" y="836" fill="#B8C8C2" font-family="Arial, sans-serif" font-size="18">Provider-specific details stay in settings, not in the chat surface.</text>
+</svg>

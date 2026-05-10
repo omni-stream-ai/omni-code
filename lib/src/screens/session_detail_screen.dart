@@ -17,6 +17,7 @@ import '../services/notification_service.dart';
 import '../services/audio_recording_service.dart';
 import '../services/speech_input_service.dart';
 import '../services/tts_service.dart';
+import '../services/volcengine_streaming_asr_service.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
@@ -60,6 +61,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   late final AudioRecordingService _audioRecordingService;
   late final SpeechInputService _speechInputService;
   late final TtsService _ttsService;
+  late final VolcengineStreamingAsrService _volcengineStreamingAsrService;
   final Set<String> _autoSpokenAssistantMessageIds = <String>{};
   final Set<String> _notifiedAssistantMessageIds = <String>{};
   final Map<String, _LocalMessageDraft> _localMessageStates = {};
@@ -77,6 +79,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _ttsReady = false;
   bool _isListening = false;
   bool _isSpeaking = false;
+  bool _callModeEnabled = false;
+  bool _callModeAwaitingPlaybackCompletion = false;
+  bool _systemTranscriptCompleting = false;
+  bool _streamingAsrActive = false;
   final Map<String, int> _unreadToolCounts = <String, int>{};
   String? _speechStatus;
   String? _speechError;
@@ -89,27 +95,27 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   String? _submittedApprovalRequestId;
   bool _cancellingReply = false;
 
-  bool get _isSpeechReadyStatus => _speechStatus == _readySpeechStatusLabel();
   BridgeClient get _client => widget.client ?? bridgeClient;
 
-  String _readySpeechStatusLabel() => context.l10n.speechReadyStatus;
   String _systemSpeechUnavailableLabel() =>
       context.l10n.systemSpeechUnavailable;
   String? get _systemSpeechUnavailableStatus =>
       _speechError == null && _speechStatus == _systemSpeechUnavailableLabel()
           ? _speechStatus
           : null;
-  String? get _speechBannerMessage {
-    if (_speechError != null) {
-      return _speechError;
+  String? get _speechBannerMessage => _speechError;
+
+  String? get _callModeUnavailableMessage {
+    if (!widget.enableSpeechServices) {
+      return context.l10n.callModeUnavailable;
     }
-    final status = _speechStatus;
-    if (status == null ||
-        _isSpeechReadyStatus ||
-        status == _systemSpeechUnavailableLabel()) {
-      return null;
+    if (!_supportsCallModeAsrProvider()) {
+      return context.l10n.callModeRequiresStreamingAsr;
     }
-    return status;
+    if (_usesSystemSpeechForCallMode() && _systemAsrUnavailable) {
+      return _systemSpeechUnavailableLabel();
+    }
+    return null;
   }
 
   String _reinitializingTtsLabel() => context.l10n.reinitializingTts;
@@ -159,6 +165,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         widget.audioRecordingService ?? AudioRecordingService();
     _speechInputService = widget.speechInputService ?? SpeechInputService();
     _ttsService = widget.ttsService ?? TtsService();
+    _volcengineStreamingAsrService = VolcengineStreamingAsrService();
     _session = widget.session;
     _pendingApproval = _session.pendingApproval;
     _creatingSession = widget.sessionInitializer != null;
@@ -182,6 +189,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _eventsReconnectTimer?.cancel();
     unawaited(_audioRecordingService.cancel());
     unawaited(_speechInputService.cancel());
+    unawaited(_volcengineStreamingAsrService.cancel());
     _ttsService.stop();
     _controller.dispose();
     _scrollController.dispose();
@@ -221,6 +229,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _isAwaitingSubmittedApprovalResolution;
     final speechBannerMessage = _speechBannerMessage;
     final systemSpeechUnavailableMessage = _systemSpeechUnavailableStatus;
+    final callModeUnavailableMessage = _callModeUnavailableMessage;
     final showVoiceInputUnavailableTooltip =
         systemSpeechUnavailableMessage != null &&
             !isSessionBusy &&
@@ -238,6 +247,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             height: 1.1,
           ),
         ),
+        actions: [
+          _buildCallModeAction(
+            unavailableMessage: callModeUnavailableMessage,
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -309,18 +323,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 message: speechBannerMessage,
                 copyLabel: context.l10n.copy,
                 copiedLabel: context.l10n.copied,
-                backgroundColor: _speechError == null
-                    ? AppColors.surfaceFor(brightness)
-                    : AppColors.errorBgFor(brightness),
-                borderColor: _speechError == null
-                    ? AppColors.outlineFor(brightness)
-                    : AppColors.errorBorderFor(brightness),
-                iconColor: _speechError == null
-                    ? AppColors.mutedFor(brightness)
-                    : AppColors.errorIconFor(brightness),
-                textColor: _speechError == null
-                    ? AppColors.onSurfaceFor(brightness)
-                    : AppColors.errorTextFor(brightness),
+                backgroundColor: AppColors.errorBgFor(brightness),
+                borderColor: AppColors.errorBorderFor(brightness),
+                iconColor: AppColors.errorIconFor(brightness),
+                textColor: AppColors.errorTextFor(brightness),
               ),
             ),
           if (_pendingApproval != null &&
@@ -463,6 +469,47 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       showDuration: const Duration(seconds: 2),
       exitDuration: const Duration(milliseconds: 100),
       child: child,
+    );
+  }
+
+  Widget _buildCallModeAction({
+    required String? unavailableMessage,
+  }) {
+    final brightness = Theme.of(context).brightness;
+    final onPressed = _callModeEnabled
+        ? () => unawaited(_disableCallMode())
+        : unavailableMessage == null
+            ? () => unawaited(_enableCallMode())
+            : null;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: AppSpacing.block),
+      child: _withUnavailableTooltip(
+        message: !_callModeEnabled ? unavailableMessage : null,
+        child: IconButton(
+          key: const Key('session-call-mode-button'),
+          tooltip: unavailableMessage == null
+              ? (_callModeEnabled
+                  ? context.l10n.stopCallMode
+                  : context.l10n.startCallMode)
+              : null,
+          onPressed: onPressed,
+          style: _callModeEnabled
+              ? IconButton.styleFrom(
+                  backgroundColor: AppColors.primaryFor(brightness),
+                  foregroundColor: AppColors.onPrimaryFor(brightness),
+                  side: BorderSide(
+                    color: AppColors.primaryFor(brightness),
+                  ),
+                )
+              : null,
+          icon: Icon(
+            _callModeEnabled
+                ? Icons.phone_in_talk_rounded
+                : Icons.call_outlined,
+          ),
+        ),
+      ),
     );
   }
 
@@ -1173,6 +1220,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _reconcileSubmittedApprovalState();
       });
       _maybeAutoScrollToBottom();
+      if (_callModeEnabled) {
+        unawaited(_maybeResumeCallModeListening());
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -1221,9 +1271,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             .where((item) => item.role == MessageRole.assistant)
             .cast<ChatMessage?>()
             .lastWhere((_) => true, orElse: () => null);
+        var startedPlayback = false;
         if (latestAssistantMessage != null) {
-          _maybeAutoSpeakAssistantMessage(latestAssistantMessage.id);
+          startedPlayback =
+              _maybeAutoSpeakAssistantMessage(latestAssistantMessage.id);
           _maybeNotifyAssistantMessage(latestAssistantMessage.id);
+        }
+        if (_callModeEnabled &&
+            !startedPlayback &&
+            status != SessionStatus.running) {
+          unawaited(_maybeResumeCallModeListening());
         }
         break;
       case 'message_created':
@@ -1489,22 +1546,32 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           });
         },
         onComplete: () {
+          final resumeCallMode = _callModeAwaitingPlaybackCompletion;
           if (!mounted) {
             return;
           }
           setState(() {
             _isSpeaking = false;
+            _callModeAwaitingPlaybackCompletion = false;
             _clearTransientTtsStatus();
           });
+          if (resumeCallMode) {
+            unawaited(_maybeResumeCallModeListening());
+          }
         },
         onCancel: () {
+          final resumeCallMode = _callModeAwaitingPlaybackCompletion;
           if (!mounted) {
             return;
           }
           setState(() {
             _isSpeaking = false;
+            _callModeAwaitingPlaybackCompletion = false;
             _clearTransientTtsStatus();
           });
+          if (resumeCallMode) {
+            unawaited(_maybeResumeCallModeListening());
+          }
         },
         onError: (message) {
           if (!mounted) {
@@ -1512,6 +1579,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           }
           setState(() {
             _isSpeaking = false;
+            _callModeAwaitingPlaybackCompletion = false;
             _speechError = context.l10n.ttsFailed(message);
           });
         },
@@ -1589,6 +1657,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 _speechError = null;
               }
             });
+            if (isFinal && _callModeEnabled) {
+              unawaited(
+                _handleCallModeTranscript(words, stopListeningFirst: true),
+              );
+            }
           },
         );
       } else {
@@ -1618,28 +1691,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       });
       return;
     }
-
-    final transcript = _recognizedSpeech.trim();
-    _recognizedSpeech = '';
-    if (!mounted) {
-      return;
-    }
-    if (transcript.isEmpty) {
-      setState(() {
-        _isListening = false;
-        _speechError = context.l10n.voiceTranscriptionNoResult;
-      });
-      return;
-    }
-    setState(() {
-      _isListening = false;
-      _controller.text = transcript;
-      _controller.selection = TextSelection.fromPosition(
-        TextPosition(offset: _controller.text.length),
-      );
-      _speechStatus = context.l10n.voiceTranscriptionComplete;
-      _speechError = null;
-    });
+    await _finalizeSystemTranscript(
+      _recognizedSpeech,
+      autoSend: _callModeEnabled,
+    );
   }
 
   Future<String?> _resolveSystemAsrLocaleId() async {
@@ -1683,6 +1738,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _useSystemSpeech() {
     return appSettingsController.settings.asrProvider == AsrProvider.system &&
         !_systemAsrUnavailable;
+  }
+
+  bool _supportsCallModeAsrProvider() {
+    final provider = appSettingsController.settings.asrProvider;
+    return provider == AsrProvider.system ||
+        provider == AsrProvider.volcengineStreaming;
+  }
+
+  bool _usesSystemSpeechForCallMode() {
+    return appSettingsController.settings.asrProvider == AsrProvider.system;
   }
 
   Future<void> _stopRecordingAndTranscribe() async {
@@ -1752,6 +1817,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Future<void> _speakMessage(String content) async {
+    await _speakMessageInternal(content, resumeCallModeOnComplete: false);
+  }
+
+  Future<void> _speakMessageInternal(
+    String content, {
+    required bool resumeCallModeOnComplete,
+  }) async {
     if (!_ttsReady) {
       setState(() {
         _speechStatus = context.l10n.reinitializingTts;
@@ -1765,6 +1837,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     setState(() {
       _speechError = null;
+      _callModeAwaitingPlaybackCompletion = resumeCallModeOnComplete;
       _clearTransientTtsStatus();
     });
     try {
@@ -1774,16 +1847,23 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         return;
       }
       setState(() {
+        _callModeAwaitingPlaybackCompletion = false;
+        if (resumeCallModeOnComplete) {
+          _callModeEnabled = false;
+        }
         _speechError = context.l10n.ttsPlaybackFailed('$error');
       });
     }
   }
 
-  void _maybeAutoSpeakAssistantMessage(String messageId) {
-    if (!appSettingsController.settings.autoSpeakReplies ||
-        _isSpeaking ||
-        !_ttsReady) {
-      return;
+  bool _maybeAutoSpeakAssistantMessage(String messageId) {
+    final shouldAutoSpeak =
+        _callModeEnabled || appSettingsController.settings.autoSpeakReplies;
+    if (!shouldAutoSpeak || _isSpeaking) {
+      return false;
+    }
+    if (!_callModeEnabled && !_ttsReady) {
+      return false;
     }
     final message = _messages
         .where((item) =>
@@ -1791,17 +1871,23 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         .cast<ChatMessage?>()
         .firstWhere((_) => true, orElse: () => null);
     if (message == null) {
-      return;
+      return false;
     }
     final content = message.content.trim();
     if (content.isEmpty || _autoSpokenAssistantMessageIds.contains(messageId)) {
-      return;
+      return false;
     }
     if (_session.status == SessionStatus.running) {
-      return;
+      return false;
     }
     _autoSpokenAssistantMessageIds.add(messageId);
-    unawaited(_speakMessage(content));
+    unawaited(
+      _speakMessageInternal(
+        content,
+        resumeCallModeOnComplete: _callModeEnabled,
+      ),
+    );
+    return true;
   }
 
   void _maybeNotifyAssistantMessage(String messageId) {
@@ -1908,7 +1994,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
-  Future<void> _submitLocalMessage(
+  Future<bool> _submitLocalMessage(
     String content, {
     required String inputMode,
     String? localMessageId,
@@ -1947,7 +2033,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         inputMode: inputMode,
       );
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() {
         _localMessageStates.remove(messageId);
@@ -1987,9 +2073,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         );
       });
       _syncSessionSummaryCache();
+      return true;
     } catch (error) {
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() {
         _localMessageStates[messageId] = _LocalMessageDraft(
@@ -2000,6 +2087,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             ? context.l10n.sessionStillRunning
             : context.l10n.sendFailed('$error');
       });
+      return false;
     }
   }
 
@@ -2044,6 +2132,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         );
       });
       _syncSessionSummaryCache();
+      if (_callModeEnabled) {
+        unawaited(_maybeResumeCallModeListening());
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -2054,6 +2145,258 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       });
       unawaited(_restoreSessionAfterResume());
     }
+  }
+
+  Future<void> _enableCallMode() async {
+    if (_callModeUnavailableMessage != null) {
+      return;
+    }
+    setState(() {
+      _callModeEnabled = true;
+      _callModeAwaitingPlaybackCompletion = false;
+      _speechError = null;
+    });
+    await _maybeResumeCallModeListening();
+  }
+
+  Future<void> _disableCallMode() async {
+    final shouldCancelListening = _isListening && _useSystemSpeech();
+    final shouldCancelStreaming = _streamingAsrActive;
+    setState(() {
+      _callModeEnabled = false;
+      _callModeAwaitingPlaybackCompletion = false;
+    });
+    if (shouldCancelStreaming) {
+      await _stopVolcengineStreamingAsr();
+    }
+    if (shouldCancelListening) {
+      try {
+        await _speechInputService.cancel();
+      } catch (_) {
+        // Best effort; disabling call mode should not surface a second error.
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isListening = false;
+        _recognizedSpeech = '';
+      });
+    }
+  }
+
+  Future<void> _maybeResumeCallModeListening() async {
+    if (!_callModeEnabled ||
+        _callModeAwaitingPlaybackCompletion ||
+        _creatingSession ||
+        !_appInForeground ||
+        _session.status == SessionStatus.running ||
+        _session.status == SessionStatus.awaitingApproval ||
+        _pendingApproval != null ||
+        _isListening ||
+        _isSpeaking ||
+        _systemTranscriptCompleting ||
+        _streamingAsrActive ||
+        _controller.text.trim().isNotEmpty ||
+        _callModeUnavailableMessage != null) {
+      return;
+    }
+
+    if (_usesSystemSpeechForCallMode()) {
+      await _toggleListening();
+    } else {
+      await _startVolcengineStreamingAsr();
+    }
+    if (!mounted) {
+      return;
+    }
+    if (_callModeEnabled &&
+        !_isListening &&
+        _session.status == SessionStatus.idle) {
+      setState(() {
+        _callModeEnabled = false;
+        _callModeAwaitingPlaybackCompletion = false;
+      });
+    }
+  }
+
+  Future<void> _handleCallModeTranscript(
+    String transcript, {
+    required bool stopListeningFirst,
+  }) async {
+    if (_systemTranscriptCompleting) {
+      return;
+    }
+    _systemTranscriptCompleting = true;
+    try {
+      if (stopListeningFirst) {
+        try {
+          await _speechInputService.stopListening();
+        } catch (error) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _isListening = false;
+            _callModeEnabled = false;
+            _callModeAwaitingPlaybackCompletion = false;
+            _speechError = context.l10n.stopVoiceInputFailed('$error');
+          });
+          return;
+        }
+      }
+      final submitted = await _finalizeSystemTranscript(
+        transcript,
+        autoSend: true,
+      );
+      if (!mounted || submitted) {
+        return;
+      }
+      setState(() {
+        _callModeEnabled = false;
+        _callModeAwaitingPlaybackCompletion = false;
+      });
+    } finally {
+      _systemTranscriptCompleting = false;
+    }
+  }
+
+  Future<bool> _finalizeSystemTranscript(
+    String transcript, {
+    required bool autoSend,
+  }) async {
+    final trimmedTranscript = transcript.trim();
+    _recognizedSpeech = '';
+    if (!mounted) {
+      return false;
+    }
+    if (trimmedTranscript.isEmpty) {
+      setState(() {
+        _isListening = false;
+        _speechError = context.l10n.voiceTranscriptionNoResult;
+      });
+      if (autoSend) {
+        unawaited(_maybeResumeCallModeListening());
+      }
+      return false;
+    }
+
+    setState(() {
+      _isListening = false;
+      _controller.text = trimmedTranscript;
+      _controller.selection = TextSelection.fromPosition(
+        TextPosition(offset: _controller.text.length),
+      );
+      _speechStatus = context.l10n.voiceTranscriptionComplete;
+      _speechError = null;
+    });
+
+    if (!autoSend) {
+      return true;
+    }
+    return _submitLocalMessage(trimmedTranscript, inputMode: 'voice');
+  }
+
+  Future<void> _startVolcengineStreamingAsr() async {
+    if (_streamingAsrActive) {
+      return;
+    }
+    if (!_speechReady) {
+      setState(() {
+        _speechStatus = context.l10n.reinitializingVoiceInput;
+        _speechError = null;
+      });
+      await _initializeSpeech();
+      if (!_speechReady) {
+        return;
+      }
+    }
+
+    setState(() {
+      _speechError = null;
+      _speechStatus = context.l10n.voiceInputInProgress;
+      _isListening = true;
+      _streamingAsrActive = true;
+      _recognizedSpeech = '';
+    });
+
+    try {
+      final audioStream = await _audioRecordingService.startStream();
+      await _volcengineStreamingAsrService.start(
+        audioStream: audioStream,
+        languageTag: preferredLocaleTagFromSetting(
+          appSettingsController.settings.appLanguage,
+        ),
+        onUtterance: (utterance) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _recognizedSpeech = utterance.text;
+            _controller.text = utterance.text;
+            _controller.selection = TextSelection.fromPosition(
+              TextPosition(offset: _controller.text.length),
+            );
+            if (utterance.isFinal) {
+              _speechStatus = context.l10n.voiceTranscriptionComplete;
+              _speechError = null;
+            }
+          });
+          if (utterance.isFinal && _callModeEnabled) {
+            unawaited(_handleVolcengineFinalUtterance(utterance.text));
+          }
+        },
+        onError: (error) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _isListening = false;
+            _streamingAsrActive = false;
+            _callModeEnabled = false;
+            _callModeAwaitingPlaybackCompletion = false;
+            _speechError = context.l10n.voiceTranscriptionFailed(error);
+          });
+        },
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isListening = false;
+        _streamingAsrActive = false;
+        _speechError = context.l10n.startVoiceInputFailed('$error');
+      });
+    }
+  }
+
+  Future<void> _stopVolcengineStreamingAsr() async {
+    await _volcengineStreamingAsrService.cancel();
+    await _audioRecordingService.cancel();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _isListening = false;
+      _streamingAsrActive = false;
+      _recognizedSpeech = '';
+    });
+  }
+
+  Future<void> _handleVolcengineFinalUtterance(String transcript) async {
+    await _stopVolcengineStreamingAsr();
+    final submitted = await _finalizeSystemTranscript(
+      transcript,
+      autoSend: true,
+    );
+    if (!mounted || submitted) {
+      return;
+    }
+    setState(() {
+      _callModeEnabled = false;
+      _callModeAwaitingPlaybackCompletion = false;
+    });
   }
 
   List<_ConversationTurn> get _turns {

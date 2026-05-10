@@ -11,7 +11,7 @@ const _defaultNotificationMaxChars = 160;
 
 enum TtsProvider { system, zhipu }
 
-enum AsrProvider { system, zhipu, whisper }
+enum AsrProvider { system, zhipu, whisper, volcengineStreaming }
 
 enum AppThemeModeSetting { system, light, dark }
 
@@ -29,6 +29,9 @@ class AppSettings {
     required this.zhipuApiKey,
     required this.whisperApiKey,
     required this.whisperBaseUrl,
+    required this.volcengineAppId,
+    required this.volcengineAccessToken,
+    required this.volcengineCluster,
     required this.updateManifestUrl,
     required this.aiApprovalEnabled,
     required this.aiApprovalBaseUrl,
@@ -51,6 +54,9 @@ class AppSettings {
   final String zhipuApiKey;
   final String whisperApiKey;
   final String whisperBaseUrl;
+  final String volcengineAppId;
+  final String volcengineAccessToken;
+  final String volcengineCluster;
   final String updateManifestUrl;
   final bool aiApprovalEnabled;
   final String aiApprovalBaseUrl;
@@ -80,6 +86,9 @@ class AppSettings {
       zhipuApiKey: '',
       whisperApiKey: '',
       whisperBaseUrl: 'https://api.openai.com/v1',
+      volcengineAppId: '',
+      volcengineAccessToken: '',
+      volcengineCluster: 'volcengine_input_common',
       updateManifestUrl: updateManifestUrl.trim().isNotEmpty
           ? updateManifestUrl.trim()
           : _defaultUpdateManifestUrl,
@@ -106,6 +115,9 @@ class AppSettings {
     String? zhipuApiKey,
     String? whisperApiKey,
     String? whisperBaseUrl,
+    String? volcengineAppId,
+    String? volcengineAccessToken,
+    String? volcengineCluster,
     String? updateManifestUrl,
     bool? aiApprovalEnabled,
     String? aiApprovalBaseUrl,
@@ -129,6 +141,10 @@ class AppSettings {
       zhipuApiKey: zhipuApiKey ?? this.zhipuApiKey,
       whisperApiKey: whisperApiKey ?? this.whisperApiKey,
       whisperBaseUrl: whisperBaseUrl ?? this.whisperBaseUrl,
+      volcengineAppId: volcengineAppId ?? this.volcengineAppId,
+      volcengineAccessToken:
+          volcengineAccessToken ?? this.volcengineAccessToken,
+      volcengineCluster: volcengineCluster ?? this.volcengineCluster,
       updateManifestUrl: updateManifestUrl ?? this.updateManifestUrl,
       aiApprovalEnabled: aiApprovalEnabled ?? this.aiApprovalEnabled,
       aiApprovalBaseUrl: aiApprovalBaseUrl ?? this.aiApprovalBaseUrl,
@@ -155,6 +171,9 @@ class AppSettings {
       'zhipu_api_key': zhipuApiKey,
       'whisper_api_key': whisperApiKey,
       'whisper_base_url': whisperBaseUrl,
+      'volcengine_app_id': volcengineAppId,
+      'volcengine_access_token': volcengineAccessToken,
+      'volcengine_cluster': volcengineCluster,
       'update_manifest_url': updateManifestUrl,
       'ai_approval_enabled': aiApprovalEnabled,
       'ai_approval_base_url': aiApprovalBaseUrl,
@@ -194,6 +213,13 @@ class AppSettings {
       whisperApiKey: _readString(json, 'whisper_api_key'),
       whisperBaseUrl:
           _readString(json, 'whisper_base_url', defaults.whisperBaseUrl),
+      volcengineAppId: _readString(json, 'volcengine_app_id'),
+      volcengineAccessToken: _readString(json, 'volcengine_access_token'),
+      volcengineCluster: _readString(
+        json,
+        'volcengine_cluster',
+        defaults.volcengineCluster,
+      ),
       updateManifestUrl:
           _readString(json, 'update_manifest_url').trim().isNotEmpty
               ? _readString(json, 'update_manifest_url').trim()

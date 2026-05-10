@@ -236,11 +236,35 @@ abstract class AppLocalizations {
   /// **'Whisper / OpenAI Compatible'**
   String get whisperCompatible;
 
+  /// No description provided for @volcengineStreamingAsr.
+  ///
+  /// In en, this message translates to:
+  /// **'Volcengine Streaming'**
+  String get volcengineStreamingAsr;
+
   /// No description provided for @apiKey.
   ///
   /// In en, this message translates to:
   /// **'API Key'**
   String get apiKey;
+
+  /// No description provided for @appId.
+  ///
+  /// In en, this message translates to:
+  /// **'App ID'**
+  String get appId;
+
+  /// No description provided for @accessToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Access Token'**
+  String get accessToken;
+
+  /// No description provided for @cluster.
+  ///
+  /// In en, this message translates to:
+  /// **'Cluster'**
+  String get cluster;
 
   /// No description provided for @baseUrl.
   ///
@@ -812,6 +836,30 @@ abstract class AppLocalizations {
   /// **'Voice input'**
   String get voiceInput;
 
+  /// No description provided for @startCallMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Start call mode'**
+  String get startCallMode;
+
+  /// No description provided for @stopCallMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop call mode'**
+  String get stopCallMode;
+
+  /// No description provided for @callModeUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Call mode is unavailable until speech services finish initializing.'**
+  String get callModeUnavailable;
+
+  /// No description provided for @callModeRequiresStreamingAsr.
+  ///
+  /// In en, this message translates to:
+  /// **'Call mode currently requires either the System ASR provider or Volcengine Streaming.'**
+  String get callModeRequiresStreamingAsr;
+
   /// No description provided for @send.
   ///
   /// In en, this message translates to:
@@ -1309,6 +1357,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Whisper ASR response is missing text'**
   String get whisperAsrMissingText;
+
+  /// No description provided for @volcengineAppIdRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill in the Volcengine App ID in settings first'**
+  String get volcengineAppIdRequired;
+
+  /// No description provided for @volcengineAccessTokenRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill in the Volcengine access token in settings first'**
+  String get volcengineAccessTokenRequired;
+
+  /// No description provided for @volcengineClusterRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill in the Volcengine cluster in settings first'**
+  String get volcengineClusterRequired;
 
   /// No description provided for @zhipuTtsRequestFailed.
   ///

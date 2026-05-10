@@ -23,7 +23,11 @@
   "asrProviderLabel": "ASR Provider",
   "bridgeCloudProxy": "Bridge / 云端中转",
   "whisperCompatible": "Whisper / OpenAI Compatible",
+  "volcengineStreamingAsr": "火山引擎流式识别",
   "apiKey": "API Key",
+  "appId": "App ID",
+  "accessToken": "Access Token",
+  "cluster": "Cluster",
   "baseUrl": "Base URL",
   "aiApprovalSection": "AI 审批",
   "enableAiApproval": "启用 AI 辅助审批",
@@ -207,6 +211,10 @@
   "messageInputHint": "输入任务，例如：帮我检查最近一次构建失败原因",
   "stopVoice": "停止语音",
   "voiceInput": "语音输入",
+  "startCallMode": "开启通话模式",
+  "stopCallMode": "停止通话模式",
+  "callModeUnavailable": "语音服务尚未初始化完成，暂时无法使用通话模式。",
+  "callModeRequiresStreamingAsr": "通话模式当前仅支持系统语音识别或火山引擎流式识别。",
   "send": "发送",
   "agentAwaitingPermission": "{agent} 等待权限确认",
   "@agentAwaitingPermission": {
@@ -377,6 +385,9 @@
     }
   },
   "whisperAsrMissingText": "Whisper ASR 响应缺少 text",
+  "volcengineAppIdRequired": "请先在设置中填写火山引擎 App ID",
+  "volcengineAccessTokenRequired": "请先在设置中填写火山引擎 Access Token",
+  "volcengineClusterRequired": "请先在设置中填写火山引擎 Cluster",
   "zhipuTtsRequestFailed": "智谱 TTS 请求失败 ({statusCode}): {body}",
   "@zhipuTtsRequestFailed": {
     "placeholders": {

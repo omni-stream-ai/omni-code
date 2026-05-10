@@ -26,4 +26,20 @@ void main() {
     });
     expect(settings.notificationMaxChars, 160);
   });
+
+  test('volcengine streaming settings round-trip through json', () {
+    final settings = AppSettings.defaults().copyWith(
+      asrProvider: AsrProvider.volcengineStreaming,
+      volcengineAppId: 'app-id',
+      volcengineAccessToken: 'token',
+      volcengineCluster: 'volcengine_input_common',
+    );
+
+    final restored = AppSettings.fromJson(settings.toJson());
+
+    expect(restored.asrProvider, AsrProvider.volcengineStreaming);
+    expect(restored.volcengineAppId, 'app-id');
+    expect(restored.volcengineAccessToken, 'token');
+    expect(restored.volcengineCluster, 'volcengine_input_common');
+  });
 }

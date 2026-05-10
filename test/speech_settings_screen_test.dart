@@ -59,6 +59,21 @@ void main() {
       expect(dropdown.style, equals(textField.style));
     },
   );
+
+  testWidgets('shows Volcengine streaming ASR as a provider option',
+      (tester) async {
+    await tester.pumpWidget(
+      const _TestApp(
+        home: SpeechSettingsScreen(),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('System').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Volcengine Streaming'), findsOneWidget);
+  });
 }
 
 class _TestApp extends StatelessWidget {

@@ -29,6 +29,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   final _zhipuApiKeyController = TextEditingController();
   final _whisperApiKeyController = TextEditingController();
   final _whisperBaseUrlController = TextEditingController();
+  final _volcengineAppIdController = TextEditingController();
+  final _volcengineAccessTokenController = TextEditingController();
+  final _volcengineClusterController = TextEditingController();
 
   late TtsProvider _ttsProvider;
   late AsrProvider _asrProvider;
@@ -81,6 +84,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     _zhipuApiKeyController.dispose();
     _whisperApiKeyController.dispose();
     _whisperBaseUrlController.dispose();
+    _volcengineAppIdController.dispose();
+    _volcengineAccessTokenController.dispose();
+    _volcengineClusterController.dispose();
     super.dispose();
   }
 
@@ -90,6 +96,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     _zhipuApiKeyController.text = settings.zhipuApiKey;
     _whisperApiKeyController.text = settings.whisperApiKey;
     _whisperBaseUrlController.text = settings.whisperBaseUrl;
+    _volcengineAppIdController.text = settings.volcengineAppId;
+    _volcengineAccessTokenController.text = settings.volcengineAccessToken;
+    _volcengineClusterController.text = settings.volcengineCluster;
   }
 
   void _onSettingsChanged() {
@@ -215,6 +224,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                                       value: AsrProvider.whisper,
                                       child: Text(l10n.whisperCompatible),
                                     ),
+                                    DropdownMenuItem(
+                                      value: AsrProvider.volcengineStreaming,
+                                      child: Text(l10n.volcengineStreamingAsr),
+                                    ),
                                   ],
                                   onChanged: (value) {
                                     if (value != null) {
@@ -275,6 +288,38 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                               decoration: InputDecoration(
                                 labelText: l10n.baseUrl,
                                 hintText: 'https://api.openai.com/v1',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.stackTight),
+                        _buildSectionCard(
+                          context,
+                          title: 'VOLCENGINE STREAMING ASR',
+                          children: [
+                            TextField(
+                              controller: _volcengineAppIdController,
+                              style: formValueTextStyle,
+                              decoration: InputDecoration(
+                                labelText: l10n.appId,
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.stack),
+                            TextField(
+                              controller: _volcengineAccessTokenController,
+                              obscureText: true,
+                              style: formValueTextStyle,
+                              decoration: InputDecoration(
+                                labelText: l10n.accessToken,
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.stack),
+                            TextField(
+                              controller: _volcengineClusterController,
+                              style: formValueTextStyle,
+                              decoration: InputDecoration(
+                                labelText: l10n.cluster,
+                                hintText: 'volcengine_input_common',
                               ),
                             ),
                           ],
@@ -416,6 +461,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         zhipuApiKey: _zhipuApiKeyController.text.trim(),
         whisperApiKey: _whisperApiKeyController.text.trim(),
         whisperBaseUrl: _whisperBaseUrlController.text.trim(),
+        volcengineAppId: _volcengineAppIdController.text.trim(),
+        volcengineAccessToken: _volcengineAccessTokenController.text.trim(),
+        volcengineCluster: _volcengineClusterController.text.trim(),
       );
       await appSettingsController.save(next);
       if (!mounted) {

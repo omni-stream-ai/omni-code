@@ -80,7 +80,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whisperCompatible => 'Whisper / OpenAI Compatible';
 
   @override
+  String get volcengineStreamingAsr => 'Volcengine Streaming';
+
+  @override
   String get apiKey => 'API Key';
+
+  @override
+  String get appId => 'App ID';
+
+  @override
+  String get accessToken => 'Access Token';
+
+  @override
+  String get cluster => 'Cluster';
 
   @override
   String get baseUrl => 'Base URL';
@@ -414,6 +426,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get voiceInput => 'Voice input';
 
   @override
+  String get startCallMode => 'Start call mode';
+
+  @override
+  String get stopCallMode => 'Stop call mode';
+
+  @override
+  String get callModeUnavailable =>
+      'Call mode is unavailable until speech services finish initializing.';
+
+  @override
+  String get callModeRequiresStreamingAsr =>
+      'Call mode currently requires either the System ASR provider or Volcengine Streaming.';
+
+  @override
   String get send => 'Send';
 
   @override
@@ -704,6 +730,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get whisperAsrMissingText => 'Whisper ASR response is missing text';
+
+  @override
+  String get volcengineAppIdRequired =>
+      'Fill in the Volcengine App ID in settings first';
+
+  @override
+  String get volcengineAccessTokenRequired =>
+      'Fill in the Volcengine access token in settings first';
+
+  @override
+  String get volcengineClusterRequired =>
+      'Fill in the Volcengine cluster in settings first';
 
   @override
   String zhipuTtsRequestFailed(Object statusCode, Object body) {
