@@ -25,7 +25,6 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_back_header.dart';
 import '../widgets/app_skeleton.dart';
-import '../widgets/copyable_message.dart';
 
 class SessionDetailScreen extends StatefulWidget {
   const SessionDetailScreen({
@@ -73,6 +72,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   final List<ChatMessage> _messages = [];
   StreamSubscription<Map<String, dynamic>>? _eventsSubscription;
   Timer? _eventsReconnectTimer;
+  Timer? _speechStatusAutoDismissTimer;
 
   String? _recordingPath;
   String _recognizedSpeech = '';
@@ -96,6 +96,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   String? _submittedApprovalRequestId;
   bool _cancellingReply = false;
   int _visibleTurnCount = 0;
+  String? _dismissedStatusOverviewSignature;
 
   bool get _isSpeechReadyStatus => _speechStatus == _readySpeechStatusLabel();
   BridgeClient get _client => widget.client ?? bridgeClient;
@@ -121,6 +122,168 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   String _reinitializingTtsLabel() => context.l10n.reinitializingTts;
+
+  String? get _statusOverviewSignature {
+    final hasStatusOverview = _creatingSession ||
+        _session.status != SessionStatus.idle ||
+        _speechBannerMessage != null ||
+        _speechError != null;
+    if (!hasStatusOverview) {
+      _dismissedStatusOverviewSignature = null;
+      return null;
+    }
+
+    return [
+      _creatingSession ? 'creating' : 'ready',
+      _session.status.name,
+      _isAwaitingSubmittedApprovalResolution ? 'approval-processing' : 'stable',
+      _speechBannerMessage ?? '',
+      _speechError ?? '',
+      _statusOverviewDetailMessage ?? '',
+    ].join('::');
+  }
+
+  bool get _shouldShowStatusOverview {
+    final signature = _statusOverviewSignature;
+    return signature != null && signature != _dismissedStatusOverviewSignature;
+  }
+
+  String _sessionStatusLabel(SessionStatus status) {
+    switch (status) {
+      case SessionStatus.idle:
+        return context.l10n.sessionStatusIdle;
+      case SessionStatus.running:
+        return context.l10n.sessionStatusRunning;
+      case SessionStatus.awaitingApproval:
+        return context.l10n.sessionStatusAwaitingApproval;
+      case SessionStatus.waiting:
+        return context.l10n.sessionStatusWaiting;
+      case SessionStatus.failed:
+        return context.l10n.sessionStatusFailed;
+    }
+  }
+
+  _SessionStatusTone _sessionStatusTone(SessionStatus status) {
+    switch (status) {
+      case SessionStatus.idle:
+        return _SessionStatusTone.idle;
+      case SessionStatus.running:
+        return _SessionStatusTone.signal;
+      case SessionStatus.awaitingApproval:
+        return _SessionStatusTone.warning;
+      case SessionStatus.waiting:
+        return _SessionStatusTone.neutral;
+      case SessionStatus.failed:
+        return _SessionStatusTone.error;
+    }
+  }
+
+  IconData _sessionStatusIcon(SessionStatus status) {
+    switch (status) {
+      case SessionStatus.idle:
+        return Icons.pause_circle_outline;
+      case SessionStatus.running:
+        return Icons.autorenew_rounded;
+      case SessionStatus.awaitingApproval:
+        return Icons.pending_actions_outlined;
+      case SessionStatus.waiting:
+        return Icons.schedule_outlined;
+      case SessionStatus.failed:
+        return Icons.error_outline;
+    }
+  }
+
+  List<_SessionStatusItem> _statusOverviewItems() {
+    if (!_shouldShowStatusOverview) {
+      return const <_SessionStatusItem>[];
+    }
+
+    if (_creatingSession) {
+      return [
+        _SessionStatusItem(
+          label: context.l10n.creatingSession,
+          tone: _SessionStatusTone.signal,
+          loading: true,
+        ),
+      ];
+    }
+
+    final items = <_SessionStatusItem>[
+      _SessionStatusItem(
+        label: _sessionStatusLabel(_session.status),
+        tone: _sessionStatusTone(_session.status),
+        icon: _sessionStatusIcon(_session.status),
+      ),
+    ];
+
+    if (_isAwaitingSubmittedApprovalResolution) {
+      items.add(
+        _SessionStatusItem(
+          label: context.l10n.waitingApprovalProcessing,
+          tone: _SessionStatusTone.warning,
+          loading: true,
+        ),
+      );
+    }
+
+    return items;
+  }
+
+  String? get _statusOverviewDetailMessage {
+    if (_speechError != null) {
+      return _speechError;
+    }
+    final speechBannerMessage = _speechBannerMessage;
+    if (speechBannerMessage != null) {
+      return speechBannerMessage;
+    }
+    if (_session.status == SessionStatus.waiting) {
+      return context.l10n.turnPausedWaiting;
+    }
+    return null;
+  }
+
+  bool get _statusOverviewDetailIsError =>
+      !_creatingSession && _speechError != null;
+
+  bool _isAutoDismissableSpeechStatus(String? status) {
+    return status == context.l10n.voiceTranscriptionComplete ||
+        status == context.l10n.replyStopped;
+  }
+
+  void _syncSpeechStatusAutoDismiss() {
+    _speechStatusAutoDismissTimer?.cancel();
+    _speechStatusAutoDismissTimer = null;
+
+    final status = _speechStatus;
+    if (!mounted || !_isAutoDismissableSpeechStatus(status)) {
+      return;
+    }
+
+    _speechStatusAutoDismissTimer = Timer(const Duration(seconds: 3), () {
+      if (!mounted || _speechStatus != status) {
+        return;
+      }
+      setState(() {
+        _setSpeechStatus(null);
+      });
+    });
+  }
+
+  void _setSpeechStatus(String? status) {
+    _speechStatus = status;
+    _syncSpeechStatusAutoDismiss();
+  }
+
+  void _dismissStatusOverview() {
+    final signature = _statusOverviewSignature;
+    if (signature == null) {
+      return;
+    }
+    setState(() {
+      _dismissedStatusOverviewSignature = signature;
+    });
+  }
 
   bool get _isAwaitingSubmittedApprovalResolution {
     final requestId = _submittedApprovalRequestId;
@@ -155,7 +318,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   void _clearTransientTtsStatus() {
     if (_speechStatus == _reinitializingTtsLabel() ||
         _speechStatus == context.l10n.requestingTts) {
-      _speechStatus = null;
+      _setSpeechStatus(null);
     }
   }
 
@@ -188,6 +351,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     WidgetsBinding.instance.removeObserver(this);
     _eventsSubscription?.cancel();
     _eventsReconnectTimer?.cancel();
+    _speechStatusAutoDismissTimer?.cancel();
     unawaited(_audioRecordingService.cancel());
     unawaited(_speechInputService.cancel());
     _ttsService.stop();
@@ -228,7 +392,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final approvalCardMaxHeight = MediaQuery.of(context).size.height * 0.42;
     final isAwaitingSubmittedApprovalResolution =
         _isAwaitingSubmittedApprovalResolution;
-    final speechBannerMessage = _speechBannerMessage;
     final systemSpeechUnavailableMessage = _systemSpeechUnavailableStatus;
     final showVoiceInputUnavailableTooltip =
         systemSpeechUnavailableMessage != null &&
@@ -250,87 +413,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       ),
       body: Column(
         children: [
-          if (_creatingSession)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.fromLTRB(
-                AppSpacing.block,
-                AppSpacing.block,
-                AppSpacing.block,
-                0,
-              ),
-              padding: AppSpacing.tilePadding,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceFor(brightness),
-                borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-                border: Border.all(color: AppColors.outlineFor(brightness)),
-              ),
-              child: Row(
-                children: [
-                  const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  const SizedBox(width: AppSpacing.tileY),
-                  Expanded(
-                    child: Text(
-                      l10n.creatingSession,
-                      style: const TextStyle(height: 1.4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if ((_session.status == SessionStatus.awaitingApproval ||
-                  _pendingApproval != null) &&
-              (_pendingApproval == null ||
-                  isAwaitingSubmittedApprovalResolution))
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.fromLTRB(
-                AppSpacing.block,
-                AppSpacing.block,
-                AppSpacing.block,
-                0,
-              ),
-              padding: AppSpacing.tilePadding,
-              decoration: BoxDecoration(
-                color: AppColors.warningSurfaceFor(brightness),
-                borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-                border:
-                    Border.all(color: AppColors.warningBorderFor(brightness)),
-              ),
-              child: Text(
-                l10n.waitingApprovalProcessing,
-                style: const TextStyle(height: 1.4),
-              ),
-            ),
-          if (speechBannerMessage != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.block,
-                AppSpacing.block,
-                AppSpacing.block,
-                0,
-              ),
-              child: CopyableMessage(
-                message: speechBannerMessage,
-                copyLabel: context.l10n.copy,
-                copiedLabel: context.l10n.copied,
-                backgroundColor: _speechError == null
-                    ? AppColors.surfaceFor(brightness)
-                    : AppColors.errorBgFor(brightness),
-                borderColor: _speechError == null
-                    ? AppColors.outlineFor(brightness)
-                    : AppColors.errorBorderFor(brightness),
-                iconColor: _speechError == null
-                    ? AppColors.mutedFor(brightness)
-                    : AppColors.errorIconFor(brightness),
-                textColor: _speechError == null
-                    ? AppColors.onSurfaceFor(brightness)
-                    : AppColors.errorTextFor(brightness),
-              ),
+          if (_shouldShowStatusOverview)
+            _buildStatusOverviewCard(
+              items: _statusOverviewItems(),
+              detailMessage: _statusOverviewDetailMessage,
+              detailIsError: _statusOverviewDetailIsError,
             ),
           if (_pendingApproval != null &&
               !isAwaitingSubmittedApprovalResolution)
@@ -369,30 +456,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             child: hasActiveTurn
                 ? Column(
                     children: [
-                      if (_session.status ==
-                          SessionStatus.awaitingApproval) ...[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.tileY),
-                            Text(
-                              l10n.waitingProcessApproval,
-                              style: TextStyle(
-                                color: AppColors.mutedSoftFor(brightness),
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.stack),
-                      ],
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton(
@@ -613,6 +676,98 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildStatusOverviewCard({
+    required List<_SessionStatusItem> items,
+    required String? detailMessage,
+    required bool detailIsError,
+  }) {
+    final brightness = Theme.of(context).brightness;
+    return Container(
+      key: const ValueKey('session-status-overview'),
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(
+        AppSpacing.block,
+        AppSpacing.block,
+        AppSpacing.block,
+        0,
+      ),
+      padding: AppSpacing.tilePadding,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceFor(brightness),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+        border: Border.all(color: AppColors.outlineFor(brightness)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (items.isNotEmpty)
+                  Wrap(
+                    spacing: AppSpacing.compact,
+                    runSpacing: AppSpacing.compact,
+                    children: items
+                        .map(
+                          (item) => _SessionStatusPill(
+                            item: item,
+                            brightness: brightness,
+                          ),
+                        )
+                        .toList(growable: false),
+                  ),
+                if (detailMessage != null) ...[
+                  if (items.isNotEmpty)
+                    const SizedBox(height: AppSpacing.stack),
+                  if (detailIsError)
+                    Container(
+                      width: double.infinity,
+                      padding: AppSpacing.tilePadding,
+                      decoration: BoxDecoration(
+                        color: AppColors.errorBgFor(brightness),
+                        borderRadius:
+                            BorderRadius.circular(AppSpacing.radiusCard),
+                        border: Border.all(
+                          color: AppColors.errorBorderFor(brightness),
+                        ),
+                      ),
+                      child: SelectableText(
+                        detailMessage,
+                        style: TextStyle(
+                          color: AppColors.errorTextFor(brightness),
+                          height: 1.4,
+                        ),
+                      ),
+                    )
+                  else
+                    Text(
+                      detailMessage,
+                      style: TextStyle(
+                        height: 1.4,
+                        color: AppColors.mutedSoftFor(brightness),
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.compact),
+          IconButton(
+            tooltip: context.l10n.close,
+            onPressed: _dismissStatusOverview,
+            visualDensity: VisualDensity.compact,
+            icon: Icon(
+              Icons.close_rounded,
+              size: 18,
+              color: AppColors.mutedSoftFor(brightness),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2029,6 +2184,19 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           _reconcileSubmittedApprovalState();
         });
         _syncSessionSummaryCache();
+        if (!_appInForeground) {
+          unawaited(
+            notificationService.showApprovalRequestNotification(
+              _session,
+              title: context.l10n.waitingApprovalTitle,
+              body: approval.reason?.trim().isNotEmpty == true
+                  ? approval.reason!.trim()
+                  : approval.command?.trim().isNotEmpty == true
+                      ? approval.command!.trim()
+                      : context.l10n.waitingApprovalBody,
+            ),
+          );
+        }
         break;
       case 'approval_resolved':
         final requestId = payload['request_id'] as String? ?? '';
@@ -2138,7 +2306,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             setState(() {
               _speechReady = true;
               if (_speechStatus == _systemSpeechUnavailableLabel()) {
-                _speechStatus = null;
+                _setSpeechStatus(null);
               }
               _speechError = null;
             });
@@ -2154,7 +2322,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         setState(() {
           _systemAsrLocaleId = null;
           _speechReady = false;
-          _speechStatus = _systemSpeechUnavailableLabel();
+          _setSpeechStatus(_systemSpeechUnavailableLabel());
           _speechError = null;
         });
         return;
@@ -2170,7 +2338,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
       setState(() {
         _speechReady = ready;
-        _speechStatus = ready ? null : context.l10n.microphonePermissionMissing;
+        _setSpeechStatus(
+          ready ? null : context.l10n.microphonePermissionMissing,
+        );
         _speechError = null;
       });
     } catch (error) {
@@ -2234,7 +2404,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             ? _ttsService.isSystemTtsAvailable
             : true;
         if (!_ttsReady && provider == TtsProvider.system) {
-          _speechStatus = _systemSpeechUnavailableLabel();
+          _setSpeechStatus(_systemSpeechUnavailableLabel());
           _speechError = null;
         }
       });
@@ -2253,7 +2423,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final useSystemSpeech = _useSystemSpeech();
     if (!_speechReady) {
       setState(() {
-        _speechStatus = context.l10n.reinitializingVoiceInput;
+        _setSpeechStatus(context.l10n.reinitializingVoiceInput);
         _speechError = null;
       });
       await _initializeSpeech();
@@ -2273,7 +2443,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     setState(() {
       _speechError = null;
-      _speechStatus = context.l10n.voiceInputInProgress;
+      _setSpeechStatus(context.l10n.voiceInputInProgress);
       _isListening = true;
       _recognizedSpeech = '';
     });
@@ -2293,7 +2463,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 TextPosition(offset: _controller.text.length),
               );
               if (isFinal) {
-                _speechStatus = context.l10n.voiceTranscriptionComplete;
+                _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
                 _speechError = null;
               }
             });
@@ -2345,7 +2515,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _controller.selection = TextSelection.fromPosition(
         TextPosition(offset: _controller.text.length),
       );
-      _speechStatus = context.l10n.voiceTranscriptionComplete;
+      _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
       _speechError = null;
     });
   }
@@ -2416,7 +2586,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     setState(() {
       _isListening = false;
-      _speechStatus = context.l10n.uploadingAudio;
+      _setSpeechStatus(context.l10n.uploadingAudio);
     });
 
     if (filePath == null) {
@@ -2437,7 +2607,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _controller.selection = TextSelection.fromPosition(
           TextPosition(offset: _controller.text.length),
         );
-        _speechStatus = context.l10n.voiceTranscriptionComplete;
+        _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
         _speechError = null;
       });
     } catch (error) {
@@ -2462,7 +2632,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Future<void> _speakMessage(String content) async {
     if (!_ttsReady) {
       setState(() {
-        _speechStatus = context.l10n.reinitializingTts;
+        _setSpeechStatus(context.l10n.reinitializingTts);
         _speechError = null;
       });
       await _initializeTts();
@@ -2750,7 +2920,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _submittingApproval = false;
         _submittingApprovalChoice = null;
         _speechError = null;
-        _speechStatus = context.l10n.replyStopped;
+        _setSpeechStatus(context.l10n.replyStopped);
         _session = _session.copyWith(
           status: SessionStatus.idle,
           updatedAt: DateTime.now(),
@@ -3364,6 +3534,140 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 }
 
 enum _ImagePreviewBackdropMode { dark, light, checker }
+
+enum _SessionStatusTone { neutral, signal, warning, error, idle }
+
+class _SessionStatusItem {
+  const _SessionStatusItem({
+    required this.label,
+    required this.tone,
+    this.icon,
+    this.loading = false,
+  });
+
+  final String label;
+  final _SessionStatusTone tone;
+  final IconData? icon;
+  final bool loading;
+}
+
+class _SessionStatusPill extends StatelessWidget {
+  const _SessionStatusPill({
+    required this.item,
+    required this.brightness,
+  });
+
+  final _SessionStatusItem item;
+  final Brightness brightness;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _colorsForTone(item.tone, brightness);
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.tileX,
+        vertical: AppSpacing.controlTight,
+      ),
+      decoration: BoxDecoration(
+        color: colors.backgroundColor,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+        border: Border.all(color: colors.borderColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (item.loading)
+            SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: colors.foregroundColor,
+              ),
+            )
+          else if (item.icon != null)
+            Icon(
+              item.icon,
+              size: 14,
+              color: colors.foregroundColor,
+            ),
+          if (item.loading || item.icon != null)
+            const SizedBox(width: AppSpacing.micro),
+          Text(
+            item.label,
+            style: TextStyle(
+              color: colors.foregroundColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  _SessionStatusPillColors _colorsForTone(
+    _SessionStatusTone tone,
+    Brightness brightness,
+  ) {
+    switch (tone) {
+      case _SessionStatusTone.neutral:
+        return _SessionStatusPillColors(
+          backgroundColor: AppColors.surfaceFor(brightness),
+          borderColor: AppColors.outlineFor(brightness),
+          foregroundColor: AppColors.mutedSoftFor(brightness),
+        );
+      case _SessionStatusTone.signal:
+        return _SessionStatusPillColors(
+          backgroundColor: AppColors.tintSurfaceFor(
+            brightness,
+            AppColors.signalFor(brightness),
+          ),
+          borderColor: AppColors.tintBorderFor(
+            brightness,
+            AppColors.signalFor(brightness),
+          ),
+          foregroundColor: AppColors.signalFor(brightness),
+        );
+      case _SessionStatusTone.warning:
+        return _SessionStatusPillColors(
+          backgroundColor: AppColors.warningSurfaceFor(brightness),
+          borderColor: AppColors.warningBorderFor(brightness),
+          foregroundColor: AppColors.warningTextFor(brightness),
+        );
+      case _SessionStatusTone.error:
+        return _SessionStatusPillColors(
+          backgroundColor: AppColors.errorBgFor(brightness),
+          borderColor: AppColors.errorBorderFor(brightness),
+          foregroundColor: AppColors.errorTextFor(brightness),
+        );
+      case _SessionStatusTone.idle:
+        return _SessionStatusPillColors(
+          backgroundColor: AppColors.tintSurfaceFor(
+            brightness,
+            AppColors.idleFor(brightness),
+          ),
+          borderColor: AppColors.tintBorderFor(
+            brightness,
+            AppColors.idleFor(brightness),
+          ),
+          foregroundColor: AppColors.idleFor(brightness),
+        );
+    }
+  }
+}
+
+class _SessionStatusPillColors {
+  const _SessionStatusPillColors({
+    required this.backgroundColor,
+    required this.borderColor,
+    required this.foregroundColor,
+  });
+
+  final Color backgroundColor;
+  final Color borderColor;
+  final Color foregroundColor;
+}
 
 class _SessionMessagesSkeleton extends StatelessWidget {
   const _SessionMessagesSkeleton({super.key});

@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -15,9 +16,28 @@ import 'package:omni_code/src/services/speech_input_service.dart';
 import 'package:omni_code/src/services/tts_service.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 
+const _localNotificationsChannel =
+    MethodChannel('dexterous.com/flutter/local_notifications');
+
+_FakeAndroidFlutterLocalNotificationsPlugin _fakeNotifications() {
+  return FlutterLocalNotificationsPlatform.instance
+      as _FakeAndroidFlutterLocalNotificationsPlugin;
+}
+
 void main() {
   setUp(() {
     appSettingsController.debugReplaceSettings(AppSettings.defaults());
+    FlutterLocalNotificationsPlatform.instance =
+        _FakeAndroidFlutterLocalNotificationsPlugin();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_localNotificationsChannel, (call) async {
+      return null;
+    });
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_localNotificationsChannel, null);
   });
 
   testWidgets('pressing enter sends the current draft', (tester) async {
@@ -1095,6 +1115,181 @@ void main() {
     expect(find.text('Requesting TTS playback...'), findsNothing);
   });
 
+  testWidgets('auto speak still triggers while app is backgrounded',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        autoSpeakReplies: true,
+        asrProvider: AsrProvider.zhipu,
+        ttsProvider: TtsProvider.zhipu,
+      ),
+    );
+    final eventGate = Completer<void>();
+    final ttsService = _FakeTtsService(systemAvailable: false);
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          await eventGate.future;
+          return http.Response(
+            _eventStreamBody([
+              {
+                'type': 'message_created',
+                'payload': _messageJson(
+                  id: 'assistant-lockscreen-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: 'Reply while locked',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            ]),
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          ttsService: ttsService,
+          audioRecordingService:
+              _FakeAudioRecordingService(hasPermissionResult: true),
+          speechInputService: _FakeSpeechInputService(initializeResult: false),
+          enableSpeechServices: true,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+
+    eventGate.complete();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(ttsService.spokenTexts, ['Reply while locked']);
+  });
+
+  testWidgets(
+      'approval request triggers notification while app is backgrounded',
+      (tester) async {
+    final eventGate = Completer<void>();
+    final approval = _approvalRequest(
+      requestId: 'approval-lockscreen-1',
+      command: 'git push origin main',
+      reason: 'Needs network access',
+    );
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          await eventGate.future;
+          return http.Response(
+            _eventStreamBody([
+              {
+                'type': 'approval_requested',
+                'payload': {
+                  'request': {
+                    'request_id': approval.requestId,
+                    'kind': approval.kind,
+                    'command': approval.command,
+                    'reason': approval.reason,
+                    'allow_accept_for_session': approval.allowAcceptForSession,
+                    'allow_cancel': approval.allowCancel,
+                    'resolvable': approval.resolvable,
+                  },
+                },
+              },
+            ]),
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    final notifications = _fakeNotifications();
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+
+    eventGate.complete();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(notifications.shownNotifications, hasLength(1));
+    final notification = notifications.shownNotifications.single;
+    expect(notification.title, 'Waiting for approval');
+    expect(notification.body, 'Needs network access');
+  },
+      variant: const TargetPlatformVariant(<TargetPlatform>{
+        TargetPlatform.android,
+      }));
+
+  testWidgets('awaiting approval uses consolidated status overview',
+      (tester) async {
+    final approval = _approvalRequest(
+      requestId: 'approval-1',
+      command: 'rm -rf /tmp/safe-test',
+      reason: 'Needs escalation',
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(
+            status: SessionStatus.awaitingApproval,
+            pendingApproval: approval,
+          ),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+        find.byKey(const ValueKey('session-status-overview')), findsOneWidget);
+    expect(find.text('Awaiting approval'), findsOneWidget);
+    expect(find.text('Waiting to process approval...'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Approve'), findsOneWidget);
+  });
+
   testWidgets(
       'submitting approval enters waiting processing state and hides actions',
       (tester) async {
@@ -1165,6 +1360,144 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Approve'), findsNothing);
     expect(find.widgetWithText(OutlinedButton, 'Reject'), findsNothing);
     expect(find.text('rm -rf /tmp/safe-test'), findsNothing);
+  });
+
+  testWidgets('stopped reply status auto dismisses', (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/projects/project-1/sessions') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _sessionJson(
+                  status: 'idle',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/cancel') {
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Stop reply'));
+    await tester.pump();
+
+    expect(find.text('Stopped this reply'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('session-status-overview')),
+      findsOneWidget,
+    );
+
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+
+    expect(find.text('Stopped this reply'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('session-status-overview')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('status overview can be dismissed manually', (tester) async {
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('session-status-overview')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('session-status-overview')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('error detail in status overview does not show copy button',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response('boom', 500);
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('session-status-overview')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('boom'), findsOneWidget);
+    expect(find.byType(SelectableText), findsWidgets);
+    expect(find.byIcon(Icons.copy), findsNothing);
+    expect(find.byTooltip('Copy'), findsNothing);
   });
 
   testWidgets('approval resolved does not show approval granted banner',
@@ -1329,6 +1662,23 @@ Map<String, dynamic> _messageJson({
   };
 }
 
+Map<String, dynamic> _sessionJson({
+  String status = 'idle',
+}) {
+  return {
+    'id': 'session-1',
+    'project_id': 'project-1',
+    'title': 'Test Session',
+    'agent': 'codex',
+    'brief_reply_mode': false,
+    'status': status,
+    'updated_at': '2026-05-09T10:00:00.000',
+    'unread_count': 0,
+    'last_message_preview': null,
+    'pending_approval': null,
+  };
+}
+
 ApprovalRequest _approvalRequest({
   required String requestId,
   String? command,
@@ -1390,6 +1740,63 @@ class _FakeAudioRecordingService extends AudioRecordingService {
   }
 }
 
+class _FakeAndroidFlutterLocalNotificationsPlugin
+    extends AndroidFlutterLocalNotificationsPlugin {
+  final List<_ShownNotification> shownNotifications = <_ShownNotification>[];
+
+  @override
+  Future<bool> initialize({
+    required AndroidInitializationSettings settings,
+    DidReceiveNotificationResponseCallback? onDidReceiveNotificationResponse,
+    DidReceiveBackgroundNotificationResponseCallback?
+        onDidReceiveBackgroundNotificationResponse,
+  }) async {
+    return true;
+  }
+
+  @override
+  Future<bool?> requestNotificationsPermission() async {
+    return true;
+  }
+
+  @override
+  Future<void> createNotificationChannel(
+    AndroidNotificationChannel notificationChannel,
+  ) async {}
+
+  @override
+  Future<void> show({
+    required int id,
+    String? title,
+    String? body,
+    AndroidNotificationDetails? notificationDetails,
+    String? payload,
+  }) async {
+    shownNotifications.add(
+      _ShownNotification(
+        id: id,
+        title: title,
+        body: body,
+        payload: payload,
+      ),
+    );
+  }
+}
+
+class _ShownNotification {
+  const _ShownNotification({
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.payload,
+  });
+
+  final int id;
+  final String? title;
+  final String? body;
+  final String? payload;
+}
+
 class _FakeSpeechInputService extends SpeechInputService {
   _FakeSpeechInputService({
     required this.initializeResult,
@@ -1414,6 +1821,8 @@ class _FakeTtsService extends TtsService {
   });
 
   final bool systemAvailable;
+  final List<String> spokenTexts = <String>[];
+  int initializeCalls = 0;
 
   @override
   bool get isSystemTtsAvailable => systemAvailable;
@@ -1424,10 +1833,14 @@ class _FakeTtsService extends TtsService {
     void Function()? onComplete,
     void Function()? onCancel,
     void Function(String message)? onError,
-  }) async {}
+  }) async {
+    initializeCalls += 1;
+  }
 
   @override
-  Future<void> speak(String text) async {}
+  Future<void> speak(String text) async {
+    spokenTexts.add(text);
+  }
 
   @override
   Future<void> stop({bool notifyCancel = true}) async {}
