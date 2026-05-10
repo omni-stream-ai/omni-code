@@ -22,7 +22,6 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_back_header.dart';
 import '../widgets/app_skeleton.dart';
-import '../widgets/copyable_message.dart';
 
 class SessionDetailScreen extends StatefulWidget {
   const SessionDetailScreen({
@@ -1477,6 +1476,19 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           _reconcileSubmittedApprovalState();
         });
         _syncSessionSummaryCache();
+        if (!_appInForeground) {
+          unawaited(
+            notificationService.showApprovalRequestNotification(
+              _session,
+              title: context.l10n.waitingApprovalTitle,
+              body: approval.reason?.trim().isNotEmpty == true
+                  ? approval.reason!.trim()
+                  : approval.command?.trim().isNotEmpty == true
+                      ? approval.command!.trim()
+                      : context.l10n.waitingApprovalBody,
+            ),
+          );
+        }
         break;
       case 'approval_resolved':
         final requestId = payload['request_id'] as String? ?? '';

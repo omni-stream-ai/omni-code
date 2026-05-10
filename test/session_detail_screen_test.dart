@@ -19,6 +19,11 @@ import 'package:omni_code/src/settings/app_settings.dart';
 const _localNotificationsChannel =
     MethodChannel('dexterous.com/flutter/local_notifications');
 
+_FakeAndroidFlutterLocalNotificationsPlugin _fakeNotifications() {
+  return FlutterLocalNotificationsPlatform.instance
+      as _FakeAndroidFlutterLocalNotificationsPlugin;
+}
+
 void main() {
   setUp(() {
     appSettingsController.debugReplaceSettings(AppSettings.defaults());
@@ -666,6 +671,81 @@ void main() {
     expect(ttsService.spokenTexts, ['Reply while locked']);
   });
 
+  testWidgets(
+      'approval request triggers notification while app is backgrounded',
+      (tester) async {
+    final eventGate = Completer<void>();
+    final approval = _approvalRequest(
+      requestId: 'approval-lockscreen-1',
+      command: 'git push origin main',
+      reason: 'Needs network access',
+    );
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          await eventGate.future;
+          return http.Response(
+            _eventStreamBody([
+              {
+                'type': 'approval_requested',
+                'payload': {
+                  'request': {
+                    'request_id': approval.requestId,
+                    'kind': approval.kind,
+                    'command': approval.command,
+                    'reason': approval.reason,
+                    'allow_accept_for_session': approval.allowAcceptForSession,
+                    'allow_cancel': approval.allowCancel,
+                    'resolvable': approval.resolvable,
+                  },
+                },
+              },
+            ]),
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    final notifications = _fakeNotifications();
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+
+    eventGate.complete();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(notifications.shownNotifications, hasLength(1));
+    final notification = notifications.shownNotifications.single;
+    expect(notification.title, 'Waiting for approval');
+    expect(notification.body, 'Needs network access');
+  },
+      variant: const TargetPlatformVariant(<TargetPlatform>{
+        TargetPlatform.android,
+      }));
+
   testWidgets('awaiting approval uses consolidated status overview',
       (tester) async {
     final approval = _approvalRequest(
@@ -1119,6 +1199,8 @@ class _FakeAudioRecordingService extends AudioRecordingService {
 
 class _FakeAndroidFlutterLocalNotificationsPlugin
     extends AndroidFlutterLocalNotificationsPlugin {
+  final List<_ShownNotification> shownNotifications = <_ShownNotification>[];
+
   @override
   Future<bool> initialize({
     required AndroidInitializationSettings settings,
@@ -1146,7 +1228,30 @@ class _FakeAndroidFlutterLocalNotificationsPlugin
     String? body,
     AndroidNotificationDetails? notificationDetails,
     String? payload,
-  }) async {}
+  }) async {
+    shownNotifications.add(
+      _ShownNotification(
+        id: id,
+        title: title,
+        body: body,
+        payload: payload,
+      ),
+    );
+  }
+}
+
+class _ShownNotification {
+  const _ShownNotification({
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.payload,
+  });
+
+  final int id;
+  final String? title;
+  final String? body;
+  final String? payload;
 }
 
 class _FakeSpeechInputService extends SpeechInputService {
