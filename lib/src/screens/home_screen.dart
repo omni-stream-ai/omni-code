@@ -27,17 +27,19 @@ const _bridgeRepositoryUrl =
 enum _HomeSurfaceState { loading, connect, waitingApproval, dashboard }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.client});
+  const HomeScreen({super.key, this.client, this.now});
 
   final BridgeClient? client;
+  final DateTime Function()? now;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const _recentPageSize = 5;
   static const _progressMinHeight = AppSpacing.textStack + AppSpacing.hairline;
+  static const _resumeRefreshThrottle = Duration(seconds: 15);
 
   final _bridgeUrlController = TextEditingController();
   List<ProjectSummary>? _projects;
@@ -54,12 +56,15 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _authRequestId;
   int _visibleRecentCount = _recentPageSize;
   Timer? _authPollTimer;
+  DateTime? _lastHomeDataLoadAt;
 
   BridgeClient get _client => widget.client ?? bridgeClient;
+  DateTime Function() get _now => widget.now ?? DateTime.now;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _bridgeUrlController.text = appSettingsController.settings.bridgeUrl;
     _projects = _client.peekProjects();
     _recentSessions = _client.peekSessions();
@@ -70,12 +75,35 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _authPollTimer?.cancel();
     _bridgeUrlController.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      return;
+    }
+    if (_isLoading ||
+        _isRefreshing ||
+        _needsAuthorization ||
+        _isWaitingAuth ||
+        _isAuthorizing ||
+        _isSavingBridgeConfig) {
+      return;
+    }
+    final lastLoadAt = _lastHomeDataLoadAt;
+    if (lastLoadAt != null &&
+        _now().difference(lastLoadAt) < _resumeRefreshThrottle) {
+      return;
+    }
+    unawaited(_loadHomeData(forceRefresh: true));
+  }
+
   Future<void> _loadHomeData({bool forceRefresh = false}) async {
+    _lastHomeDataLoadAt = _now();
     final cachedProjects = _client.peekProjects();
     final cachedSessions = _client.peekSessions();
     final shouldRefreshFromNetwork = forceRefresh ||
