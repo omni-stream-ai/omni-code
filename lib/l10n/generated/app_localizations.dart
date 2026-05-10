@@ -236,11 +236,11 @@ abstract class AppLocalizations {
   /// **'Whisper / OpenAI Compatible'**
   String get whisperCompatible;
 
-  /// No description provided for @volcengineStreamingAsr.
+  /// No description provided for @tencentCloudStreamingAsr.
   ///
   /// In en, this message translates to:
-  /// **'Volcengine Streaming'**
-  String get volcengineStreamingAsr;
+  /// **'Tencent Cloud Streaming'**
+  String get tencentCloudStreamingAsr;
 
   /// No description provided for @apiKey.
   ///
@@ -254,17 +254,17 @@ abstract class AppLocalizations {
   /// **'App ID'**
   String get appId;
 
-  /// No description provided for @accessToken.
+  /// No description provided for @secretId.
   ///
   /// In en, this message translates to:
-  /// **'Access Token'**
-  String get accessToken;
+  /// **'Secret ID'**
+  String get secretId;
 
-  /// No description provided for @cluster.
+  /// No description provided for @secretKey.
   ///
   /// In en, this message translates to:
-  /// **'Cluster'**
-  String get cluster;
+  /// **'Secret Key'**
+  String get secretKey;
 
   /// No description provided for @baseUrl.
   ///
@@ -836,6 +836,42 @@ abstract class AppLocalizations {
   /// **'Voice input'**
   String get voiceInput;
 
+  /// No description provided for @voiceChatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice chat'**
+  String get voiceChatTitle;
+
+  /// No description provided for @callModeListening.
+  ///
+  /// In en, this message translates to:
+  /// **'Go ahead, I\'m listening'**
+  String get callModeListening;
+
+  /// No description provided for @callModeSpeaking.
+  ///
+  /// In en, this message translates to:
+  /// **'Replying out loud'**
+  String get callModeSpeaking;
+
+  /// No description provided for @callModeWorking.
+  ///
+  /// In en, this message translates to:
+  /// **'Thinking through your request'**
+  String get callModeWorking;
+
+  /// No description provided for @callModeIdleSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Speak naturally. I will listen, send, and read the reply back.'**
+  String get callModeIdleSubtitle;
+
+  /// No description provided for @callModeOpenChatHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Open chat history'**
+  String get callModeOpenChatHistory;
+
   /// No description provided for @startCallMode.
   ///
   /// In en, this message translates to:
@@ -857,7 +893,7 @@ abstract class AppLocalizations {
   /// No description provided for @callModeRequiresStreamingAsr.
   ///
   /// In en, this message translates to:
-  /// **'Call mode currently requires either the System ASR provider or Volcengine Streaming.'**
+  /// **'Call mode currently requires either the System ASR provider or Tencent Cloud Streaming.'**
   String get callModeRequiresStreamingAsr;
 
   /// No description provided for @send.
@@ -1358,23 +1394,29 @@ abstract class AppLocalizations {
   /// **'Whisper ASR response is missing text'**
   String get whisperAsrMissingText;
 
-  /// No description provided for @volcengineAppIdRequired.
+  /// No description provided for @tencentCloudAppIdRequired.
   ///
   /// In en, this message translates to:
-  /// **'Fill in the Volcengine App ID in settings first'**
-  String get volcengineAppIdRequired;
+  /// **'Fill in the Tencent Cloud App ID in settings first'**
+  String get tencentCloudAppIdRequired;
 
-  /// No description provided for @volcengineAccessTokenRequired.
+  /// No description provided for @tencentCloudAppIdInvalid.
   ///
   /// In en, this message translates to:
-  /// **'Fill in the Volcengine access token in settings first'**
-  String get volcengineAccessTokenRequired;
+  /// **'Tencent Cloud App ID must be a number'**
+  String get tencentCloudAppIdInvalid;
 
-  /// No description provided for @volcengineClusterRequired.
+  /// No description provided for @tencentCloudSecretIdRequired.
   ///
   /// In en, this message translates to:
-  /// **'Fill in the Volcengine cluster in settings first'**
-  String get volcengineClusterRequired;
+  /// **'Fill in the Tencent Cloud Secret ID in settings first'**
+  String get tencentCloudSecretIdRequired;
+
+  /// No description provided for @tencentCloudSecretKeyRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill in the Tencent Cloud Secret Key in settings first'**
+  String get tencentCloudSecretKeyRequired;
 
   /// No description provided for @zhipuTtsRequestFailed.
   ///

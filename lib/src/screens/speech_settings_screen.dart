@@ -29,9 +29,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   final _zhipuApiKeyController = TextEditingController();
   final _whisperApiKeyController = TextEditingController();
   final _whisperBaseUrlController = TextEditingController();
-  final _volcengineAppIdController = TextEditingController();
-  final _volcengineAccessTokenController = TextEditingController();
-  final _volcengineClusterController = TextEditingController();
+  final _tencentCloudAppIdController = TextEditingController();
+  final _tencentCloudSecretIdController = TextEditingController();
+  final _tencentCloudSecretKeyController = TextEditingController();
 
   late TtsProvider _ttsProvider;
   late AsrProvider _asrProvider;
@@ -84,9 +84,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     _zhipuApiKeyController.dispose();
     _whisperApiKeyController.dispose();
     _whisperBaseUrlController.dispose();
-    _volcengineAppIdController.dispose();
-    _volcengineAccessTokenController.dispose();
-    _volcengineClusterController.dispose();
+    _tencentCloudAppIdController.dispose();
+    _tencentCloudSecretIdController.dispose();
+    _tencentCloudSecretKeyController.dispose();
     super.dispose();
   }
 
@@ -96,9 +96,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     _zhipuApiKeyController.text = settings.zhipuApiKey;
     _whisperApiKeyController.text = settings.whisperApiKey;
     _whisperBaseUrlController.text = settings.whisperBaseUrl;
-    _volcengineAppIdController.text = settings.volcengineAppId;
-    _volcengineAccessTokenController.text = settings.volcengineAccessToken;
-    _volcengineClusterController.text = settings.volcengineCluster;
+    _tencentCloudAppIdController.text = settings.tencentCloudAppId;
+    _tencentCloudSecretIdController.text = settings.tencentCloudSecretId;
+    _tencentCloudSecretKeyController.text = settings.tencentCloudSecretKey;
   }
 
   void _onSettingsChanged() {
@@ -225,8 +225,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                                       child: Text(l10n.whisperCompatible),
                                     ),
                                     DropdownMenuItem(
-                                      value: AsrProvider.volcengineStreaming,
-                                      child: Text(l10n.volcengineStreamingAsr),
+                                      value: AsrProvider.tencentCloudStreaming,
+                                      child: Text(l10n.tencentCloudStreamingAsr),
                                     ),
                                   ],
                                   onChanged: (value) {
@@ -295,10 +295,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                         const SizedBox(height: AppSpacing.stackTight),
                         _buildSectionCard(
                           context,
-                          title: 'VOLCENGINE STREAMING ASR',
+                          title: 'TENCENT CLOUD STREAMING ASR',
                           children: [
                             TextField(
-                              controller: _volcengineAppIdController,
+                              controller: _tencentCloudAppIdController,
                               style: formValueTextStyle,
                               decoration: InputDecoration(
                                 labelText: l10n.appId,
@@ -306,20 +306,19 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                             ),
                             const SizedBox(height: AppSpacing.stack),
                             TextField(
-                              controller: _volcengineAccessTokenController,
-                              obscureText: true,
+                              controller: _tencentCloudSecretIdController,
                               style: formValueTextStyle,
                               decoration: InputDecoration(
-                                labelText: l10n.accessToken,
+                                labelText: l10n.secretId,
                               ),
                             ),
                             const SizedBox(height: AppSpacing.stack),
                             TextField(
-                              controller: _volcengineClusterController,
+                              controller: _tencentCloudSecretKeyController,
+                              obscureText: true,
                               style: formValueTextStyle,
                               decoration: InputDecoration(
-                                labelText: l10n.cluster,
-                                hintText: 'volcengine_input_common',
+                                labelText: l10n.secretKey,
                               ),
                             ),
                           ],
@@ -461,9 +460,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         zhipuApiKey: _zhipuApiKeyController.text.trim(),
         whisperApiKey: _whisperApiKeyController.text.trim(),
         whisperBaseUrl: _whisperBaseUrlController.text.trim(),
-        volcengineAppId: _volcengineAppIdController.text.trim(),
-        volcengineAccessToken: _volcengineAccessTokenController.text.trim(),
-        volcengineCluster: _volcengineClusterController.text.trim(),
+        tencentCloudAppId: _tencentCloudAppIdController.text.trim(),
+        tencentCloudSecretId: _tencentCloudSecretIdController.text.trim(),
+        tencentCloudSecretKey: _tencentCloudSecretKeyController.text.trim(),
       );
       await appSettingsController.save(next);
       if (!mounted) {

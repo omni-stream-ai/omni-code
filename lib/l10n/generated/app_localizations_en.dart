@@ -80,7 +80,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whisperCompatible => 'Whisper / OpenAI Compatible';
 
   @override
-  String get volcengineStreamingAsr => 'Volcengine Streaming';
+  String get tencentCloudStreamingAsr => 'Tencent Cloud Streaming';
 
   @override
   String get apiKey => 'API Key';
@@ -89,10 +89,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appId => 'App ID';
 
   @override
-  String get accessToken => 'Access Token';
+  String get secretId => 'Secret ID';
 
   @override
-  String get cluster => 'Cluster';
+  String get secretKey => 'Secret Key';
 
   @override
   String get baseUrl => 'Base URL';
@@ -426,6 +426,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get voiceInput => 'Voice input';
 
   @override
+  String get voiceChatTitle => 'Voice chat';
+
+  @override
+  String get callModeListening => 'Go ahead, I\'m listening';
+
+  @override
+  String get callModeSpeaking => 'Replying out loud';
+
+  @override
+  String get callModeWorking => 'Thinking through your request';
+
+  @override
+  String get callModeIdleSubtitle =>
+      'Speak naturally. I will listen, send, and read the reply back.';
+
+  @override
+  String get callModeOpenChatHistory => 'Open chat history';
+
+  @override
   String get startCallMode => 'Start call mode';
 
   @override
@@ -437,7 +456,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get callModeRequiresStreamingAsr =>
-      'Call mode currently requires either the System ASR provider or Volcengine Streaming.';
+      'Call mode currently requires either the System ASR provider or Tencent Cloud Streaming.';
 
   @override
   String get send => 'Send';
@@ -732,16 +751,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whisperAsrMissingText => 'Whisper ASR response is missing text';
 
   @override
-  String get volcengineAppIdRequired =>
-      'Fill in the Volcengine App ID in settings first';
+  String get tencentCloudAppIdRequired =>
+      'Fill in the Tencent Cloud App ID in settings first';
 
   @override
-  String get volcengineAccessTokenRequired =>
-      'Fill in the Volcengine access token in settings first';
+  String get tencentCloudAppIdInvalid =>
+      'Tencent Cloud App ID must be a number';
 
   @override
-  String get volcengineClusterRequired =>
-      'Fill in the Volcengine cluster in settings first';
+  String get tencentCloudSecretIdRequired =>
+      'Fill in the Tencent Cloud Secret ID in settings first';
+
+  @override
+  String get tencentCloudSecretKeyRequired =>
+      'Fill in the Tencent Cloud Secret Key in settings first';
 
   @override
   String zhipuTtsRequestFailed(Object statusCode, Object body) {

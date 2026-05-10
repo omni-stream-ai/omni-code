@@ -60,7 +60,7 @@ void main() {
     },
   );
 
-  testWidgets('shows Volcengine streaming ASR as a provider option',
+  testWidgets('shows Tencent Cloud streaming ASR as a provider option',
       (tester) async {
     await tester.pumpWidget(
       const _TestApp(
@@ -72,7 +72,21 @@ void main() {
     await tester.tap(find.text('System').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('Volcengine Streaming'), findsOneWidget);
+    expect(find.text('Tencent Cloud Streaming'), findsOneWidget);
+  });
+
+  testWidgets('shows Tencent Cloud credential fields',
+      (tester) async {
+    await tester.pumpWidget(
+      const _TestApp(
+        home: SpeechSettingsScreen(),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.widgetWithText(TextField, 'App ID'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Secret ID'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Secret Key'), findsOneWidget);
   });
 }
 

@@ -80,7 +80,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whisperCompatible => 'Whisper / OpenAI Compatible';
 
   @override
-  String get volcengineStreamingAsr => '火山引擎流式识别';
+  String get tencentCloudStreamingAsr => '腾讯云流式识别';
 
   @override
   String get apiKey => 'API Key';
@@ -89,10 +89,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appId => 'App ID';
 
   @override
-  String get accessToken => 'Access Token';
+  String get secretId => 'Secret ID';
 
   @override
-  String get cluster => 'Cluster';
+  String get secretKey => 'Secret Key';
 
   @override
   String get baseUrl => 'Base URL';
@@ -413,6 +413,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get voiceInput => '语音输入';
 
   @override
+  String get voiceChatTitle => '通话模式';
+
+  @override
+  String get callModeListening => '可以开始说了，我正在听';
+
+  @override
+  String get callModeSpeaking => '正在语音回复';
+
+  @override
+  String get callModeWorking => '正在思考你的请求';
+
+  @override
+  String get callModeIdleSubtitle => '直接说就行，我会自动听、自动发、再把回复念给你。';
+
+  @override
+  String get callModeOpenChatHistory => '查看对话记录';
+
+  @override
   String get startCallMode => '开启通话模式';
 
   @override
@@ -422,7 +440,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get callModeUnavailable => '语音服务尚未初始化完成，暂时无法使用通话模式。';
 
   @override
-  String get callModeRequiresStreamingAsr => '通话模式当前仅支持系统语音识别或火山引擎流式识别。';
+  String get callModeRequiresStreamingAsr => '通话模式当前仅支持系统语音识别或腾讯云流式识别。';
 
   @override
   String get send => '发送';
@@ -708,13 +726,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whisperAsrMissingText => 'Whisper ASR 响应缺少 text';
 
   @override
-  String get volcengineAppIdRequired => '请先在设置中填写火山引擎 App ID';
+  String get tencentCloudAppIdRequired => '请先在设置中填写腾讯云 App ID';
 
   @override
-  String get volcengineAccessTokenRequired => '请先在设置中填写火山引擎 Access Token';
+  String get tencentCloudAppIdInvalid => '腾讯云 App ID 必须是数字';
 
   @override
-  String get volcengineClusterRequired => '请先在设置中填写火山引擎 Cluster';
+  String get tencentCloudSecretIdRequired => '请先在设置中填写腾讯云 Secret ID';
+
+  @override
+  String get tencentCloudSecretKeyRequired => '请先在设置中填写腾讯云 Secret Key';
 
   @override
   String zhipuTtsRequestFailed(Object statusCode, Object body) {

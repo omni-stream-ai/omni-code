@@ -27,19 +27,19 @@ void main() {
     expect(settings.notificationMaxChars, 160);
   });
 
-  test('volcengine streaming settings round-trip through json', () {
+  test('tencent cloud streaming settings round-trip through json', () {
     final settings = AppSettings.defaults().copyWith(
-      asrProvider: AsrProvider.volcengineStreaming,
-      volcengineAppId: 'app-id',
-      volcengineAccessToken: 'token',
-      volcengineCluster: 'volcengine_input_common',
+      asrProvider: AsrProvider.tencentCloudStreaming,
+      tencentCloudAppId: '1234567890',
+      tencentCloudSecretId: 'secret-id',
+      tencentCloudSecretKey: 'secret-key',
     );
 
     final restored = AppSettings.fromJson(settings.toJson());
 
-    expect(restored.asrProvider, AsrProvider.volcengineStreaming);
-    expect(restored.volcengineAppId, 'app-id');
-    expect(restored.volcengineAccessToken, 'token');
-    expect(restored.volcengineCluster, 'volcengine_input_common');
+    expect(restored.asrProvider, AsrProvider.tencentCloudStreaming);
+    expect(restored.tencentCloudAppId, '1234567890');
+    expect(restored.tencentCloudSecretId, 'secret-id');
+    expect(restored.tencentCloudSecretKey, 'secret-key');
   });
 }

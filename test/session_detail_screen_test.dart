@@ -500,7 +500,8 @@ void main() {
     expect(find.text(message), findsOneWidget);
 
     await tester.tap(find.byType(TextField));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text(message), findsNothing);
   });
@@ -509,7 +510,7 @@ void main() {
       (tester) async {
     appSettingsController.debugReplaceSettings(
       AppSettings.defaults().copyWith(
-        asrProvider: AsrProvider.volcengineStreaming,
+        asrProvider: AsrProvider.tencentCloudStreaming,
       ),
     );
     final audioService = _FakeAudioRecordingService(hasPermissionResult: true);
@@ -542,6 +543,45 @@ void main() {
     expect(find.byKey(const Key('session-call-mode-button')), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Start call mode'), findsNothing);
     expect(callModeButton.onPressed, isNotNull);
+  });
+
+  testWidgets('entering call mode switches to immersive voice chat screen',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        asrProvider: AsrProvider.tencentCloudStreaming,
+      ),
+    );
+    final audioService = _FakeAudioRecordingService(hasPermissionResult: true);
+    final ttsService = _FakeTtsService(systemAvailable: false);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages([
+            _messageJson(
+              id: 'assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'Reply ready',
+              createdAt: '2026-05-09T10:00:01.000',
+            ),
+          ]),
+          audioRecordingService: audioService,
+          ttsService: ttsService,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-call-mode-button')));
+    await tester.pump();
+
+    expect(find.text('Voice chat'), findsOneWidget);
+    expect(find.text('Reply ready'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Voice input'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Send'), findsNothing);
   });
 
   testWidgets('cloud speech can be enabled explicitly from settings',

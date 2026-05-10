@@ -11,7 +11,7 @@ const _defaultNotificationMaxChars = 160;
 
 enum TtsProvider { system, zhipu }
 
-enum AsrProvider { system, zhipu, whisper, volcengineStreaming }
+enum AsrProvider { system, zhipu, whisper, tencentCloudStreaming }
 
 enum AppThemeModeSetting { system, light, dark }
 
@@ -29,9 +29,9 @@ class AppSettings {
     required this.zhipuApiKey,
     required this.whisperApiKey,
     required this.whisperBaseUrl,
-    required this.volcengineAppId,
-    required this.volcengineAccessToken,
-    required this.volcengineCluster,
+    required String tencentCloudAppId,
+    required String tencentCloudSecretId,
+    required String tencentCloudSecretKey,
     required this.updateManifestUrl,
     required this.aiApprovalEnabled,
     required this.aiApprovalBaseUrl,
@@ -41,7 +41,9 @@ class AppSettings {
     required this.notificationMaxChars,
     required this.autoSpeakReplies,
     required this.compressAssistantReplies,
-  });
+  })  : _tencentCloudAppId = tencentCloudAppId,
+        _tencentCloudSecretId = tencentCloudSecretId,
+        _tencentCloudSecretKey = tencentCloudSecretKey;
 
   final String bridgeUrl;
   final String bridgeToken;
@@ -54,9 +56,12 @@ class AppSettings {
   final String zhipuApiKey;
   final String whisperApiKey;
   final String whisperBaseUrl;
-  final String volcengineAppId;
-  final String volcengineAccessToken;
-  final String volcengineCluster;
+  final String? _tencentCloudAppId;
+  final String? _tencentCloudSecretId;
+  final String? _tencentCloudSecretKey;
+  String get tencentCloudAppId => _tencentCloudAppId ?? '';
+  String get tencentCloudSecretId => _tencentCloudSecretId ?? '';
+  String get tencentCloudSecretKey => _tencentCloudSecretKey ?? '';
   final String updateManifestUrl;
   final bool aiApprovalEnabled;
   final String aiApprovalBaseUrl;
@@ -86,9 +91,9 @@ class AppSettings {
       zhipuApiKey: '',
       whisperApiKey: '',
       whisperBaseUrl: 'https://api.openai.com/v1',
-      volcengineAppId: '',
-      volcengineAccessToken: '',
-      volcengineCluster: 'volcengine_input_common',
+      tencentCloudAppId: '',
+      tencentCloudSecretId: '',
+      tencentCloudSecretKey: '',
       updateManifestUrl: updateManifestUrl.trim().isNotEmpty
           ? updateManifestUrl.trim()
           : _defaultUpdateManifestUrl,
@@ -115,9 +120,9 @@ class AppSettings {
     String? zhipuApiKey,
     String? whisperApiKey,
     String? whisperBaseUrl,
-    String? volcengineAppId,
-    String? volcengineAccessToken,
-    String? volcengineCluster,
+    String? tencentCloudAppId,
+    String? tencentCloudSecretId,
+    String? tencentCloudSecretKey,
     String? updateManifestUrl,
     bool? aiApprovalEnabled,
     String? aiApprovalBaseUrl,
@@ -141,10 +146,11 @@ class AppSettings {
       zhipuApiKey: zhipuApiKey ?? this.zhipuApiKey,
       whisperApiKey: whisperApiKey ?? this.whisperApiKey,
       whisperBaseUrl: whisperBaseUrl ?? this.whisperBaseUrl,
-      volcengineAppId: volcengineAppId ?? this.volcengineAppId,
-      volcengineAccessToken:
-          volcengineAccessToken ?? this.volcengineAccessToken,
-      volcengineCluster: volcengineCluster ?? this.volcengineCluster,
+      tencentCloudAppId: tencentCloudAppId ?? this.tencentCloudAppId,
+      tencentCloudSecretId:
+          tencentCloudSecretId ?? this.tencentCloudSecretId,
+      tencentCloudSecretKey:
+          tencentCloudSecretKey ?? this.tencentCloudSecretKey,
       updateManifestUrl: updateManifestUrl ?? this.updateManifestUrl,
       aiApprovalEnabled: aiApprovalEnabled ?? this.aiApprovalEnabled,
       aiApprovalBaseUrl: aiApprovalBaseUrl ?? this.aiApprovalBaseUrl,
@@ -171,9 +177,9 @@ class AppSettings {
       'zhipu_api_key': zhipuApiKey,
       'whisper_api_key': whisperApiKey,
       'whisper_base_url': whisperBaseUrl,
-      'volcengine_app_id': volcengineAppId,
-      'volcengine_access_token': volcengineAccessToken,
-      'volcengine_cluster': volcengineCluster,
+      'tencent_cloud_app_id': tencentCloudAppId,
+      'tencent_cloud_secret_id': tencentCloudSecretId,
+      'tencent_cloud_secret_key': tencentCloudSecretKey,
       'update_manifest_url': updateManifestUrl,
       'ai_approval_enabled': aiApprovalEnabled,
       'ai_approval_base_url': aiApprovalBaseUrl,
@@ -213,13 +219,9 @@ class AppSettings {
       whisperApiKey: _readString(json, 'whisper_api_key'),
       whisperBaseUrl:
           _readString(json, 'whisper_base_url', defaults.whisperBaseUrl),
-      volcengineAppId: _readString(json, 'volcengine_app_id'),
-      volcengineAccessToken: _readString(json, 'volcengine_access_token'),
-      volcengineCluster: _readString(
-        json,
-        'volcengine_cluster',
-        defaults.volcengineCluster,
-      ),
+      tencentCloudAppId: _readString(json, 'tencent_cloud_app_id'),
+      tencentCloudSecretId: _readString(json, 'tencent_cloud_secret_id'),
+      tencentCloudSecretKey: _readString(json, 'tencent_cloud_secret_key'),
       updateManifestUrl:
           _readString(json, 'update_manifest_url').trim().isNotEmpty
               ? _readString(json, 'update_manifest_url').trim()

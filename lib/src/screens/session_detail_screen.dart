@@ -17,13 +17,14 @@ import '../services/notification_service.dart';
 import '../services/audio_recording_service.dart';
 import '../services/speech_input_service.dart';
 import '../services/tts_service.dart';
-import '../services/volcengine_streaming_asr_service.dart';
+import '../services/tencent_cloud_streaming_asr_service.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_back_header.dart';
 import '../widgets/app_skeleton.dart';
 import '../widgets/copyable_message.dart';
+import '../../l10n/generated/app_localizations.dart';
 
 class SessionDetailScreen extends StatefulWidget {
   const SessionDetailScreen({
@@ -52,7 +53,7 @@ class SessionDetailScreen extends StatefulWidget {
 }
 
 class _SessionDetailScreenState extends State<SessionDetailScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   static const double _bottomAutoScrollThreshold = 96;
   static const double _messageBubbleMaxWidth = 320;
   static const double _assistantMessageBubbleWidthFactor = 0.82;
@@ -61,7 +62,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   late final AudioRecordingService _audioRecordingService;
   late final SpeechInputService _speechInputService;
   late final TtsService _ttsService;
-  late final VolcengineStreamingAsrService _volcengineStreamingAsrService;
+  late final TencentCloudStreamingAsrService _tencentCloudStreamingAsrService;
   final Set<String> _autoSpokenAssistantMessageIds = <String>{};
   final Set<String> _notifiedAssistantMessageIds = <String>{};
   final Map<String, _LocalMessageDraft> _localMessageStates = {};
@@ -69,6 +70,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   final List<ChatMessage> _messages = [];
   StreamSubscription<Map<String, dynamic>>? _eventsSubscription;
   Timer? _eventsReconnectTimer;
+  late final AnimationController _callModeOrbController;
 
   String? _recordingPath;
   String _recognizedSpeech = '';
@@ -160,12 +162,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   @override
   void initState() {
     super.initState();
+    _callModeOrbController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2600),
+    )..repeat(reverse: true);
     WidgetsBinding.instance.addObserver(this);
     _audioRecordingService =
         widget.audioRecordingService ?? AudioRecordingService();
     _speechInputService = widget.speechInputService ?? SpeechInputService();
     _ttsService = widget.ttsService ?? TtsService();
-    _volcengineStreamingAsrService = VolcengineStreamingAsrService();
+    _tencentCloudStreamingAsrService = TencentCloudStreamingAsrService();
     _session = widget.session;
     _pendingApproval = _session.pendingApproval;
     _creatingSession = widget.sessionInitializer != null;
@@ -184,12 +190,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   @override
   void dispose() {
+    _callModeOrbController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _eventsSubscription?.cancel();
     _eventsReconnectTimer?.cancel();
     unawaited(_audioRecordingService.cancel());
     unawaited(_speechInputService.cancel());
-    unawaited(_volcengineStreamingAsrService.cancel());
+    unawaited(_tencentCloudStreamingAsrService.cancel());
     _ttsService.stop();
     _controller.dispose();
     _scrollController.dispose();
@@ -215,6 +222,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (_callModeEnabled) {
+      return _buildCallModeScaffold(context);
+    }
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final brightness = theme.brightness;
@@ -451,6 +461,559 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           ),
         ],
       ),
+    );
+  }
+
+  Scaffold _buildCallModeScaffold(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final l10n = context.l10n;
+    final speechBannerMessage = _speechBannerMessage;
+    final lastAssistantMessage = _latestAssistantMessage;
+    final lastAssistantPreview = _previewText(lastAssistantMessage?.content);
+    final liveTranscript = _recognizedSpeech.trim().isNotEmpty
+        ? _recognizedSpeech.trim()
+        : _controller.text.trim();
+    final statusLine = _callModeStatusLine(l10n);
+    final subtitle = liveTranscript.isNotEmpty
+        ? liveTranscript
+        : (lastAssistantPreview.isNotEmpty
+            ? lastAssistantPreview
+            : _callModeIdleSubtitle(l10n));
+    final orbScale = _isListening
+        ? 1.08
+        : _isSpeaking
+            ? 1.04
+            : _session.status == SessionStatus.running
+                ? 1.02
+                : 0.96;
+
+    return Scaffold(
+      backgroundColor: brightness == Brightness.dark
+          ? const Color(0xFF0B1020)
+          : const Color(0xFFF5F8FF),
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: brightness == Brightness.dark
+                ? const [
+                    Color(0xFF121A31),
+                    Color(0xFF0F1527),
+                    Color(0xFF0B1020),
+                  ]
+                : const [
+                    Color(0xFFFDFEFF),
+                    Color(0xFFEFF5FF),
+                    Color(0xFFEAF1FF),
+                  ],
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.block,
+              AppSpacing.compact,
+              AppSpacing.block,
+              AppSpacing.block,
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: l10n.close,
+                      onPressed: () => unawaited(_disableCallMode()),
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                    ),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Text(
+                            l10n.voiceChatTitle,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _session.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: AppColors.mutedSoftFor(brightness),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
+                const Spacer(),
+                Text(
+                  statusLine,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: AppColors.accentBlueFor(brightness),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.stack),
+                _buildCallModeOrb(
+                  brightness: brightness,
+                  baseScale: orbScale,
+                ),
+                const SizedBox(height: AppSpacing.section),
+                Container(
+                  width: double.infinity,
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.section,
+                    vertical: AppSpacing.card,
+                  ),
+                  decoration: BoxDecoration(
+                    color: brightness == Brightness.dark
+                        ? Colors.white.withValues(alpha: 0.06)
+                        : Colors.white.withValues(alpha: 0.72),
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusHero),
+                    border: Border.all(
+                      color: brightness == Brightness.dark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : const Color(0xFFD9E6FF),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        subtitle,
+                        textAlign: TextAlign.center,
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          height: 1.45,
+                          color: AppColors.textSoftFor(brightness),
+                        ),
+                      ),
+                      if (speechBannerMessage != null) ...[
+                        const SizedBox(height: AppSpacing.stack),
+                        Text(
+                          speechBannerMessage,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppColors.errorTextFor(brightness),
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildCallModeControlButton(
+                      brightness: brightness,
+                      icon: Icons.chat_bubble_outline_rounded,
+                      tooltip: l10n.callModeOpenChatHistory,
+                      onPressed: () {
+                        unawaited(_disableCallMode());
+                        _showLatestConversationPreview();
+                      },
+                    ),
+                    const SizedBox(width: AppSpacing.section),
+                    _buildCallModePrimaryButton(
+                      brightness: brightness,
+                      onPressed: () {
+                        if (_session.status == SessionStatus.running) {
+                          unawaited(_cancelReply());
+                          return;
+                        }
+                        unawaited(_toggleListening());
+                      },
+                    ),
+                    const SizedBox(width: AppSpacing.section),
+                    _buildCallModeControlButton(
+                      brightness: brightness,
+                      icon: Icons.close_rounded,
+                      tooltip: l10n.close,
+                      onPressed: () => unawaited(_disableCallMode()),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCallModeControlButton({
+    required Brightness brightness,
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: brightness == Brightness.dark
+                  ? Colors.white.withValues(alpha: 0.07)
+                  : Colors.white.withValues(alpha: 0.82),
+              border: Border.all(
+                color: brightness == Brightness.dark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : const Color(0xFFD7E5FF),
+              ),
+            ),
+            child: Icon(
+              icon,
+              color: AppColors.textSoftFor(brightness),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCallModeOrb({
+    required Brightness brightness,
+    required double baseScale,
+  }) {
+    final intensity = _isListening
+        ? 1.0
+        : _isSpeaking
+            ? 0.82
+            : _session.status == SessionStatus.running
+                ? 0.68
+                : 0.46;
+    return AnimatedBuilder(
+      animation: _callModeOrbController,
+      builder: (context, child) {
+        final wave = Curves.easeInOut.transform(_callModeOrbController.value);
+        final pulseScale = 0.965 + (0.08 * intensity * wave);
+        final haloScale = 1.08 + (0.18 * intensity * wave);
+        final haloOpacity = 0.12 + (0.18 * intensity * wave);
+        final sparkleOffset = -0.16 + (0.12 * wave);
+        return Transform.scale(
+          scale: baseScale * pulseScale,
+          child: SizedBox(
+            width: 258,
+            height: 258,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Transform.scale(
+                  scale: haloScale,
+                  child: Container(
+                    width: 188,
+                    height: 188,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          const Color(0xFF78A7FF).withValues(alpha: haloOpacity),
+                          const Color(0xFFB392FF)
+                              .withValues(alpha: haloOpacity * 0.62),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 34,
+                  child: Container(
+                    width: 154,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+                      gradient: RadialGradient(
+                        colors: [
+                          const Color(0xFF6C8FFF)
+                              .withValues(alpha: 0.16 + (0.10 * intensity)),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 236,
+                  height: 236,
+                  alignment: Alignment.center,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Align(
+                        alignment: Alignment(-0.04 + (0.04 * wave), 0.02),
+                        child: Container(
+                          width: 188,
+                          height: 188,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                const Color(0xFFFFD7EB)
+                                    .withValues(alpha: 0.18 + (0.08 * intensity)),
+                                const Color(0xFF9A88FF)
+                                    .withValues(alpha: 0.10 + (0.06 * intensity)),
+                                const Color(0xFF4E78FF)
+                                    .withValues(alpha: 0.04 + (0.04 * intensity)),
+                                Colors.transparent,
+                              ],
+                              stops: const [0.0, 0.34, 0.72, 1.0],
+                            ),
+                          ),
+                        ),
+                      ),
+                      ShaderMask(
+                        blendMode: BlendMode.dstIn,
+                        shaderCallback: (bounds) {
+                          return const RadialGradient(
+                            center: Alignment(0, -0.04),
+                            radius: 0.88,
+                            colors: [
+                              Colors.white,
+                              Colors.white,
+                              Colors.transparent,
+                            ],
+                            stops: [0.0, 0.58, 1.0],
+                          ).createShader(bounds);
+                        },
+                        child: CustomPaint(
+                          painter: _CallModeOrbPainter(
+                            progress: _callModeOrbController.value,
+                            intensity: intensity,
+                            brightness: brightness,
+                          ),
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment(sparkleOffset, -0.46),
+                        child: Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                Colors.white.withValues(alpha: 0.22),
+                                Colors.white.withValues(alpha: 0.06),
+                                Colors.transparent,
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCallModePrimaryButton({
+    required Brightness brightness,
+    required VoidCallback onPressed,
+  }) {
+    final isBusy = _session.status == SessionStatus.running;
+    final isLive = _isListening || _streamingAsrActive;
+    final icon = isBusy
+        ? Icons.stop_rounded
+        : isLive
+            ? Icons.graphic_eq_rounded
+            : Icons.mic_rounded;
+    final background = isBusy
+        ? const Color(0xFFFF7B6B)
+        : const Color(0xFF1E74FF);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+        child: Container(
+          width: 76,
+          height: 76,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: background,
+            boxShadow: [
+              BoxShadow(
+                color: background.withValues(alpha: 0.28),
+                blurRadius: 24,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Icon(
+            icon,
+            size: 30,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+  ChatMessage? get _latestAssistantMessage {
+    for (var index = _messages.length - 1; index >= 0; index -= 1) {
+      final message = _messages[index];
+      if (message.role == MessageRole.assistant &&
+          message.content.trim().isNotEmpty) {
+        return message;
+      }
+    }
+    return null;
+  }
+
+  String _previewText(String? value) {
+    final trimmed = (value ?? '').trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    final normalized = trimmed.replaceAll(RegExp(r'\s+'), ' ');
+    if (normalized.length <= 120) {
+      return normalized;
+    }
+    return '${normalized.substring(0, 117)}...';
+  }
+
+  String _callModeStatusLine(AppLocalizations l10n) {
+    if (_speechError != null && _speechError!.trim().isNotEmpty) {
+      return _speechError!;
+    }
+    if (_session.status == SessionStatus.awaitingApproval) {
+      return l10n.waitingApprovalProcessing;
+    }
+    if (_session.status == SessionStatus.running) {
+      return l10n.callModeWorking;
+    }
+    if (_callModeAwaitingPlaybackCompletion || _isSpeaking) {
+      return l10n.callModeSpeaking;
+    }
+    if (_isListening || _streamingAsrActive) {
+      return l10n.callModeListening;
+    }
+    return l10n.startCallMode;
+  }
+
+  String _callModeIdleSubtitle(AppLocalizations l10n) {
+    return l10n.callModeIdleSubtitle;
+  }
+
+  Future<void> _showLatestConversationPreview() async {
+    final previewMessages = _messages
+        .where((message) =>
+            message.role == MessageRole.user || message.role == MessageRole.assistant)
+        .toList(growable: false);
+    if (!mounted || previewMessages.isEmpty) {
+      return;
+    }
+    final brightness = Theme.of(context).brightness;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.panelFor(brightness),
+      isScrollControlled: true,
+      builder: (context) {
+        final height = MediaQuery.of(context).size.height * 0.62;
+        return SafeArea(
+          child: SizedBox(
+            height: height,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.block,
+                    AppSpacing.block,
+                    AppSpacing.block,
+                    AppSpacing.compact,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _session.title,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.block,
+                      0,
+                      AppSpacing.block,
+                      AppSpacing.block,
+                    ),
+                    itemCount: previewMessages.length,
+                    itemBuilder: (context, index) {
+                      final message = previewMessages[index];
+                      final isUser = message.role == MessageRole.user;
+                      return Align(
+                        alignment: isUser
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: AppSpacing.stack),
+                          padding: const EdgeInsets.all(AppSpacing.card),
+                          constraints: const BoxConstraints(maxWidth: 420),
+                          decoration: BoxDecoration(
+                            color: isUser
+                                ? AppColors.accentBlueFor(brightness)
+                                : AppColors.panelDeepFor(brightness),
+                            borderRadius:
+                                BorderRadius.circular(AppSpacing.radiusPanel),
+                            border: isUser
+                                ? null
+                                : Border.all(
+                                    color: AppColors.outlineFor(brightness),
+                                  ),
+                          ),
+                          child: Text(
+                            _previewText(message.content),
+                            style: TextStyle(
+                              height: 1.45,
+                              color: isUser
+                                  ? AppColors.accentBlueOnFor(brightness)
+                                  : AppColors.textSoftFor(brightness),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1611,6 +2174,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Future<void> _toggleListening() async {
     final useSystemSpeech = _useSystemSpeech();
+    final useTencentStreaming =
+        appSettingsController.settings.asrProvider ==
+        AsrProvider.tencentCloudStreaming;
     if (!_speechReady) {
       setState(() {
         _speechStatus = context.l10n.reinitializingVoiceInput;
@@ -1625,6 +2191,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_isListening) {
       if (useSystemSpeech) {
         await _stopSystemListening();
+      } else if (useTencentStreaming) {
+        await _stopTencentCloudStreamingAsr();
       } else {
         await _stopRecordingAndTranscribe();
       }
@@ -1664,6 +2232,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             }
           },
         );
+      } else if (useTencentStreaming) {
+        await _startTencentCloudStreamingAsr();
       } else {
         _recordingPath = await _audioRecordingService.start();
       }
@@ -1743,7 +2313,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _supportsCallModeAsrProvider() {
     final provider = appSettingsController.settings.asrProvider;
     return provider == AsrProvider.system ||
-        provider == AsrProvider.volcengineStreaming;
+        provider == AsrProvider.tencentCloudStreaming;
   }
 
   bool _usesSystemSpeechForCallMode() {
@@ -2167,7 +2737,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _callModeAwaitingPlaybackCompletion = false;
     });
     if (shouldCancelStreaming) {
-      await _stopVolcengineStreamingAsr();
+      await _stopTencentCloudStreamingAsr();
     }
     if (shouldCancelListening) {
       try {
@@ -2205,7 +2775,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_usesSystemSpeechForCallMode()) {
       await _toggleListening();
     } else {
-      await _startVolcengineStreamingAsr();
+      await _startTencentCloudStreamingAsr();
     }
     if (!mounted) {
       return;
@@ -2297,7 +2867,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return _submitLocalMessage(trimmedTranscript, inputMode: 'voice');
   }
 
-  Future<void> _startVolcengineStreamingAsr() async {
+  Future<void> _startTencentCloudStreamingAsr() async {
     if (_streamingAsrActive) {
       return;
     }
@@ -2321,13 +2891,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     });
 
     try {
+      debugPrint('[call-mode] starting Tencent streaming ASR');
       final audioStream = await _audioRecordingService.startStream();
-      await _volcengineStreamingAsrService.start(
+      await _tencentCloudStreamingAsrService.start(
         audioStream: audioStream,
         languageTag: preferredLocaleTagFromSetting(
           appSettingsController.settings.appLanguage,
         ),
         onUtterance: (utterance) {
+          debugPrint(
+            '[call-mode] utterance final=${utterance.isFinal} text=${utterance.text}',
+          );
           if (!mounted) {
             return;
           }
@@ -2343,10 +2917,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             }
           });
           if (utterance.isFinal && _callModeEnabled) {
-            unawaited(_handleVolcengineFinalUtterance(utterance.text));
+            unawaited(_handleTencentCloudFinalUtterance(utterance.text));
           }
         },
         onError: (error) {
+          debugPrint('[call-mode] Tencent ASR error: $error');
           if (!mounted) {
             return;
           }
@@ -2360,6 +2935,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         },
       );
     } catch (error) {
+      debugPrint('[call-mode] failed to start Tencent ASR: $error');
       if (!mounted) {
         return;
       }
@@ -2371,8 +2947,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
   }
 
-  Future<void> _stopVolcengineStreamingAsr() async {
-    await _volcengineStreamingAsrService.cancel();
+  Future<void> _stopTencentCloudStreamingAsr() async {
+    await _tencentCloudStreamingAsrService.cancel();
     await _audioRecordingService.cancel();
     if (!mounted) {
       return;
@@ -2381,11 +2957,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _isListening = false;
       _streamingAsrActive = false;
       _recognizedSpeech = '';
+      if (!_callModeEnabled) {
+        _speechStatus = null;
+      }
     });
   }
 
-  Future<void> _handleVolcengineFinalUtterance(String transcript) async {
-    await _stopVolcengineStreamingAsr();
+  Future<void> _handleTencentCloudFinalUtterance(String transcript) async {
+    await _stopTencentCloudStreamingAsr();
     final submitted = await _finalizeSystemTranscript(
       transcript,
       autoSend: true,
@@ -3069,6 +3648,130 @@ class _ConversationTurn {
   final ChatMessage? userMessage;
   final List<ChatMessage> assistantMessages = <ChatMessage>[];
   final List<ChatMessage> toolMessages = <ChatMessage>[];
+}
+
+class _CallModeOrbPainter extends CustomPainter {
+  const _CallModeOrbPainter({
+    required this.progress,
+    required this.intensity,
+    required this.brightness,
+  });
+
+  final double progress;
+  final double intensity;
+  final Brightness brightness;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    _paintBlob(
+      canvas,
+      size,
+      center: center.translate(
+        _wave(0.0, 20, 38),
+        _wave(0.18, -18, 22),
+      ),
+      radiusX: size.width * (0.30 + (0.03 * _wave01(0.12))),
+      radiusY: size.height * (0.24 + (0.04 * _wave01(0.44))),
+      rotation: _wave(0.0, -0.36, 0.52),
+      colorA: const Color(0xFFFFC0DE).withValues(alpha: 0.68),
+      colorB: const Color(0xFFC5A1FF).withValues(alpha: 0.22),
+    );
+    _paintBlob(
+      canvas,
+      size,
+      center: center.translate(
+        _wave(0.36, -34, 24),
+        _wave(0.58, 10, 28),
+      ),
+      radiusX: size.width * (0.23 + (0.04 * _wave01(0.28))),
+      radiusY: size.height * (0.22 + (0.03 * _wave01(0.76))),
+      rotation: _wave(0.42, 0.58, -0.74),
+      colorA: Colors.white.withValues(alpha: 0.18 + (0.06 * intensity)),
+      colorB: const Color(0xFF7EA7FF).withValues(alpha: 0.10),
+    );
+    _paintBlob(
+      canvas,
+      size,
+      center: center.translate(
+        _wave(0.74, 12, 20),
+        _wave(0.86, 30, -20),
+      ),
+      radiusX: size.width * (0.21 + (0.03 * _wave01(0.66))),
+      radiusY: size.height * (0.24 + (0.04 * _wave01(0.18))),
+      rotation: _wave(0.72, -0.24, 0.30),
+      colorA: const Color(0xFFFFB2D2)
+          .withValues(alpha: brightness == Brightness.dark ? 0.48 : 0.42),
+      colorB: const Color(0xFF8C7CFF).withValues(alpha: 0.10),
+    );
+  }
+
+  void _paintBlob(
+    Canvas canvas,
+    Size size, {
+    required Offset center,
+    required double radiusX,
+    required double radiusY,
+    required double rotation,
+    required Color colorA,
+    required Color colorB,
+  }) {
+    final path = Path();
+    final points = <Offset>[];
+    final count = 7;
+    for (var index = 0; index < count; index += 1) {
+      final t = index / count;
+      final angle = (math.pi * 2 * t) + rotation;
+      final noise = 0.84 + (0.24 * _wave01(t + progress));
+      final x = center.dx + math.cos(angle) * radiusX * noise;
+      final y = center.dy + math.sin(angle) * radiusY * (1.0 + (0.18 * noise));
+      points.add(Offset(x, y));
+    }
+
+    path.moveTo(points.first.dx, points.first.dy);
+    for (var index = 0; index < count; index += 1) {
+      final current = points[index];
+      final next = points[(index + 1) % count];
+      final mid = Offset(
+        (current.dx + next.dx) / 2,
+        (current.dy + next.dy) / 2,
+      );
+      path.quadraticBezierTo(current.dx, current.dy, mid.dx, mid.dy);
+    }
+    path.close();
+
+    final paint = Paint()
+      ..shader = RadialGradient(
+        center: Alignment(
+          ((center.dx / size.width) * 2) - 1,
+          ((center.dy / size.height) * 2) - 1,
+        ),
+        radius: 0.92,
+        colors: [colorA, colorB, Colors.transparent],
+        stops: const [0.0, 0.72, 1.0],
+      ).createShader(Offset.zero & size)
+      ..blendMode = BlendMode.screen
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+
+    canvas.drawPath(path, paint);
+  }
+
+  double _wave(double shift, double from, double to) {
+    final value = math.sin((progress + shift) * math.pi * 2);
+    final normalized = (value + 1) / 2;
+    return from + ((to - from) * normalized);
+  }
+
+  double _wave01(double shift) {
+    return (math.sin((progress + shift) * math.pi * 2) + 1) / 2;
+  }
+
+  @override
+  bool shouldRepaint(covariant _CallModeOrbPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.intensity != intensity ||
+        oldDelegate.brightness != brightness;
+  }
 }
 
 class _ParsedToolMessage {
