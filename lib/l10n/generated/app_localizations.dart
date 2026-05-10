@@ -818,6 +818,48 @@ abstract class AppLocalizations {
   /// **'Send'**
   String get send;
 
+  /// No description provided for @imageAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Image attachment'**
+  String get imageAttachment;
+
+  /// No description provided for @previewImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get previewImage;
+
+  /// No description provided for @imagePreviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Image preview'**
+  String get imagePreviewTitle;
+
+  /// No description provided for @imagePreviewLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load image preview'**
+  String get imagePreviewLoadFailed;
+
+  /// No description provided for @imagePreviewBgDark.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get imagePreviewBgDark;
+
+  /// No description provided for @imagePreviewBgLight.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get imagePreviewBgLight;
+
+  /// No description provided for @imagePreviewBgChecker.
+  ///
+  /// In en, this message translates to:
+  /// **'Checker'**
+  String get imagePreviewBgChecker;
+
   /// No description provided for @agentAwaitingPermission.
   ///
   /// In en, this message translates to:

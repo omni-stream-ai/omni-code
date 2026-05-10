@@ -208,6 +208,13 @@
   "stopVoice": "Stop voice",
   "voiceInput": "Voice input",
   "send": "Send",
+  "imageAttachment": "Image attachment",
+  "previewImage": "Preview",
+  "imagePreviewTitle": "Image preview",
+  "imagePreviewLoadFailed": "Failed to load image preview",
+  "imagePreviewBgDark": "Dark",
+  "imagePreviewBgLight": "Light",
+  "imagePreviewBgChecker": "Checker",
   "agentAwaitingPermission": "{agent} is waiting for permission",
   "@agentAwaitingPermission": {
     "placeholders": {

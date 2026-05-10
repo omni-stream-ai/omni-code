@@ -417,6 +417,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get send => 'Send';
 
   @override
+  String get imageAttachment => 'Image attachment';
+
+  @override
+  String get previewImage => 'Preview';
+
+  @override
+  String get imagePreviewTitle => 'Image preview';
+
+  @override
+  String get imagePreviewLoadFailed => 'Failed to load image preview';
+
+  @override
+  String get imagePreviewBgDark => 'Dark';
+
+  @override
+  String get imagePreviewBgLight => 'Light';
+
+  @override
+  String get imagePreviewBgChecker => 'Checker';
+
+  @override
   String agentAwaitingPermission(Object agent) {
     return '$agent is waiting for permission';
   }
