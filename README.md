@@ -11,6 +11,8 @@ to the bridge over HTTP and SSE so you can manage projects, open sessions, send
 messages, receive reply notifications, and handle approval prompts across
 mobile and desktop devices.
 
+![Omni Code App Screens Preview](./designs/omni-code-screens-from-code.png)
+
 ## TODO Board
 
 The current project TODO board lives in GitHub Projects:
