@@ -106,6 +106,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _lastHomeDataLoadAt = _now();
     final cachedProjects = _client.peekProjects();
     final cachedSessions = _client.peekSessions();
+    final previousVisibleCount = _visibleRecentCount;
     final shouldRefreshFromNetwork = forceRefresh ||
         cachedProjects != null ||
         cachedSessions != null ||
@@ -118,8 +119,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _authError = null;
       _projects = cachedProjects ?? _projects;
       _recentSessions = cachedSessions ?? _recentSessions;
-      _visibleRecentCount =
-          min(_recentPageSize, _recentSessions?.length ?? _visibleRecentCount);
+      final availableCount = _recentSessions?.length ?? previousVisibleCount;
+      _visibleRecentCount = availableCount == 0
+          ? 0
+          : min(max(previousVisibleCount, _recentPageSize), availableCount);
       if (_projects == null && _recentSessions == null) {
         _isLoading = true;
       } else {
@@ -149,8 +152,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       setState(() {
         _projects = projects;
         _recentSessions = sessions ?? _client.peekSessions() ?? _recentSessions;
-        _visibleRecentCount =
-            min(_recentPageSize, _recentSessions?.length ?? 0);
+        final availableCount = _recentSessions?.length ?? 0;
+        _visibleRecentCount = availableCount == 0
+            ? 0
+            : min(max(previousVisibleCount, _recentPageSize), availableCount);
         _recentSessionsError = sessionsError;
         _needsAuthorization = false;
         _isWaitingAuth = false;
