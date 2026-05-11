@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -6,11 +7,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app_routes.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
+import '../message_image_paths.dart';
 import '../models.dart';
 import '../services/cloud_speech_service.dart';
 import '../services/notification_service.dart';
@@ -23,7 +26,6 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_back_header.dart';
 import '../widgets/app_skeleton.dart';
-import '../widgets/copyable_message.dart';
 import '../../l10n/generated/app_localizations.dart';
 
 class SessionDetailScreen extends StatefulWidget {
@@ -55,8 +57,11 @@ class SessionDetailScreen extends StatefulWidget {
 class _SessionDetailScreenState extends State<SessionDetailScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   static const double _bottomAutoScrollThreshold = 96;
+  static const double _topHistoryExpandThreshold = 72;
   static const double _messageBubbleMaxWidth = 320;
   static const double _assistantMessageBubbleWidthFactor = 0.82;
+  static const int _initialVisibleTurnCount = 10;
+  static const int _historyTurnBatchSize = 10;
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
   late final AudioRecordingService _audioRecordingService;
@@ -71,6 +76,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   StreamSubscription<Map<String, dynamic>>? _eventsSubscription;
   Timer? _eventsReconnectTimer;
   late final AnimationController _callModeOrbController;
+  Timer? _speechStatusAutoDismissTimer;
 
   String? _recordingPath;
   String _recognizedSpeech = '';
@@ -90,22 +96,38 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   String? _speechError;
   ApprovalRequest? _pendingApproval;
   bool _restoringSession = false;
+  bool _expandingHistory = false;
   bool _appInForeground = true;
   bool _creatingSession = false;
   bool _submittingApproval = false;
   String? _submittingApprovalChoice;
   String? _submittedApprovalRequestId;
   bool _cancellingReply = false;
+  int _visibleTurnCount = 0;
+  String? _dismissedStatusOverviewSignature;
 
+  bool get _isSpeechReadyStatus => _speechStatus == _readySpeechStatusLabel();
   BridgeClient get _client => widget.client ?? bridgeClient;
 
+  String _readySpeechStatusLabel() => context.l10n.speechReadyStatus;
   String _systemSpeechUnavailableLabel() =>
       context.l10n.systemSpeechUnavailable;
   String? get _systemSpeechUnavailableStatus =>
       _speechError == null && _speechStatus == _systemSpeechUnavailableLabel()
           ? _speechStatus
           : null;
-  String? get _speechBannerMessage => _speechError;
+  String? get _speechBannerMessage {
+    if (_speechError != null) {
+      return _speechError;
+    }
+    final status = _speechStatus;
+    if (status == null ||
+        _isSpeechReadyStatus ||
+        status == _systemSpeechUnavailableLabel()) {
+      return null;
+    }
+    return status;
+  }
 
   String? get _callModeUnavailableMessage {
     if (!widget.enableSpeechServices) {
@@ -121,6 +143,168 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   String _reinitializingTtsLabel() => context.l10n.reinitializingTts;
+
+  String? get _statusOverviewSignature {
+    final hasStatusOverview = _creatingSession ||
+        _session.status != SessionStatus.idle ||
+        _speechBannerMessage != null ||
+        _speechError != null;
+    if (!hasStatusOverview) {
+      _dismissedStatusOverviewSignature = null;
+      return null;
+    }
+
+    return [
+      _creatingSession ? 'creating' : 'ready',
+      _session.status.name,
+      _isAwaitingSubmittedApprovalResolution ? 'approval-processing' : 'stable',
+      _speechBannerMessage ?? '',
+      _speechError ?? '',
+      _statusOverviewDetailMessage ?? '',
+    ].join('::');
+  }
+
+  bool get _shouldShowStatusOverview {
+    final signature = _statusOverviewSignature;
+    return signature != null && signature != _dismissedStatusOverviewSignature;
+  }
+
+  String _sessionStatusLabel(SessionStatus status) {
+    switch (status) {
+      case SessionStatus.idle:
+        return context.l10n.sessionStatusIdle;
+      case SessionStatus.running:
+        return context.l10n.sessionStatusRunning;
+      case SessionStatus.awaitingApproval:
+        return context.l10n.sessionStatusAwaitingApproval;
+      case SessionStatus.waiting:
+        return context.l10n.sessionStatusWaiting;
+      case SessionStatus.failed:
+        return context.l10n.sessionStatusFailed;
+    }
+  }
+
+  _SessionStatusTone _sessionStatusTone(SessionStatus status) {
+    switch (status) {
+      case SessionStatus.idle:
+        return _SessionStatusTone.idle;
+      case SessionStatus.running:
+        return _SessionStatusTone.signal;
+      case SessionStatus.awaitingApproval:
+        return _SessionStatusTone.warning;
+      case SessionStatus.waiting:
+        return _SessionStatusTone.neutral;
+      case SessionStatus.failed:
+        return _SessionStatusTone.error;
+    }
+  }
+
+  IconData _sessionStatusIcon(SessionStatus status) {
+    switch (status) {
+      case SessionStatus.idle:
+        return Icons.pause_circle_outline;
+      case SessionStatus.running:
+        return Icons.autorenew_rounded;
+      case SessionStatus.awaitingApproval:
+        return Icons.pending_actions_outlined;
+      case SessionStatus.waiting:
+        return Icons.schedule_outlined;
+      case SessionStatus.failed:
+        return Icons.error_outline;
+    }
+  }
+
+  List<_SessionStatusItem> _statusOverviewItems() {
+    if (!_shouldShowStatusOverview) {
+      return const <_SessionStatusItem>[];
+    }
+
+    if (_creatingSession) {
+      return [
+        _SessionStatusItem(
+          label: context.l10n.creatingSession,
+          tone: _SessionStatusTone.signal,
+          loading: true,
+        ),
+      ];
+    }
+
+    final items = <_SessionStatusItem>[
+      _SessionStatusItem(
+        label: _sessionStatusLabel(_session.status),
+        tone: _sessionStatusTone(_session.status),
+        icon: _sessionStatusIcon(_session.status),
+      ),
+    ];
+
+    if (_isAwaitingSubmittedApprovalResolution) {
+      items.add(
+        _SessionStatusItem(
+          label: context.l10n.waitingApprovalProcessing,
+          tone: _SessionStatusTone.warning,
+          loading: true,
+        ),
+      );
+    }
+
+    return items;
+  }
+
+  String? get _statusOverviewDetailMessage {
+    if (_speechError != null) {
+      return _speechError;
+    }
+    final speechBannerMessage = _speechBannerMessage;
+    if (speechBannerMessage != null) {
+      return speechBannerMessage;
+    }
+    if (_session.status == SessionStatus.waiting) {
+      return context.l10n.turnPausedWaiting;
+    }
+    return null;
+  }
+
+  bool get _statusOverviewDetailIsError =>
+      !_creatingSession && _speechError != null;
+
+  bool _isAutoDismissableSpeechStatus(String? status) {
+    return status == context.l10n.voiceTranscriptionComplete ||
+        status == context.l10n.replyStopped;
+  }
+
+  void _syncSpeechStatusAutoDismiss() {
+    _speechStatusAutoDismissTimer?.cancel();
+    _speechStatusAutoDismissTimer = null;
+
+    final status = _speechStatus;
+    if (!mounted || !_isAutoDismissableSpeechStatus(status)) {
+      return;
+    }
+
+    _speechStatusAutoDismissTimer = Timer(const Duration(seconds: 3), () {
+      if (!mounted || _speechStatus != status) {
+        return;
+      }
+      setState(() {
+        _setSpeechStatus(null);
+      });
+    });
+  }
+
+  void _setSpeechStatus(String? status) {
+    _speechStatus = status;
+    _syncSpeechStatusAutoDismiss();
+  }
+
+  void _dismissStatusOverview() {
+    final signature = _statusOverviewSignature;
+    if (signature == null) {
+      return;
+    }
+    setState(() {
+      _dismissedStatusOverviewSignature = signature;
+    });
+  }
 
   bool get _isAwaitingSubmittedApprovalResolution {
     final requestId = _submittedApprovalRequestId;
@@ -155,7 +339,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   void _clearTransientTtsStatus() {
     if (_speechStatus == _reinitializingTtsLabel() ||
         _speechStatus == context.l10n.requestingTts) {
-      _speechStatus = null;
+      _setSpeechStatus(null);
     }
   }
 
@@ -194,6 +378,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     WidgetsBinding.instance.removeObserver(this);
     _eventsSubscription?.cancel();
     _eventsReconnectTimer?.cancel();
+    _speechStatusAutoDismissTimer?.cancel();
     unawaited(_audioRecordingService.cancel());
     unawaited(_speechInputService.cancel());
     unawaited(_tencentCloudStreamingAsrService.cancel());
@@ -234,10 +419,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _pendingApproval != null;
     final canCancelReply = hasActiveTurn && !_cancellingReply;
     final turns = _turns;
+    final showHistoryLoader = _hasHiddenTurns || _expandingHistory;
     final approvalCardMaxHeight = MediaQuery.of(context).size.height * 0.42;
     final isAwaitingSubmittedApprovalResolution =
         _isAwaitingSubmittedApprovalResolution;
-    final speechBannerMessage = _speechBannerMessage;
     final systemSpeechUnavailableMessage = _systemSpeechUnavailableStatus;
     final callModeUnavailableMessage = _callModeUnavailableMessage;
     final showVoiceInputUnavailableTooltip =
@@ -265,79 +450,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       ),
       body: Column(
         children: [
-          if (_creatingSession)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.fromLTRB(
-                AppSpacing.block,
-                AppSpacing.block,
-                AppSpacing.block,
-                0,
-              ),
-              padding: AppSpacing.tilePadding,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceFor(brightness),
-                borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-                border: Border.all(color: AppColors.outlineFor(brightness)),
-              ),
-              child: Row(
-                children: [
-                  const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  const SizedBox(width: AppSpacing.tileY),
-                  Expanded(
-                    child: Text(
-                      l10n.creatingSession,
-                      style: const TextStyle(height: 1.4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if ((_session.status == SessionStatus.awaitingApproval ||
-                  _pendingApproval != null) &&
-              (_pendingApproval == null ||
-                  isAwaitingSubmittedApprovalResolution))
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.fromLTRB(
-                AppSpacing.block,
-                AppSpacing.block,
-                AppSpacing.block,
-                0,
-              ),
-              padding: AppSpacing.tilePadding,
-              decoration: BoxDecoration(
-                color: AppColors.warningSurfaceFor(brightness),
-                borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-                border:
-                    Border.all(color: AppColors.warningBorderFor(brightness)),
-              ),
-              child: Text(
-                l10n.waitingApprovalProcessing,
-                style: const TextStyle(height: 1.4),
-              ),
-            ),
-          if (speechBannerMessage != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.block,
-                AppSpacing.block,
-                AppSpacing.block,
-                0,
-              ),
-              child: CopyableMessage(
-                message: speechBannerMessage,
-                copyLabel: context.l10n.copy,
-                copiedLabel: context.l10n.copied,
-                backgroundColor: AppColors.errorBgFor(brightness),
-                borderColor: AppColors.errorBorderFor(brightness),
-                iconColor: AppColors.errorIconFor(brightness),
-                textColor: AppColors.errorTextFor(brightness),
-              ),
+          if (_shouldShowStatusOverview)
+            _buildStatusOverviewCard(
+              items: _statusOverviewItems(),
+              detailMessage: _statusOverviewDetailMessage,
+              detailIsError: _statusOverviewDetailIsError,
             ),
           if (_pendingApproval != null &&
               !isAwaitingSubmittedApprovalResolution)
@@ -352,8 +469,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     child: ListView.builder(
                       controller: _scrollController,
                       padding: AppSpacing.blockPadding,
-                      itemCount: turns.length,
+                      itemCount: turns.length + (showHistoryLoader ? 1 : 0),
                       itemBuilder: (context, index) {
+                        if (showHistoryLoader) {
+                          if (index == 0) {
+                            return _buildHistoryLoader();
+                          }
+                          index -= 1;
+                        }
                         final turn = turns[index];
                         return _buildTurn(context, turn);
                       },
@@ -370,30 +493,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             child: hasActiveTurn
                 ? Column(
                     children: [
-                      if (_session.status ==
-                          SessionStatus.awaitingApproval) ...[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.tileY),
-                            Text(
-                              l10n.waitingProcessApproval,
-                              style: TextStyle(
-                                color: AppColors.mutedSoftFor(brightness),
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.stack),
-                      ],
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton(
@@ -725,7 +824,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          const Color(0xFF78A7FF).withValues(alpha: haloOpacity),
+                          const Color(0xFF78A7FF)
+                              .withValues(alpha: haloOpacity),
                           const Color(0xFFB392FF)
                               .withValues(alpha: haloOpacity * 0.62),
                           Colors.transparent,
@@ -740,7 +840,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     width: 154,
                     height: 44,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+                      borderRadius:
+                          BorderRadius.circular(AppSpacing.radiusPill),
                       gradient: RadialGradient(
                         colors: [
                           const Color(0xFF6C8FFF)
@@ -767,12 +868,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                             shape: BoxShape.circle,
                             gradient: RadialGradient(
                               colors: [
-                                const Color(0xFFFFD7EB)
-                                    .withValues(alpha: 0.18 + (0.08 * intensity)),
-                                const Color(0xFF9A88FF)
-                                    .withValues(alpha: 0.10 + (0.06 * intensity)),
-                                const Color(0xFF4E78FF)
-                                    .withValues(alpha: 0.04 + (0.04 * intensity)),
+                                const Color(0xFFFFD7EB).withValues(
+                                    alpha: 0.18 + (0.08 * intensity)),
+                                const Color(0xFF9A88FF).withValues(
+                                    alpha: 0.10 + (0.06 * intensity)),
+                                const Color(0xFF4E78FF).withValues(
+                                    alpha: 0.04 + (0.04 * intensity)),
                                 Colors.transparent,
                               ],
                               stops: const [0.0, 0.34, 0.72, 1.0],
@@ -841,9 +942,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         : isLive
             ? Icons.graphic_eq_rounded
             : Icons.mic_rounded;
-    final background = isBusy
-        ? const Color(0xFFFF7B6B)
-        : const Color(0xFF1E74FF);
+    final background =
+        isBusy ? const Color(0xFFFF7B6B) : const Color(0xFF1E74FF);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -922,7 +1022,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Future<void> _showLatestConversationPreview() async {
     final previewMessages = _messages
         .where((message) =>
-            message.role == MessageRole.user || message.role == MessageRole.assistant)
+            message.role == MessageRole.user ||
+            message.role == MessageRole.assistant)
         .toList(growable: false);
     if (!mounted || previewMessages.isEmpty) {
       return;
@@ -951,9 +1052,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                       Expanded(
                         child: Text(
                           _session.title,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
                         ),
                       ),
                       IconButton(
@@ -980,7 +1082,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                             ? Alignment.centerRight
                             : Alignment.centerLeft,
                         child: Container(
-                          margin: const EdgeInsets.only(bottom: AppSpacing.stack),
+                          margin:
+                              const EdgeInsets.only(bottom: AppSpacing.stack),
                           padding: const EdgeInsets.all(AppSpacing.card),
                           constraints: const BoxConstraints(maxWidth: 420),
                           decoration: BoxDecoration(
@@ -1212,6 +1315,98 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
+  Widget _buildStatusOverviewCard({
+    required List<_SessionStatusItem> items,
+    required String? detailMessage,
+    required bool detailIsError,
+  }) {
+    final brightness = Theme.of(context).brightness;
+    return Container(
+      key: const ValueKey('session-status-overview'),
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(
+        AppSpacing.block,
+        AppSpacing.block,
+        AppSpacing.block,
+        0,
+      ),
+      padding: AppSpacing.tilePadding,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceFor(brightness),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+        border: Border.all(color: AppColors.outlineFor(brightness)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (items.isNotEmpty)
+                  Wrap(
+                    spacing: AppSpacing.compact,
+                    runSpacing: AppSpacing.compact,
+                    children: items
+                        .map(
+                          (item) => _SessionStatusPill(
+                            item: item,
+                            brightness: brightness,
+                          ),
+                        )
+                        .toList(growable: false),
+                  ),
+                if (detailMessage != null) ...[
+                  if (items.isNotEmpty)
+                    const SizedBox(height: AppSpacing.stack),
+                  if (detailIsError)
+                    Container(
+                      width: double.infinity,
+                      padding: AppSpacing.tilePadding,
+                      decoration: BoxDecoration(
+                        color: AppColors.errorBgFor(brightness),
+                        borderRadius:
+                            BorderRadius.circular(AppSpacing.radiusCard),
+                        border: Border.all(
+                          color: AppColors.errorBorderFor(brightness),
+                        ),
+                      ),
+                      child: SelectableText(
+                        detailMessage,
+                        style: TextStyle(
+                          color: AppColors.errorTextFor(brightness),
+                          height: 1.4,
+                        ),
+                      ),
+                    )
+                  else
+                    Text(
+                      detailMessage,
+                      style: TextStyle(
+                        height: 1.4,
+                        color: AppColors.mutedSoftFor(brightness),
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.compact),
+          IconButton(
+            tooltip: context.l10n.close,
+            onPressed: _dismissStatusOverview,
+            visualDensity: VisualDensity.compact,
+            icon: Icon(
+              Icons.close_rounded,
+              size: 18,
+              color: AppColors.mutedSoftFor(brightness),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildApprovalButtonChild(String choice, String label) {
     final isSubmittingThisChoice =
         _submittingApproval && _submittingApprovalChoice == choice;
@@ -1276,6 +1471,38 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
+  Widget _buildHistoryLoader() {
+    final brightness = Theme.of(context).brightness;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.stack),
+      child: Center(
+        child: Container(
+          key: const ValueKey('session-history-loader'),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.tileX,
+            vertical: AppSpacing.compact,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.panelDeepFor(brightness),
+            borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+            border: Border.all(color: AppColors.outlineFor(brightness)),
+          ),
+          child: _expandingHistory
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(
+                  Icons.expand_less_rounded,
+                  size: 16,
+                  color: AppColors.mutedSoftFor(brightness),
+                ),
+        ),
+      ),
+    );
+  }
+
   double _messageBubbleMaxWidthFor(double availableWidth) {
     final preferredWidth = availableWidth * _assistantMessageBubbleWidthFactor;
     return math.min(
@@ -1295,6 +1522,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final canRetry = localState?.state == _LocalMessageState.failed;
     final brightness = Theme.of(context).brightness;
     final bubbleTextColor = AppColors.accentBlueOnFor(brightness);
+    final imageReferences = extractMessageImageReferences(message.content);
     return Align(
       alignment: Alignment.centerRight,
       child: GestureDetector(
@@ -1311,12 +1539,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SelectableText(
+              _buildMarkdownMessageBody(
                 message.content,
-                style: TextStyle(
-                  height: 1.45,
-                  color: bubbleTextColor,
-                ),
+                textColor: bubbleTextColor,
+                maxWidth: maxWidth,
+                imageReferences: imageReferences,
+                imageCardBuilder: (reference) =>
+                    _buildUserImageCard(reference, textColor: bubbleTextColor),
               ),
               if (localState != null) ...[
                 const SizedBox(height: AppSpacing.compact),
@@ -1430,6 +1659,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required double maxWidth,
   }) {
     final displayContent = _displayContentForMessage(message);
+    final imageReferences = extractMessageImageReferences(message.content);
     final isLoadingReply = message.content.trim().isEmpty &&
         _session.status == SessionStatus.running;
     final theme = Theme.of(context);
@@ -1471,16 +1701,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 ],
               )
             else ...[
-              MarkdownBody(
-                data: displayContent,
-                fitContent: true,
-                selectable: true,
-                shrinkWrap: true,
-                softLineBreak: true,
-                styleSheet: _assistantMarkdownStyleSheet(theme),
-                syntaxHighlighter: _AssistantCodeSyntaxHighlighter(theme),
-                onTapLink: (text, href, title) =>
-                    _handleAssistantMarkdownLinkTap(href),
+              _buildMarkdownMessageBody(
+                displayContent,
+                textColor: AppColors.textFor(brightness),
+                maxWidth: maxWidth,
+                imageReferences: imageReferences,
+                imageCardBuilder: _buildAssistantImageCard,
               ),
               const SizedBox(height: AppSpacing.tileY),
               _withUnavailableTooltip(
@@ -1514,62 +1740,57 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
-  MarkdownStyleSheet _assistantMarkdownStyleSheet(ThemeData theme) {
+  Widget _buildMarkdownMessageBody(
+    String content, {
+    required Color textColor,
+    required double maxWidth,
+    required List<MessageImageReference> imageReferences,
+    required Widget Function(MessageImageReference reference) imageCardBuilder,
+  }) {
+    final theme = Theme.of(context);
     final brightness = theme.brightness;
-    final bodyStyle = theme.textTheme.bodyLarge?.copyWith(
-      height: 1.45,
-      color: AppColors.textFor(brightness),
-    );
-    final headingColor = AppColors.textFor(brightness);
-    final codeSurfaceColor = AppColors.tintSurfaceFor(
-      brightness,
-      AppColors.signalFor(brightness),
-      base: AppColors.panelFor(brightness),
-      darkAlpha: 0.16,
-      lightAlpha: 0.09,
-    );
-    final outlineColor = AppColors.tintBorderFor(
-      brightness,
-      AppColors.signalFor(brightness),
-      base: AppColors.outlineFor(brightness),
-      darkAlpha: 0.34,
-      lightAlpha: 0.18,
-    );
-    final linkColor = AppColors.signalFor(brightness);
-    final inlineCodeBackground = AppColors.tintSurfaceFor(
-      brightness,
-      AppColors.signalFor(brightness),
-      base: AppColors.surfaceFor(brightness),
-      darkAlpha: 0.12,
-      lightAlpha: 0.07,
-    );
     final codeStyle = theme.textTheme.bodyMedium?.copyWith(
-      fontSize: (bodyStyle?.fontSize ?? 14) * 0.93,
+      fontSize: 13,
       height: 1.55,
-      color: AppColors.textFor(brightness),
+      color: textColor,
       fontFamily: 'JetBrains Mono',
       fontFamilyFallback: const <String>['monospace'],
       letterSpacing: 0.1,
     );
-
-    return MarkdownStyleSheet.fromTheme(theme).copyWith(
-      p: bodyStyle,
-      a: bodyStyle?.copyWith(
-        color: linkColor,
+    final styleSheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
+      p: theme.textTheme.bodyLarge?.copyWith(
+        height: 1.45,
+        color: textColor,
+      ),
+      a: theme.textTheme.bodyLarge?.copyWith(
+        height: 1.45,
+        color: textColor,
         decoration: TextDecoration.underline,
-        decorationColor: linkColor,
+        decorationColor: textColor,
       ),
       code: codeStyle?.copyWith(
-        backgroundColor: inlineCodeBackground,
+        backgroundColor: AppColors.tintSurfaceFor(
+          brightness,
+          textColor,
+          base: Colors.transparent,
+          darkAlpha: 0.18,
+          lightAlpha: 0.10,
+        ),
       ),
-      strong: bodyStyle?.copyWith(fontWeight: FontWeight.w700),
-      em: bodyStyle?.copyWith(fontStyle: FontStyle.italic),
-      listBullet: bodyStyle,
-      blockquote: bodyStyle?.copyWith(
-        color: AppColors.textSoftFor(brightness),
+      strong: theme.textTheme.bodyLarge?.copyWith(
+        color: textColor,
+        fontWeight: FontWeight.w700,
       ),
-      pPadding: const EdgeInsets.symmetric(vertical: 1),
+      em: theme.textTheme.bodyLarge?.copyWith(
+        color: textColor,
+        fontStyle: FontStyle.italic,
+      ),
+      listBullet: theme.textTheme.bodyLarge?.copyWith(color: textColor),
+      blockquote: theme.textTheme.bodyLarge?.copyWith(
+        color: textColor.withValues(alpha: 0.9),
+      ),
       blockSpacing: AppSpacing.compact,
+      pPadding: const EdgeInsets.symmetric(vertical: 1),
       codeblockPadding: const EdgeInsets.fromLTRB(
         AppSpacing.tileX,
         AppSpacing.tileY,
@@ -1577,41 +1798,698 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         AppSpacing.tileX,
       ),
       codeblockDecoration: BoxDecoration(
-        color: codeSurfaceColor,
+        color: AppColors.tintSurfaceFor(
+          brightness,
+          textColor,
+          base: Colors.transparent,
+          darkAlpha: 0.14,
+          lightAlpha: 0.08,
+        ),
         borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-        border: Border.all(color: outlineColor),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.boardFor(brightness).withValues(alpha: 0.18),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+        border: Border.all(
+          color: textColor.withValues(alpha: 0.22),
+        ),
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        MarkdownBody(
+          data: content,
+          fitContent: true,
+          selectable: true,
+          shrinkWrap: true,
+          softLineBreak: true,
+          styleSheet: styleSheet,
+          syntaxHighlighter: _AssistantCodeSyntaxHighlighter(theme),
+          onTapLink: (text, href, title) =>
+              _handleAssistantMarkdownLinkTap(href),
+        ),
+        if (imageReferences.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.stack),
+          ...imageReferences.map(
+            (reference) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.compact),
+              child: imageCardBuilder(reference),
+            ),
           ),
         ],
-      ),
-      blockquotePadding: AppSpacing.tilePadding,
-      blockquoteDecoration: BoxDecoration(
-        color: AppColors.surfaceFor(brightness),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-        border: Border.all(color: outlineColor),
-      ),
-      horizontalRuleDecoration: BoxDecoration(
-        border: Border(top: BorderSide(color: outlineColor)),
-      ),
-      h1: theme.textTheme.titleLarge?.copyWith(color: headingColor),
-      h2: theme.textTheme.titleMedium?.copyWith(color: headingColor),
-      h3: theme.textTheme.titleSmall?.copyWith(color: headingColor),
-      h4: bodyStyle?.copyWith(fontWeight: FontWeight.w700),
-      h5: bodyStyle?.copyWith(fontWeight: FontWeight.w700),
-      h6: bodyStyle?.copyWith(fontWeight: FontWeight.w700),
+      ],
     );
   }
 
   void _handleAssistantMarkdownLinkTap(String? href) {
+    final reference =
+        href == null ? null : MessageImageReference.tryParse(href);
+    if (reference != null) {
+      unawaited(_showImagePreview(reference));
+      return;
+    }
+
     final uri = href == null ? null : Uri.tryParse(href);
     if (uri == null) {
       return;
     }
     unawaited(launchUrl(uri));
+  }
+
+  Widget _buildAssistantImageCard(MessageImageReference reference) {
+    final brightness = Theme.of(context).brightness;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: ValueKey('assistant-image-card-${reference.cardKey}'),
+        onTap: () => unawaited(_showImagePreview(reference)),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+        child: Container(
+          width: double.infinity,
+          padding: AppSpacing.tilePadding,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceFor(brightness),
+            borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+            border: Border.all(color: AppColors.outlineStrongFor(brightness)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.tintSurfaceFor(
+                    brightness,
+                    AppColors.signalFor(brightness),
+                    base: AppColors.panelFor(brightness),
+                    darkAlpha: 0.18,
+                    lightAlpha: 0.12,
+                  ),
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+                ),
+                child: Icon(
+                  Icons.image_outlined,
+                  color: AppColors.signalFor(brightness),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.tileX),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.l10n.imageAttachment,
+                      style: TextStyle(
+                        color: AppColors.textFor(brightness),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.micro),
+                    Text(
+                      reference.displayPath,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.mutedSoftFor(brightness),
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.compact),
+              Text(
+                context.l10n.previewImage,
+                style: TextStyle(
+                  color: AppColors.signalFor(brightness),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserImageCard(
+    MessageImageReference reference, {
+    required Color textColor,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: ValueKey('user-image-card-${reference.cardKey}'),
+        onTap: () => unawaited(_showImagePreview(reference)),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+        child: Container(
+          width: double.infinity,
+          padding: AppSpacing.tilePadding,
+          decoration: BoxDecoration(
+            color: textColor.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+            border: Border.all(
+              color: textColor.withValues(alpha: 0.26),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: textColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+                ),
+                child: Icon(
+                  Icons.image_outlined,
+                  color: textColor,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.tileX),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.l10n.imageAttachment,
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.micro),
+                    Text(
+                      reference.displayPath,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: textColor.withValues(alpha: 0.86),
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.compact),
+              Text(
+                context.l10n.previewImage,
+                style: TextStyle(
+                  color: textColor,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showImagePreview(MessageImageReference reference) async {
+    if (!mounted) {
+      return;
+    }
+
+    final brightness = Theme.of(context).brightness;
+    final bridgeFileFuture = reference.isRemoteUrl || reference.isDataUri
+        ? null
+        : _client.readFile(
+            reference.path,
+            sessionId: reference.isAbsoluteLocalPath ? null : _session.id,
+          );
+    var isFullscreen = false;
+    var backdropMode = _ImagePreviewBackdropMode.dark;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          Widget wrapPreviewSurface(Widget child) {
+            return MouseRegion(
+              cursor: isFullscreen
+                  ? SystemMouseCursors.zoomOut
+                  : SystemMouseCursors.zoomIn,
+              child: GestureDetector(
+                key: const ValueKey('image-preview-surface'),
+                onTap: () => setDialogState(() {
+                  isFullscreen = !isFullscreen;
+                }),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  width: double.infinity,
+                  height: 320,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceDeepFor(brightness),
+                    borderRadius: BorderRadius.circular(
+                      AppSpacing.radiusCard,
+                    ),
+                    border: Border.all(
+                      color: AppColors.outlineStrongFor(brightness),
+                    ),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: child,
+                ),
+              ),
+            );
+          }
+
+          Widget? buildDataUriImage() {
+            final bytes = reference.dataBytes;
+            if (!reference.isDataUri || bytes == null) {
+              return null;
+            }
+
+            if (reference.isSvg) {
+              return SvgPicture.string(
+                utf8.decode(bytes, allowMalformed: true),
+                fit: BoxFit.contain,
+              );
+            }
+
+            return Image.memory(
+              bytes,
+              fit: BoxFit.contain,
+              errorBuilder: (context, _, __) {
+                return _buildImagePreviewError(
+                  context.l10n.imagePreviewLoadFailed,
+                );
+              },
+            );
+          }
+
+          Widget buildImage() {
+            final isSvg = reference.isSvg;
+            final dataUriChild = buildDataUriImage();
+            if (dataUriChild != null) {
+              return wrapPreviewSurface(
+                InteractiveViewer(child: dataUriChild),
+              );
+            }
+            if (reference.isRemoteUrl) {
+              final remoteChild = isSvg
+                  ? SvgPicture.network(
+                      reference.path,
+                      fit: BoxFit.contain,
+                      placeholderBuilder: (context) => const Center(
+                        child: SizedBox(
+                          width: 28,
+                          height: 28,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    )
+                  : Image.network(
+                      reference.path,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, _, __) {
+                        return _buildImagePreviewError(
+                          context.l10n.imagePreviewLoadFailed,
+                        );
+                      },
+                    );
+              return wrapPreviewSurface(
+                InteractiveViewer(child: remoteChild),
+              );
+            }
+
+            return FutureBuilder<BridgeFileResponse>(
+              future: bridgeFileFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                }
+                if (snapshot.hasError || !snapshot.hasData) {
+                  return _buildImagePreviewError(
+                    context.l10n.imagePreviewLoadFailed,
+                  );
+                }
+
+                final localChild = isSvg
+                    ? SvgPicture.string(
+                        String.fromCharCodes(snapshot.data!.bytes),
+                        fit: BoxFit.contain,
+                      )
+                    : Image.memory(
+                        snapshot.data!.bytes,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, _, __) {
+                          return _buildImagePreviewError(
+                            context.l10n.imagePreviewLoadFailed,
+                          );
+                        },
+                      );
+
+                return wrapPreviewSurface(
+                  InteractiveViewer(child: localChild),
+                );
+              },
+            );
+          }
+
+          Widget buildFullscreenImage() {
+            final isSvg = reference.isSvg;
+            final dataUriChild = buildDataUriImage();
+            if (dataUriChild != null) {
+              return InteractiveViewer(
+                child: SizedBox.expand(child: dataUriChild),
+              );
+            }
+            if (reference.isRemoteUrl) {
+              return InteractiveViewer(
+                child: SizedBox.expand(
+                  child: isSvg
+                      ? SvgPicture.network(
+                          reference.path,
+                          fit: BoxFit.contain,
+                          placeholderBuilder: (context) => const Center(
+                            child: SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        )
+                      : Image.network(
+                          reference.path,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, _, __) {
+                            return _buildImagePreviewError(
+                              context.l10n.imagePreviewLoadFailed,
+                            );
+                          },
+                        ),
+                ),
+              );
+            }
+
+            return FutureBuilder<BridgeFileResponse>(
+              future: bridgeFileFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                }
+                if (snapshot.hasError || !snapshot.hasData) {
+                  return _buildImagePreviewError(
+                    context.l10n.imagePreviewLoadFailed,
+                  );
+                }
+                return InteractiveViewer(
+                  child: SizedBox.expand(
+                    child: isSvg
+                        ? SvgPicture.string(
+                            String.fromCharCodes(snapshot.data!.bytes),
+                            fit: BoxFit.contain,
+                          )
+                        : Image.memory(
+                            snapshot.data!.bytes,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, _, __) {
+                              return _buildImagePreviewError(
+                                context.l10n.imagePreviewLoadFailed,
+                              );
+                            },
+                          ),
+                  ),
+                );
+              },
+            );
+          }
+
+          Color fullscreenBackdropColor() {
+            switch (backdropMode) {
+              case _ImagePreviewBackdropMode.dark:
+                return const Color(0xF20F1115);
+              case _ImagePreviewBackdropMode.light:
+                return const Color(0xF3EEF2F6);
+              case _ImagePreviewBackdropMode.checker:
+                return const Color(0xF2181B21);
+            }
+          }
+
+          Color stageSurfaceColor() {
+            switch (backdropMode) {
+              case _ImagePreviewBackdropMode.dark:
+                return const Color(0xFF171B22);
+              case _ImagePreviewBackdropMode.light:
+                return const Color(0xFFF8FBFF);
+              case _ImagePreviewBackdropMode.checker:
+                return Colors.transparent;
+            }
+          }
+
+          Color stageBorderColor() {
+            switch (backdropMode) {
+              case _ImagePreviewBackdropMode.dark:
+                return Colors.white.withValues(alpha: 0.20);
+              case _ImagePreviewBackdropMode.light:
+                return Colors.black.withValues(alpha: 0.16);
+              case _ImagePreviewBackdropMode.checker:
+                return Colors.white.withValues(alpha: 0.24);
+            }
+          }
+
+          List<BoxShadow> stageShadow() {
+            return [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.22),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
+              ),
+            ];
+          }
+
+          Widget buildCheckerboardBackground() {
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                const cell = 24.0;
+                final cols = math.max(1, (constraints.maxWidth / cell).ceil());
+                final rows = math.max(1, (constraints.maxHeight / cell).ceil());
+                return Column(
+                  children: List.generate(rows, (row) {
+                    return Expanded(
+                      child: Row(
+                        children: List.generate(cols, (col) {
+                          final isLight = (row + col).isEven;
+                          return Expanded(
+                            child: ColoredBox(
+                              color: isLight
+                                  ? const Color(0xFFE7EBF1)
+                                  : const Color(0xFFC7D0DA),
+                            ),
+                          );
+                        }),
+                      ),
+                    );
+                  }),
+                );
+              },
+            );
+          }
+
+          Widget buildBackdropChip(
+            _ImagePreviewBackdropMode mode,
+            String label,
+          ) {
+            final selected = backdropMode == mode;
+            return InkWell(
+              key: ValueKey('image-preview-bg-$mode'),
+              onTap: () => setDialogState(() {
+                backdropMode = mode;
+              }),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.tileX,
+                  vertical: AppSpacing.compact,
+                ),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? Colors.white.withValues(alpha: 0.14)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+                  border: Border.all(
+                    color: selected
+                        ? Colors.white.withValues(alpha: 0.40)
+                        : Colors.white.withValues(alpha: 0.18),
+                  ),
+                ),
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            );
+          }
+
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Center(
+                child: AlertDialog(
+                  key: const ValueKey('image-preview-dialog'),
+                  backgroundColor: AppColors.panelFor(brightness),
+                  title: Text(context.l10n.imagePreviewTitle),
+                  content: SizedBox(
+                    width: 420,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          reference.displayPath,
+                          style: TextStyle(
+                            color: AppColors.mutedSoftFor(brightness),
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.block),
+                        Flexible(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxHeight: 420,
+                              minHeight: 180,
+                            ),
+                            child: buildImage(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text(context.l10n.close),
+                    ),
+                  ],
+                ),
+              ),
+              if (isFullscreen)
+                Positioned.fill(
+                  child: GestureDetector(
+                    key: const ValueKey('image-preview-fullscreen'),
+                    onTap: () => setDialogState(() {
+                      isFullscreen = false;
+                    }),
+                    child: ColoredBox(
+                      color: fullscreenBackdropColor(),
+                      child: SafeArea(
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.block),
+                          child: Stack(
+                            children: [
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      buildBackdropChip(
+                                        _ImagePreviewBackdropMode.dark,
+                                        context.l10n.imagePreviewBgDark,
+                                      ),
+                                      const SizedBox(
+                                        width: AppSpacing.compact,
+                                      ),
+                                      buildBackdropChip(
+                                        _ImagePreviewBackdropMode.light,
+                                        context.l10n.imagePreviewBgLight,
+                                      ),
+                                      const SizedBox(
+                                        width: AppSpacing.compact,
+                                      ),
+                                      buildBackdropChip(
+                                        _ImagePreviewBackdropMode.checker,
+                                        context.l10n.imagePreviewBgChecker,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              Positioned.fill(
+                                top: 52,
+                                child: MouseRegion(
+                                  cursor: SystemMouseCursors.zoomOut,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(
+                                      AppSpacing.block,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: stageSurfaceColor(),
+                                      borderRadius: BorderRadius.circular(
+                                        AppSpacing.radiusHero,
+                                      ),
+                                      border: Border.all(
+                                        color: stageBorderColor(),
+                                      ),
+                                      boxShadow: stageShadow(),
+                                    ),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        if (backdropMode ==
+                                            _ImagePreviewBackdropMode.checker)
+                                          buildCheckerboardBackground(),
+                                        buildFullscreenImage(),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildImagePreviewError(String message) {
+    final brightness = Theme.of(context).brightness;
+    return Center(
+      child: Container(
+        width: double.infinity,
+        padding: AppSpacing.tilePadding,
+        decoration: BoxDecoration(
+          color: AppColors.errorBgFor(brightness),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+          border: Border.all(color: AppColors.errorBorderFor(brightness)),
+        ),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.errorTextFor(brightness),
+            height: 1.4,
+          ),
+        ),
+      ),
+    );
   }
 
   String _toolMessagePreview(ChatMessage message) {
@@ -1699,6 +2577,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _messages
           ..clear()
           ..addAll(messages);
+        _resetVisibleTurnWindow();
         _loadingMessages = false;
       });
       _jumpToBottom();
@@ -1751,6 +2630,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _restoringSession = true;
     try {
       _subscribeToEvents();
+      final shouldAutoScroll = _isNearBottom();
+      final previousTurnCount = _allTurns.length;
 
       final results = await Future.wait<Object?>([
         _client.listMessages(_session.id),
@@ -1774,6 +2655,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _messages
           ..clear()
           ..addAll(messages);
+        _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
         _loadingMessages = false;
         _pendingApproval = refreshedSession?.pendingApproval;
         _speechError = null;
@@ -1782,7 +2664,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         }
         _reconcileSubmittedApprovalState();
       });
-      _maybeAutoScrollToBottom();
+      if (shouldAutoScroll) {
+        _jumpToBottom();
+      }
       if (_callModeEnabled) {
         unawaited(_maybeResumeCallModeListening());
       }
@@ -1848,6 +2732,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         break;
       case 'message_created':
         final shouldAutoScroll = _isNearBottom();
+        final previousTurnCount = _allTurns.length;
         final message = ChatMessage.fromJson(payload);
         setState(() {
           _localMessageStates.remove(message.id);
@@ -1879,6 +2764,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               lastMessagePreview: message.content,
             );
           }
+          _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
         });
         if (message.role != MessageRole.system) {
           _syncSessionSummaryCache();
@@ -1893,6 +2779,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         break;
       case 'message_delta':
         final shouldAutoScroll = _isNearBottom();
+        final previousTurnCount = _allTurns.length;
         final messageId = payload['message_id'] as String;
         final delta = payload['delta'] as String;
         setState(() {
@@ -1912,6 +2799,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               ),
             );
           }
+          _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
         });
         _maybeAutoSpeakAssistantMessage(messageId);
         _maybeNotifyAssistantMessage(messageId);
@@ -1941,6 +2829,19 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           _reconcileSubmittedApprovalState();
         });
         _syncSessionSummaryCache();
+        if (!_appInForeground) {
+          unawaited(
+            notificationService.showApprovalRequestNotification(
+              _session,
+              title: context.l10n.waitingApprovalTitle,
+              body: approval.reason?.trim().isNotEmpty == true
+                  ? approval.reason!.trim()
+                  : approval.command?.trim().isNotEmpty == true
+                      ? approval.command!.trim()
+                      : context.l10n.waitingApprovalBody,
+            ),
+          );
+        }
         break;
       case 'approval_resolved':
         final requestId = payload['request_id'] as String? ?? '';
@@ -2050,7 +2951,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             setState(() {
               _speechReady = true;
               if (_speechStatus == _systemSpeechUnavailableLabel()) {
-                _speechStatus = null;
+                _setSpeechStatus(null);
               }
               _speechError = null;
             });
@@ -2066,7 +2967,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         setState(() {
           _systemAsrLocaleId = null;
           _speechReady = false;
-          _speechStatus = _systemSpeechUnavailableLabel();
+          _setSpeechStatus(_systemSpeechUnavailableLabel());
           _speechError = null;
         });
         return;
@@ -2082,7 +2983,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
       setState(() {
         _speechReady = ready;
-        _speechStatus = ready ? null : context.l10n.microphonePermissionMissing;
+        _setSpeechStatus(
+          ready ? null : context.l10n.microphonePermissionMissing,
+        );
         _speechError = null;
       });
     } catch (error) {
@@ -2157,7 +3060,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             ? _ttsService.isSystemTtsAvailable
             : true;
         if (!_ttsReady && provider == TtsProvider.system) {
-          _speechStatus = _systemSpeechUnavailableLabel();
+          _setSpeechStatus(_systemSpeechUnavailableLabel());
           _speechError = null;
         }
       });
@@ -2174,12 +3077,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Future<void> _toggleListening() async {
     final useSystemSpeech = _useSystemSpeech();
-    final useTencentStreaming =
-        appSettingsController.settings.asrProvider ==
+    final useTencentStreaming = appSettingsController.settings.asrProvider ==
         AsrProvider.tencentCloudStreaming;
     if (!_speechReady) {
       setState(() {
-        _speechStatus = context.l10n.reinitializingVoiceInput;
+        _setSpeechStatus(context.l10n.reinitializingVoiceInput);
         _speechError = null;
       });
       await _initializeSpeech();
@@ -2201,7 +3103,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     setState(() {
       _speechError = null;
-      _speechStatus = context.l10n.voiceInputInProgress;
+      _setSpeechStatus(context.l10n.voiceInputInProgress);
       _isListening = true;
       _recognizedSpeech = '';
     });
@@ -2221,7 +3123,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 TextPosition(offset: _controller.text.length),
               );
               if (isFinal) {
-                _speechStatus = context.l10n.voiceTranscriptionComplete;
+                _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
                 _speechError = null;
               }
             });
@@ -2343,7 +3245,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     setState(() {
       _isListening = false;
-      _speechStatus = context.l10n.uploadingAudio;
+      _setSpeechStatus(context.l10n.uploadingAudio);
     });
 
     if (filePath == null) {
@@ -2364,7 +3266,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _controller.selection = TextSelection.fromPosition(
           TextPosition(offset: _controller.text.length),
         );
-        _speechStatus = context.l10n.voiceTranscriptionComplete;
+        _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
         _speechError = null;
       });
     } catch (error) {
@@ -2396,7 +3298,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }) async {
     if (!_ttsReady) {
       setState(() {
-        _speechStatus = context.l10n.reinitializingTts;
+        _setSpeechStatus(context.l10n.reinitializingTts);
         _speechError = null;
       });
       await _initializeTts();
@@ -2569,6 +3471,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required String inputMode,
     String? localMessageId,
   }) async {
+    final previousTurnCount = _allTurns.length;
     final messageId =
         localMessageId ?? 'local-${DateTime.now().microsecondsSinceEpoch}';
     final localMessage = ChatMessage(
@@ -2593,10 +3496,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         state: _LocalMessageState.pending,
         inputMode: inputMode,
       );
+      _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
     });
     _jumpToBottom();
 
     try {
+      final previousTurnCountAfterLocalInsert = _allTurns.length;
       final result = await _client.sendMessage(
         _session.id,
         content,
@@ -2640,6 +3545,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           updatedAt: result.userMessage.createdAt,
           lastMessagePreview: result.userMessage.content,
           clearPendingApproval: true,
+        );
+        _syncVisibleTurnWindow(
+          previousTotalTurns: previousTurnCountAfterLocalInsert,
         );
       });
       _syncSessionSummaryCache();
@@ -2694,7 +3602,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _submittingApproval = false;
         _submittingApprovalChoice = null;
         _speechError = null;
-        _speechStatus = context.l10n.replyStopped;
+        _setSpeechStatus(context.l10n.replyStopped);
         _session = _session.copyWith(
           status: SessionStatus.idle,
           updatedAt: DateTime.now(),
@@ -2857,7 +3765,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _controller.selection = TextSelection.fromPosition(
         TextPosition(offset: _controller.text.length),
       );
-      _speechStatus = context.l10n.voiceTranscriptionComplete;
+      _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
       _speechError = null;
     });
 
@@ -2873,7 +3781,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     if (!_speechReady) {
       setState(() {
-        _speechStatus = context.l10n.reinitializingVoiceInput;
+        _setSpeechStatus(context.l10n.reinitializingVoiceInput);
         _speechError = null;
       });
       await _initializeSpeech();
@@ -2884,7 +3792,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     setState(() {
       _speechError = null;
-      _speechStatus = context.l10n.voiceInputInProgress;
+      _setSpeechStatus(context.l10n.voiceInputInProgress);
       _isListening = true;
       _streamingAsrActive = true;
       _recognizedSpeech = '';
@@ -2912,7 +3820,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               TextPosition(offset: _controller.text.length),
             );
             if (utterance.isFinal) {
-              _speechStatus = context.l10n.voiceTranscriptionComplete;
+              _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
               _speechError = null;
             }
           });
@@ -2958,7 +3866,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _streamingAsrActive = false;
       _recognizedSpeech = '';
       if (!_callModeEnabled) {
-        _speechStatus = null;
+        _setSpeechStatus(null);
       }
     });
   }
@@ -2978,10 +3886,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     });
   }
 
-  List<_ConversationTurn> get _turns {
+  List<_ConversationTurn> _buildConversationTurns(
+      Iterable<ChatMessage> messages) {
     final turns = <_ConversationTurn>[];
     _ConversationTurn? currentTurn;
-    for (final message in _messages) {
+    for (final message in messages) {
       if (message.role == MessageRole.user) {
         currentTurn = _ConversationTurn(id: message.id, userMessage: message);
         turns.add(currentTurn);
@@ -3000,6 +3909,94 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
     }
     return turns;
+  }
+
+  List<_ConversationTurn> get _allTurns => _buildConversationTurns(_messages);
+
+  List<_ConversationTurn> get _turns {
+    final turns = _allTurns;
+    if (turns.isEmpty) {
+      return turns;
+    }
+    final visibleTurnCount = math.min(_visibleTurnCount, turns.length);
+    if (visibleTurnCount <= 0 || visibleTurnCount >= turns.length) {
+      return turns;
+    }
+    return turns.sublist(turns.length - visibleTurnCount);
+  }
+
+  bool get _hasHiddenTurns => _visibleTurnCount < _allTurns.length;
+
+  void _resetVisibleTurnWindow() {
+    _visibleTurnCount = math.min(_allTurns.length, _initialVisibleTurnCount);
+  }
+
+  void _syncVisibleTurnWindow({
+    required int previousTotalTurns,
+  }) {
+    final totalTurns = _allTurns.length;
+    if (totalTurns == 0) {
+      _visibleTurnCount = 0;
+      return;
+    }
+
+    if (_visibleTurnCount <= 0) {
+      _visibleTurnCount = math.min(totalTurns, _initialVisibleTurnCount);
+      return;
+    }
+
+    final showingAllTurns =
+        previousTotalTurns > 0 && _visibleTurnCount >= previousTotalTurns;
+    _visibleTurnCount =
+        showingAllTurns ? totalTurns : math.min(_visibleTurnCount, totalTurns);
+  }
+
+  void _expandVisibleHistory({required bool preserveViewport}) {
+    if (_expandingHistory || !_hasHiddenTurns) {
+      return;
+    }
+
+    final previousMaxScrollExtent = _scrollController.hasClients
+        ? _scrollController.position.maxScrollExtent
+        : 0.0;
+    final previousPixels =
+        _scrollController.hasClients ? _scrollController.position.pixels : 0.0;
+
+    setState(() {
+      _expandingHistory = true;
+      _visibleTurnCount = math.min(
+        _allTurns.length,
+        _visibleTurnCount + _historyTurnBatchSize,
+      );
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      if (_scrollController.hasClients) {
+        if (preserveViewport) {
+          final position = _scrollController.position;
+          final extentDelta =
+              position.maxScrollExtent - previousMaxScrollExtent;
+          final target = (previousPixels + extentDelta).clamp(
+            position.minScrollExtent,
+            position.maxScrollExtent,
+          );
+          _scrollController.jumpTo(target);
+        } else {
+          _jumpToBottom();
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _expandingHistory = false;
+      });
+    });
   }
 
   String? get _activeTurnId {
@@ -3405,6 +4402,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   bool _handleScrollNotification(ScrollNotification notification) {
+    if (_hasHiddenTurns &&
+        !_expandingHistory &&
+        notification.metrics.pixels <= _topHistoryExpandThreshold) {
+      _expandVisibleHistory(preserveViewport: true);
+    }
     return false;
   }
 
@@ -3424,26 +4426,193 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   void _jumpToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) {
-        return;
-      }
-      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-    });
+    _scrollToBottom();
   }
 
   void _animateToBottom() {
+    _scrollToBottom(animated: true);
+  }
+
+  void _scrollToBottom({
+    bool animated = false,
+    int remainingPasses = 4,
+    double? lastMaxScrollExtent,
+  }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) {
         return;
       }
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-      );
+
+      final position = _scrollController.position;
+      final target = position.maxScrollExtent;
+      final shouldMove = (target - position.pixels).abs() > 0.5;
+
+      if (shouldMove) {
+        if (animated) {
+          unawaited(
+            _scrollController.animateTo(
+              target,
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+            ),
+          );
+        } else {
+          _scrollController.jumpTo(target);
+        }
+      }
+
+      if (remainingPasses <= 1) {
+        return;
+      }
+
+      final shouldContinue = lastMaxScrollExtent == null ||
+          (target - lastMaxScrollExtent).abs() > 0.5 ||
+          !_isNearBottom();
+      if (shouldContinue) {
+        WidgetsBinding.instance.scheduleFrame();
+        _scrollToBottom(
+          remainingPasses: remainingPasses - 1,
+          lastMaxScrollExtent: target,
+        );
+      }
     });
   }
+}
+
+enum _ImagePreviewBackdropMode { dark, light, checker }
+
+enum _SessionStatusTone { neutral, signal, warning, error, idle }
+
+class _SessionStatusItem {
+  const _SessionStatusItem({
+    required this.label,
+    required this.tone,
+    this.icon,
+    this.loading = false,
+  });
+
+  final String label;
+  final _SessionStatusTone tone;
+  final IconData? icon;
+  final bool loading;
+}
+
+class _SessionStatusPill extends StatelessWidget {
+  const _SessionStatusPill({
+    required this.item,
+    required this.brightness,
+  });
+
+  final _SessionStatusItem item;
+  final Brightness brightness;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _colorsForTone(item.tone, brightness);
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.tileX,
+        vertical: AppSpacing.controlTight,
+      ),
+      decoration: BoxDecoration(
+        color: colors.backgroundColor,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+        border: Border.all(color: colors.borderColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (item.loading)
+            SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: colors.foregroundColor,
+              ),
+            )
+          else if (item.icon != null)
+            Icon(
+              item.icon,
+              size: 14,
+              color: colors.foregroundColor,
+            ),
+          if (item.loading || item.icon != null)
+            const SizedBox(width: AppSpacing.micro),
+          Text(
+            item.label,
+            style: TextStyle(
+              color: colors.foregroundColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  _SessionStatusPillColors _colorsForTone(
+    _SessionStatusTone tone,
+    Brightness brightness,
+  ) {
+    switch (tone) {
+      case _SessionStatusTone.neutral:
+        return _SessionStatusPillColors(
+          backgroundColor: AppColors.surfaceFor(brightness),
+          borderColor: AppColors.outlineFor(brightness),
+          foregroundColor: AppColors.mutedSoftFor(brightness),
+        );
+      case _SessionStatusTone.signal:
+        return _SessionStatusPillColors(
+          backgroundColor: AppColors.tintSurfaceFor(
+            brightness,
+            AppColors.signalFor(brightness),
+          ),
+          borderColor: AppColors.tintBorderFor(
+            brightness,
+            AppColors.signalFor(brightness),
+          ),
+          foregroundColor: AppColors.signalFor(brightness),
+        );
+      case _SessionStatusTone.warning:
+        return _SessionStatusPillColors(
+          backgroundColor: AppColors.warningSurfaceFor(brightness),
+          borderColor: AppColors.warningBorderFor(brightness),
+          foregroundColor: AppColors.warningTextFor(brightness),
+        );
+      case _SessionStatusTone.error:
+        return _SessionStatusPillColors(
+          backgroundColor: AppColors.errorBgFor(brightness),
+          borderColor: AppColors.errorBorderFor(brightness),
+          foregroundColor: AppColors.errorTextFor(brightness),
+        );
+      case _SessionStatusTone.idle:
+        return _SessionStatusPillColors(
+          backgroundColor: AppColors.tintSurfaceFor(
+            brightness,
+            AppColors.idleFor(brightness),
+          ),
+          borderColor: AppColors.tintBorderFor(
+            brightness,
+            AppColors.idleFor(brightness),
+          ),
+          foregroundColor: AppColors.idleFor(brightness),
+        );
+    }
+  }
+}
+
+class _SessionStatusPillColors {
+  const _SessionStatusPillColors({
+    required this.backgroundColor,
+    required this.borderColor,
+    required this.foregroundColor,
+  });
+
+  final Color backgroundColor;
+  final Color borderColor;
+  final Color foregroundColor;
 }
 
 class _SessionMessagesSkeleton extends StatelessWidget {

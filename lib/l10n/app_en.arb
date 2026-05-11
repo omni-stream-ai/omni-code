@@ -15,6 +15,8 @@
   "bridgeHelp": "Use 127.0.0.1:8787 with adb reverse. For LAN access, enter your computer IP. The server can allow requests by token and client ID.",
   "appUpdateSection": "App Update",
   "updateManifestUrlLabel": "Manifest URL",
+  "updateTargetVersionLabel": "Target version",
+  "updateTargetVersionHelp": "Optional. Enter a release version like 0.2.1 to download that specific GitHub release instead of the latest one.",
   "checkingUpdate": "Checking...",
   "checkAppUpdate": "Check app update",
   "updateHelp": "By default, updates are checked from the official GitHub release manifest. You can override it with a custom manifest URL, including a self-hosted Bridge manifest. When a new version is found, the system opens the download link and handles installation.",
@@ -61,6 +63,19 @@
       "versionName": {}
     }
   },
+  "targetVersionReady": "Version {versionName} is ready",
+  "@targetVersionReady": {
+    "placeholders": {
+      "versionName": {}
+    }
+  },
+  "targetVersionNotFound": "Version {version} could not be found or downloaded",
+  "@targetVersionNotFound": {
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "targetVersionDowngradeWarning": "If this is an older version than the one currently installed, Android may block the install as a downgrade.",
   "currentVersion": "Current version: {version}",
   "@currentVersion": {
     "placeholders": {
@@ -222,6 +237,13 @@
   "callModeUnavailable": "Call mode is unavailable until speech services finish initializing.",
   "callModeRequiresStreamingAsr": "Call mode currently requires either the System ASR provider or Tencent Cloud Streaming.",
   "send": "Send",
+  "imageAttachment": "Image attachment",
+  "previewImage": "Preview",
+  "imagePreviewTitle": "Image preview",
+  "imagePreviewLoadFailed": "Failed to load image preview",
+  "imagePreviewBgDark": "Dark",
+  "imagePreviewBgLight": "Light",
+  "imagePreviewBgChecker": "Checker",
   "agentAwaitingPermission": "{agent} is waiting for permission",
   "@agentAwaitingPermission": {
     "placeholders": {

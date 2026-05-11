@@ -33,6 +33,7 @@ class AppSettings {
     required String tencentCloudSecretId,
     required String tencentCloudSecretKey,
     required this.updateManifestUrl,
+    required this.updateTargetVersion,
     required this.aiApprovalEnabled,
     required this.aiApprovalBaseUrl,
     required this.aiApprovalApiKey,
@@ -63,6 +64,7 @@ class AppSettings {
   String get tencentCloudSecretId => _tencentCloudSecretId ?? '';
   String get tencentCloudSecretKey => _tencentCloudSecretKey ?? '';
   final String updateManifestUrl;
+  final String updateTargetVersion;
   final bool aiApprovalEnabled;
   final String aiApprovalBaseUrl;
   final String aiApprovalApiKey;
@@ -97,6 +99,7 @@ class AppSettings {
       updateManifestUrl: updateManifestUrl.trim().isNotEmpty
           ? updateManifestUrl.trim()
           : _defaultUpdateManifestUrl,
+      updateTargetVersion: '',
       aiApprovalEnabled: false,
       aiApprovalBaseUrl: 'https://api.openai.com/v1',
       aiApprovalApiKey: '',
@@ -124,6 +127,7 @@ class AppSettings {
     String? tencentCloudSecretId,
     String? tencentCloudSecretKey,
     String? updateManifestUrl,
+    String? updateTargetVersion,
     bool? aiApprovalEnabled,
     String? aiApprovalBaseUrl,
     String? aiApprovalApiKey,
@@ -152,6 +156,7 @@ class AppSettings {
       tencentCloudSecretKey:
           tencentCloudSecretKey ?? this.tencentCloudSecretKey,
       updateManifestUrl: updateManifestUrl ?? this.updateManifestUrl,
+      updateTargetVersion: updateTargetVersion ?? this.updateTargetVersion,
       aiApprovalEnabled: aiApprovalEnabled ?? this.aiApprovalEnabled,
       aiApprovalBaseUrl: aiApprovalBaseUrl ?? this.aiApprovalBaseUrl,
       aiApprovalApiKey: aiApprovalApiKey ?? this.aiApprovalApiKey,
@@ -181,6 +186,7 @@ class AppSettings {
       'tencent_cloud_secret_id': tencentCloudSecretId,
       'tencent_cloud_secret_key': tencentCloudSecretKey,
       'update_manifest_url': updateManifestUrl,
+      'update_target_version': updateTargetVersion,
       'ai_approval_enabled': aiApprovalEnabled,
       'ai_approval_base_url': aiApprovalBaseUrl,
       'ai_approval_api_key': aiApprovalApiKey,
@@ -226,6 +232,8 @@ class AppSettings {
           _readString(json, 'update_manifest_url').trim().isNotEmpty
               ? _readString(json, 'update_manifest_url').trim()
               : defaults.updateManifestUrl,
+      updateTargetVersion:
+          _readString(json, 'update_target_version').trim(),
       aiApprovalEnabled:
           _readBool(json, 'ai_approval_enabled', defaults.aiApprovalEnabled),
       aiApprovalBaseUrl: _readString(
@@ -422,6 +430,9 @@ class AppSettingsController extends ChangeNotifier {
         final updateManifestUrl =
             (json['update_manifest_url'] as String?)?.trim() ?? '';
         if (json['update_manifest_url'] == null || updateManifestUrl.isEmpty) {
+          shouldPersist = true;
+        }
+        if (json['update_target_version'] == null) {
           shouldPersist = true;
         }
         if (json['ai_approval_enabled'] == null) {

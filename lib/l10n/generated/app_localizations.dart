@@ -188,6 +188,18 @@ abstract class AppLocalizations {
   /// **'Manifest URL'**
   String get updateManifestUrlLabel;
 
+  /// No description provided for @updateTargetVersionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Target version'**
+  String get updateTargetVersionLabel;
+
+  /// No description provided for @updateTargetVersionHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional. Enter a release version like 0.2.1 to download that specific GitHub release instead of the latest one.'**
+  String get updateTargetVersionHelp;
+
   /// No description provided for @checkingUpdate.
   ///
   /// In en, this message translates to:
@@ -373,6 +385,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New version {versionName}'**
   String newVersionFound(Object versionName);
+
+  /// No description provided for @targetVersionReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {versionName} is ready'**
+  String targetVersionReady(Object versionName);
+
+  /// No description provided for @targetVersionNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version} could not be found or downloaded'**
+  String targetVersionNotFound(Object version);
+
+  /// No description provided for @targetVersionDowngradeWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'If this is an older version than the one currently installed, Android may block the install as a downgrade.'**
+  String get targetVersionDowngradeWarning;
 
   /// No description provided for @currentVersion.
   ///
@@ -901,6 +931,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Send'**
   String get send;
+
+  /// No description provided for @imageAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Image attachment'**
+  String get imageAttachment;
+
+  /// No description provided for @previewImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get previewImage;
+
+  /// No description provided for @imagePreviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Image preview'**
+  String get imagePreviewTitle;
+
+  /// No description provided for @imagePreviewLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load image preview'**
+  String get imagePreviewLoadFailed;
+
+  /// No description provided for @imagePreviewBgDark.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get imagePreviewBgDark;
+
+  /// No description provided for @imagePreviewBgLight.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get imagePreviewBgLight;
+
+  /// No description provided for @imagePreviewBgChecker.
+  ///
+  /// In en, this message translates to:
+  /// **'Checker'**
+  String get imagePreviewBgChecker;
 
   /// No description provided for @agentAwaitingPermission.
   ///

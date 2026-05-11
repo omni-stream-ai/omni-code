@@ -52,6 +52,8 @@ class TtsService {
       }
     });
 
+    await _configurePlaybackContext();
+
     try {
       await _flutterTts.awaitSpeakCompletion(true);
       _flutterTts.setStartHandler(() {
@@ -137,6 +139,10 @@ class TtsService {
     if (locale != null) {
       await _flutterTts.setLanguage(locale);
     }
+    if (!kIsWeb && Platform.isAndroid) {
+      await _flutterTts.speak(text, focus: true);
+      return;
+    }
     await _flutterTts.speak(text);
   }
 
@@ -149,6 +155,48 @@ class TtsService {
       return null;
     }
     return locale;
+  }
+
+  Future<void> _configurePlaybackContext() async {
+    try {
+      await _player.setAudioContext(
+        AudioContext(
+          android: const AudioContextAndroid(
+            stayAwake: true,
+          ),
+          iOS: AudioContextIOS(
+            category: AVAudioSessionCategory.playback,
+          ),
+        ),
+      );
+    } catch (_) {
+      // Best-effort audio session tuning for lock-screen playback.
+    }
+
+    if (kIsWeb) {
+      return;
+    }
+
+    if (Platform.isIOS) {
+      try {
+        await _flutterTts.setSharedInstance(true);
+        await _flutterTts.setIosAudioCategory(
+          IosTextToSpeechAudioCategory.playback,
+          const <IosTextToSpeechAudioCategoryOptions>[],
+        );
+      } catch (_) {
+        // Best-effort iOS session tuning for system TTS playback.
+      }
+      return;
+    }
+
+    if (Platform.isAndroid) {
+      try {
+        await _flutterTts.setAudioAttributesForNavigation();
+      } catch (_) {
+        // Best-effort Android audio attribute tuning for system TTS playback.
+      }
+    }
   }
 
   Future<String> _writeAudioFile(List<int> bytes) async {

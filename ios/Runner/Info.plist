@@ -30,6 +30,10 @@
 	<string>Omni Code 需要麦克风权限来录入语音指令。</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Omni Code 需要语音识别权限把你的语音转换成任务文本。</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

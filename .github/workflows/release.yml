@@ -53,6 +53,13 @@ jobs:
           is_primary_branch="false"
           tag_name="v${current_name}"
 
+          disable_release_for_branch_version_combo() {
+            if [[ "$is_primary_branch" != "true" && "$stable" == "true" ]]; then
+              echo "Skipping release for stable version ${current_name} on non-main branch ${branch_name}."
+              should_release="false"
+            fi
+          }
+
           if [[ "$branch_name" == "main" ]]; then
             is_primary_branch="true"
           fi
@@ -100,10 +107,7 @@ jobs:
                 exit 1
               fi
 
-              if [[ "$is_primary_branch" != "true" && "$stable" == "true" ]]; then
-                echo "${branch_name} must use a prerelease version suffix (for example 0.1.0-beta.1): ${current_name}" >&2
-                exit 1
-              fi
+              disable_release_for_branch_version_combo
 
               if [[ "$tag_exists" == "true" ]]; then
                 tagged_commit="$(git rev-list -n 1 "${tag_name}")"
@@ -128,10 +132,7 @@ jobs:
                   exit 1
                 fi
 
-                if [[ "$is_primary_branch" != "true" && "$stable" == "true" ]]; then
-                  echo "${branch_name} must use a prerelease version suffix (for example 0.1.0-beta.1): ${current_name}" >&2
-                  exit 1
-                fi
+                disable_release_for_branch_version_combo
               fi
             fi
           else

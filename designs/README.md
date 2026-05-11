@@ -1,17 +1,22 @@
 # Omni Code Designs
 
-![Omni Code Theme Board](./Omni_Code_Theme_Board.png)
+![Omni Code Theme Board](./omni-code-theme-from-code.png)
 
-This directory stores the shared OpenPencil design sources for Omni Code.
+![Omni Code App Screens](./omni-code-screens-from-code.png)
+
+This directory stores the code-derived OpenPencil design sources for Omni Code.
 
 ## Files
 
-- `theme.op`: source of truth for shared design tokens, dark/light modes, and preview states.
-- `main.op`: main screen draft aligned to the shared theme system.
-- `Omni_Code_Theme_Board.png`: exported preview image from `theme.op`.
+- `omni-code-theme-from-code.pen`: OpenPencil theme board generated from the current Flutter theme and screen code.
+- `omni-code-screens-from-code.pen`: OpenPencil screen draft generated from the current Flutter screen structure.
+- `omni-code-theme-from-code.png`: exported preview image from `omni-code-theme-from-code.pen`.
+- `omni-code-screens-from-code.png`: exported preview image from `omni-code-screens-from-code.pen`.
+
+Legacy `.op` design files have been removed. `.pen` is the only maintained design format in this repo.
 
 ## Workflow
 
-1. Update `theme.op` when the shared design system changes.
-2. Run `node scripts/sync_op_theme.mjs` when `main.op` needs the latest theme block.
-3. Re-export the preview PNG after meaningful visual changes and replace `Omni_Code_Theme_Board.png`.
+1. Run `node scripts/generate_openpencil_design_from_code.mjs` to regenerate the code-derived `.pen` design drafts.
+2. Re-export the preview PNGs after meaningful visual changes.
+3. Treat the generated `.pen` files as the current design handoff for the Flutter app.

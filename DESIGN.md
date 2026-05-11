@@ -8,14 +8,15 @@
 
 ## Source Of Truth
 
-- `designs/theme.op` is the source of truth for shared design tokens.
+- `designs/omni-code-theme-from-code.pen` is the source of truth for shared design tokens.
+- `designs/omni-code-screens-from-code.pen` is the current screen draft generated from the Flutter implementation.
 - Prefer semantic tokens before adding new raw values.
-- In `designs/*.op`, colors and strokes should use token refs like `$--color-panel` instead of new hex values whenever possible.
-- When a design file needs local token resolution, run `node scripts/sync_op_theme.mjs` to inject the shared theme block from `designs/theme.op`.
+- In `designs/*.pen`, colors and strokes should use token refs like `$--color-panel` instead of new hex values whenever possible.
+- Legacy `.op` design files have been removed from this repo.
 
 ## Theme System
 
-Shared token categories in `designs/theme.op`:
+Shared token categories in `designs/omni-code-theme-from-code.pen`:
 
 - Typography
 - Radius
@@ -31,11 +32,11 @@ Rules:
 
 - Reuse an existing semantic token before creating a new one.
 - Add a new token only when a value represents a stable new role in the system, not a one-off exception.
-- When a token is added in `theme.op`, update this document only if it changes the shared system, not just one screen.
+- When a token is added in `omni-code-theme-from-code.pen`, update this document only if it changes the shared system, not just one screen.
 
 ## Color System
 
-- Use semantic color tokens from `theme.op` rather than raw hex values.
+- Use semantic color tokens from `omni-code-theme-from-code.pen` rather than raw hex values.
 - Keep token naming role-based, not page-based.
 - Prefer a small set of reusable surfaces, text levels, and state colors over local special cases.
 - Dark and light mode values should stay paired inside the same token instead of forking token names by mode.
@@ -62,7 +63,7 @@ Rules:
 
 ## Spacing And Padding System
 
-Use this spacing scale for Omni Code OpenPencil drafts:
+Use this spacing scale for Omni Code OpenPencil `.pen` drafts:
 
 - Micro text grouping: `1` via `--space-text-tight`, `2` via `--space-text-stack`
 - Tight control spacing: `6` via `--space-control-tight`, `8` via `--space-compact`
@@ -103,7 +104,7 @@ Preferred gap patterns:
 
 ## OpenPencil Limitation
 
-- OpenPencil currently resolves color and stroke token refs reliably in `.op` files.
+- OpenPencil currently resolves color and stroke token refs reliably in `.pen` files.
 - `gap` and scalar `padding` token refs are reliable enough to use in design drafts.
 - Radius, font family, and many padding-array cases are not as reliable as variable refs yet.
 - Because of that, keep corner radii and array paddings aligned to the system scale above even if some values remain literal numbers in the file.

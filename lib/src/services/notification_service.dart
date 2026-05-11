@@ -231,6 +231,73 @@ class NotificationService {
     await showAssistantReplyNotification(session, notificationBody);
   }
 
+  Future<void> showApprovalRequestNotification(
+    SessionSummary session, {
+    required String title,
+    required String body,
+  }) async {
+    final trimmedBody = truncateNotificationBody(
+      body,
+      appSettingsController.settings.notificationMaxChars,
+    );
+    if (trimmedBody.isEmpty) {
+      return;
+    }
+    await _plugin.show(
+      id: '${session.id}::approval'.hashCode,
+      title: title,
+      body: trimmedBody,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _replyChannelId,
+          _replyChannelName,
+          channelDescription: _replyChannelDescription,
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          ticker: 'Omni Code',
+          category: AndroidNotificationCategory.status,
+          visibility: NotificationVisibility.public,
+          autoCancel: true,
+          ongoing: false,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+          presentBanner: true,
+          presentList: true,
+          threadIdentifier: _replyThreadId,
+        ),
+        macOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+          presentBanner: true,
+          presentList: true,
+          threadIdentifier: _replyThreadId,
+        ),
+        linux: LinuxNotificationDetails(
+          defaultActionName: _defaultActionName,
+        ),
+        windows: WindowsNotificationDetails(),
+      ),
+      payload: jsonEncode({
+        'session': {
+          'id': session.id,
+          'project_id': session.projectId,
+          'title': session.title,
+          'agent': session.agent.name,
+          'status': _statusName(session.status),
+          'updated_at': session.updatedAt.toIso8601String(),
+          'unread_count': session.unreadCount,
+          'last_message_preview': session.lastMessagePreview,
+        },
+      }),
+    );
+  }
+
   String _statusName(SessionStatus status) {
     switch (status) {
       case SessionStatus.idle:

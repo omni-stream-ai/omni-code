@@ -326,6 +326,275 @@ void main() {
     expect(find.text(l10n.loadMoreSessionsLabel), findsNothing);
   });
 
+  testWidgets('home refresh keeps expanded recent session count',
+      (tester) async {
+    var sessionsRequestCount = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _projectJson(
+                  id: 'project-1',
+                  name: 'Project One',
+                  updatedAt: '2026-05-05T11:00:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/sessions') {
+          sessionsRequestCount += 1;
+          return http.Response(
+            jsonEncode({
+              'data': [
+                for (var i = 7; i >= 1; i--)
+                  _sessionJson(
+                    id: 'session-$i',
+                    projectId: 'project-1',
+                    title: 'Session $i',
+                    updatedAt: '2026-05-05T${10 + i}:00:00.000',
+                    preview: 'Refresh $sessionsRequestCount · Preview $i',
+                  ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(HomeScreen)),
+    )!;
+    final loadMore = find.text(l10n.loadMoreSessionsLabel);
+    expect(loadMore, findsOneWidget);
+
+    await tester.ensureVisible(loadMore);
+    await tester.tap(loadMore);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Session 2'), findsOneWidget);
+    expect(find.text('Session 1'), findsOneWidget);
+
+    final refreshButton = find.byIcon(Icons.refresh_rounded);
+    await tester.tap(refreshButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(sessionsRequestCount, 2);
+    expect(find.text('Session 2'), findsOneWidget);
+    expect(find.text('Session 1'), findsOneWidget);
+    expect(find.text(l10n.loadMoreSessionsLabel), findsNothing);
+  });
+
+  testWidgets('home refreshes recent sessions when app resumes after throttle',
+      (tester) async {
+    final binding = tester.binding;
+    final now = _FakeNow(DateTime(2026, 5, 10, 9, 0, 0));
+    var sessionsRequestCount = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _projectJson(
+                  id: 'project-1',
+                  name: 'Project One',
+                  updatedAt: '2026-05-05T11:00:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/sessions') {
+          sessionsRequestCount += 1;
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _sessionJson(
+                  id: 'session-$sessionsRequestCount',
+                  projectId: 'project-1',
+                  title: 'Session $sessionsRequestCount',
+                  updatedAt: '2026-05-05T13:00:00.000',
+                  preview: 'Latest $sessionsRequestCount',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(home: HomeScreen(client: client, now: now.call)),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(sessionsRequestCount, 1);
+    expect(find.text('Session 1'), findsOneWidget);
+
+    now.advance(const Duration(seconds: 16));
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(sessionsRequestCount, 2);
+    expect(find.text('Session 2'), findsOneWidget);
+  });
+
+  testWidgets('home refresh keeps expanded recent sessions visible',
+      (tester) async {
+    var sessionsRequestCount = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _projectJson(
+                  id: 'project-1',
+                  name: 'Project One',
+                  updatedAt: '2026-05-05T11:00:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/sessions') {
+          sessionsRequestCount += 1;
+          return http.Response(
+            jsonEncode({
+              'data': [
+                for (var i = 7; i >= 1; i--)
+                  _sessionJson(
+                    id: 'session-$i',
+                    projectId: 'project-1',
+                    title: sessionsRequestCount == 1
+                        ? 'Session $i'
+                        : 'Refreshed Session $i',
+                    updatedAt: '2026-05-05T${10 + i}:00:00.000',
+                    preview: 'Preview $i',
+                  ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(HomeScreen)),
+    )!;
+    final loadMore = find.text(l10n.loadMoreSessionsLabel);
+
+    await tester.ensureVisible(loadMore);
+    await tester.tap(loadMore);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Session 2'), findsOneWidget);
+    expect(find.text('Session 1'), findsOneWidget);
+    expect(find.text(l10n.loadMoreSessionsLabel), findsNothing);
+
+    await tester.tap(find.byIcon(Icons.refresh_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(sessionsRequestCount, 2);
+    expect(find.text('Refreshed Session 2'), findsOneWidget);
+    expect(find.text('Refreshed Session 1'), findsOneWidget);
+    expect(find.text(l10n.loadMoreSessionsLabel), findsNothing);
+  });
+
+  testWidgets('home skips resumed refresh inside throttle window',
+      (tester) async {
+    final binding = tester.binding;
+    final now = _FakeNow(DateTime(2026, 5, 10, 9, 0, 0));
+    var sessionsRequestCount = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _projectJson(
+                  id: 'project-1',
+                  name: 'Project One',
+                  updatedAt: '2026-05-05T11:00:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/sessions') {
+          sessionsRequestCount += 1;
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _sessionJson(
+                  id: 'session-$sessionsRequestCount',
+                  projectId: 'project-1',
+                  title: 'Session $sessionsRequestCount',
+                  updatedAt: '2026-05-05T13:00:00.000',
+                  preview: 'Latest $sessionsRequestCount',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(home: HomeScreen(client: client, now: now.call)),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(sessionsRequestCount, 1);
+    expect(find.text('Session 1'), findsOneWidget);
+
+    now.advance(const Duration(seconds: 10));
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(sessionsRequestCount, 1);
+    expect(find.text('Session 1'), findsOneWidget);
+  });
+
   testWidgets('home opens session detail from a recent session card',
       (tester) async {
     String? pushedSessionRouteName;
@@ -735,6 +1004,18 @@ class _MemoryAppSettingsStore implements AppSettingsStore {
   @override
   Future<void> write(String value) async {
     _value = value;
+  }
+}
+
+class _FakeNow {
+  _FakeNow(this.value);
+
+  DateTime value;
+
+  DateTime call() => value;
+
+  void advance(Duration duration) {
+    value = value.add(duration);
   }
 }
 

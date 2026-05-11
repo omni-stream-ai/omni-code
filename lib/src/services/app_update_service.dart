@@ -14,18 +14,31 @@ class AppUpdateService {
       : _httpClient = httpClient ?? http.Client();
 
   static const MethodChannel _channel = MethodChannel('omni_code/app_update');
+  static const String _defaultGithubManifestUrl =
+      'https://github.com/omni-stream-ai/omni-code/releases/latest/download/update.json';
+  static const String _githubDownloadPrefix =
+      'https://github.com/omni-stream-ai/omni-code/releases/download/';
 
   final http.Client _httpClient;
   final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
 
   Future<AppUpdateCheckResult> checkForUpdate(
-      {required String manifestUrl}) async {
+      {required String manifestUrl, String? targetVersion}) async {
     final trimmedUrl = manifestUrl.trim();
-    if (trimmedUrl.isEmpty) {
+    final normalizedTargetVersion = normalizeTargetVersion(targetVersion);
+    final isTargetedDownload = _canResolveGithubTargetVersion(
+      manifestUrl: trimmedUrl,
+      targetVersion: normalizedTargetVersion,
+    );
+    final resolvedManifestUrl = resolveManifestUrl(
+      manifestUrl: trimmedUrl,
+      targetVersion: normalizedTargetVersion,
+    );
+    if (resolvedManifestUrl.isEmpty) {
       throw AppUpdateException(currentL10n().updateManifestUrlRequired);
     }
 
-    final uri = Uri.tryParse(trimmedUrl);
+    final uri = Uri.tryParse(resolvedManifestUrl);
     if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
       throw AppUpdateException(currentL10n().updateManifestUrlInvalid);
     }
@@ -38,6 +51,11 @@ class AppUpdateService {
         'Accept': 'application/json'
       }).timeout(const Duration(seconds: 12));
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        if (isTargetedDownload && response.statusCode == 404) {
+          throw AppUpdateException(
+            currentL10n().targetVersionNotFound(normalizedTargetVersion),
+          );
+        }
         throw AppUpdateException(
           currentL10n().updateCheckHttpFailed(response.statusCode),
         );
@@ -56,7 +74,11 @@ class AppUpdateService {
       return AppUpdateCheckResult(
         currentVersionName: packageInfo.version,
         currentVersionCode: currentBuildNumber,
-        update: update.versionCode > currentBuildNumber ? update : null,
+        targetVersion: normalizedTargetVersion,
+        isTargetedDownload: isTargetedDownload,
+        update: isTargetedDownload
+            ? update
+            : (update.versionCode > currentBuildNumber ? update : null),
       );
     } on AppUpdateException {
       rethrow;
@@ -115,6 +137,75 @@ class AppUpdateService {
         error.message ?? currentL10n().cannotOpenInstaller,
       );
     }
+  }
+
+  static String normalizeTargetVersion(String? targetVersion) {
+    final trimmed = targetVersion?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    return trimmed.startsWith('v') || trimmed.startsWith('V')
+        ? trimmed.substring(1)
+        : trimmed;
+  }
+
+  static String resolveManifestUrl({
+    required String manifestUrl,
+    String? targetVersion,
+  }) {
+    final trimmedUrl = manifestUrl.trim();
+    final normalizedTargetVersion = normalizeTargetVersion(targetVersion);
+    if (normalizedTargetVersion.isEmpty) {
+      return trimmedUrl;
+    }
+
+    final uri = Uri.tryParse(trimmedUrl);
+    if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
+      return trimmedUrl;
+    }
+
+    if (_isOfficialGithubManifestUri(uri)) {
+      return '${_githubDownloadPrefix}v$normalizedTargetVersion/update.json';
+    }
+
+    return trimmedUrl;
+  }
+
+  static bool _canResolveGithubTargetVersion({
+    required String manifestUrl,
+    required String targetVersion,
+  }) {
+    if (targetVersion.isEmpty) {
+      return false;
+    }
+
+    final uri = Uri.tryParse(manifestUrl.trim());
+    if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
+      return false;
+    }
+
+    return _isOfficialGithubManifestUri(uri);
+  }
+
+  static bool _isOfficialGithubManifestUri(Uri uri) {
+    if (uri.toString() == _defaultGithubManifestUrl) {
+      return true;
+    }
+
+    if (uri.scheme != 'https' || uri.host != 'github.com') {
+      return false;
+    }
+
+    final segments = uri.pathSegments;
+    if (segments.length < 6) {
+      return false;
+    }
+
+    return segments[0] == 'omni-stream-ai' &&
+        segments[1] == 'omni-code' &&
+        segments[2] == 'releases' &&
+        segments[3] == 'download' &&
+        segments[5] == 'update.json';
   }
 }
 
@@ -302,14 +393,21 @@ class AppUpdateCheckResult {
   const AppUpdateCheckResult({
     required this.currentVersionName,
     required this.currentVersionCode,
+    required this.targetVersion,
+    required this.isTargetedDownload,
     required this.update,
   });
 
   final String currentVersionName;
   final int currentVersionCode;
+  final String targetVersion;
+  final bool isTargetedDownload;
   final AppUpdateInfo? update;
 
   bool get hasUpdate => update != null;
+
+  bool get isDowngrade =>
+      update != null && update!.versionCode < currentVersionCode;
 }
 
 class AppUpdateException implements Exception {
