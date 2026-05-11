@@ -15,6 +15,8 @@
   "bridgeHelp": "真机通过 adb reverse 时可直接用 127.0.0.1:8787；局域网访问时填电脑 IP。服务端可按 token 和 client id 放行。",
   "appUpdateSection": "App 更新",
   "updateManifestUrlLabel": "更新清单 URL",
+  "updateTargetVersionLabel": "目标版本号",
+  "updateTargetVersionHelp": "可选。填写如 0.2.1 这样的版本号后，会下载对应 GitHub Release，而不是最新版本。",
   "checkingUpdate": "检查中...",
   "checkAppUpdate": "检查 App 更新",
   "updateHelp": "默认从官方 GitHub Release 的更新清单检查新版本。你也可以手动填写自定义清单 URL，包括自托管 Bridge 的 manifest。发现新版本后会打开下载链接，由系统完成安装。",
@@ -57,6 +59,19 @@
       "versionName": {}
     }
   },
+  "targetVersionReady": "版本 {versionName} 已可下载",
+  "@targetVersionReady": {
+    "placeholders": {
+      "versionName": {}
+    }
+  },
+  "targetVersionNotFound": "未找到或无法下载版本 {version}",
+  "@targetVersionNotFound": {
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "targetVersionDowngradeWarning": "如果这是比当前已安装版本更旧的包，Android 可能会拦截降级安装。",
   "currentVersion": "当前版本：{version}",
   "@currentVersion": {
     "placeholders": {

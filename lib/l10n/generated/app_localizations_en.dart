@@ -55,6 +55,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updateManifestUrlLabel => 'Manifest URL';
 
   @override
+  String get updateTargetVersionLabel => 'Target version';
+
+  @override
+  String get updateTargetVersionHelp =>
+      'Optional. Enter a release version like 0.2.1 to download that specific GitHub release instead of the latest one.';
+
+  @override
   String get checkingUpdate => 'Checking...';
 
   @override
@@ -145,6 +152,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String newVersionFound(Object versionName) {
     return 'New version $versionName';
   }
+
+  @override
+  String targetVersionReady(Object versionName) {
+    return 'Version $versionName is ready';
+  }
+
+  @override
+  String targetVersionNotFound(Object version) {
+    return 'Version $version could not be found or downloaded';
+  }
+
+  @override
+  String get targetVersionDowngradeWarning =>
+      'If this is an older version than the one currently installed, Android may block the install as a downgrade.';
 
   @override
   String currentVersion(Object version) {

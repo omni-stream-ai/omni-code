@@ -34,6 +34,28 @@ void main() {
       expect(dropdown.style, equals(textField.style));
     },
   );
+
+  testWidgets('shows saved target update version in settings screen',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(updateTargetVersion: '0.2.1'),
+    );
+
+    await tester.pumpWidget(
+      const _TestApp(
+        home: SettingsScreen(),
+      ),
+    );
+    await tester.pump();
+
+    final matchingFields = tester.widgetList<TextField>(find.byType(TextField));
+    expect(
+      matchingFields.any(
+        (field) => field.controller?.text == '0.2.1',
+      ),
+      isTrue,
+    );
+  });
 }
 
 class _TestApp extends StatelessWidget {

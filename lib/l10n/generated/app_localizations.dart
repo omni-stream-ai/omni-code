@@ -188,6 +188,18 @@ abstract class AppLocalizations {
   /// **'Manifest URL'**
   String get updateManifestUrlLabel;
 
+  /// No description provided for @updateTargetVersionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Target version'**
+  String get updateTargetVersionLabel;
+
+  /// No description provided for @updateTargetVersionHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional. Enter a release version like 0.2.1 to download that specific GitHub release instead of the latest one.'**
+  String get updateTargetVersionHelp;
+
   /// No description provided for @checkingUpdate.
   ///
   /// In en, this message translates to:
@@ -349,6 +361,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New version {versionName}'**
   String newVersionFound(Object versionName);
+
+  /// No description provided for @targetVersionReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {versionName} is ready'**
+  String targetVersionReady(Object versionName);
+
+  /// No description provided for @targetVersionNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version} could not be found or downloaded'**
+  String targetVersionNotFound(Object version);
+
+  /// No description provided for @targetVersionDowngradeWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'If this is an older version than the one currently installed, Android may block the install as a downgrade.'**
+  String get targetVersionDowngradeWarning;
 
   /// No description provided for @currentVersion.
   ///

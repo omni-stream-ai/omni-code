@@ -1,7 +1,7 @@
 name: omni_code
 description: Client console for managing desktop coding agents.
 publish_to: "none"
-version: 0.3.0+4
+version: 0.3.1+4
 
 environment:
   sdk: ">=3.5.0 <4.0.0"

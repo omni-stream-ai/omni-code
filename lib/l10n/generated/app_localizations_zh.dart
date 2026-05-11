@@ -55,6 +55,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateManifestUrlLabel => '更新清单 URL';
 
   @override
+  String get updateTargetVersionLabel => '目标版本号';
+
+  @override
+  String get updateTargetVersionHelp =>
+      '可选。填写如 0.2.1 这样的版本号后，会下载对应 GitHub Release，而不是最新版本。';
+
+  @override
   String get checkingUpdate => '检查中...';
 
   @override
@@ -143,6 +150,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String newVersionFound(Object versionName) {
     return '发现新版本 $versionName';
   }
+
+  @override
+  String targetVersionReady(Object versionName) {
+    return '版本 $versionName 已可下载';
+  }
+
+  @override
+  String targetVersionNotFound(Object version) {
+    return '未找到或无法下载版本 $version';
+  }
+
+  @override
+  String get targetVersionDowngradeWarning =>
+      '如果这是比当前已安装版本更旧的包，Android 可能会拦截降级安装。';
 
   @override
   String currentVersion(Object version) {

@@ -31,6 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _bridgeUrlController = TextEditingController();
   final _clientIdController = TextEditingController();
   final _updateManifestUrlController = TextEditingController();
+  final _updateTargetVersionController = TextEditingController();
   final _aiApprovalBaseUrlController = TextEditingController();
   final _aiApprovalApiKeyController = TextEditingController();
   final _aiApprovalModelController = TextEditingController();
@@ -60,6 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _bridgeUrlController.dispose();
     _clientIdController.dispose();
     _updateManifestUrlController.dispose();
+    _updateTargetVersionController.dispose();
     _aiApprovalBaseUrlController.dispose();
     _aiApprovalApiKeyController.dispose();
     _aiApprovalModelController.dispose();
@@ -72,6 +74,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _clientIdController.text = settings.clientId;
     _appLanguage = settings.appLanguage;
     _updateManifestUrlController.text = settings.updateManifestUrl;
+    _updateTargetVersionController.text = settings.updateTargetVersion;
     _aiApprovalBaseUrlController.text = settings.aiApprovalBaseUrl;
     _aiApprovalApiKeyController.text = settings.aiApprovalApiKey;
     _aiApprovalModelController.text = settings.aiApprovalModel;
@@ -335,6 +338,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               context,
                               label: 'Update manifest',
                               value: 'GitHub releases',
+                            ),
+                            TextField(
+                              controller: _updateTargetVersionController,
+                              style: formValueTextStyle,
+                              decoration: InputDecoration(
+                                labelText: l10n.updateTargetVersionLabel,
+                                hintText: '0.2.1',
+                                helperText: l10n.updateTargetVersionHelp,
+                              ),
                             ),
                           ],
                         ),
@@ -632,6 +644,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         appLanguage: _appLanguage,
         themeMode: _themeMode,
         updateManifestUrl: _updateManifestUrlController.text.trim(),
+        updateTargetVersion: _normalizedUpdateTargetVersion(),
         aiApprovalEnabled: _aiApprovalEnabled,
         aiApprovalBaseUrl: _aiApprovalBaseUrlController.text.trim(),
         aiApprovalApiKey: _aiApprovalApiKeyController.text.trim(),
@@ -708,10 +721,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await appSettingsController.save(
         appSettingsController.settings.copyWith(
           updateManifestUrl: _updateManifestUrlController.text.trim(),
+          updateTargetVersion: _normalizedUpdateTargetVersion(),
         ),
       );
       final result = await appUpdateService.checkForUpdate(
         manifestUrl: _resolvedUpdateManifestUrl(),
+        targetVersion: _normalizedUpdateTargetVersion(),
       );
       if (!mounted) {
         return;
@@ -720,7 +735,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              context.l10n.alreadyLatestVersion(result.currentVersionName),
+              result.isTargetedDownload
+                  ? context.l10n.targetVersionNotFound(result.targetVersion)
+                  : context.l10n.alreadyLatestVersion(result.currentVersionName),
             ),
           ),
         );
@@ -756,6 +773,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return appSettingsController.settings.updateManifestUrl.trim();
   }
 
+  String _normalizedUpdateTargetVersion() {
+    return AppUpdateService.normalizeTargetVersion(
+      _updateTargetVersionController.text,
+    );
+  }
+
   Future<void> _showUpdateDialog(AppUpdateCheckResult result) async {
     final update = result.update!;
     await showDialog<void>(
@@ -763,7 +786,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       barrierDismissible: !update.force,
       builder: (context) {
         return AlertDialog(
-          title: Text(context.l10n.newVersionFound(update.versionName)),
+          title: Text(
+            result.isTargetedDownload
+                ? context.l10n.targetVersionReady(update.versionName)
+                : context.l10n.newVersionFound(update.versionName),
+          ),
           content: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -771,6 +798,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Text(context.l10n.currentVersion(result.currentVersionName)),
                 const SizedBox(height: AppSpacing.compact),
+                if (result.isDowngrade) ...[
+                  Text(context.l10n.targetVersionDowngradeWarning),
+                  const SizedBox(height: AppSpacing.compact),
+                ],
                 if (update.releaseNotes.trim().isNotEmpty)
                   Text(update.releaseNotes.trim()),
               ],

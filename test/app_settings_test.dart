@@ -26,4 +26,15 @@ void main() {
     });
     expect(settings.notificationMaxChars, 160);
   });
+
+  test('updateTargetVersion defaults to empty string', () {
+    expect(AppSettings.defaults().updateTargetVersion, isEmpty);
+  });
+
+  test('reads and trims update_target_version', () {
+    final settings = AppSettings.fromJson(<String, dynamic>{
+      'update_target_version': '  v0.2.1  ',
+    });
+    expect(settings.updateTargetVersion, 'v0.2.1');
+  });
 }

@@ -30,6 +30,7 @@ class AppSettings {
     required this.whisperApiKey,
     required this.whisperBaseUrl,
     required this.updateManifestUrl,
+    required this.updateTargetVersion,
     required this.aiApprovalEnabled,
     required this.aiApprovalBaseUrl,
     required this.aiApprovalApiKey,
@@ -52,6 +53,7 @@ class AppSettings {
   final String whisperApiKey;
   final String whisperBaseUrl;
   final String updateManifestUrl;
+  final String updateTargetVersion;
   final bool aiApprovalEnabled;
   final String aiApprovalBaseUrl;
   final String aiApprovalApiKey;
@@ -83,6 +85,7 @@ class AppSettings {
       updateManifestUrl: updateManifestUrl.trim().isNotEmpty
           ? updateManifestUrl.trim()
           : _defaultUpdateManifestUrl,
+      updateTargetVersion: '',
       aiApprovalEnabled: false,
       aiApprovalBaseUrl: 'https://api.openai.com/v1',
       aiApprovalApiKey: '',
@@ -107,6 +110,7 @@ class AppSettings {
     String? whisperApiKey,
     String? whisperBaseUrl,
     String? updateManifestUrl,
+    String? updateTargetVersion,
     bool? aiApprovalEnabled,
     String? aiApprovalBaseUrl,
     String? aiApprovalApiKey,
@@ -130,6 +134,7 @@ class AppSettings {
       whisperApiKey: whisperApiKey ?? this.whisperApiKey,
       whisperBaseUrl: whisperBaseUrl ?? this.whisperBaseUrl,
       updateManifestUrl: updateManifestUrl ?? this.updateManifestUrl,
+      updateTargetVersion: updateTargetVersion ?? this.updateTargetVersion,
       aiApprovalEnabled: aiApprovalEnabled ?? this.aiApprovalEnabled,
       aiApprovalBaseUrl: aiApprovalBaseUrl ?? this.aiApprovalBaseUrl,
       aiApprovalApiKey: aiApprovalApiKey ?? this.aiApprovalApiKey,
@@ -156,6 +161,7 @@ class AppSettings {
       'whisper_api_key': whisperApiKey,
       'whisper_base_url': whisperBaseUrl,
       'update_manifest_url': updateManifestUrl,
+      'update_target_version': updateTargetVersion,
       'ai_approval_enabled': aiApprovalEnabled,
       'ai_approval_base_url': aiApprovalBaseUrl,
       'ai_approval_api_key': aiApprovalApiKey,
@@ -198,6 +204,8 @@ class AppSettings {
           _readString(json, 'update_manifest_url').trim().isNotEmpty
               ? _readString(json, 'update_manifest_url').trim()
               : defaults.updateManifestUrl,
+      updateTargetVersion:
+          _readString(json, 'update_target_version').trim(),
       aiApprovalEnabled:
           _readBool(json, 'ai_approval_enabled', defaults.aiApprovalEnabled),
       aiApprovalBaseUrl: _readString(
@@ -394,6 +402,9 @@ class AppSettingsController extends ChangeNotifier {
         final updateManifestUrl =
             (json['update_manifest_url'] as String?)?.trim() ?? '';
         if (json['update_manifest_url'] == null || updateManifestUrl.isEmpty) {
+          shouldPersist = true;
+        }
+        if (json['update_target_version'] == null) {
           shouldPersist = true;
         }
         if (json['ai_approval_enabled'] == null) {
