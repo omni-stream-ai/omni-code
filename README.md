@@ -128,7 +128,7 @@ This repository includes a client release workflow:
 - Output: universal Android APK, split Android ABI APKs, Windows zip, Linux tar.gz, plus `update.json` GitHub Release assets
 - Release notes: generated from Conventional Commit messages since the previous tag
 - `main` can publish stable versions only
-- Other branches must use prerelease versions such as `0.1.0-beta.1`
+- Other branches can build with stable versions, but release publishing is skipped unless the version is a prerelease such as `0.1.0-beta.1`
 
 If `.github/workflows/release.yml` changes and the current app version tag does
 not exist yet, the workflow will still publish that version's release.
