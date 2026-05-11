@@ -113,7 +113,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _lastHomeDataLoadAt = _now();
     final cachedProjects = _client.peekProjects();
     final cachedSessions = _client.peekSessions();
-    final previousVisibleCount = _visibleRecentCount;
     final shouldRefreshFromNetwork = forceRefresh ||
         cachedProjects != null ||
         cachedSessions != null ||
