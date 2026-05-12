@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+env:
+  HOMEBREW_TAP_REPO: omni-stream-ai/homebrew-omni-code
+  AUR_REPO: omni-code-bin
+
 jobs:
   detect-version-bump:
     name: Detect Client Version Bump
@@ -293,6 +297,14 @@ jobs:
             label: Linux
             asset_name: omni-code-linux-x86_64
             archive_name: omni-code-linux-x86_64.tar.gz
+          - os: macos-14
+            label: macOS Apple Silicon
+            asset_name: omni-code-macos-arm64
+            archive_name: omni-code-macos-arm64.zip
+          - os: macos-13
+            label: macOS Intel
+            asset_name: omni-code-macos-x64
+            archive_name: omni-code-macos-x64.zip
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -332,6 +344,11 @@ jobs:
         shell: bash
         run: flutter build linux --release
 
+      - name: Build macOS desktop bundle
+        if: runner.os == 'macOS'
+        shell: bash
+        run: flutter build macos --release
+
       - name: Package Windows desktop bundle
         if: runner.os == 'Windows'
         shell: pwsh
@@ -349,6 +366,16 @@ jobs:
           cp -R build/linux/x64/release/bundle "dist/${{ matrix.asset_name }}"
           tar -C dist -czf "dist/${{ matrix.archive_name }}" "${{ matrix.asset_name }}"
 
+      - name: Package macOS desktop bundle
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/macos/Build/Products/Release/omni_code.app \
+            "dist/${{ matrix.archive_name }}"
+
       - name: Upload desktop bundle
         uses: actions/upload-artifact@v4
         with:
@@ -364,6 +391,8 @@ jobs:
       - android-apk
       - desktop-bundles
     if: needs.detect-version-bump.outputs.should_release == 'true'
+    env:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -475,4 +504,109 @@ jobs:
             release-assets/omni-code-android-x86_64.apk
             release-assets/omni-code-windows-x86_64.zip
             release-assets/omni-code-linux-x86_64.tar.gz
+            release-assets/omni-code-macos-arm64.zip
+            release-assets/omni-code-macos-x64.zip
             release-assets/update.json
+
+      - name: Checkout Homebrew tap repository
+        if: needs.detect-version-bump.outputs.stable == 'true' && env.HOMEBREW_TAP_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.HOMEBREW_TAP_REPO }}
+          token: ${{ env.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update Homebrew cask
+        if: needs.detect-version-bump.outputs.stable == 'true' && env.HOMEBREW_TAP_TOKEN != ''
+        env:
+          VERSION: ${{ needs.detect-version-bump.outputs.version_name }}
+          TAG: ${{ needs.detect-version-bump.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          macos_arm_sha=$(sha256sum release-assets/omni-code-macos-arm64.zip | awk '{print $1}')
+          macos_x86_sha=$(sha256sum release-assets/omni-code-macos-x64.zip | awk '{print $1}')
+
+          mkdir -p homebrew-tap/Casks
+          cat > homebrew-tap/Casks/omni-code.rb <<EOF
+          cask "omni-code" do
+            arch arm: "arm64", intel: "x64"
+
+            version "${VERSION}"
+            sha256 arm: "${macos_arm_sha}", intel: "${macos_x86_sha}"
+
+            url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/omni-code-macos-#{arch}.zip",
+                verified: "github.com/${GITHUB_REPOSITORY}/"
+            name "Omni Code"
+            desc "Flutter client for desktop Omni Code agent sessions"
+            homepage "https://github.com/${GITHUB_REPOSITORY}"
+
+            app "omni_code.app"
+            binary "#{appdir}/omni_code.app/Contents/MacOS/omni_code", target: "omni-code"
+          end
+          EOF
+
+      - name: Commit and push Homebrew cask update
+        if: needs.detect-version-bump.outputs.stable == 'true' && env.HOMEBREW_TAP_TOKEN != ''
+        env:
+          VERSION: ${{ needs.detect-version-bump.outputs.version_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd homebrew-tap
+          git add Casks/omni-code.rb
+          if git diff --cached --quiet; then
+            echo "No Homebrew cask changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "omni-code ${VERSION}"
+          git push origin HEAD
+
+      - name: Publish to AUR
+        if: needs.detect-version-bump.outputs.stable == 'true'
+        env:
+          VERSION: ${{ needs.detect-version-bump.outputs.version_name }}
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${AUR_SSH_PRIVATE_KEY}" ]]; then
+            echo "AUR_SSH_PRIVATE_KEY not set, skipping AUR publish."
+            exit 0
+          fi
+
+          sudo apt-get update -q
+          sudo apt-get install -y openssh-client
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${AUR_SSH_PRIVATE_KEY}" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
+
+          git clone ssh://aur@aur.archlinux.org/${AUR_REPO}.git aur-pkg
+          cd aur-pkg
+
+          linux_x86_sha=$(sha256sum ../release-assets/omni-code-linux-x86_64.tar.gz | awk '{print $1}')
+          license_sha=$(sha256sum ../LICENSE | awk '{print $1}')
+
+          bash ../scripts/generate-aur-bin.sh "${VERSION}" "${GITHUB_REPOSITORY}" "${license_sha}" "${linux_x86_sha}" .
+          cp ../web/icons/Icon-512.png ./omni-code.png
+
+          git add PKGBUILD .SRCINFO omni-code.desktop omni-code.png
+          if git diff --cached --quiet; then
+            echo "No AUR changes to commit."
+            exit 0
+          fi
+
+          git config user.email "junjie@omni-stream.ai"
+          git config user.name "Junjie"
+          git commit -m "Update omni-code-bin to ${VERSION}"
+          git push origin master

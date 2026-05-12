@@ -13,6 +13,24 @@ mobile and desktop devices.
 
 ![Omni Code App Screens Preview](./designs/omni-code-screens-from-code.png)
 
+## Install
+
+**Homebrew (macOS):**
+
+```bash
+brew tap omni-stream-ai/homebrew-omni-code
+brew install --cask omni-code
+```
+
+**Arch Linux (AUR):**
+
+```bash
+yay -S omni-code-bin
+```
+
+Stable releases update the Homebrew cask and AUR package automatically from
+GitHub Actions.
+
 ## TODO Board
 
 The current project TODO board lives in GitHub Projects:
@@ -125,10 +143,11 @@ This repository includes a client release workflow:
 - `.github/workflows/release.yml`
 - Workflow name: `Release Client`
 - Trigger: `workflow_dispatch` or pushes that change `pubspec.yaml` or `.github/workflows/release.yml`
-- Output: universal Android APK, split Android ABI APKs, Windows zip, Linux tar.gz, plus `update.json` GitHub Release assets
+- Output: universal Android APK, split Android ABI APKs, Windows zip, Linux tar.gz, macOS Intel/Apple Silicon zips, plus `update.json` GitHub Release assets
 - Release notes: generated from Conventional Commit messages since the previous tag
 - `main` can publish stable versions only
 - Other branches can build with stable versions, but release publishing is skipped unless the version is a prerelease such as `0.1.0-beta.1`
+- Stable releases also update `omni-stream-ai/homebrew-omni-code` and the AUR package `omni-code-bin` when the required publishing secrets are configured
 
 If `.github/workflows/release.yml` changes and the current app version tag does
 not exist yet, the workflow will still publish that version's release.
@@ -144,6 +163,8 @@ Recommended GitHub Actions secrets:
 - `ANDROID_KEY_PASSWORD`: Android signing key password
 - `ANDROID_STORE_PASSWORD`: Android keystore password
 - `ANDROID_GOOGLE_SERVICES_JSON_BASE64`: base64-encoded `android/app/google-services.json` in a single line, without quotes or `data:...;base64,` prefixes
+- `HOMEBREW_TAP_TOKEN`: token with push access to `omni-stream-ai/homebrew-omni-code`
+- `AUR_SSH_PRIVATE_KEY`: SSH private key for the `omni-code-bin` AUR package repository
 
 ## Documentation
 
