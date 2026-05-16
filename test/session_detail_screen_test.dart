@@ -1261,8 +1261,7 @@ void main() {
         TargetPlatform.android,
       }));
 
-  testWidgets('awaiting approval uses consolidated status overview',
-      (tester) async {
+  testWidgets('awaiting approval shows pending approval card', (tester) async {
     final approval = _approvalRequest(
       requestId: 'approval-1',
       command: 'rm -rf /tmp/safe-test',
@@ -1283,9 +1282,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(
-        find.byKey(const ValueKey('session-status-overview')), findsOneWidget);
-    expect(find.text('Awaiting approval'), findsOneWidget);
+    expect(find.text('Needs escalation'), findsOneWidget);
     expect(find.text('Waiting to process approval...'), findsNothing);
     expect(find.widgetWithText(FilledButton, 'Approve'), findsOneWidget);
   });
@@ -1354,15 +1351,16 @@ void main() {
 
     submitGate.complete(http.Response('', 204));
     await tester.pump();
+    await tester.pump();
 
     expect(approvalSubmitCalls, 1);
     expect(find.text('Waiting for approval processing...'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Approve'), findsNothing);
     expect(find.widgetWithText(OutlinedButton, 'Reject'), findsNothing);
-    expect(find.text('rm -rf /tmp/safe-test'), findsNothing);
+    expect(find.text('rm -rf /tmp/safe-test'), findsOneWidget);
   });
 
-  testWidgets('stopped reply status auto dismisses', (tester) async {
+  testWidgets('stopped reply status shows snackbar', (tester) async {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
         if (request.method == 'GET' &&
@@ -1416,50 +1414,12 @@ void main() {
 
     await tester.tap(find.widgetWithText(OutlinedButton, 'Stop reply'));
     await tester.pump();
+    await tester.pump();
 
     expect(find.text('Stopped this reply'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('session-status-overview')),
-      findsOneWidget,
-    );
-
-    await tester.pump(const Duration(seconds: 3));
-    await tester.pump();
-
-    expect(find.text('Stopped this reply'), findsNothing);
-    expect(
-      find.byKey(const ValueKey('session-status-overview')),
-      findsNothing,
-    );
   });
 
-  testWidgets('status overview can be dismissed manually', (tester) async {
-    await tester.pumpWidget(
-      _TestApp(
-        home: SessionDetailScreen(
-          session: _session().copyWith(status: SessionStatus.running),
-          client: _clientForMessages(const <Map<String, dynamic>>[]),
-          enableSpeechServices: false,
-        ),
-      ),
-    );
-    await tester.pump();
-
-    expect(
-      find.byKey(const ValueKey('session-status-overview')),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.byTooltip('Close'));
-    await tester.pump();
-
-    expect(
-      find.byKey(const ValueKey('session-status-overview')),
-      findsNothing,
-    );
-  });
-
-  testWidgets('error detail in status overview does not show copy button',
+  testWidgets('error banner can be dismissed manually',
       (tester) async {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
@@ -1491,13 +1451,21 @@ void main() {
     await tester.pump();
 
     expect(
-      find.byKey(const ValueKey('session-status-overview')),
+      find.byKey(const ValueKey('session-error-banner')),
       findsOneWidget,
     );
     expect(find.textContaining('boom'), findsOneWidget);
     expect(find.byType(SelectableText), findsWidgets);
     expect(find.byIcon(Icons.copy), findsNothing);
     expect(find.byTooltip('Copy'), findsNothing);
+
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('session-error-banner')),
+      findsNothing,
+    );
   });
 
   testWidgets('approval resolved does not show approval granted banner',

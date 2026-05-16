@@ -96,7 +96,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   String? _submittedApprovalRequestId;
   bool _cancellingReply = false;
   int _visibleTurnCount = 0;
-  String? _dismissedStatusOverviewSignature;
+  String? _dismissedErrorBannerMessage;
 
   bool get _isSpeechReadyStatus => _speechStatus == _readySpeechStatusLabel();
   BridgeClient get _client => widget.client ?? bridgeClient;
@@ -108,143 +108,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _speechError == null && _speechStatus == _systemSpeechUnavailableLabel()
           ? _speechStatus
           : null;
-  String? get _speechBannerMessage {
-    if (_speechError != null) {
-      return _speechError;
-    }
-    final status = _speechStatus;
-    if (status == null ||
-        _isSpeechReadyStatus ||
-        status == _systemSpeechUnavailableLabel()) {
-      return null;
-    }
-    return status;
-  }
 
   String _reinitializingTtsLabel() => context.l10n.reinitializingTts;
 
-  String? get _statusOverviewSignature {
-    final hasStatusOverview = _creatingSession ||
-        _session.status != SessionStatus.idle ||
-        _speechBannerMessage != null ||
-        _speechError != null;
-    if (!hasStatusOverview) {
-      _dismissedStatusOverviewSignature = null;
-      return null;
+  bool get _shouldShowErrorBanner {
+    final message = _speechError?.trim();
+    if (message == null || message.isEmpty) {
+      _dismissedErrorBannerMessage = null;
+      return false;
     }
-
-    return [
-      _creatingSession ? 'creating' : 'ready',
-      _session.status.name,
-      _isAwaitingSubmittedApprovalResolution ? 'approval-processing' : 'stable',
-      _speechBannerMessage ?? '',
-      _speechError ?? '',
-      _statusOverviewDetailMessage ?? '',
-    ].join('::');
+    return message != _dismissedErrorBannerMessage;
   }
-
-  bool get _shouldShowStatusOverview {
-    final signature = _statusOverviewSignature;
-    return signature != null && signature != _dismissedStatusOverviewSignature;
-  }
-
-  String _sessionStatusLabel(SessionStatus status) {
-    switch (status) {
-      case SessionStatus.idle:
-        return context.l10n.sessionStatusIdle;
-      case SessionStatus.running:
-        return context.l10n.sessionStatusRunning;
-      case SessionStatus.awaitingApproval:
-        return context.l10n.sessionStatusAwaitingApproval;
-      case SessionStatus.waiting:
-        return context.l10n.sessionStatusWaiting;
-      case SessionStatus.failed:
-        return context.l10n.sessionStatusFailed;
-    }
-  }
-
-  _SessionStatusTone _sessionStatusTone(SessionStatus status) {
-    switch (status) {
-      case SessionStatus.idle:
-        return _SessionStatusTone.idle;
-      case SessionStatus.running:
-        return _SessionStatusTone.signal;
-      case SessionStatus.awaitingApproval:
-        return _SessionStatusTone.warning;
-      case SessionStatus.waiting:
-        return _SessionStatusTone.neutral;
-      case SessionStatus.failed:
-        return _SessionStatusTone.error;
-    }
-  }
-
-  IconData _sessionStatusIcon(SessionStatus status) {
-    switch (status) {
-      case SessionStatus.idle:
-        return Icons.pause_circle_outline;
-      case SessionStatus.running:
-        return Icons.autorenew_rounded;
-      case SessionStatus.awaitingApproval:
-        return Icons.pending_actions_outlined;
-      case SessionStatus.waiting:
-        return Icons.schedule_outlined;
-      case SessionStatus.failed:
-        return Icons.error_outline;
-    }
-  }
-
-  List<_SessionStatusItem> _statusOverviewItems() {
-    if (!_shouldShowStatusOverview) {
-      return const <_SessionStatusItem>[];
-    }
-
-    if (_creatingSession) {
-      return [
-        _SessionStatusItem(
-          label: context.l10n.creatingSession,
-          tone: _SessionStatusTone.signal,
-          loading: true,
-        ),
-      ];
-    }
-
-    final items = <_SessionStatusItem>[
-      _SessionStatusItem(
-        label: _sessionStatusLabel(_session.status),
-        tone: _sessionStatusTone(_session.status),
-        icon: _sessionStatusIcon(_session.status),
-      ),
-    ];
-
-    if (_isAwaitingSubmittedApprovalResolution) {
-      items.add(
-        _SessionStatusItem(
-          label: context.l10n.waitingApprovalProcessing,
-          tone: _SessionStatusTone.warning,
-          loading: true,
-        ),
-      );
-    }
-
-    return items;
-  }
-
-  String? get _statusOverviewDetailMessage {
-    if (_speechError != null) {
-      return _speechError;
-    }
-    final speechBannerMessage = _speechBannerMessage;
-    if (speechBannerMessage != null) {
-      return speechBannerMessage;
-    }
-    if (_session.status == SessionStatus.waiting) {
-      return context.l10n.turnPausedWaiting;
-    }
-    return null;
-  }
-
-  bool get _statusOverviewDetailIsError =>
-      !_creatingSession && _speechError != null;
 
   bool _isAutoDismissableSpeechStatus(String? status) {
     return status == context.l10n.voiceTranscriptionComplete ||
@@ -271,18 +145,46 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   void _setSpeechStatus(String? status) {
+    final previousStatus = _speechStatus;
     _speechStatus = status;
     _syncSpeechStatusAutoDismiss();
+    if (status == null ||
+        status == previousStatus ||
+        status == _readySpeechStatusLabel() ||
+        status == _systemSpeechUnavailableLabel()) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _speechStatus != status) {
+        return;
+      }
+      _showTransientSpeechStatus(status);
+    });
   }
 
-  void _dismissStatusOverview() {
-    final signature = _statusOverviewSignature;
-    if (signature == null) {
+  void _dismissErrorBanner() {
+    final message = _speechError?.trim();
+    if (message == null || message.isEmpty) {
       return;
     }
     setState(() {
-      _dismissedStatusOverviewSignature = signature;
+      _dismissedErrorBannerMessage = message;
     });
+  }
+
+  void _showTransientSpeechStatus(String message) {
+    if (!mounted) {
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 3),
+          content: Text(message),
+        ),
+      );
   }
 
   bool get _isAwaitingSubmittedApprovalResolution {
@@ -413,14 +315,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       ),
       body: Column(
         children: [
-          if (_shouldShowStatusOverview)
-            _buildStatusOverviewCard(
-              items: _statusOverviewItems(),
-              detailMessage: _statusOverviewDetailMessage,
-              detailIsError: _statusOverviewDetailIsError,
-            ),
-          if (_pendingApproval != null &&
-              !isAwaitingSubmittedApprovalResolution)
+          if (_shouldShowErrorBanner) _buildErrorBanner(_speechError!.trim()),
+          if (_pendingApproval != null)
             _buildPendingApprovalCard(approvalCardMaxHeight),
           Expanded(
             child: (_creatingSession || _loadingMessages)
@@ -552,6 +448,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final approval = _pendingApproval!;
     final summary = approval.reason ?? approval.command ?? approval.kind;
     final isSubmitting = _submittingApproval;
+    final isAwaitingResolution = _isAwaitingSubmittedApprovalResolution;
     final theme = Theme.of(context);
     final brightness = theme.brightness;
 
@@ -593,6 +490,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                       summary,
                       style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
                     ),
+                    if (isAwaitingResolution) ...[
+                      const SizedBox(height: AppSpacing.compact),
+                      Text(
+                        context.l10n.waitingApprovalProcessing,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: AppColors.warningTextFor(brightness),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                     if (approval.command != null) ...[
                       const SizedBox(height: AppSpacing.compact),
                       Container(
@@ -630,64 +537,61 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               ),
             ),
             const SizedBox(height: AppSpacing.stack),
-            Wrap(
-              spacing: AppSpacing.compact,
-              runSpacing: AppSpacing.compact,
-              children: [
-                FilledButton(
-                  onPressed: approval.resolvable && !isSubmitting
-                      ? () => _submitApproval('accept')
-                      : null,
-                  child: _buildApprovalButtonChild(
-                    'accept',
-                    context.l10n.approve,
-                  ),
-                ),
-                if (approval.allowAcceptForSession)
-                  OutlinedButton(
+            if (!isAwaitingResolution)
+              Wrap(
+                spacing: AppSpacing.compact,
+                runSpacing: AppSpacing.compact,
+                children: [
+                  FilledButton(
                     onPressed: approval.resolvable && !isSubmitting
-                        ? () => _submitApproval('accept_for_session')
+                        ? () => _submitApproval('accept')
                         : null,
                     child: _buildApprovalButtonChild(
-                      'accept_for_session',
-                      context.l10n.approveForSession,
+                      'accept',
+                      context.l10n.approve,
                     ),
                   ),
-                OutlinedButton(
-                  onPressed: approval.resolvable && !isSubmitting
-                      ? () => _submitApproval('decline')
-                      : null,
-                  child: _buildApprovalButtonChild(
-                    'decline',
-                    context.l10n.reject,
-                  ),
-                ),
-                if (approval.allowCancel)
+                  if (approval.allowAcceptForSession)
+                    OutlinedButton(
+                      onPressed: approval.resolvable && !isSubmitting
+                          ? () => _submitApproval('accept_for_session')
+                          : null,
+                      child: _buildApprovalButtonChild(
+                        'accept_for_session',
+                        context.l10n.approveForSession,
+                      ),
+                    ),
                   OutlinedButton(
                     onPressed: approval.resolvable && !isSubmitting
-                        ? () => _submitApproval('cancel')
+                        ? () => _submitApproval('decline')
                         : null,
                     child: _buildApprovalButtonChild(
-                      'cancel',
-                      context.l10n.cancel,
+                      'decline',
+                      context.l10n.reject,
                     ),
                   ),
-              ],
-            ),
+                  if (approval.allowCancel)
+                    OutlinedButton(
+                      onPressed: approval.resolvable && !isSubmitting
+                          ? () => _submitApproval('cancel')
+                          : null,
+                      child: _buildApprovalButtonChild(
+                        'cancel',
+                        context.l10n.cancel,
+                      ),
+                    ),
+                ],
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatusOverviewCard({
-    required List<_SessionStatusItem> items,
-    required String? detailMessage,
-    required bool detailIsError,
-  }) {
+  Widget _buildErrorBanner(String message) {
     final brightness = Theme.of(context).brightness;
     return Container(
-      key: const ValueKey('session-status-overview'),
+      key: const ValueKey('session-error-banner'),
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(
         AppSpacing.block,
@@ -697,69 +601,26 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       ),
       padding: AppSpacing.tilePadding,
       decoration: BoxDecoration(
-        color: AppColors.surfaceFor(brightness),
+        color: AppColors.errorBgFor(brightness),
         borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-        border: Border.all(color: AppColors.outlineFor(brightness)),
+        border: Border.all(color: AppColors.errorBorderFor(brightness)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (items.isNotEmpty)
-                  Wrap(
-                    spacing: AppSpacing.compact,
-                    runSpacing: AppSpacing.compact,
-                    children: items
-                        .map(
-                          (item) => _SessionStatusPill(
-                            item: item,
-                            brightness: brightness,
-                          ),
-                        )
-                        .toList(growable: false),
-                  ),
-                if (detailMessage != null) ...[
-                  if (items.isNotEmpty)
-                    const SizedBox(height: AppSpacing.stack),
-                  if (detailIsError)
-                    Container(
-                      width: double.infinity,
-                      padding: AppSpacing.tilePadding,
-                      decoration: BoxDecoration(
-                        color: AppColors.errorBgFor(brightness),
-                        borderRadius:
-                            BorderRadius.circular(AppSpacing.radiusCard),
-                        border: Border.all(
-                          color: AppColors.errorBorderFor(brightness),
-                        ),
-                      ),
-                      child: SelectableText(
-                        detailMessage,
-                        style: TextStyle(
-                          color: AppColors.errorTextFor(brightness),
-                          height: 1.4,
-                        ),
-                      ),
-                    )
-                  else
-                    Text(
-                      detailMessage,
-                      style: TextStyle(
-                        height: 1.4,
-                        color: AppColors.mutedSoftFor(brightness),
-                      ),
-                    ),
-                ],
-              ],
+            child: SelectableText(
+              message,
+              style: TextStyle(
+                color: AppColors.errorTextFor(brightness),
+                height: 1.4,
+              ),
             ),
           ),
           const SizedBox(width: AppSpacing.compact),
           IconButton(
             tooltip: context.l10n.close,
-            onPressed: _dismissStatusOverview,
+            onPressed: _dismissErrorBanner,
             visualDensity: VisualDensity.compact,
             icon: Icon(
               Icons.close_rounded,
@@ -2243,10 +2104,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         return;
       }
       setState(() {
-        _pendingApproval = null;
+        _pendingApproval = approval;
         _session = _session.copyWith(
           updatedAt: DateTime.now(),
-          clearPendingApproval: true,
         );
         _submittingApproval = false;
         _submittingApprovalChoice = null;
@@ -3534,140 +3394,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 }
 
 enum _ImagePreviewBackdropMode { dark, light, checker }
-
-enum _SessionStatusTone { neutral, signal, warning, error, idle }
-
-class _SessionStatusItem {
-  const _SessionStatusItem({
-    required this.label,
-    required this.tone,
-    this.icon,
-    this.loading = false,
-  });
-
-  final String label;
-  final _SessionStatusTone tone;
-  final IconData? icon;
-  final bool loading;
-}
-
-class _SessionStatusPill extends StatelessWidget {
-  const _SessionStatusPill({
-    required this.item,
-    required this.brightness,
-  });
-
-  final _SessionStatusItem item;
-  final Brightness brightness;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = _colorsForTone(item.tone, brightness);
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.tileX,
-        vertical: AppSpacing.controlTight,
-      ),
-      decoration: BoxDecoration(
-        color: colors.backgroundColor,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
-        border: Border.all(color: colors.borderColor),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (item.loading)
-            SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: colors.foregroundColor,
-              ),
-            )
-          else if (item.icon != null)
-            Icon(
-              item.icon,
-              size: 14,
-              color: colors.foregroundColor,
-            ),
-          if (item.loading || item.icon != null)
-            const SizedBox(width: AppSpacing.micro),
-          Text(
-            item.label,
-            style: TextStyle(
-              color: colors.foregroundColor,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  _SessionStatusPillColors _colorsForTone(
-    _SessionStatusTone tone,
-    Brightness brightness,
-  ) {
-    switch (tone) {
-      case _SessionStatusTone.neutral:
-        return _SessionStatusPillColors(
-          backgroundColor: AppColors.surfaceFor(brightness),
-          borderColor: AppColors.outlineFor(brightness),
-          foregroundColor: AppColors.mutedSoftFor(brightness),
-        );
-      case _SessionStatusTone.signal:
-        return _SessionStatusPillColors(
-          backgroundColor: AppColors.tintSurfaceFor(
-            brightness,
-            AppColors.signalFor(brightness),
-          ),
-          borderColor: AppColors.tintBorderFor(
-            brightness,
-            AppColors.signalFor(brightness),
-          ),
-          foregroundColor: AppColors.signalFor(brightness),
-        );
-      case _SessionStatusTone.warning:
-        return _SessionStatusPillColors(
-          backgroundColor: AppColors.warningSurfaceFor(brightness),
-          borderColor: AppColors.warningBorderFor(brightness),
-          foregroundColor: AppColors.warningTextFor(brightness),
-        );
-      case _SessionStatusTone.error:
-        return _SessionStatusPillColors(
-          backgroundColor: AppColors.errorBgFor(brightness),
-          borderColor: AppColors.errorBorderFor(brightness),
-          foregroundColor: AppColors.errorTextFor(brightness),
-        );
-      case _SessionStatusTone.idle:
-        return _SessionStatusPillColors(
-          backgroundColor: AppColors.tintSurfaceFor(
-            brightness,
-            AppColors.idleFor(brightness),
-          ),
-          borderColor: AppColors.tintBorderFor(
-            brightness,
-            AppColors.idleFor(brightness),
-          ),
-          foregroundColor: AppColors.idleFor(brightness),
-        );
-    }
-  }
-}
-
-class _SessionStatusPillColors {
-  const _SessionStatusPillColors({
-    required this.backgroundColor,
-    required this.borderColor,
-    required this.foregroundColor,
-  });
-
-  final Color backgroundColor;
-  final Color borderColor;
-  final Color foregroundColor;
-}
 
 class _SessionMessagesSkeleton extends StatelessWidget {
   const _SessionMessagesSkeleton({super.key});
