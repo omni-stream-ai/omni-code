@@ -2126,7 +2126,8 @@ void main() {
     expect(find.text('rm -rf /tmp/safe-test'), findsOneWidget);
   });
 
-  testWidgets('stopped reply status shows snackbar', (tester) async {
+  testWidgets('stopped reply status does not show duplicate snackbar',
+      (tester) async {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
         if (request.method == 'GET' &&
@@ -2182,7 +2183,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('Stopped this reply'), findsOneWidget);
+    expect(find.text('Stopped this reply'), findsNothing);
   });
 
   testWidgets('error banner can be dismissed manually', (tester) async {

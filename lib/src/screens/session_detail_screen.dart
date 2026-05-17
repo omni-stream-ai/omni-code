@@ -118,29 +118,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   int _visibleTurnCount = 0;
   String? _dismissedErrorBannerMessage;
 
-  bool get _isSpeechReadyStatus => _speechStatus == _readySpeechStatusLabel();
   BridgeClient get _client => widget.client ?? bridgeClient;
 
-  String _readySpeechStatusLabel() => context.l10n.speechReadyStatus;
   String _systemSpeechUnavailableLabel() =>
       context.l10n.systemSpeechUnavailable;
   String? get _systemSpeechUnavailableStatus =>
       _speechError == null && _speechStatus == _systemSpeechUnavailableLabel()
           ? _speechStatus
           : null;
-  String? get _speechBannerMessage {
-    if (_speechError != null) {
-      return _speechError;
-    }
-    final status = _speechStatus;
-    if (status == null ||
-        _isSpeechReadyStatus ||
-        status == _systemSpeechUnavailableLabel()) {
-      return null;
-    }
-    return status;
-  }
-
   String? get _callModeUnavailableMessage {
     if (!widget.enableSpeechServices) {
       return context.l10n.callModeUnavailable;
@@ -190,21 +175,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   void _setSpeechStatus(String? status) {
-    final previousStatus = _speechStatus;
     _speechStatus = status;
     _syncSpeechStatusAutoDismiss();
-    if (status == null ||
-        status == previousStatus ||
-        status == _readySpeechStatusLabel() ||
-        status == _systemSpeechUnavailableLabel()) {
-      return;
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _speechStatus != status) {
-        return;
-      }
-      _showTransientSpeechStatus(status);
-    });
   }
 
   void _dismissErrorBanner() {
@@ -215,21 +187,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     setState(() {
       _dismissedErrorBannerMessage = message;
     });
-  }
-
-  void _showTransientSpeechStatus(String message) {
-    if (!mounted) {
-      return;
-    }
-    final messenger = ScaffoldMessenger.of(context);
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 3),
-          content: Text(message),
-        ),
-      );
   }
 
   bool get _isAwaitingSubmittedApprovalResolution {
@@ -486,8 +443,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Widget _buildCallModeScaffold(BuildContext context) {
     final l10n = context.l10n;
     final showVoiceInputStarting = _showVoiceInputStartingAsPrimary;
-    final speechBannerMessage =
-        _voiceInputStarting ? null : _speechBannerMessage;
+    final speechError = _speechError?.trim();
     final liveTranscript = _recognizedSpeech.trim().isNotEmpty
         ? _recognizedSpeech.trim()
         : _controller.text.trim();
@@ -509,8 +465,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       bodyText: subtitle,
       realtimeHintLabel: realtimeHint?.label,
       realtimeHintDetail: realtimeHint?.detail,
-      bannerText: speechBannerMessage,
-      statusIsError: _speechError != null && _speechError!.trim().isNotEmpty,
+      bannerText:
+          speechError == null || speechError.isEmpty ? null : speechError,
+      statusIsError: speechError != null && speechError.isNotEmpty,
       subtitlesVisible: _callModeSubtitlesVisible,
       subtitleToggleTooltip: _callModeSubtitlesVisible
           ? l10n.hideCallModeSubtitles
