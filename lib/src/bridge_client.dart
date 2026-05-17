@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'bridge_speech_models.dart';
 import 'models.dart';
 import 'settings/app_settings.dart';
 
@@ -81,6 +82,24 @@ class BridgeClient {
 
   bool _isUnauthorized(http.Response response) {
     return response.statusCode == 401 || response.statusCode == 403;
+  }
+
+  Map<String, dynamic> _decodeApiData(String body) {
+    final payload = jsonDecode(body) as Map<String, dynamic>;
+    final data = payload['data'];
+    if (data is! Map<String, dynamic>) {
+      throw Exception('Invalid bridge response: $body');
+    }
+    return data;
+  }
+
+  List<dynamic> _decodeApiListData(String body) {
+    final payload = jsonDecode(body) as Map<String, dynamic>;
+    final data = payload['data'];
+    if (data is! List<dynamic>) {
+      throw Exception('Invalid bridge response: $body');
+    }
+    return data;
   }
 
   Future<ClientAuthRequest> registerClient() async {
@@ -524,12 +543,138 @@ class BridgeClient {
     }
   }
 
-  Future<String> transcribeAudio(File audioFile) async {
+  Future<SpeechStatus> getSpeechStatus() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/speech'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeechStatus.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<List<SpeechModelSummary>> listSpeechModels() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/speech/models'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return _decodeApiListData(response.body)
+        .whereType<Map<String, dynamic>>()
+        .map(SpeechModelSummary.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<SpeechDownloadTask> createSpeechDownload(String modelId) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/speech/models/downloads'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'model_id': modelId}),
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeechDownloadTask.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<SpeechDownloadTask> getSpeechDownload(String taskId) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/speech/models/downloads/$taskId'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeechDownloadTask.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<SpeechProfileBinding> getSpeechProfileModel(
+      SpeechProfile profile) async {
+    final response = await _httpClient.get(
+      Uri.parse(
+          '$baseUrl/speech/profiles/${_speechProfileSlug(profile)}/model'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeechProfileBinding.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<SpeechProfileSelection> updateSpeechProfileModel(
+    SpeechProfile profile, {
+    String? modelId,
+  }) async {
+    final response = await _httpClient.put(
+      Uri.parse(
+          '$baseUrl/speech/profiles/${_speechProfileSlug(profile)}/model'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'model_id': modelId}),
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeechProfileSelection.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<Map<String, dynamic>> getSpeechRealtimeDescriptor() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/speech/realtime'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return _decodeApiData(response.body);
+  }
+
+  Future<List<String>> listOpenAiSpeechModels() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/v1/models'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = payload['data'] as List<dynamic>? ?? const <dynamic>[];
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map((item) => item['id']?.toString() ?? '')
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Future<String> transcribeAudio(
+    File audioFile, {
+    String? model,
+  }) async {
     final request = http.MultipartRequest(
       'POST',
-      Uri.parse('$baseUrl/audio/transcriptions'),
+      Uri.parse('$baseUrl/v1/audio/transcriptions'),
     );
     request.headers.addAll(_defaultHeaders);
+    request.fields['response_format'] = 'json';
+    if (model?.trim().isNotEmpty == true) {
+      request.fields['model'] = model!.trim();
+    }
     request.files
         .add(await http.MultipartFile.fromPath('file', audioFile.path));
 
@@ -541,29 +686,34 @@ class BridgeClient {
     }
 
     final payload = jsonDecode(body) as Map<String, dynamic>;
-    final data = payload['data'] as Map<String, dynamic>;
-    return data['text'] as String;
+    final text = payload['text'] as String?;
+    if (text == null || text.trim().isEmpty) {
+      throw Exception('ASR response missing text.');
+    }
+    return text;
   }
 
   Future<SynthesizedSpeech> synthesizeSpeech(
     String text, {
+    String? model,
     String voice = 'female',
     double speed = 1.0,
-    double volume = 1.0,
     String responseFormat = 'wav',
+    bool stream = false,
   }) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/audio/speech'),
+      Uri.parse('$baseUrl/v1/audio/speech'),
       headers: {
         ..._defaultHeaders,
         'Content-Type': 'application/json',
       },
       body: jsonEncode({
+        if (model?.trim().isNotEmpty == true) 'model': model!.trim(),
         'input': text,
         'voice': voice,
         'speed': speed,
-        'volume': volume,
         'response_format': responseFormat,
+        if (stream) 'stream': true,
       }),
     );
 
@@ -573,10 +723,32 @@ class BridgeClient {
       );
     }
 
+    final contentType = response.headers['content-type'] ?? 'audio/wav';
+    if (contentType.contains('application/json')) {
+      final payload = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = payload['data'] as Map<String, dynamic>? ?? payload;
+      final streamUrl = (data['stream_url'] as String?)?.trim();
+      if (streamUrl?.isNotEmpty == true) {
+        return SynthesizedSpeech(
+          bytes: Uint8List(0),
+          contentType: data['content_type'] as String? ?? 'audio/wav',
+          streamUrl: _resolveUrl(streamUrl!),
+        );
+      }
+    }
+
     return SynthesizedSpeech(
       bytes: response.bodyBytes,
-      contentType: response.headers['content-type'] ?? 'audio/wav',
+      contentType: contentType,
     );
+  }
+
+  String _resolveUrl(String value) {
+    final uri = Uri.parse(value);
+    if (uri.hasScheme) {
+      return uri.toString();
+    }
+    return Uri.parse(baseUrl).resolveUri(uri).toString();
   }
 
   Stream<Map<String, dynamic>> subscribeToSessionEvents(
@@ -856,6 +1028,15 @@ class BridgeClient {
     }
     return 'application/octet-stream';
   }
+
+  static String _speechProfileSlug(SpeechProfile profile) {
+    return switch (profile) {
+      SpeechProfile.asrBatch => 'asr.batch',
+      SpeechProfile.asrRealtime => 'asr.realtime',
+      SpeechProfile.ttsDefault => 'tts.default',
+      SpeechProfile.vadDefault => 'vad.default',
+    };
+  }
 }
 
 class _CacheEntry<T> {
@@ -874,10 +1055,14 @@ class SynthesizedSpeech {
   const SynthesizedSpeech({
     required this.bytes,
     required this.contentType,
+    this.streamUrl,
   });
 
   final Uint8List bytes;
   final String contentType;
+  final String? streamUrl;
+
+  bool get isStreaming => streamUrl?.isNotEmpty == true;
 }
 
 class BridgeFileResponse {

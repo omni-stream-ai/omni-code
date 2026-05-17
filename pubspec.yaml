@@ -38,3 +38,7 @@ dev_dependencies:
 flutter:
   generate: true
   uses-material-design: true
+  assets:
+    - assets/call_mode/glowing_orb_water_loop_inner_small.gif
+  shaders:
+    - shaders/call_mode_orb.frag

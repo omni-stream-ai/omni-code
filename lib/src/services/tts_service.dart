@@ -99,10 +99,24 @@ class TtsService {
         return;
       }
       final speech = await _speechService.synthesizeSpeech(text);
+      _onStart?.call();
+      if (speech.isStreaming) {
+        await _player.play(
+          UrlSource(
+            speech.streamUrl!,
+            mimeType: speech.contentType,
+          ),
+        );
+        return;
+      }
       final filePath = await _writeAudioFile(speech.bytes);
       _currentAudioPath = filePath;
-      _onStart?.call();
-      await _player.play(DeviceFileSource(filePath));
+      await _player.play(
+        DeviceFileSource(
+          filePath,
+          mimeType: speech.contentType,
+        ),
+      );
     } catch (error) {
       _onError?.call(error.toString());
       rethrow;

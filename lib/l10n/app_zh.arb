@@ -231,11 +231,31 @@
   "callModeSpeaking": "正在语音回复",
   "callModeWorking": "正在思考你的请求",
   "callModeIdleSubtitle": "直接说就行，我会自动听、自动发、再把回复念给你。",
+  "callModeListeningReadyLabel": "正在监听",
+  "callModeListeningReadyDetail": "可以直接开始说，识别内容会实时显示在这里。",
+  "callModeSpeechDetectedLabel": "检测到你在说话",
+  "callModeSpeechDetectedDetail": "继续自然说下去，系统会持续补全这句内容。",
+  "callModeWaitingForPauseLabel": "等待你这句话结束",
+  "callModeWaitingForPauseDetail": "你停顿一会儿后，这句会自动发送，无需手动点按钮。",
   "callModeOpenChatHistory": "查看对话记录",
+  "showCallModeSubtitles": "显示字幕",
+  "hideCallModeSubtitles": "隐藏字幕",
   "startCallMode": "开启通话模式",
   "stopCallMode": "停止通话模式",
   "callModeUnavailable": "语音服务尚未初始化完成，暂时无法使用通话模式。",
-  "callModeRequiresStreamingAsr": "通话模式当前仅支持系统语音识别或腾讯云流式识别。",
+  "callModeRequiresStreamingAsr": "通话模式当前仅支持系统语音识别、Omni Bridge Local 或腾讯云流式识别。",
+  "callModeSection": "通话模式",
+  "callModeAllowInterruptionsLabel": "允许说话打断回复",
+  "callModeAllowInterruptionsHelp": "开启后，通话模式下如果你在回复播报过程中再次开口，会停止当前语音回复并接管这一轮。",
+  "callModeSpeechPauseLabel": "停顿判定时长",
+  "callModeSpeechPauseHelp": "你停止说话后，等待多久自动发送当前这句。",
+  "callModeSpeechPauseOption": "停顿 {seconds} 秒",
+  "@callModeSpeechPauseOption": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "callModeSpeechPauseBridgeOnlyHint": "这个停顿时长目前会精确作用在 Omni Bridge Local 的实时通话模式上。其他 ASR 提供方可能仍使用各自内置的停顿策略。",
   "send": "发送",
   "imageAttachment": "图片附件",
   "previewImage": "预览",
@@ -465,11 +485,140 @@
   "reinitializingVoiceInput": "正在重新初始化语音输入...",
   "voiceTranscriptionNoResult": "未识别到语音",
   "speechSystem": "系统",
+  "omniBridgeLocal": "Omni Bridge Local",
+  "refresh": "刷新",
+  "refreshing": "刷新中...",
+  "clear": "清除",
   "speechSystemPreferredHelp": "系统可用时默认使用。如需备份可切换到云服务商。",
   "systemTtsUnavailableOnLinux": "Linux 当前还不支持系统 TTS。请切换到云端服务商后再启用播报。",
   "systemAsrUnavailableOnLinux": "Linux 当前还不支持系统 ASR。请切换到云端服务商后再启用语音输入。",
   "systemAsrMacosPermissionHint": "macOS 的系统 ASR 需要麦克风和语音识别权限。",
   "systemSpeechUnavailable": "当前设备不支持系统语音。请到设置中切换服务商后再使用云端语音。",
+  "localBridgeSpeechSection": "本地 Bridge 语音",
+  "localBridgeModelsSection": "本地 Bridge 模型",
+  "localBridgeSpeechIntro": "通过本地 Bridge 在自己的机器上运行离线 ASR、TTS、VAD，并下载所需模型。",
+  "localBridgeModelRoot": "模型目录",
+  "localBridgeDownloadTasksSection": "下载任务",
+  "localBridgeNoCompatibleModels": "当前这个类型还没有可用的兼容模型。",
+  "localBridgeTtsVoiceLabel": "TTS 音色",
+  "localBridgeTtsVoiceField": "音色",
+  "localBridgeTtsVoiceHelp": "会用于本地 Bridge 的普通播报、自动播报和通话模式语音回复。",
+  "localBridgeTtsStreamingLabel": "流式播报本地 Bridge TTS",
+  "localBridgeTtsStreamingHelp": "开启后，本地 Bridge 还在生成语音时就会开始播放。若你更希望先完整生成再播放，可以关闭它。",
+  "localBridgeTtsVoiceOption": "音色 {voice}",
+  "@localBridgeTtsVoiceOption": {
+    "placeholders": {
+      "voice": {}
+    }
+  },
+  "localBridgeTtsVoiceDefault": "音色 {voice}（默认）",
+  "@localBridgeTtsVoiceDefault": {
+    "placeholders": {
+      "voice": {}
+    }
+  },
+  "localBridgeTtsNamedVoiceDefault": "{voice}（默认）",
+  "@localBridgeTtsNamedVoiceDefault": {
+    "placeholders": {
+      "voice": {}
+    }
+  },
+  "localBridgeTtsVoiceId": "ID {voice}",
+  "@localBridgeTtsVoiceId": {
+    "placeholders": {
+      "voice": {}
+    }
+  },
+  "speechVoiceLanguageChinese": "中文",
+  "speechVoiceLanguageEnglish": "英文",
+  "speechVoiceLanguageChineseEnglish": "中文 + 英文",
+  "speechVoiceLanguageJapanese": "日文",
+  "speechVoiceLanguageSpanish": "西班牙文",
+  "speechVoiceLanguageFrench": "法文",
+  "speechVoiceLanguageHindi": "印地文",
+  "speechVoiceLanguageItalian": "意大利文",
+  "speechVoiceLanguagePortugueseBr": "巴西葡萄牙文",
+  "speechVoiceLanguageUnknown": "未知语言",
+  "speechVoiceAccentAmericanEnglish": "美式英文",
+  "speechVoiceAccentBritishEnglish": "英式英文",
+  "speechVoiceAccentBrazilianPortuguese": "巴西葡萄牙文",
+  "speechVoiceGenderFemale": "女声",
+  "speechVoiceGenderMale": "男声",
+  "zhipuApiSection": "Zhipu API",
+  "whisperApiSection": "Whisper API",
+  "tencentCloudStreamingAsrSection": "腾讯云流式识别",
+  "bridgeLocalTtsHelp": "通过 bridge-local 的 /v1/audio/speech 接口和下方选中的 TTS 模型进行本地播报。",
+  "bridgeLocalAsrHelp": "通过 bridge-local 的 /v1/audio/transcriptions 接口处理录音后的语音转写。",
+  "zhipuApiHelp": "需要填写 Zhipu API Key。",
+  "whisperApiHelp": "需要填写兼容 Whisper 的 Base URL 和 API Key。",
+  "tencentStreamingAsrHelp": "通过腾讯云 websocket 流式接口进行实时转写。",
+  "speechNotSelected": "未选择",
+  "speechInstalled": "已安装",
+  "speechNotInstalled": "未安装",
+  "speechDownload": "下载",
+  "speechDownloading": "下载中...",
+  "speechSelect": "选择",
+  "speechChange": "更换",
+  "speechSelected": "已选中",
+  "speechModelKindAsr": "ASR",
+  "speechModelKindTts": "TTS",
+  "speechModelKindVad": "VAD",
+  "speechRuntimeStreaming": "流式",
+  "speechRuntimeOffline": "离线",
+  "speechProfileBatchAsrTitle": "批量 ASR",
+  "speechProfileBatchAsrHelp": "用于录音结束后的语音转写。适合更看重最终识别准确度，而不是边说边出字的场景。",
+  "speechProfileBatchAsrAction": "设为批量 ASR",
+  "speechProfileRealtimeAsrTitle": "实时 ASR",
+  "speechProfileRealtimeAsrHelp": "用于通话模式和 websocket 实时转写。适合说话过程中就需要持续返回中间结果的场景。",
+  "speechProfileRealtimeAsrAction": "设为实时 ASR",
+  "speechProfileTtsTitle": "TTS",
+  "speechProfileTtsHelp": "用于本地 Bridge 的语音播报回复。适合希望助手用本地模型直接念出回答的场景。",
+  "speechProfileTtsAction": "设为 TTS",
+  "speechProfileVadTitle": "VAD",
+  "speechProfileVadHelp": "用于实时模式下检测说话开始和结束。适合希望抢话更灵敏、断句更干净的场景。",
+  "speechProfileVadAction": "设为 VAD",
+  "speechDownloadStatusQueued": "排队中",
+  "speechDownloadStatusDownloading": "下载中",
+  "speechDownloadStatusExtracting": "解压中",
+  "speechDownloadStatusVerifying": "校验中",
+  "speechDownloadStatusCompleted": "已完成",
+  "speechDownloadStatusFailed": "失败",
+  "speechActiveDownloadsCount": "{count, plural, =1{1 个下载任务进行中} other{{count} 个下载任务进行中}}",
+  "@speechActiveDownloadsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "speechDownloadProgressPercent": "已完成 {percent}%",
+  "@speechDownloadProgressPercent": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "speechLocalModelsLoadFailed": "加载本地语音模型失败：{error}",
+  "@speechLocalModelsLoadFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "speechModelDownloadFailed": "下载模型 {modelId} 失败：{error}",
+  "@speechModelDownloadFailed": {
+    "placeholders": {
+      "modelId": {},
+      "error": {}
+    }
+  },
+  "speechProfileUpdateFailed": "更新 {profile} 失败：{error}",
+  "@speechProfileUpdateFailed": {
+    "placeholders": {
+      "profile": {},
+      "error": {}
+    }
+  },
   "appDownloadSection": "应用下载",
   "appDownloadHelp": "从 GitHub 下载最新版本。",
   "openGithubReleases": "打开 GitHub Releases",

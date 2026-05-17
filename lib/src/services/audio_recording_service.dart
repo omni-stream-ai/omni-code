@@ -6,6 +6,32 @@ class AudioRecordingService {
   AudioRecordingService({AudioRecorder? recorder})
       : _recorder = recorder ?? AudioRecorder();
 
+  static const speechRecordConfig = RecordConfig(
+    encoder: AudioEncoder.wav,
+    sampleRate: 16000,
+    numChannels: 1,
+    autoGain: true,
+    echoCancel: true,
+    noiseSuppress: true,
+    androidConfig: AndroidRecordConfig(
+      audioSource: AndroidAudioSource.voiceCommunication,
+      audioManagerMode: AudioManagerMode.modeInCommunication,
+    ),
+  );
+
+  static const speechStreamConfig = RecordConfig(
+    encoder: AudioEncoder.pcm16bits,
+    sampleRate: 16000,
+    numChannels: 1,
+    autoGain: true,
+    echoCancel: true,
+    noiseSuppress: true,
+    androidConfig: AndroidRecordConfig(
+      audioSource: AndroidAudioSource.voiceCommunication,
+      audioManagerMode: AudioManagerMode.modeInCommunication,
+    ),
+  );
+
   final AudioRecorder _recorder;
 
   Future<bool> hasPermission() {
@@ -18,11 +44,7 @@ class AudioRecordingService {
         '${directory.path}/omni-code-${DateTime.now().millisecondsSinceEpoch}.wav';
 
     await _recorder.start(
-      const RecordConfig(
-        encoder: AudioEncoder.wav,
-        sampleRate: 16000,
-        numChannels: 1,
-      ),
+      speechRecordConfig,
       path: filePath,
     );
 
@@ -31,11 +53,7 @@ class AudioRecordingService {
 
   Future<Stream<Uint8List>> startStream() {
     return _recorder.startStream(
-      const RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: 16000,
-        numChannels: 1,
-      ),
+      speechStreamConfig,
     );
   }
 

@@ -1,0 +1,1155 @@
+{
+  "version": "1.0.0",
+  "themes": {
+    "theme": [
+      "light"
+    ]
+  },
+  "variables": {},
+  "children": [
+    {
+      "type": "frame",
+      "name": "Voice Call Board",
+      "width": 1080,
+      "height": 1200,
+      "layout": "vertical",
+      "justifyContent": "center",
+      "alignItems": "center",
+      "gap": 36,
+      "padding": [
+        72,
+        72
+      ],
+      "fill": [
+        {
+          "type": "solid",
+          "color": "#ECEAE7"
+        }
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "name": "Design Title",
+          "layout": "vertical",
+          "alignItems": "center",
+          "gap": 8,
+          "children": [
+            {
+              "type": "text",
+              "content": "OMNI CODE",
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "fontWeight": 700,
+              "lineHeight": 1.2,
+              "letterSpacing": 1.2,
+              "fill": [
+                {
+                  "type": "solid",
+                  "color": "#667085"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "content": "Voice Call / Listening State",
+              "fontFamily": "Inter",
+              "fontSize": 30,
+              "fontWeight": 700,
+              "lineHeight": 1.15,
+              "letterSpacing": -0.4,
+              "fill": [
+                {
+                  "type": "solid",
+                  "color": "#171B28"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "content": "A soft, phone-first call surface based on the reference moodboard.",
+              "fontFamily": "Inter",
+              "fontSize": 14,
+              "fontWeight": 500,
+              "lineHeight": 1.45,
+              "letterSpacing": 0,
+              "fill": [
+                {
+                  "type": "solid",
+                  "color": "#7A869E"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "name": "Phone Shell",
+          "width": 390,
+          "height": 844,
+          "layout": "vertical",
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "padding": [
+            12,
+            20,
+            18,
+            20
+          ],
+          "cornerRadius": 44,
+          "clipContent": true,
+          "fill": [
+            {
+              "type": "solid",
+              "color": "#F9FBFF"
+            }
+          ],
+          "stroke": {
+            "thickness": 1,
+            "fill": [
+              {
+                "type": "solid",
+                "color": "#EDF0F6"
+              }
+            ],
+            "align": "inside"
+          },
+          "effects": [
+            {
+              "type": "shadow",
+              "offsetX": 0,
+              "offsetY": 34,
+              "blur": 84,
+              "spread": 0,
+              "color": "rgba(82, 96, 128, 0.18)"
+            }
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "name": "Top Stack",
+              "width": "fill_container",
+              "height": "fit_content",
+              "layout": "vertical",
+              "gap": 18,
+              "children": [
+                {
+                  "type": "frame",
+                  "name": "Status Bar",
+                  "width": "fill_container",
+                  "height": 32,
+                  "layout": "horizontal",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "name": "Time Slot",
+                      "width": 72,
+                      "height": 32,
+                      "layout": "horizontal",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "content": "9:41",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": 700,
+                          "lineHeight": 1.2,
+                          "letterSpacing": 0,
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#121826"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "name": "Island Slot",
+                      "width": "fill_container",
+                      "height": 32,
+                      "layout": "horizontal",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "rectangle",
+                          "name": "Dynamic Island",
+                          "width": 126,
+                          "height": 34,
+                          "cornerRadius": 17,
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#131315"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "name": "System Icons",
+                      "width": 72,
+                      "height": 32,
+                      "layout": "horizontal",
+                      "justifyContent": "end",
+                      "alignItems": "center",
+                      "gap": 8,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "name": "Signal Bars",
+                          "width": 16,
+                          "height": 12,
+                          "layout": "horizontal",
+                          "alignItems": "end",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "width": 2,
+                              "height": 4,
+                              "cornerRadius": 999,
+                              "fill": [
+                                {
+                                  "type": "solid",
+                                  "color": "#121826"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "rectangle",
+                              "width": 2,
+                              "height": 6,
+                              "cornerRadius": 999,
+                              "fill": [
+                                {
+                                  "type": "solid",
+                                  "color": "#121826"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "rectangle",
+                              "width": 2,
+                              "height": 8,
+                              "cornerRadius": 999,
+                              "fill": [
+                                {
+                                  "type": "solid",
+                                  "color": "#121826"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "rectangle",
+                              "width": 2,
+                              "height": 10,
+                              "cornerRadius": 999,
+                              "fill": [
+                                {
+                                  "type": "solid",
+                                  "color": "#121826"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "name": "Battery",
+                          "width": 24,
+                          "height": 12,
+                          "layout": "horizontal",
+                          "alignItems": "center",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "name": "Battery Outline",
+                              "width": 20,
+                              "height": 12,
+                              "cornerRadius": 4,
+                              "fill": [],
+                              "stroke": {
+                                "thickness": 1,
+                                "fill": [
+                                  {
+                                    "type": "solid",
+                                    "color": "#121826"
+                                  }
+                                ],
+                                "align": "inside"
+                              },
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "name": "Battery Fill",
+                                  "x": 2,
+                                  "y": 2,
+                                  "width": 12,
+                                  "height": 8,
+                                  "cornerRadius": 2,
+                                  "fill": [
+                                    {
+                                      "type": "solid",
+                                      "color": "#121826"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "rectangle",
+                              "name": "Battery Cap",
+                              "width": 2,
+                              "height": 6,
+                              "cornerRadius": 999,
+                              "fill": [
+                                {
+                                  "type": "solid",
+                                  "color": "#121826"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Header",
+                  "width": "fill_container",
+                  "height": "fit_content",
+                  "layout": "horizontal",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "name": "Back Action",
+                      "width": 32,
+                      "height": 32,
+                      "layout": "horizontal",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "name": "Back Icon",
+                          "iconFontName": "chevron-left",
+                          "width": 18,
+                          "height": 18,
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#293047"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "name": "Header Title",
+                      "layout": "vertical",
+                      "alignItems": "center",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "content": "Voice call",
+                          "fontFamily": "Inter",
+                          "fontSize": 16,
+                          "fontWeight": 600,
+                          "lineHeight": 1.2,
+                          "letterSpacing": -0.2,
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#161A28"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "name": "Header Spacer",
+                      "width": 32,
+                      "height": 32
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Listening Prompt",
+                  "width": "fill_container",
+                  "height": "fit_content",
+                  "layout": "horizontal",
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "content": "Go ahead, I'm listening.",
+                      "fontFamily": "Inter",
+                      "fontSize": 13,
+                      "fontWeight": 500,
+                      "lineHeight": 1.3,
+                      "letterSpacing": 0.1,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#7A8FC2"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "name": "Middle Stack",
+              "width": "fill_container",
+              "height": "fit_content",
+              "layout": "vertical",
+              "alignItems": "center",
+              "gap": 26,
+              "children": [
+                {
+                  "type": "frame",
+                  "name": "Orb Stage",
+                  "width": 320,
+                  "height": 320,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "path",
+                      "name": "Outer Glow",
+                      "x": 52.7,
+                      "y": 48.3,
+                      "width": 241.9,
+                      "height": 255.5,
+                      "d": "M 128.5 56.3 C 172.0 33.2 167.8 25.5 217.6 48.3 C 267.4 71.0 282.6 70.8 294.6 132.2 C 306.7 193.5 299.4 201.1 257.7 252.6 C 216.0 304.1 217.0 306.4 155.5 303.8 C 94.1 301.2 77.6 297.5 52.7 243.9 C 27.9 190.3 49.9 181.4 72.6 125.2 C 95.3 68.9 85.0 79.4 128.5 56.3 Z",
+                      "fill": [
+                        {
+                          "type": "radial_gradient",
+                          "cx": 0.34,
+                          "cy": 0.22,
+                          "radius": 1,
+                          "stops": [
+                            {
+                              "offset": 0,
+                              "color": "#FBFFFF"
+                            },
+                            {
+                              "offset": 0.24,
+                              "color": "#A3FAFF"
+                            },
+                            {
+                              "offset": 0.62,
+                              "color": "#95C2FF"
+                            },
+                            {
+                              "offset": 1,
+                              "color": "#D6C1FF"
+                            }
+                          ]
+                        }
+                      ],
+                      "opacity": 0.19,
+                      "effects": [
+                        {
+                          "type": "shadow",
+                          "offsetX": 0,
+                          "offsetY": 22,
+                          "blur": 80,
+                          "spread": 0,
+                          "color": "rgba(100, 186, 255, 0.24)"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "path",
+                      "name": "Aura Blob",
+                      "x": 60.2,
+                      "y": 61.5,
+                      "width": 220.1,
+                      "height": 223.3,
+                      "d": "M 133.1 61.5 C 172.8 45.3 170.9 41.8 213.6 64.6 C 256.3 87.3 271.7 87.7 280.4 140.0 C 289.0 192.2 281.9 202.7 243.5 244.7 C 205.1 286.7 201.2 290.8 148.0 284.7 C 94.9 278.6 81.0 271.3 60.2 223.7 C 39.5 176.1 55.3 167.5 76.5 120.5 C 97.6 73.4 93.3 77.7 133.1 61.5 Z",
+                      "fill": [
+                        {
+                          "type": "radial_gradient",
+                          "cx": 0.3,
+                          "cy": 0.22,
+                          "radius": 1,
+                          "stops": [
+                            {
+                              "offset": 0,
+                              "color": "#F7FFFF"
+                            },
+                            {
+                              "offset": 0.22,
+                              "color": "#83F5FF"
+                            },
+                            {
+                              "offset": 0.5,
+                              "color": "#67A0FF"
+                            },
+                            {
+                              "offset": 0.8,
+                              "color": "#7A61FF"
+                            },
+                            {
+                              "offset": 1,
+                              "color": "#4C2ED7"
+                            }
+                          ]
+                        }
+                      ],
+                      "opacity": 0.39,
+                      "effects": [
+                        {
+                          "type": "shadow",
+                          "offsetX": 0,
+                          "offsetY": 14,
+                          "blur": 48,
+                          "spread": 0,
+                          "color": "rgba(111, 219, 255, 0.24)"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "path",
+                      "name": "Main Blob",
+                      "x": 69.7,
+                      "y": 72,
+                      "width": 195.2,
+                      "height": 198.2,
+                      "d": "M 135.4 72.0 C 171.4 58.8 170.9 55.2 207.8 75.6 C 244.7 96.1 258.2 98.5 264.9 143.8 C 271.6 189.1 265.3 198.6 231.3 234.6 C 197.2 270.7 191.5 276.6 145.4 270.2 C 99.4 263.9 87.9 254.6 69.7 212.4 C 51.4 170.2 62.6 162.1 81.3 122.1 C 100.1 82.1 99.3 85.3 135.4 72.0 Z",
+                      "fill": [
+                        {
+                          "type": "radial_gradient",
+                          "cx": 0.32,
+                          "cy": 0.2,
+                          "radius": 0.98,
+                          "stops": [
+                            {
+                              "offset": 0,
+                              "color": "#F9FFFF"
+                            },
+                            {
+                              "offset": 0.16,
+                              "color": "#B4FBFF"
+                            },
+                            {
+                              "offset": 0.36,
+                              "color": "#76CBFF"
+                            },
+                            {
+                              "offset": 0.62,
+                              "color": "#6078FF"
+                            },
+                            {
+                              "offset": 0.84,
+                              "color": "#684DFF"
+                            },
+                            {
+                              "offset": 1,
+                              "color": "#24145B"
+                            }
+                          ]
+                        }
+                      ],
+                      "opacity": 0.99,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": [
+                          {
+                            "type": "linear_gradient",
+                            "angle": 164,
+                            "stops": [
+                              {
+                                "offset": 0,
+                                "color": "#E7FFFF"
+                              },
+                              {
+                                "offset": 1,
+                                "color": "#7A61FF"
+                              }
+                            ]
+                          }
+                        ],
+                        "align": "inside"
+                      },
+                      "effects": [
+                        {
+                          "type": "shadow",
+                          "offsetX": 0,
+                          "offsetY": 18,
+                          "blur": 30,
+                          "spread": 0,
+                          "color": "rgba(48, 33, 130, 0.3)"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "path",
+                      "name": "Inner Blue Drift",
+                      "x": 121.8,
+                      "y": 139.6,
+                      "width": 92.7,
+                      "height": 72.2,
+                      "d": "M 183.5 139.6 C 198.0 143.5 202.7 145.9 210.2 158.9 C 217.6 171.9 223.0 181.0 214.5 193.7 C 206.1 206.4 193.9 210.9 175.1 211.7 C 156.2 212.6 148.9 208.4 136.1 197.2 C 123.3 186.0 118.6 178.2 121.8 165.0 C 125.0 151.8 134.6 148.4 149.4 142.3 C 164.2 136.2 168.9 135.6 183.5 139.6 Z",
+                      "fill": [
+                        {
+                          "type": "radial_gradient",
+                          "cx": 0.64,
+                          "cy": 0.32,
+                          "radius": 0.92,
+                          "stops": [
+                            {
+                              "offset": 0,
+                              "color": "#D9FFFF"
+                            },
+                            {
+                              "offset": 0.34,
+                              "color": "#7DD6FF"
+                            },
+                            {
+                              "offset": 0.74,
+                              "color": "#4E66F1"
+                            },
+                            {
+                              "offset": 1,
+                              "color": "#372AA4"
+                            }
+                          ]
+                        }
+                      ],
+                      "opacity": 0.22,
+                      "effects": [
+                        {
+                          "type": "shadow",
+                          "offsetX": 0,
+                          "offsetY": 6,
+                          "blur": 20,
+                          "spread": 0,
+                          "color": "rgba(87, 145, 255, 0.16)"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "path",
+                      "name": "Inner Cyan Flow",
+                      "x": 102.9,
+                      "y": 106.5,
+                      "width": 84.4,
+                      "height": 71.6,
+                      "d": "M 124.3 110.9 C 137.8 104.4 141.3 103.2 157.1 106.5 C 172.8 109.8 180.4 111.6 187.3 124.0 C 194.2 136.5 193.9 142.9 184.5 156.4 C 175.2 169.9 168.7 176.2 149.8 178.0 C 130.9 179.9 120.6 175.3 108.9 163.8 C 97.2 152.4 99.0 145.5 102.9 132.2 C 106.7 119.0 110.7 117.3 124.3 110.9 Z",
+                      "fill": [
+                        {
+                          "type": "radial_gradient",
+                          "cx": 0.32,
+                          "cy": 0.24,
+                          "radius": 0.96,
+                          "stops": [
+                            {
+                              "offset": 0,
+                              "color": "#FFFFFF"
+                            },
+                            {
+                              "offset": 0.34,
+                              "color": "#A6FBFF"
+                            },
+                            {
+                              "offset": 0.72,
+                              "color": "#66B8FF"
+                            },
+                            {
+                              "offset": 1,
+                              "color": "#5C72FF"
+                            }
+                          ]
+                        }
+                      ],
+                      "opacity": 0.35,
+                      "effects": [
+                        {
+                          "type": "shadow",
+                          "offsetX": 0,
+                          "offsetY": 6,
+                          "blur": 18,
+                          "spread": 0,
+                          "color": "rgba(128, 243, 255, 0.2)"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "path",
+                      "name": "Inner Violet Flow",
+                      "x": 161.3,
+                      "y": 134.8,
+                      "width": 68.4,
+                      "height": 56.2,
+                      "d": "M 195.9 134.8 C 206.0 135.1 209.8 136.2 217.5 144.0 C 225.3 151.8 231.6 158.0 229.7 168.8 C 227.7 179.6 220.9 186.2 209.2 191.0 C 197.5 195.8 189.8 195.3 178.7 189.6 C 167.7 183.9 162.4 177.0 161.3 166.2 C 160.2 155.4 165.9 149.9 173.9 142.7 C 181.8 135.5 185.9 134.5 195.9 134.8 Z",
+                      "fill": [
+                        {
+                          "type": "radial_gradient",
+                          "cx": 0.72,
+                          "cy": 0.24,
+                          "radius": 0.92,
+                          "stops": [
+                            {
+                              "offset": 0,
+                              "color": "#CDC7FF"
+                            },
+                            {
+                              "offset": 0.44,
+                              "color": "#836BFF"
+                            },
+                            {
+                              "offset": 1,
+                              "color": "#2B175E"
+                            }
+                          ]
+                        }
+                      ],
+                      "opacity": 0.24,
+                      "effects": [
+                        {
+                          "type": "shadow",
+                          "offsetX": 0,
+                          "offsetY": 8,
+                          "blur": 20,
+                          "spread": 0,
+                          "color": "rgba(67, 44, 158, 0.18)"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "path",
+                      "name": "Inner Highlight",
+                      "x": 92.6,
+                      "y": 75.2,
+                      "width": 93,
+                      "height": 98.4,
+                      "d": "M 118.5 78.6 C 134.8 70.2 137.9 68.9 155.3 75.2 C 172.8 81.5 179.5 84.2 185.7 102.8 C 191.9 121.5 191.0 128.5 179.2 146.9 C 167.4 165.3 161.3 172.4 140.2 173.6 C 119.2 174.7 110.6 168.3 98.2 151.1 C 85.9 133.9 87.4 126.2 92.6 107.4 C 97.9 88.5 102.2 86.9 118.5 78.6 Z",
+                      "fill": [
+                        {
+                          "type": "radial_gradient",
+                          "cx": 0.3,
+                          "cy": 0.2,
+                          "radius": 0.9,
+                          "stops": [
+                            {
+                              "offset": 0,
+                              "color": "#FFFFFF"
+                            },
+                            {
+                              "offset": 0.42,
+                              "color": "#E6F7FF"
+                            },
+                            {
+                              "offset": 1,
+                              "color": "#B6B3FF"
+                            }
+                          ]
+                        }
+                      ],
+                      "opacity": 0.24
+                    },
+                    {
+                      "type": "path",
+                      "name": "Bottom Gloss",
+                      "x": 114,
+                      "y": 225,
+                      "width": 86,
+                      "height": 15.2,
+                      "d": "M 126.0 231.0 C 141.8 227.6 165.3 227.8 180.8 231.2 C 185.3 232.2 185.6 235.2 179.2 236.7 C 163.8 239.0 140.5 238.9 126.8 237.0 C 120.7 236.1 120.5 232.8 126.0 231.0 Z",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#FFFFFF"
+                        }
+                      ],
+                      "opacity": 0.1
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Assistant Copy",
+                  "layout": "vertical",
+                  "alignItems": "center",
+                  "gap": 10,
+                  "children": [
+                    {
+                      "type": "text",
+                      "content": "Hello. I'm here to help you learn, explore new topics, and untangle tricky questions.",
+                      "width": 300,
+                      "textGrowth": "fixed-width",
+                      "textAlign": "center",
+                      "fontFamily": "Inter",
+                      "fontSize": 18,
+                      "fontWeight": 600,
+                      "lineHeight": 1.55,
+                      "letterSpacing": -0.1,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#1F2537"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "content": "You can interrupt at any time.",
+                      "fontFamily": "Inter",
+                      "fontSize": 13,
+                      "fontWeight": 500,
+                      "lineHeight": 1.35,
+                      "letterSpacing": 0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#909BB2"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "name": "Bottom Stack",
+              "width": "fill_container",
+              "height": "fit_content",
+              "layout": "vertical",
+              "alignItems": "center",
+              "gap": 18,
+              "children": [
+                {
+                  "type": "frame",
+                  "name": "Live Transcription Chip",
+                  "layout": "horizontal",
+                  "alignItems": "center",
+                  "gap": 10,
+                  "padding": [
+                    8,
+                    14
+                  ],
+                  "cornerRadius": 999,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#FFFFFF"
+                    }
+                  ],
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": [
+                      {
+                        "type": "solid",
+                        "color": "#E8ECF3"
+                      }
+                    ],
+                    "align": "inside"
+                  },
+                  "effects": [
+                    {
+                      "type": "shadow",
+                      "offsetX": 0,
+                      "offsetY": 8,
+                      "blur": 24,
+                      "spread": 0,
+                      "color": "rgba(109, 123, 152, 0.08)"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "name": "Waveform",
+                      "layout": "horizontal",
+                      "alignItems": "end",
+                      "gap": 3,
+                      "children": [
+                        {
+                          "type": "rectangle",
+                          "width": 3,
+                          "height": 8,
+                          "cornerRadius": 999,
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#2F6BFF"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "rectangle",
+                          "width": 3,
+                          "height": 14,
+                          "cornerRadius": 999,
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#5B8BFF"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "rectangle",
+                          "width": 3,
+                          "height": 10,
+                          "cornerRadius": 999,
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#8E76FF"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "rectangle",
+                          "width": 3,
+                          "height": 16,
+                          "cornerRadius": 999,
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#2F6BFF"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "rectangle",
+                          "width": 3,
+                          "height": 9,
+                          "cornerRadius": 999,
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#5B8BFF"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "content": "Live transcription",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": 600,
+                      "lineHeight": 1.2,
+                      "letterSpacing": 0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#53627F"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Control Row",
+                  "width": "fill_container",
+                  "height": "fit_content",
+                  "layout": "horizontal",
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "gap": 20,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "name": "Message Action",
+                      "width": 58,
+                      "height": 58,
+                      "layout": "horizontal",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "cornerRadius": 999,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#FFFFFF"
+                        }
+                      ],
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": [
+                          {
+                            "type": "solid",
+                            "color": "#E7EBF3"
+                          }
+                        ],
+                        "align": "inside"
+                      },
+                      "effects": [
+                        {
+                          "type": "shadow",
+                          "offsetX": 0,
+                          "offsetY": 10,
+                          "blur": 24,
+                          "spread": 0,
+                          "color": "rgba(109, 123, 152, 0.08)"
+                        }
+                      ],
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "name": "Message Icon",
+                          "iconFontName": "message-circle",
+                          "width": 22,
+                          "height": 22,
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#667792"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "name": "Mic Action",
+                      "width": 90,
+                      "height": 90,
+                      "layout": "horizontal",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "cornerRadius": 999,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#2F6BFF"
+                        }
+                      ],
+                      "effects": [
+                        {
+                          "type": "shadow",
+                          "offsetX": 0,
+                          "offsetY": 16,
+                          "blur": 34,
+                          "spread": 0,
+                          "color": "rgba(47, 107, 255, 0.34)"
+                        }
+                      ],
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "name": "Mic Icon",
+                          "iconFontName": "mic",
+                          "width": 28,
+                          "height": 28,
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#FFFFFF"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "name": "Dismiss Action",
+                      "width": 58,
+                      "height": 58,
+                      "layout": "horizontal",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "cornerRadius": 999,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#FFFFFF"
+                        }
+                      ],
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": [
+                          {
+                            "type": "solid",
+                            "color": "#E7EBF3"
+                          }
+                        ],
+                        "align": "inside"
+                      },
+                      "effects": [
+                        {
+                          "type": "shadow",
+                          "offsetX": 0,
+                          "offsetY": 10,
+                          "blur": 24,
+                          "spread": 0,
+                          "color": "rgba(109, 123, 152, 0.08)"
+                        }
+                      ],
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "name": "Dismiss Icon",
+                          "iconFontName": "x",
+                          "width": 22,
+                          "height": 22,
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#2B3042"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "content": "Tap the mic to pause or resume the conversation.",
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": 500,
+                  "lineHeight": 1.35,
+                  "letterSpacing": 0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#98A3B8"
+                    }
+                  ]
+                },
+                {
+                  "type": "rectangle",
+                  "name": "Home Indicator",
+                  "width": 136,
+                  "height": 5,
+                  "cornerRadius": 999,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#121416"
+                    }
+                  ],
+                  "opacity": 0.86
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

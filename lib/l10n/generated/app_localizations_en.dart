@@ -463,7 +463,34 @@ class AppLocalizationsEn extends AppLocalizations {
       'Speak naturally. I will listen, send, and read the reply back.';
 
   @override
+  String get callModeListeningReadyLabel => 'Listening now';
+
+  @override
+  String get callModeListeningReadyDetail =>
+      'Start speaking whenever you\'re ready. Live transcription will show up here.';
+
+  @override
+  String get callModeSpeechDetectedLabel => 'Speech detected';
+
+  @override
+  String get callModeSpeechDetectedDetail =>
+      'Keep talking naturally. The current utterance is still being captured.';
+
+  @override
+  String get callModeWaitingForPauseLabel => 'Waiting for you to finish';
+
+  @override
+  String get callModeWaitingForPauseDetail =>
+      'After a short pause, this utterance will be sent automatically.';
+
+  @override
   String get callModeOpenChatHistory => 'Open chat history';
+
+  @override
+  String get showCallModeSubtitles => 'Show subtitles';
+
+  @override
+  String get hideCallModeSubtitles => 'Hide subtitles';
 
   @override
   String get startCallMode => 'Start call mode';
@@ -477,7 +504,33 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get callModeRequiresStreamingAsr =>
-      'Call mode currently requires either the System ASR provider or Tencent Cloud Streaming.';
+      'Call mode currently requires System ASR, Omni Bridge Local, or Tencent Cloud Streaming.';
+
+  @override
+  String get callModeSection => 'Call mode';
+
+  @override
+  String get callModeAllowInterruptionsLabel => 'Allow speaking over replies';
+
+  @override
+  String get callModeAllowInterruptionsHelp =>
+      'When enabled, speaking again during call mode will stop the current spoken reply and take over the turn.';
+
+  @override
+  String get callModeSpeechPauseLabel => 'Speech pause detection';
+
+  @override
+  String get callModeSpeechPauseHelp =>
+      'How long to wait after you stop speaking before the current utterance is sent automatically.';
+
+  @override
+  String callModeSpeechPauseOption(Object seconds) {
+    return 'Pause ${seconds}s';
+  }
+
+  @override
+  String get callModeSpeechPauseBridgeOnlyHint =>
+      'This pause setting currently applies precisely to Omni Bridge Local realtime call mode. Other ASR providers may keep their own built-in pause behavior.';
 
   @override
   String get send => 'Send';
@@ -913,6 +966,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get speechSystem => 'System';
 
   @override
+  String get omniBridgeLocal => 'Omni Bridge Local';
+
+  @override
+  String get refresh => 'Refresh';
+
+  @override
+  String get refreshing => 'Refreshing...';
+
+  @override
+  String get clear => 'Clear';
+
+  @override
   String get speechSystemPreferredHelp =>
       'System is used by default when available. Switch to cloud providers if you need a fallback.';
 
@@ -931,6 +996,264 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get systemSpeechUnavailable =>
       'System speech is unavailable on this device. Switch providers in Settings to use cloud speech.';
+
+  @override
+  String get localBridgeSpeechSection => 'Local Bridge Speech';
+
+  @override
+  String get localBridgeModelsSection => 'Local Bridge Models';
+
+  @override
+  String get localBridgeSpeechIntro =>
+      'Use the local Bridge to run offline ASR, TTS, VAD, and model downloads on your own machine.';
+
+  @override
+  String get localBridgeModelRoot => 'Model root';
+
+  @override
+  String get localBridgeDownloadTasksSection => 'Download tasks';
+
+  @override
+  String get localBridgeNoCompatibleModels =>
+      'No compatible models are available for this type yet.';
+
+  @override
+  String get localBridgeTtsVoiceLabel => 'TTS voice';
+
+  @override
+  String get localBridgeTtsVoiceField => 'Voice';
+
+  @override
+  String get localBridgeTtsVoiceHelp =>
+      'Used for local Bridge reply playback, auto-play, and call mode spoken replies.';
+
+  @override
+  String get localBridgeTtsStreamingLabel => 'Stream Bridge Local TTS';
+
+  @override
+  String get localBridgeTtsStreamingHelp =>
+      'Starts playback while the local Bridge is still generating speech. Disable this if you prefer full audio to be generated before playback begins.';
+
+  @override
+  String localBridgeTtsVoiceOption(Object voice) {
+    return 'Voice $voice';
+  }
+
+  @override
+  String localBridgeTtsVoiceDefault(Object voice) {
+    return 'Voice $voice (Default)';
+  }
+
+  @override
+  String localBridgeTtsNamedVoiceDefault(Object voice) {
+    return '$voice (Default)';
+  }
+
+  @override
+  String localBridgeTtsVoiceId(Object voice) {
+    return 'ID $voice';
+  }
+
+  @override
+  String get speechVoiceLanguageChinese => 'Chinese';
+
+  @override
+  String get speechVoiceLanguageEnglish => 'English';
+
+  @override
+  String get speechVoiceLanguageChineseEnglish => 'Chinese + English';
+
+  @override
+  String get speechVoiceLanguageJapanese => 'Japanese';
+
+  @override
+  String get speechVoiceLanguageSpanish => 'Spanish';
+
+  @override
+  String get speechVoiceLanguageFrench => 'French';
+
+  @override
+  String get speechVoiceLanguageHindi => 'Hindi';
+
+  @override
+  String get speechVoiceLanguageItalian => 'Italian';
+
+  @override
+  String get speechVoiceLanguagePortugueseBr => 'Portuguese (BR)';
+
+  @override
+  String get speechVoiceLanguageUnknown => 'Unknown language';
+
+  @override
+  String get speechVoiceAccentAmericanEnglish => 'American English';
+
+  @override
+  String get speechVoiceAccentBritishEnglish => 'British English';
+
+  @override
+  String get speechVoiceAccentBrazilianPortuguese => 'Brazilian Portuguese';
+
+  @override
+  String get speechVoiceGenderFemale => 'Female';
+
+  @override
+  String get speechVoiceGenderMale => 'Male';
+
+  @override
+  String get zhipuApiSection => 'Zhipu API';
+
+  @override
+  String get whisperApiSection => 'Whisper API';
+
+  @override
+  String get tencentCloudStreamingAsrSection => 'Tencent Cloud Streaming ASR';
+
+  @override
+  String get bridgeLocalTtsHelp =>
+      'Uses the bridge-local /v1/audio/speech endpoint and the selected TTS model below.';
+
+  @override
+  String get bridgeLocalAsrHelp =>
+      'Uses the bridge-local /v1/audio/transcriptions endpoint for recorded voice input.';
+
+  @override
+  String get zhipuApiHelp => 'Requires a Zhipu API key.';
+
+  @override
+  String get whisperApiHelp =>
+      'Requires a Whisper-compatible base URL and API key.';
+
+  @override
+  String get tencentStreamingAsrHelp =>
+      'Uses Tencent Cloud websocket streaming for realtime transcription.';
+
+  @override
+  String get speechNotSelected => 'Not selected';
+
+  @override
+  String get speechInstalled => 'Installed';
+
+  @override
+  String get speechNotInstalled => 'Not installed';
+
+  @override
+  String get speechDownload => 'Download';
+
+  @override
+  String get speechDownloading => 'Downloading...';
+
+  @override
+  String get speechSelect => 'Select';
+
+  @override
+  String get speechChange => 'Change';
+
+  @override
+  String get speechSelected => 'Selected';
+
+  @override
+  String get speechModelKindAsr => 'ASR';
+
+  @override
+  String get speechModelKindTts => 'TTS';
+
+  @override
+  String get speechModelKindVad => 'VAD';
+
+  @override
+  String get speechRuntimeStreaming => 'Streaming';
+
+  @override
+  String get speechRuntimeOffline => 'Offline';
+
+  @override
+  String get speechProfileBatchAsrTitle => 'Batch ASR';
+
+  @override
+  String get speechProfileBatchAsrHelp =>
+      'Used for recorded voice transcription. Pick this when you want accurate transcription after the user finishes speaking.';
+
+  @override
+  String get speechProfileBatchAsrAction => 'Use for Batch ASR';
+
+  @override
+  String get speechProfileRealtimeAsrTitle => 'Realtime ASR';
+
+  @override
+  String get speechProfileRealtimeAsrHelp =>
+      'Used by call mode and realtime websocket transcription. Pick this when you need partial transcripts while the user is still speaking.';
+
+  @override
+  String get speechProfileRealtimeAsrAction => 'Use for Realtime ASR';
+
+  @override
+  String get speechProfileTtsTitle => 'TTS';
+
+  @override
+  String get speechProfileTtsHelp =>
+      'Used for spoken reply playback from the local Bridge. Pick this when you want the assistant to speak through a local model.';
+
+  @override
+  String get speechProfileTtsAction => 'Use for TTS';
+
+  @override
+  String get speechProfileVadTitle => 'VAD';
+
+  @override
+  String get speechProfileVadHelp =>
+      'Used to detect when speech starts and ends in realtime mode. Pick this when you want faster turn-taking and cleaner cutoffs.';
+
+  @override
+  String get speechProfileVadAction => 'Use for VAD';
+
+  @override
+  String get speechDownloadStatusQueued => 'Queued';
+
+  @override
+  String get speechDownloadStatusDownloading => 'Downloading';
+
+  @override
+  String get speechDownloadStatusExtracting => 'Extracting';
+
+  @override
+  String get speechDownloadStatusVerifying => 'Verifying';
+
+  @override
+  String get speechDownloadStatusCompleted => 'Completed';
+
+  @override
+  String get speechDownloadStatusFailed => 'Failed';
+
+  @override
+  String speechActiveDownloadsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count active downloads',
+      one: '1 active download',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speechDownloadProgressPercent(int percent) {
+    return '$percent% complete';
+  }
+
+  @override
+  String speechLocalModelsLoadFailed(Object error) {
+    return 'Unable to load local speech models: $error';
+  }
+
+  @override
+  String speechModelDownloadFailed(Object modelId, Object error) {
+    return 'Download failed for $modelId: $error';
+  }
+
+  @override
+  String speechProfileUpdateFailed(Object profile, Object error) {
+    return 'Failed to update $profile: $error';
+  }
 
   @override
   String get appDownloadSection => 'App Download';

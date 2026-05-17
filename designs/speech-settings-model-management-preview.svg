@@ -1,0 +1,129 @@
+<svg width="1080" height="1800" viewBox="0 0 1080 1800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadow" x="240" y="210" width="600" height="1060" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="24" stdDeviation="30" flood-color="#526080" flood-opacity="0.16"/>
+    </filter>
+    <style>
+      .ui { font-family: Inter, "Noto Sans CJK SC", sans-serif; }
+      .kicker { font-size: 13px; font-weight: 700; letter-spacing: 1.2px; fill: #667085; }
+      .title { font-size: 30px; font-weight: 800; fill: #171B28; }
+      .sub { font-size: 14px; font-weight: 500; fill: #7A869E; }
+      .section { font-size: 11px; font-weight: 800; letter-spacing: 0.3px; fill: #536170; }
+      .h1 { font-size: 24px; font-weight: 800; fill: #10161D; }
+      .cardTitle { font-size: 14px; font-weight: 700; fill: #10161D; }
+      .label { font-size: 11px; font-weight: 700; fill: #536170; }
+      .value { font-size: 13px; font-weight: 600; fill: #10161D; }
+      .muted { font-size: 12px; font-weight: 500; fill: #536170; }
+      .small { font-size: 11px; font-weight: 600; fill: #748292; }
+      .action { font-size: 11px; font-weight: 800; fill: #006CFF; }
+      .pill { font-size: 10px; font-weight: 800; letter-spacing: 0.2px; }
+    </style>
+  </defs>
+
+  <rect width="1080" height="1800" fill="#ECEAE7"/>
+
+  <g class="ui" text-anchor="middle">
+    <text x="540" y="82" class="kicker">OMNI CODE</text>
+    <text x="540" y="124" class="title">Speech Settings / Model Management</text>
+    <text x="540" y="154" class="sub">语音页需要明确三件事：选 Provider、下载/设默认模型、选择 TTS 音色。</text>
+  </g>
+
+  <g filter="url(#shadow)" class="ui">
+    <rect x="345" y="210" width="390" height="980" rx="38" fill="#F3F0EA" stroke="#CDD6E0"/>
+    <g transform="translate(363 228)">
+      <circle cx="16" cy="16" r="16" fill="#E7EDF3"/>
+      <path d="M19 10 L13 16 L19 22" stroke="#10161D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="42" y="27" class="h1">SPEECH</text>
+      <text x="354" y="24" text-anchor="end" class="action" font-size="13">SAVE</text>
+    </g>
+    <g transform="translate(363 281)">
+      <rect width="354" height="112" rx="14" fill="#F7F9FC" stroke="#CDD6E0"/>
+      <text x="14" y="26" class="section">PROVIDERS</text>
+      <text x="14" y="55" class="label">TTS</text>
+      <rect x="14" y="63" width="159" height="38" rx="10" fill="#E7EDF3"/>
+      <text x="26" y="87" class="value">Bridge Local</text>
+      <text x="181" y="55" class="label">ASR</text>
+      <rect x="181" y="63" width="159" height="38" rx="10" fill="#E7EDF3"/>
+      <text x="193" y="87" class="value">Bridge Local</text>
+    </g>
+    <g transform="translate(363 410)">
+      <text x="0" y="12" class="section">LOCAL BRIDGE MODELS</text>
+      <rect y="20" width="354" height="318" rx="14" fill="#F7F9FC" stroke="#CDD6E0"/>
+      <text x="14" y="50" class="cardTitle">Model root</text>
+      <text x="340" y="50" text-anchor="end" class="action">REFRESH</text>
+      <rect x="14" y="62" width="326" height="34" rx="10" fill="#E7EDF3"/>
+      <text x="26" y="84" class="muted">~/omni/models</text>
+      <g transform="translate(14 110)">
+        <rect width="326" height="52" rx="10" fill="#FFFFFF" stroke="#E0E6EF"/>
+        <circle cx="13" cy="18" r="4" fill="#188038"/>
+        <text x="26" y="22" class="value" font-size="12">Realtime ASR</text>
+        <text x="26" y="40" class="small">sherpa-streaming-zipformer · 248 MB</text>
+        <rect x="240" y="13" width="72" height="26" rx="13" fill="#B2FF2E"/>
+        <text x="276" y="30" text-anchor="middle" class="pill" fill="#0F151B">SELECTED</text>
+      </g>
+      <g transform="translate(14 170)">
+        <rect width="326" height="52" rx="10" fill="#FFFFFF" stroke="#E0E6EF"/>
+        <circle cx="13" cy="18" r="4" fill="#188038"/>
+        <text x="26" y="22" class="value" font-size="12">TTS Model</text>
+        <text x="26" y="40" class="small">kokoro-v1.0 · voices: 6</text>
+        <rect x="252" y="13" width="60" height="26" rx="13" fill="#E7EDF3"/>
+        <text x="282" y="30" text-anchor="middle" class="pill" fill="#10161D">CHANGE</text>
+      </g>
+      <g transform="translate(14 230)">
+        <rect width="326" height="52" rx="10" fill="#FFFFFF" stroke="#E0E6EF"/>
+        <circle cx="13" cy="18" r="4" fill="#B54708"/>
+        <text x="26" y="22" class="value" font-size="12">Batch ASR</text>
+        <text x="26" y="40" class="small">whisper-small · not installed</text>
+        <rect x="246" y="13" width="66" height="26" rx="13" fill="#006CFF"/>
+        <text x="279" y="30" text-anchor="middle" class="pill" fill="#FFFFFF">DOWNLOAD</text>
+      </g>
+      <g transform="translate(14 290)">
+        <rect width="326" height="34" rx="10" fill="#F2FBF5" stroke="#B7DEC7"/>
+        <text x="12" y="22" class="small" fill="#15633C">Download progress appears here when active</text>
+      </g>
+    </g>
+    <g transform="translate(363 765)">
+      <text x="0" y="12" class="section">TTS VOICE</text>
+      <rect y="20" width="354" height="118" rx="14" fill="#F7F9FC" stroke="#CDD6E0"/>
+      <text x="14" y="50" class="cardTitle">Voice for local TTS</text>
+      <text x="340" y="50" text-anchor="end" class="action">TEST</text>
+      <rect x="14" y="66" width="326" height="42" rx="10" fill="#E7EDF3"/>
+      <text x="26" y="92" class="value">Voice 01 · warm neutral</text>
+      <path d="M320 82 L326 88 L332 82" stroke="#748292" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g transform="translate(363 920)">
+      <text x="0" y="12" class="section">CALL MODE</text>
+      <rect y="20" width="354" height="118" rx="14" fill="#F7F9FC" stroke="#CDD6E0"/>
+      <text x="14" y="52" class="cardTitle">Allow interruptions</text>
+      <rect x="298" y="37" width="42" height="24" rx="12" fill="#B2FF2E"/>
+      <circle cx="325" cy="49" r="9" fill="#0F151B"/>
+      <rect x="14" y="70" width="326" height="42" rx="10" fill="#E7EDF3"/>
+      <text x="26" y="96" class="muted">Speech pause</text>
+      <text x="316" y="96" text-anchor="end" class="value" font-weight="800">1.2s</text>
+    </g>
+    <g transform="translate(363 1075)">
+      <rect width="354" height="62" rx="14" fill="#FFF8E8" stroke="#F2B57E"/>
+      <text x="14" y="26" class="section" fill="#8C4A18">CLOUD PROVIDERS</text>
+      <text x="14" y="47" class="muted" fill="#8C4A18">Zhipu / Whisper / Tencent credentials fold below</text>
+    </g>
+  </g>
+
+  <g class="ui">
+    <text x="540" y="1260" class="title" text-anchor="middle" font-size="22">CHANGE TTS MODEL SHEET</text>
+    <text x="540" y="1288" class="sub" text-anchor="middle">Opened from the TTS Model row without covering the main page.</text>
+  </g>
+
+  <g filter="url(#shadow)" class="ui">
+    <rect x="345" y="1320" width="390" height="360" rx="38" fill="#F7F9FC" stroke="#CDD6E0"/>
+    <rect x="499" y="1334" width="82" height="5" rx="2.5" fill="#CDD6E0"/>
+    <g transform="translate(363 1370)">
+      <rect width="354" height="214" rx="14" fill="#FFFFFF" stroke="#E0E6EF"/>
+      <text x="14" y="28" class="cardTitle">Choose TTS model</text>
+      <text x="14" y="54" class="muted">kokoro-v1.0 · SELECTED</text>
+      <text x="14" y="98" class="muted">piper-en-us-lessac · SELECT</text>
+      <text x="14" y="142" class="muted">edge-tts-local-cache · DOWNLOAD</text>
+      <rect x="14" y="160" width="326" height="24" rx="12" fill="#F2FBF5" stroke="#B7DEC7"/>
+      <text x="26" y="176" class="small" fill="#15633C">Download progress appears here when active.</text>
+    </g>
+  </g>
+</svg>

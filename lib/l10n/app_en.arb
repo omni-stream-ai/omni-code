@@ -231,11 +231,31 @@
   "callModeSpeaking": "Replying out loud",
   "callModeWorking": "Thinking through your request",
   "callModeIdleSubtitle": "Speak naturally. I will listen, send, and read the reply back.",
+  "callModeListeningReadyLabel": "Listening now",
+  "callModeListeningReadyDetail": "Start speaking whenever you're ready. Live transcription will show up here.",
+  "callModeSpeechDetectedLabel": "Speech detected",
+  "callModeSpeechDetectedDetail": "Keep talking naturally. The current utterance is still being captured.",
+  "callModeWaitingForPauseLabel": "Waiting for you to finish",
+  "callModeWaitingForPauseDetail": "After a short pause, this utterance will be sent automatically.",
   "callModeOpenChatHistory": "Open chat history",
+  "showCallModeSubtitles": "Show subtitles",
+  "hideCallModeSubtitles": "Hide subtitles",
   "startCallMode": "Start call mode",
   "stopCallMode": "Stop call mode",
   "callModeUnavailable": "Call mode is unavailable until speech services finish initializing.",
-  "callModeRequiresStreamingAsr": "Call mode currently requires either the System ASR provider or Tencent Cloud Streaming.",
+  "callModeRequiresStreamingAsr": "Call mode currently requires System ASR, Omni Bridge Local, or Tencent Cloud Streaming.",
+  "callModeSection": "Call mode",
+  "callModeAllowInterruptionsLabel": "Allow speaking over replies",
+  "callModeAllowInterruptionsHelp": "When enabled, speaking again during call mode will stop the current spoken reply and take over the turn.",
+  "callModeSpeechPauseLabel": "Speech pause detection",
+  "callModeSpeechPauseHelp": "How long to wait after you stop speaking before the current utterance is sent automatically.",
+  "callModeSpeechPauseOption": "Pause {seconds}s",
+  "@callModeSpeechPauseOption": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "callModeSpeechPauseBridgeOnlyHint": "This pause setting currently applies precisely to Omni Bridge Local realtime call mode. Other ASR providers may keep their own built-in pause behavior.",
   "send": "Send",
   "imageAttachment": "Image attachment",
   "previewImage": "Preview",
@@ -465,11 +485,140 @@
   "reinitializingVoiceInput": "Reinitializing voice input...",
   "voiceTranscriptionNoResult": "No speech was recognized",
   "speechSystem": "System",
+  "omniBridgeLocal": "Omni Bridge Local",
+  "refresh": "Refresh",
+  "refreshing": "Refreshing...",
+  "clear": "Clear",
   "speechSystemPreferredHelp": "System is used by default when available. Switch to cloud providers if you need a fallback.",
   "systemTtsUnavailableOnLinux": "System TTS is not available on Linux yet. Choose a cloud provider to enable playback.",
   "systemAsrUnavailableOnLinux": "System ASR is not available on Linux yet. Choose a cloud provider to enable voice input.",
   "systemAsrMacosPermissionHint": "System ASR on macOS requires microphone and speech recognition permissions.",
   "systemSpeechUnavailable": "System speech is unavailable on this device. Switch providers in Settings to use cloud speech.",
+  "localBridgeSpeechSection": "Local Bridge Speech",
+  "localBridgeModelsSection": "Local Bridge Models",
+  "localBridgeSpeechIntro": "Use the local Bridge to run offline ASR, TTS, VAD, and model downloads on your own machine.",
+  "localBridgeModelRoot": "Model root",
+  "localBridgeDownloadTasksSection": "Download tasks",
+  "localBridgeNoCompatibleModels": "No compatible models are available for this type yet.",
+  "localBridgeTtsVoiceLabel": "TTS voice",
+  "localBridgeTtsVoiceField": "Voice",
+  "localBridgeTtsVoiceHelp": "Used for local Bridge reply playback, auto-play, and call mode spoken replies.",
+  "localBridgeTtsStreamingLabel": "Stream Bridge Local TTS",
+  "localBridgeTtsStreamingHelp": "Starts playback while the local Bridge is still generating speech. Disable this if you prefer full audio to be generated before playback begins.",
+  "localBridgeTtsVoiceOption": "Voice {voice}",
+  "@localBridgeTtsVoiceOption": {
+    "placeholders": {
+      "voice": {}
+    }
+  },
+  "localBridgeTtsVoiceDefault": "Voice {voice} (Default)",
+  "@localBridgeTtsVoiceDefault": {
+    "placeholders": {
+      "voice": {}
+    }
+  },
+  "localBridgeTtsNamedVoiceDefault": "{voice} (Default)",
+  "@localBridgeTtsNamedVoiceDefault": {
+    "placeholders": {
+      "voice": {}
+    }
+  },
+  "localBridgeTtsVoiceId": "ID {voice}",
+  "@localBridgeTtsVoiceId": {
+    "placeholders": {
+      "voice": {}
+    }
+  },
+  "speechVoiceLanguageChinese": "Chinese",
+  "speechVoiceLanguageEnglish": "English",
+  "speechVoiceLanguageChineseEnglish": "Chinese + English",
+  "speechVoiceLanguageJapanese": "Japanese",
+  "speechVoiceLanguageSpanish": "Spanish",
+  "speechVoiceLanguageFrench": "French",
+  "speechVoiceLanguageHindi": "Hindi",
+  "speechVoiceLanguageItalian": "Italian",
+  "speechVoiceLanguagePortugueseBr": "Portuguese (BR)",
+  "speechVoiceLanguageUnknown": "Unknown language",
+  "speechVoiceAccentAmericanEnglish": "American English",
+  "speechVoiceAccentBritishEnglish": "British English",
+  "speechVoiceAccentBrazilianPortuguese": "Brazilian Portuguese",
+  "speechVoiceGenderFemale": "Female",
+  "speechVoiceGenderMale": "Male",
+  "zhipuApiSection": "Zhipu API",
+  "whisperApiSection": "Whisper API",
+  "tencentCloudStreamingAsrSection": "Tencent Cloud Streaming ASR",
+  "bridgeLocalTtsHelp": "Uses the bridge-local /v1/audio/speech endpoint and the selected TTS model below.",
+  "bridgeLocalAsrHelp": "Uses the bridge-local /v1/audio/transcriptions endpoint for recorded voice input.",
+  "zhipuApiHelp": "Requires a Zhipu API key.",
+  "whisperApiHelp": "Requires a Whisper-compatible base URL and API key.",
+  "tencentStreamingAsrHelp": "Uses Tencent Cloud websocket streaming for realtime transcription.",
+  "speechNotSelected": "Not selected",
+  "speechInstalled": "Installed",
+  "speechNotInstalled": "Not installed",
+  "speechDownload": "Download",
+  "speechDownloading": "Downloading...",
+  "speechSelect": "Select",
+  "speechChange": "Change",
+  "speechSelected": "Selected",
+  "speechModelKindAsr": "ASR",
+  "speechModelKindTts": "TTS",
+  "speechModelKindVad": "VAD",
+  "speechRuntimeStreaming": "Streaming",
+  "speechRuntimeOffline": "Offline",
+  "speechProfileBatchAsrTitle": "Batch ASR",
+  "speechProfileBatchAsrHelp": "Used for recorded voice transcription. Pick this when you want accurate transcription after the user finishes speaking.",
+  "speechProfileBatchAsrAction": "Use for Batch ASR",
+  "speechProfileRealtimeAsrTitle": "Realtime ASR",
+  "speechProfileRealtimeAsrHelp": "Used by call mode and realtime websocket transcription. Pick this when you need partial transcripts while the user is still speaking.",
+  "speechProfileRealtimeAsrAction": "Use for Realtime ASR",
+  "speechProfileTtsTitle": "TTS",
+  "speechProfileTtsHelp": "Used for spoken reply playback from the local Bridge. Pick this when you want the assistant to speak through a local model.",
+  "speechProfileTtsAction": "Use for TTS",
+  "speechProfileVadTitle": "VAD",
+  "speechProfileVadHelp": "Used to detect when speech starts and ends in realtime mode. Pick this when you want faster turn-taking and cleaner cutoffs.",
+  "speechProfileVadAction": "Use for VAD",
+  "speechDownloadStatusQueued": "Queued",
+  "speechDownloadStatusDownloading": "Downloading",
+  "speechDownloadStatusExtracting": "Extracting",
+  "speechDownloadStatusVerifying": "Verifying",
+  "speechDownloadStatusCompleted": "Completed",
+  "speechDownloadStatusFailed": "Failed",
+  "speechActiveDownloadsCount": "{count, plural, one{1 active download} other{{count} active downloads}}",
+  "@speechActiveDownloadsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "speechDownloadProgressPercent": "{percent}% complete",
+  "@speechDownloadProgressPercent": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "speechLocalModelsLoadFailed": "Unable to load local speech models: {error}",
+  "@speechLocalModelsLoadFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "speechModelDownloadFailed": "Download failed for {modelId}: {error}",
+  "@speechModelDownloadFailed": {
+    "placeholders": {
+      "modelId": {},
+      "error": {}
+    }
+  },
+  "speechProfileUpdateFailed": "Failed to update {profile}: {error}",
+  "@speechProfileUpdateFailed": {
+    "placeholders": {
+      "profile": {},
+      "error": {}
+    }
+  },
   "appDownloadSection": "App Download",
   "appDownloadHelp": "Download the latest release from GitHub.",
   "openGithubReleases": "Open GitHub Releases",

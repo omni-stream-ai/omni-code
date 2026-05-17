@@ -20,6 +20,9 @@ class CloudSpeechService {
         'System ASR should be handled by SpeechInputService, not CloudSpeechService.',
       );
     }
+    if (settings.asrProvider == AsrProvider.bridgeLocal) {
+      return BridgeClient(httpClient: _httpClient).transcribeAudio(audioFile);
+    }
     if (settings.asrProvider == AsrProvider.whisper) {
       return _transcribeWithWhisper(
         audioFile,
@@ -32,6 +35,15 @@ class CloudSpeechService {
 
   Future<SynthesizedSpeech> synthesizeSpeech(String text) async {
     final settings = appSettingsController.settings;
+    if (settings.ttsProvider == TtsProvider.bridgeLocal) {
+      return BridgeClient(httpClient: _httpClient).synthesizeSpeech(
+        text,
+        voice: settings.bridgeLocalTtsVoice.trim().isNotEmpty
+            ? settings.bridgeLocalTtsVoice.trim()
+            : '0',
+        stream: settings.bridgeLocalTtsStreaming,
+      );
+    }
     return _synthesizeWithZhipu(text, settings.zhipuApiKey);
   }
 

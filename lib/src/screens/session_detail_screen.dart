@@ -18,14 +18,15 @@ import '../models.dart';
 import '../services/cloud_speech_service.dart';
 import '../services/notification_service.dart';
 import '../services/audio_recording_service.dart';
+import '../services/bridge_realtime_asr_service.dart';
 import '../services/speech_input_service.dart';
 import '../services/tts_service.dart';
-import '../services/tencent_cloud_streaming_asr_service.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_back_header.dart';
 import '../widgets/app_skeleton.dart';
+import '../widgets/session_call_mode_view.dart';
 import '../../l10n/generated/app_localizations.dart';
 
 class SessionDetailScreen extends StatefulWidget {
@@ -38,6 +39,7 @@ class SessionDetailScreen extends StatefulWidget {
     this.audioRecordingService,
     this.speechInputService,
     this.ttsService,
+    this.bridgeRealtimeAsrService,
   });
 
   static const routeName = '/session';
@@ -49,6 +51,7 @@ class SessionDetailScreen extends StatefulWidget {
   final AudioRecordingService? audioRecordingService;
   final SpeechInputService? speechInputService;
   final TtsService? ttsService;
+  final BridgeRealtimeAsrService? bridgeRealtimeAsrService;
 
   @override
   State<SessionDetailScreen> createState() => _SessionDetailScreenState();
@@ -60,6 +63,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   static const double _topHistoryExpandThreshold = 72;
   static const double _messageBubbleMaxWidth = 320;
   static const double _assistantMessageBubbleWidthFactor = 0.82;
+  static const double _bridgeRealtimeEndpointRule2Ratio = 0.7;
+  static const double _callModeSpeechHintDelayRatio = 0.55;
   static const int _initialVisibleTurnCount = 10;
   static const int _historyTurnBatchSize = 10;
   final _controller = TextEditingController();
@@ -67,7 +72,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   late final AudioRecordingService _audioRecordingService;
   late final SpeechInputService _speechInputService;
   late final TtsService _ttsService;
-  late final TencentCloudStreamingAsrService _tencentCloudStreamingAsrService;
+  late final BridgeRealtimeAsrService _bridgeRealtimeAsrService;
   final Set<String> _autoSpokenAssistantMessageIds = <String>{};
   final Set<String> _notifiedAssistantMessageIds = <String>{};
   final Map<String, _LocalMessageDraft> _localMessageStates = {};
@@ -77,6 +82,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Timer? _eventsReconnectTimer;
   late final AnimationController _callModeOrbController;
   Timer? _speechStatusAutoDismissTimer;
+  Timer? _callModeSpeechHintTimer;
 
   String? _recordingPath;
   String _recognizedSpeech = '';
@@ -86,11 +92,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _speechReady = false;
   bool _ttsReady = false;
   bool _isListening = false;
+  bool _voiceInputStarting = false;
   bool _isSpeaking = false;
   bool _callModeEnabled = false;
+  bool _callModeSubtitlesVisible = true;
   bool _callModeAwaitingPlaybackCompletion = false;
+  String? _callModeSpokenReplyText;
   bool _systemTranscriptCompleting = false;
   bool _streamingAsrActive = false;
+  bool _callModeInterrupting = false;
+  bool _callModeInterruptedCurrentReply = false;
+  _CallModeSpeechHintState? _callModeSpeechHintState;
   final Map<String, int> _unreadToolCounts = <String, int>{};
   String? _speechStatus;
   String? _speechError;
@@ -355,7 +367,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         widget.audioRecordingService ?? AudioRecordingService();
     _speechInputService = widget.speechInputService ?? SpeechInputService();
     _ttsService = widget.ttsService ?? TtsService();
-    _tencentCloudStreamingAsrService = TencentCloudStreamingAsrService();
+    _bridgeRealtimeAsrService = widget.bridgeRealtimeAsrService ??
+        BridgeRealtimeAsrService(client: _client);
     _session = widget.session;
     _pendingApproval = _session.pendingApproval;
     _creatingSession = widget.sessionInitializer != null;
@@ -379,9 +392,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _eventsSubscription?.cancel();
     _eventsReconnectTimer?.cancel();
     _speechStatusAutoDismissTimer?.cancel();
+    _callModeSpeechHintTimer?.cancel();
     unawaited(_audioRecordingService.cancel());
     unawaited(_speechInputService.cancel());
-    unawaited(_tencentCloudStreamingAsrService.cancel());
+    unawaited(_bridgeRealtimeAsrService.cancel());
     _ttsService.stop();
     _controller.dispose();
     _scrollController.dispose();
@@ -563,425 +577,56 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
-  Scaffold _buildCallModeScaffold(BuildContext context) {
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
+  Widget _buildCallModeScaffold(BuildContext context) {
     final l10n = context.l10n;
-    final speechBannerMessage = _speechBannerMessage;
-    final lastAssistantMessage = _latestAssistantMessage;
-    final lastAssistantPreview = _previewText(lastAssistantMessage?.content);
+    final showVoiceInputStarting = _showVoiceInputStartingAsPrimary;
+    final speechBannerMessage =
+        _voiceInputStarting ? null : _speechBannerMessage;
     final liveTranscript = _recognizedSpeech.trim().isNotEmpty
         ? _recognizedSpeech.trim()
         : _controller.text.trim();
+    final spokenReplyPreview = _previewText(_callModeSpokenReplyText);
     final statusLine = _callModeStatusLine(l10n);
-    final subtitle = liveTranscript.isNotEmpty
-        ? liveTranscript
-        : (lastAssistantPreview.isNotEmpty
-            ? lastAssistantPreview
-            : _callModeIdleSubtitle(l10n));
-    final orbScale = _isListening
-        ? 1.08
-        : _isSpeaking
-            ? 1.04
-            : _session.status == SessionStatus.running
-                ? 1.02
-                : 0.96;
-
-    return Scaffold(
-      backgroundColor: brightness == Brightness.dark
-          ? const Color(0xFF0B1020)
-          : const Color(0xFFF5F8FF),
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: brightness == Brightness.dark
-                ? const [
-                    Color(0xFF121A31),
-                    Color(0xFF0F1527),
-                    Color(0xFF0B1020),
-                  ]
-                : const [
-                    Color(0xFFFDFEFF),
-                    Color(0xFFEFF5FF),
-                    Color(0xFFEAF1FF),
-                  ],
-          ),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.block,
-              AppSpacing.compact,
-              AppSpacing.block,
-              AppSpacing.block,
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    IconButton(
-                      tooltip: l10n.close,
-                      onPressed: () => unawaited(_disableCallMode()),
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                    ),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Text(
-                            l10n.voiceChatTitle,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _session.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: AppColors.mutedSoftFor(brightness),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 48),
-                  ],
-                ),
-                const Spacer(),
-                Text(
-                  statusLine,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: AppColors.accentBlueFor(brightness),
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.stack),
-                _buildCallModeOrb(
-                  brightness: brightness,
-                  baseScale: orbScale,
-                ),
-                const SizedBox(height: AppSpacing.section),
-                Container(
-                  width: double.infinity,
-                  constraints: const BoxConstraints(maxWidth: 420),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.section,
-                    vertical: AppSpacing.card,
-                  ),
-                  decoration: BoxDecoration(
-                    color: brightness == Brightness.dark
-                        ? Colors.white.withValues(alpha: 0.06)
-                        : Colors.white.withValues(alpha: 0.72),
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusHero),
-                    border: Border.all(
-                      color: brightness == Brightness.dark
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : const Color(0xFFD9E6FF),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        subtitle,
-                        textAlign: TextAlign.center,
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          height: 1.45,
-                          color: AppColors.textSoftFor(brightness),
-                        ),
-                      ),
-                      if (speechBannerMessage != null) ...[
-                        const SizedBox(height: AppSpacing.stack),
-                        Text(
-                          speechBannerMessage,
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: AppColors.errorTextFor(brightness),
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const Spacer(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildCallModeControlButton(
-                      brightness: brightness,
-                      icon: Icons.chat_bubble_outline_rounded,
-                      tooltip: l10n.callModeOpenChatHistory,
-                      onPressed: () {
-                        unawaited(_disableCallMode());
-                        _showLatestConversationPreview();
-                      },
-                    ),
-                    const SizedBox(width: AppSpacing.section),
-                    _buildCallModePrimaryButton(
-                      brightness: brightness,
-                      onPressed: () {
-                        if (_session.status == SessionStatus.running) {
-                          unawaited(_cancelReply());
-                          return;
-                        }
-                        unawaited(_toggleListening());
-                      },
-                    ),
-                    const SizedBox(width: AppSpacing.section),
-                    _buildCallModeControlButton(
-                      brightness: brightness,
-                      icon: Icons.close_rounded,
-                      tooltip: l10n.close,
-                      onPressed: () => unawaited(_disableCallMode()),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCallModeControlButton({
-    required Brightness brightness,
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onPressed,
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
-          child: Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: brightness == Brightness.dark
-                  ? Colors.white.withValues(alpha: 0.07)
-                  : Colors.white.withValues(alpha: 0.82),
-              border: Border.all(
-                color: brightness == Brightness.dark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : const Color(0xFFD7E5FF),
-              ),
-            ),
-            child: Icon(
-              icon,
-              color: AppColors.textSoftFor(brightness),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCallModeOrb({
-    required Brightness brightness,
-    required double baseScale,
-  }) {
-    final intensity = _isListening
-        ? 1.0
-        : _isSpeaking
-            ? 0.82
-            : _session.status == SessionStatus.running
-                ? 0.68
-                : 0.46;
-    return AnimatedBuilder(
-      animation: _callModeOrbController,
-      builder: (context, child) {
-        final wave = Curves.easeInOut.transform(_callModeOrbController.value);
-        final pulseScale = 0.965 + (0.08 * intensity * wave);
-        final haloScale = 1.08 + (0.18 * intensity * wave);
-        final haloOpacity = 0.12 + (0.18 * intensity * wave);
-        final sparkleOffset = -0.16 + (0.12 * wave);
-        return Transform.scale(
-          scale: baseScale * pulseScale,
-          child: SizedBox(
-            width: 258,
-            height: 258,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Transform.scale(
-                  scale: haloScale,
-                  child: Container(
-                    width: 188,
-                    height: 188,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          const Color(0xFF78A7FF)
-                              .withValues(alpha: haloOpacity),
-                          const Color(0xFFB392FF)
-                              .withValues(alpha: haloOpacity * 0.62),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 34,
-                  child: Container(
-                    width: 154,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      borderRadius:
-                          BorderRadius.circular(AppSpacing.radiusPill),
-                      gradient: RadialGradient(
-                        colors: [
-                          const Color(0xFF6C8FFF)
-                              .withValues(alpha: 0.16 + (0.10 * intensity)),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                Container(
-                  width: 236,
-                  height: 236,
-                  alignment: Alignment.center,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Align(
-                        alignment: Alignment(-0.04 + (0.04 * wave), 0.02),
-                        child: Container(
-                          width: 188,
-                          height: 188,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: RadialGradient(
-                              colors: [
-                                const Color(0xFFFFD7EB).withValues(
-                                    alpha: 0.18 + (0.08 * intensity)),
-                                const Color(0xFF9A88FF).withValues(
-                                    alpha: 0.10 + (0.06 * intensity)),
-                                const Color(0xFF4E78FF).withValues(
-                                    alpha: 0.04 + (0.04 * intensity)),
-                                Colors.transparent,
-                              ],
-                              stops: const [0.0, 0.34, 0.72, 1.0],
-                            ),
-                          ),
-                        ),
-                      ),
-                      ShaderMask(
-                        blendMode: BlendMode.dstIn,
-                        shaderCallback: (bounds) {
-                          return const RadialGradient(
-                            center: Alignment(0, -0.04),
-                            radius: 0.88,
-                            colors: [
-                              Colors.white,
-                              Colors.white,
-                              Colors.transparent,
-                            ],
-                            stops: [0.0, 0.58, 1.0],
-                          ).createShader(bounds);
-                        },
-                        child: CustomPaint(
-                          painter: _CallModeOrbPainter(
-                            progress: _callModeOrbController.value,
-                            intensity: intensity,
-                            brightness: brightness,
-                          ),
-                        ),
-                      ),
-                      Align(
-                        alignment: Alignment(sparkleOffset, -0.46),
-                        child: Container(
-                          width: 72,
-                          height: 72,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: RadialGradient(
-                              colors: [
-                                Colors.white.withValues(alpha: 0.22),
-                                Colors.white.withValues(alpha: 0.06),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
+    final realtimeHint = _callModeRealtimeHint(l10n);
+    final subtitle = showVoiceInputStarting
+        ? l10n.callModePreparingListening
+        : _session.status == SessionStatus.running
+            ? l10n.callModeWorking
+            : liveTranscript.isNotEmpty
+                ? liveTranscript
+                : (spokenReplyPreview.isNotEmpty
+                    ? spokenReplyPreview
+                    : _callModeIdleSubtitle(l10n));
+    return SessionCallModeView(
+      voiceChatTitle: l10n.voiceChatTitle,
+      statusText: statusLine,
+      bodyText: subtitle,
+      realtimeHintLabel: realtimeHint?.label,
+      realtimeHintDetail: realtimeHint?.detail,
+      bannerText: speechBannerMessage,
+      statusIsError: _speechError != null && _speechError!.trim().isNotEmpty,
+      subtitlesVisible: _callModeSubtitlesVisible,
+      subtitleToggleTooltip: _callModeSubtitlesVisible
+          ? l10n.hideCallModeSubtitles
+          : l10n.showCallModeSubtitles,
+      closeTooltip: l10n.close,
+      orbAnimation: _callModeOrbController,
+      isStarting: showVoiceInputStarting,
+      isListening: _isListening,
+      isSpeaking: _isSpeaking || _callModeAwaitingPlaybackCompletion,
+      isBusy: _session.status == SessionStatus.running,
+      isLive: _isListening || _streamingAsrActive,
+      onBackPressed: () => unawaited(_disableCallMode()),
+      onSubtitleTogglePressed: _toggleCallModeSubtitles,
+      onPrimaryPressed: () {
+        if (_session.status == SessionStatus.running) {
+          unawaited(_cancelReply());
+          return;
+        }
+        unawaited(_toggleListening());
       },
+      onClosePressed: () => unawaited(_disableCallMode()),
     );
-  }
-
-  Widget _buildCallModePrimaryButton({
-    required Brightness brightness,
-    required VoidCallback onPressed,
-  }) {
-    final isBusy = _session.status == SessionStatus.running;
-    final isLive = _isListening || _streamingAsrActive;
-    final icon = isBusy
-        ? Icons.stop_rounded
-        : isLive
-            ? Icons.graphic_eq_rounded
-            : Icons.mic_rounded;
-    final background =
-        isBusy ? const Color(0xFFFF7B6B) : const Color(0xFF1E74FF);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
-        child: Container(
-          width: 76,
-          height: 76,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: background,
-            boxShadow: [
-              BoxShadow(
-                color: background.withValues(alpha: 0.28),
-                blurRadius: 24,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-          child: Icon(
-            icon,
-            size: 30,
-            color: Colors.white,
-          ),
-        ),
-      ),
-    );
-  }
-
-  ChatMessage? get _latestAssistantMessage {
-    for (var index = _messages.length - 1; index >= 0; index -= 1) {
-      final message = _messages[index];
-      if (message.role == MessageRole.assistant &&
-          message.content.trim().isNotEmpty) {
-        return message;
-      }
-    }
-    return null;
   }
 
   String _previewText(String? value) {
@@ -1000,6 +645,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_speechError != null && _speechError!.trim().isNotEmpty) {
       return _speechError!;
     }
+    if (_showVoiceInputStartingAsPrimary) {
+      return l10n.callModePreparingListening;
+    }
     if (_session.status == SessionStatus.awaitingApproval) {
       return l10n.waitingApprovalProcessing;
     }
@@ -1015,109 +663,67 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return l10n.startCallMode;
   }
 
+  _CallModeRealtimeHint? _callModeRealtimeHint(AppLocalizations l10n) {
+    if (_speechError != null && _speechError!.trim().isNotEmpty) {
+      return null;
+    }
+    if (_showVoiceInputStartingAsPrimary) {
+      return _CallModeRealtimeHint(
+        label: l10n.callModePreparingListeningLabel,
+        detail: l10n.callModePreparingListeningDetail,
+      );
+    }
+    if (_session.status == SessionStatus.awaitingApproval ||
+        _session.status == SessionStatus.running ||
+        _callModeAwaitingPlaybackCompletion ||
+        _isSpeaking) {
+      return null;
+    }
+    if (!_callModeEnabled) {
+      return null;
+    }
+    final speechHintState = _callModeSpeechHintState;
+    if (speechHintState == _CallModeSpeechHintState.speaking) {
+      return _CallModeRealtimeHint(
+        label: l10n.callModeSpeechDetectedLabel,
+        detail: l10n.callModeSpeechDetectedDetail,
+      );
+    }
+    if (speechHintState == _CallModeSpeechHintState.waitingForPause) {
+      return _CallModeRealtimeHint(
+        label: l10n.callModeWaitingForPauseLabel,
+        detail: l10n.callModeWaitingForPauseDetail,
+      );
+    }
+    if (_isListening || _streamingAsrActive) {
+      return _CallModeRealtimeHint(
+        label: l10n.callModeListeningReadyLabel,
+        detail: l10n.callModeListeningReadyDetail,
+      );
+    }
+    return null;
+  }
+
   String _callModeIdleSubtitle(AppLocalizations l10n) {
     return l10n.callModeIdleSubtitle;
   }
 
-  Future<void> _showLatestConversationPreview() async {
-    final previewMessages = _messages
-        .where((message) =>
-            message.role == MessageRole.user ||
-            message.role == MessageRole.assistant)
-        .toList(growable: false);
-    if (!mounted || previewMessages.isEmpty) {
+  bool get _showVoiceInputStartingAsPrimary {
+    if (!_voiceInputStarting) {
+      return false;
+    }
+    return _session.status != SessionStatus.running &&
+        !_callModeAwaitingPlaybackCompletion &&
+        !_isSpeaking;
+  }
+
+  void _toggleCallModeSubtitles() {
+    if (!mounted) {
       return;
     }
-    final brightness = Theme.of(context).brightness;
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppColors.panelFor(brightness),
-      isScrollControlled: true,
-      builder: (context) {
-        final height = MediaQuery.of(context).size.height * 0.62;
-        return SafeArea(
-          child: SizedBox(
-            height: height,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.block,
-                    AppSpacing.block,
-                    AppSpacing.block,
-                    AppSpacing.compact,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _session.title,
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.block,
-                      0,
-                      AppSpacing.block,
-                      AppSpacing.block,
-                    ),
-                    itemCount: previewMessages.length,
-                    itemBuilder: (context, index) {
-                      final message = previewMessages[index];
-                      final isUser = message.role == MessageRole.user;
-                      return Align(
-                        alignment: isUser
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                        child: Container(
-                          margin:
-                              const EdgeInsets.only(bottom: AppSpacing.stack),
-                          padding: const EdgeInsets.all(AppSpacing.card),
-                          constraints: const BoxConstraints(maxWidth: 420),
-                          decoration: BoxDecoration(
-                            color: isUser
-                                ? AppColors.accentBlueFor(brightness)
-                                : AppColors.panelDeepFor(brightness),
-                            borderRadius:
-                                BorderRadius.circular(AppSpacing.radiusPanel),
-                            border: isUser
-                                ? null
-                                : Border.all(
-                                    color: AppColors.outlineFor(brightness),
-                                  ),
-                          ),
-                          child: Text(
-                            _previewText(message.content),
-                            style: TextStyle(
-                              height: 1.45,
-                              color: isUser
-                                  ? AppColors.accentBlueOnFor(brightness)
-                                  : AppColors.textSoftFor(brightness),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+    setState(() {
+      _callModeSubtitlesVisible = !_callModeSubtitlesVisible;
+    });
   }
 
   Widget _withUnavailableTooltip({
@@ -2927,6 +2533,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               if (status == 'done' || status == 'notListening') {
                 setState(() {
                   _isListening = false;
+                  _voiceInputStarting = false;
                 });
               }
             },
@@ -2936,6 +2543,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               }
               setState(() {
                 _isListening = false;
+                _voiceInputStarting = false;
                 _speechError = context.l10n.voiceTranscriptionFailed(error);
               });
               if (permanent || kIsWeb) {
@@ -3019,6 +2627,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           setState(() {
             _isSpeaking = false;
             _callModeAwaitingPlaybackCompletion = false;
+            _callModeSpokenReplyText = null;
             _clearTransientTtsStatus();
           });
           if (resumeCallMode) {
@@ -3033,6 +2642,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           setState(() {
             _isSpeaking = false;
             _callModeAwaitingPlaybackCompletion = false;
+            _callModeSpokenReplyText = null;
             _clearTransientTtsStatus();
           });
           if (resumeCallMode) {
@@ -3046,6 +2656,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           setState(() {
             _isSpeaking = false;
             _callModeAwaitingPlaybackCompletion = false;
+            _callModeSpokenReplyText = null;
             _speechError = context.l10n.ttsFailed(message);
           });
         },
@@ -3077,15 +2688,20 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Future<void> _toggleListening() async {
     final useSystemSpeech = _useSystemSpeech();
-    final useTencentStreaming = appSettingsController.settings.asrProvider ==
-        AsrProvider.tencentCloudStreaming;
+    final useBridgeStreaming = _usesBridgeRealtimeSpeechForCallMode();
     if (!_speechReady) {
       setState(() {
+        _voiceInputStarting = true;
         _setSpeechStatus(context.l10n.reinitializingVoiceInput);
         _speechError = null;
       });
       await _initializeSpeech();
       if (!_speechReady) {
+        if (mounted) {
+          setState(() {
+            _voiceInputStarting = false;
+          });
+        }
         return;
       }
     }
@@ -3093,18 +2709,27 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_isListening) {
       if (useSystemSpeech) {
         await _stopSystemListening();
-      } else if (useTencentStreaming) {
-        await _stopTencentCloudStreamingAsr();
+      } else if (useBridgeStreaming) {
+        await _stopBridgeRealtimeAsr();
       } else {
         await _stopRecordingAndTranscribe();
       }
       return;
     }
 
+    if (_voiceInputStarting) {
+      return;
+    }
+
+    if (useBridgeStreaming) {
+      await _startBridgeRealtimeAsr();
+      return;
+    }
+
     setState(() {
       _speechError = null;
-      _setSpeechStatus(context.l10n.voiceInputInProgress);
-      _isListening = true;
+      _setSpeechStatus(context.l10n.callModePreparingListening);
+      _voiceInputStarting = true;
       _recognizedSpeech = '';
     });
 
@@ -3134,16 +2759,23 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             }
           },
         );
-      } else if (useTencentStreaming) {
-        await _startTencentCloudStreamingAsr();
       } else {
         _recordingPath = await _audioRecordingService.start();
       }
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _voiceInputStarting = false;
+        _setSpeechStatus(context.l10n.voiceInputInProgress);
+        _isListening = true;
+      });
     } catch (error) {
       if (!mounted) {
         return;
       }
       setState(() {
+        _voiceInputStarting = false;
         _isListening = false;
         _speechError = context.l10n.startVoiceInputFailed('$error');
       });
@@ -3151,6 +2783,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Future<void> _stopSystemListening() async {
+    _clearCallModeSpeechHint();
     try {
       await _speechInputService.stopListening();
     } catch (error) {
@@ -3159,6 +2792,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
       setState(() {
         _isListening = false;
+        _voiceInputStarting = false;
         _speechError = context.l10n.stopVoiceInputFailed('$error');
       });
       return;
@@ -3215,11 +2849,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _supportsCallModeAsrProvider() {
     final provider = appSettingsController.settings.asrProvider;
     return provider == AsrProvider.system ||
-        provider == AsrProvider.tencentCloudStreaming;
+        provider == AsrProvider.bridgeLocal;
   }
 
   bool _usesSystemSpeechForCallMode() {
     return appSettingsController.settings.asrProvider == AsrProvider.system;
+  }
+
+  bool _usesBridgeRealtimeSpeechForCallMode() {
+    return appSettingsController.settings.asrProvider ==
+        AsrProvider.bridgeLocal;
   }
 
   Future<void> _stopRecordingAndTranscribe() async {
@@ -3232,6 +2871,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
       setState(() {
         _isListening = false;
+        _voiceInputStarting = false;
         _speechError = context.l10n.stopVoiceInputFailed('$error');
       });
       return;
@@ -3245,6 +2885,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     setState(() {
       _isListening = false;
+      _voiceInputStarting = false;
       _setSpeechStatus(context.l10n.uploadingAudio);
     });
 
@@ -3309,9 +2950,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     setState(() {
       _speechError = null;
+      _callModeSpokenReplyText =
+          resumeCallModeOnComplete ? content.trim() : _callModeSpokenReplyText;
       _callModeAwaitingPlaybackCompletion = resumeCallModeOnComplete;
       _clearTransientTtsStatus();
     });
+    if (resumeCallModeOnComplete && _callModeAllowInterruptions) {
+      unawaited(_maybeResumeCallModeListening());
+    }
     try {
       await _ttsService.speak(content);
     } catch (error) {
@@ -3320,6 +2966,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
       setState(() {
         _callModeAwaitingPlaybackCompletion = false;
+        _callModeSpokenReplyText = null;
         if (resumeCallModeOnComplete) {
           _callModeEnabled = false;
         }
@@ -3400,6 +3047,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     setState(() {
       _isSpeaking = false;
+      _callModeSpokenReplyText = null;
     });
   }
 
@@ -3546,6 +3194,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           lastMessagePreview: result.userMessage.content,
           clearPendingApproval: true,
         );
+        _callModeInterruptedCurrentReply = false;
         _syncVisibleTurnWindow(
           previousTotalTurns: previousTurnCountAfterLocalInsert,
         );
@@ -3631,7 +3280,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     setState(() {
       _callModeEnabled = true;
+      _voiceInputStarting = false;
       _callModeAwaitingPlaybackCompletion = false;
+      _callModeSpokenReplyText = null;
+      _callModeInterruptedCurrentReply = false;
+      _callModeSpeechHintState = null;
       _speechError = null;
     });
     await _maybeResumeCallModeListening();
@@ -3639,13 +3292,24 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Future<void> _disableCallMode() async {
     final shouldCancelListening = _isListening && _useSystemSpeech();
-    final shouldCancelStreaming = _streamingAsrActive;
+    final shouldCancelBridgeStreaming =
+        _streamingAsrActive && _usesBridgeRealtimeSpeechForCallMode();
+    final shouldCancelBridgeStarting =
+        _voiceInputStarting && _usesBridgeRealtimeSpeechForCallMode();
+    _cancelCallModeSpeechHintTimer();
     setState(() {
       _callModeEnabled = false;
+      _isListening = false;
+      _voiceInputStarting = false;
+      _streamingAsrActive = false;
+      _recognizedSpeech = '';
       _callModeAwaitingPlaybackCompletion = false;
+      _callModeSpokenReplyText = null;
+      _callModeInterruptedCurrentReply = false;
+      _callModeSpeechHintState = null;
     });
-    if (shouldCancelStreaming) {
-      await _stopTencentCloudStreamingAsr();
+    if (shouldCancelBridgeStreaming || shouldCancelBridgeStarting) {
+      await _stopBridgeRealtimeAsr();
     }
     if (shouldCancelListening) {
       try {
@@ -3658,32 +3322,37 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
       setState(() {
         _isListening = false;
+        _voiceInputStarting = false;
         _recognizedSpeech = '';
+        _callModeSpeechHintState = null;
       });
     }
   }
 
   Future<void> _maybeResumeCallModeListening() async {
+    final listeningForInterruptions = _shouldListenForCallModeInterruptions;
     if (!_callModeEnabled ||
-        _callModeAwaitingPlaybackCompletion ||
         _creatingSession ||
         !_appInForeground ||
-        _session.status == SessionStatus.running ||
         _session.status == SessionStatus.awaitingApproval ||
         _pendingApproval != null ||
+        _voiceInputStarting ||
         _isListening ||
-        _isSpeaking ||
         _systemTranscriptCompleting ||
         _streamingAsrActive ||
-        _controller.text.trim().isNotEmpty ||
+        (_session.status == SessionStatus.running &&
+            !listeningForInterruptions) ||
+        ((_callModeAwaitingPlaybackCompletion || _isSpeaking) &&
+            !listeningForInterruptions) ||
+        (_controller.text.trim().isNotEmpty && !listeningForInterruptions) ||
         _callModeUnavailableMessage != null) {
       return;
     }
 
     if (_usesSystemSpeechForCallMode()) {
       await _toggleListening();
-    } else {
-      await _startTencentCloudStreamingAsr();
+    } else if (_usesBridgeRealtimeSpeechForCallMode()) {
+      await _startBridgeRealtimeAsr();
     }
     if (!mounted) {
       return;
@@ -3716,6 +3385,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           }
           setState(() {
             _isListening = false;
+            _voiceInputStarting = false;
             _callModeEnabled = false;
             _callModeAwaitingPlaybackCompletion = false;
             _speechError = context.l10n.stopVoiceInputFailed('$error');
@@ -3739,6 +3409,118 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
   }
 
+  BridgeRealtimeAsrConfig _bridgeRealtimeAsrConfig() {
+    final pauseMillis =
+        appSettingsController.settings.callModeSpeechPauseMillis;
+    final endpointTrailingSilenceMs = math.max(
+      300,
+      math.min(5000, (pauseMillis / _bridgeRealtimeEndpointRule2Ratio).ceil()),
+    );
+    final vadMinSilenceMs = math.max(200, math.min(5000, pauseMillis));
+    return BridgeRealtimeAsrConfig(
+      sampleRateHz: 16000,
+      channels: 1,
+      enableVad: true,
+      endpointTrailingSilenceMs: endpointTrailingSilenceMs,
+      vadMinSilenceMs: vadMinSilenceMs,
+    );
+  }
+
+  bool get _callModeAllowInterruptions =>
+      appSettingsController.settings.callModeAllowInterruptions;
+
+  bool get _shouldListenForCallModeInterruptions {
+    if (!_callModeEnabled || !_callModeAllowInterruptions) {
+      return false;
+    }
+    final provider = appSettingsController.settings.asrProvider;
+    final canStream =
+        provider == AsrProvider.bridgeLocal || provider == AsrProvider.system;
+    if (!canStream) {
+      return false;
+    }
+    return _session.status == SessionStatus.running ||
+        _callModeAwaitingPlaybackCompletion ||
+        _isSpeaking;
+  }
+
+  void _cancelCallModeSpeechHintTimer() {
+    _callModeSpeechHintTimer?.cancel();
+    _callModeSpeechHintTimer = null;
+  }
+
+  void _setCallModeSpeechHintState(_CallModeSpeechHintState? state) {
+    if (!mounted || _callModeSpeechHintState == state) {
+      return;
+    }
+    setState(() {
+      _callModeSpeechHintState = state;
+    });
+  }
+
+  void _clearCallModeSpeechHint() {
+    _cancelCallModeSpeechHintTimer();
+    _setCallModeSpeechHintState(null);
+  }
+
+  void _handleCallModeSpeechActivity() {
+    if (!_callModeEnabled) {
+      return;
+    }
+    _cancelCallModeSpeechHintTimer();
+    _setCallModeSpeechHintState(_CallModeSpeechHintState.speaking);
+
+    final pauseMillis =
+        appSettingsController.settings.callModeSpeechPauseMillis;
+    final delayMillis = math.max(
+      240,
+      (pauseMillis * _callModeSpeechHintDelayRatio).round(),
+    );
+    _callModeSpeechHintTimer = Timer(
+      Duration(milliseconds: delayMillis),
+      () {
+        if (!mounted ||
+            !_callModeEnabled ||
+            !_streamingAsrActive ||
+            _recognizedSpeech.trim().isEmpty) {
+          return;
+        }
+        _setCallModeSpeechHintState(_CallModeSpeechHintState.waitingForPause);
+      },
+    );
+  }
+
+  Future<void> _handleCallModeSpeechStarted() async {
+    if (!_callModeEnabled ||
+        !_callModeAllowInterruptions ||
+        _callModeInterruptedCurrentReply ||
+        _callModeInterrupting) {
+      return;
+    }
+    final shouldStopSpeaking =
+        _isSpeaking || _callModeAwaitingPlaybackCompletion;
+    final shouldCancelReply =
+        _session.status == SessionStatus.running && !_cancellingReply;
+    if (!shouldStopSpeaking && !shouldCancelReply) {
+      return;
+    }
+
+    _callModeInterrupting = true;
+    _callModeInterruptedCurrentReply = true;
+    try {
+      if (shouldStopSpeaking) {
+        await _stopSpeaking();
+      }
+      if (shouldCancelReply) {
+        await _cancelReply();
+      } else if (_callModeEnabled) {
+        unawaited(_maybeResumeCallModeListening());
+      }
+    } finally {
+      _callModeInterrupting = false;
+    }
+  }
+
   Future<bool> _finalizeSystemTranscript(
     String transcript, {
     required bool autoSend,
@@ -3751,6 +3533,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (trimmedTranscript.isEmpty) {
       setState(() {
         _isListening = false;
+        _voiceInputStarting = false;
         _speechError = context.l10n.voiceTranscriptionNoResult;
       });
       if (autoSend) {
@@ -3761,6 +3544,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     setState(() {
       _isListening = false;
+      _voiceInputStarting = false;
       _controller.text = trimmedTranscript;
       _controller.selection = TextSelection.fromPosition(
         TextPosition(offset: _controller.text.length),
@@ -3772,46 +3556,63 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (!autoSend) {
       return true;
     }
-    return _submitLocalMessage(trimmedTranscript, inputMode: 'voice');
+    final submitted =
+        await _submitLocalMessage(trimmedTranscript, inputMode: 'voice');
+    if (submitted && _callModeEnabled && _callModeAllowInterruptions) {
+      unawaited(_maybeResumeCallModeListening());
+    }
+    return submitted;
   }
 
-  Future<void> _startTencentCloudStreamingAsr() async {
+  Future<void> _startBridgeRealtimeAsr() async {
     if (_streamingAsrActive) {
+      return;
+    }
+    if (_voiceInputStarting) {
       return;
     }
     if (!_speechReady) {
       setState(() {
+        _voiceInputStarting = true;
         _setSpeechStatus(context.l10n.reinitializingVoiceInput);
         _speechError = null;
       });
       await _initializeSpeech();
       if (!_speechReady) {
+        if (mounted) {
+          setState(() {
+            _voiceInputStarting = false;
+          });
+        }
         return;
       }
     }
 
     setState(() {
       _speechError = null;
-      _setSpeechStatus(context.l10n.voiceInputInProgress);
-      _isListening = true;
-      _streamingAsrActive = true;
+      _setSpeechStatus(context.l10n.callModePreparingListening);
+      _voiceInputStarting = true;
       _recognizedSpeech = '';
+      _callModeSpeechHintState = null;
     });
 
+    final startedForCallMode = _callModeEnabled;
     try {
-      debugPrint('[call-mode] starting Tencent streaming ASR');
+      debugPrint('[call-mode] starting bridge realtime ASR');
       final audioStream = await _audioRecordingService.startStream();
-      await _tencentCloudStreamingAsrService.start(
+      await _bridgeRealtimeAsrService.start(
         audioStream: audioStream,
-        languageTag: preferredLocaleTagFromSetting(
-          appSettingsController.settings.appLanguage,
-        ),
+        config: _bridgeRealtimeAsrConfig(),
         onUtterance: (utterance) {
           debugPrint(
-            '[call-mode] utterance final=${utterance.isFinal} text=${utterance.text}',
+            '[call-mode] bridge utterance final=${utterance.isFinal} text=${utterance.text}',
           );
           if (!mounted) {
             return;
+          }
+          if (_callModeEnabled && utterance.text.trim().isNotEmpty) {
+            _handleCallModeSpeechActivity();
+            unawaited(_handleCallModeSpeechStarted());
           }
           setState(() {
             _recognizedSpeech = utterance.text;
@@ -3825,29 +3626,61 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             }
           });
           if (utterance.isFinal && _callModeEnabled) {
-            unawaited(_handleTencentCloudFinalUtterance(utterance.text));
+            unawaited(_handleBridgeRealtimeFinalUtterance(utterance.text));
           }
         },
         onError: (error) {
-          debugPrint('[call-mode] Tencent ASR error: $error');
+          debugPrint('[call-mode] bridge ASR error: $error');
           if (!mounted) {
+            return;
+          }
+          if (startedForCallMode && !_callModeEnabled) {
             return;
           }
           setState(() {
             _isListening = false;
+            _voiceInputStarting = false;
             _streamingAsrActive = false;
             _callModeEnabled = false;
             _callModeAwaitingPlaybackCompletion = false;
             _speechError = context.l10n.voiceTranscriptionFailed(error);
           });
         },
+        onSpeechStarted: () {
+          if (_callModeEnabled) {
+            unawaited(_handleCallModeSpeechStarted());
+          }
+        },
       );
-    } catch (error) {
-      debugPrint('[call-mode] failed to start Tencent ASR: $error');
       if (!mounted) {
         return;
       }
+      if (startedForCallMode && !_callModeEnabled) {
+        await _stopBridgeRealtimeAsr();
+        return;
+      }
       setState(() {
+        _voiceInputStarting = false;
+        _setSpeechStatus(context.l10n.voiceInputInProgress);
+        _isListening = true;
+        _streamingAsrActive = true;
+      });
+    } catch (error) {
+      debugPrint('[call-mode] failed to start bridge ASR: $error');
+      await _cancelBridgeRealtimeAsrServices();
+      if (!mounted) {
+        return;
+      }
+      if (startedForCallMode && !_callModeEnabled) {
+        setState(() {
+          _voiceInputStarting = false;
+          _isListening = false;
+          _streamingAsrActive = false;
+        });
+        return;
+      }
+      setState(() {
+        _voiceInputStarting = false;
         _isListening = false;
         _streamingAsrActive = false;
         _speechError = context.l10n.startVoiceInputFailed('$error');
@@ -3855,14 +3688,28 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
   }
 
-  Future<void> _stopTencentCloudStreamingAsr() async {
-    await _tencentCloudStreamingAsrService.cancel();
-    await _audioRecordingService.cancel();
+  Future<void> _cancelBridgeRealtimeAsrServices() async {
+    try {
+      await _bridgeRealtimeAsrService.cancel();
+    } catch (error) {
+      debugPrint('[call-mode] failed to cancel bridge realtime ASR: $error');
+    }
+    try {
+      await _audioRecordingService.cancel();
+    } catch (error) {
+      debugPrint('[call-mode] failed to cancel audio recording: $error');
+    }
+  }
+
+  Future<void> _stopBridgeRealtimeAsr() async {
+    _clearCallModeSpeechHint();
+    await _cancelBridgeRealtimeAsrServices();
     if (!mounted) {
       return;
     }
     setState(() {
       _isListening = false;
+      _voiceInputStarting = false;
       _streamingAsrActive = false;
       _recognizedSpeech = '';
       if (!_callModeEnabled) {
@@ -3871,12 +3718,37 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     });
   }
 
-  Future<void> _handleTencentCloudFinalUtterance(String transcript) async {
-    await _stopTencentCloudStreamingAsr();
-    final submitted = await _finalizeSystemTranscript(
-      transcript,
-      autoSend: true,
-    );
+  Future<void> _handleBridgeRealtimeFinalUtterance(String transcript) async {
+    _clearCallModeSpeechHint();
+    final trimmedTranscript = transcript.trim();
+    if (!mounted) {
+      return;
+    }
+    if (trimmedTranscript.isEmpty) {
+      setState(() {
+        _recognizedSpeech = '';
+        _controller.clear();
+        _speechError = context.l10n.voiceTranscriptionNoResult;
+      });
+      return;
+    }
+    setState(() {
+      _recognizedSpeech = '';
+      _controller.text = trimmedTranscript;
+      _controller.selection = TextSelection.fromPosition(
+        TextPosition(offset: _controller.text.length),
+      );
+      _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
+      _speechError = null;
+    });
+    if (!_callModeAllowInterruptions) {
+      await _stopBridgeRealtimeAsr();
+      if (!mounted) {
+        return;
+      }
+    }
+    final submitted =
+        await _submitLocalMessage(trimmedTranscript, inputMode: 'voice');
     if (!mounted || submitted) {
       return;
     }
@@ -4483,6 +4355,21 @@ enum _ImagePreviewBackdropMode { dark, light, checker }
 
 enum _SessionStatusTone { neutral, signal, warning, error, idle }
 
+enum _CallModeSpeechHintState {
+  speaking,
+  waitingForPause,
+}
+
+class _CallModeRealtimeHint {
+  const _CallModeRealtimeHint({
+    required this.label,
+    required this.detail,
+  });
+
+  final String label;
+  final String detail;
+}
+
 class _SessionStatusItem {
   const _SessionStatusItem({
     required this.label,
@@ -4817,130 +4704,6 @@ class _ConversationTurn {
   final ChatMessage? userMessage;
   final List<ChatMessage> assistantMessages = <ChatMessage>[];
   final List<ChatMessage> toolMessages = <ChatMessage>[];
-}
-
-class _CallModeOrbPainter extends CustomPainter {
-  const _CallModeOrbPainter({
-    required this.progress,
-    required this.intensity,
-    required this.brightness,
-  });
-
-  final double progress;
-  final double intensity;
-  final Brightness brightness;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    _paintBlob(
-      canvas,
-      size,
-      center: center.translate(
-        _wave(0.0, 20, 38),
-        _wave(0.18, -18, 22),
-      ),
-      radiusX: size.width * (0.30 + (0.03 * _wave01(0.12))),
-      radiusY: size.height * (0.24 + (0.04 * _wave01(0.44))),
-      rotation: _wave(0.0, -0.36, 0.52),
-      colorA: const Color(0xFFFFC0DE).withValues(alpha: 0.68),
-      colorB: const Color(0xFFC5A1FF).withValues(alpha: 0.22),
-    );
-    _paintBlob(
-      canvas,
-      size,
-      center: center.translate(
-        _wave(0.36, -34, 24),
-        _wave(0.58, 10, 28),
-      ),
-      radiusX: size.width * (0.23 + (0.04 * _wave01(0.28))),
-      radiusY: size.height * (0.22 + (0.03 * _wave01(0.76))),
-      rotation: _wave(0.42, 0.58, -0.74),
-      colorA: Colors.white.withValues(alpha: 0.18 + (0.06 * intensity)),
-      colorB: const Color(0xFF7EA7FF).withValues(alpha: 0.10),
-    );
-    _paintBlob(
-      canvas,
-      size,
-      center: center.translate(
-        _wave(0.74, 12, 20),
-        _wave(0.86, 30, -20),
-      ),
-      radiusX: size.width * (0.21 + (0.03 * _wave01(0.66))),
-      radiusY: size.height * (0.24 + (0.04 * _wave01(0.18))),
-      rotation: _wave(0.72, -0.24, 0.30),
-      colorA: const Color(0xFFFFB2D2)
-          .withValues(alpha: brightness == Brightness.dark ? 0.48 : 0.42),
-      colorB: const Color(0xFF8C7CFF).withValues(alpha: 0.10),
-    );
-  }
-
-  void _paintBlob(
-    Canvas canvas,
-    Size size, {
-    required Offset center,
-    required double radiusX,
-    required double radiusY,
-    required double rotation,
-    required Color colorA,
-    required Color colorB,
-  }) {
-    final path = Path();
-    final points = <Offset>[];
-    final count = 7;
-    for (var index = 0; index < count; index += 1) {
-      final t = index / count;
-      final angle = (math.pi * 2 * t) + rotation;
-      final noise = 0.84 + (0.24 * _wave01(t + progress));
-      final x = center.dx + math.cos(angle) * radiusX * noise;
-      final y = center.dy + math.sin(angle) * radiusY * (1.0 + (0.18 * noise));
-      points.add(Offset(x, y));
-    }
-
-    path.moveTo(points.first.dx, points.first.dy);
-    for (var index = 0; index < count; index += 1) {
-      final current = points[index];
-      final next = points[(index + 1) % count];
-      final mid = Offset(
-        (current.dx + next.dx) / 2,
-        (current.dy + next.dy) / 2,
-      );
-      path.quadraticBezierTo(current.dx, current.dy, mid.dx, mid.dy);
-    }
-    path.close();
-
-    final paint = Paint()
-      ..shader = RadialGradient(
-        center: Alignment(
-          ((center.dx / size.width) * 2) - 1,
-          ((center.dy / size.height) * 2) - 1,
-        ),
-        radius: 0.92,
-        colors: [colorA, colorB, Colors.transparent],
-        stops: const [0.0, 0.72, 1.0],
-      ).createShader(Offset.zero & size)
-      ..blendMode = BlendMode.screen
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-
-    canvas.drawPath(path, paint);
-  }
-
-  double _wave(double shift, double from, double to) {
-    final value = math.sin((progress + shift) * math.pi * 2);
-    final normalized = (value + 1) / 2;
-    return from + ((to - from) * normalized);
-  }
-
-  double _wave01(double shift) {
-    return (math.sin((progress + shift) * math.pi * 2) + 1) / 2;
-  }
-
-  @override
-  bool shouldRepaint(covariant _CallModeOrbPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.intensity != intensity ||
-        oldDelegate.brightness != brightness;
-  }
 }
 
 class _ParsedToolMessage {
