@@ -248,12 +248,6 @@ abstract class AppLocalizations {
   /// **'Whisper / OpenAI Compatible'**
   String get whisperCompatible;
 
-  /// No description provided for @tencentCloudStreamingAsr.
-  ///
-  /// In en, this message translates to:
-  /// **'Tencent Cloud Streaming'**
-  String get tencentCloudStreamingAsr;
-
   /// No description provided for @apiKey.
   ///
   /// In en, this message translates to:
@@ -878,6 +872,12 @@ abstract class AppLocalizations {
   /// **'Go ahead, I\'m listening'**
   String get callModeListening;
 
+  /// No description provided for @callModePreparingListening.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing microphone'**
+  String get callModePreparingListening;
+
   /// No description provided for @callModeSpeaking.
   ///
   /// In en, this message translates to:
@@ -895,6 +895,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Speak naturally. I will listen, send, and read the reply back.'**
   String get callModeIdleSubtitle;
+
+  /// No description provided for @callModePreparingListeningLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing to listen'**
+  String get callModePreparingListeningLabel;
+
+  /// No description provided for @callModePreparingListeningDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone and speech recognition are starting. Speech may not be captured yet.'**
+  String get callModePreparingListeningDetail;
 
   /// No description provided for @callModeListeningReadyLabel.
   ///
@@ -971,7 +983,7 @@ abstract class AppLocalizations {
   /// No description provided for @callModeRequiresStreamingAsr.
   ///
   /// In en, this message translates to:
-  /// **'Call mode currently requires System ASR, Omni Bridge Local, or Tencent Cloud Streaming.'**
+  /// **'Call mode currently requires System ASR or Omni Bridge Local.'**
   String get callModeRequiresStreamingAsr;
 
   /// No description provided for @callModeSection.
@@ -1520,24 +1532,6 @@ abstract class AppLocalizations {
   /// **'Send failed, tap to retry'**
   String get draftFailed;
 
-  /// No description provided for @zhipuApiKeyRequired.
-  ///
-  /// In en, this message translates to:
-  /// **'Fill in the Zhipu API key in settings first'**
-  String get zhipuApiKeyRequired;
-
-  /// No description provided for @zhipuAsrRequestFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Zhipu ASR request failed ({statusCode}): {body}'**
-  String zhipuAsrRequestFailed(Object statusCode, Object body);
-
-  /// No description provided for @zhipuAsrMissingText.
-  ///
-  /// In en, this message translates to:
-  /// **'Zhipu ASR response is missing text'**
-  String get zhipuAsrMissingText;
-
   /// No description provided for @whisperApiKeyRequired.
   ///
   /// In en, this message translates to:
@@ -1555,36 +1549,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Whisper ASR response is missing text'**
   String get whisperAsrMissingText;
-
-  /// No description provided for @tencentCloudAppIdRequired.
-  ///
-  /// In en, this message translates to:
-  /// **'Fill in the Tencent Cloud App ID in settings first'**
-  String get tencentCloudAppIdRequired;
-
-  /// No description provided for @tencentCloudAppIdInvalid.
-  ///
-  /// In en, this message translates to:
-  /// **'Tencent Cloud App ID must be a number'**
-  String get tencentCloudAppIdInvalid;
-
-  /// No description provided for @tencentCloudSecretIdRequired.
-  ///
-  /// In en, this message translates to:
-  /// **'Fill in the Tencent Cloud Secret ID in settings first'**
-  String get tencentCloudSecretIdRequired;
-
-  /// No description provided for @tencentCloudSecretKeyRequired.
-  ///
-  /// In en, this message translates to:
-  /// **'Fill in the Tencent Cloud Secret Key in settings first'**
-  String get tencentCloudSecretKeyRequired;
-
-  /// No description provided for @zhipuTtsRequestFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Zhipu TTS request failed ({statusCode}): {body}'**
-  String zhipuTtsRequestFailed(Object statusCode, Object body);
 
   /// No description provided for @updateManifestUrlRequired.
   ///
@@ -1976,23 +1940,11 @@ abstract class AppLocalizations {
   /// **'Male'**
   String get speechVoiceGenderMale;
 
-  /// No description provided for @zhipuApiSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Zhipu API'**
-  String get zhipuApiSection;
-
   /// No description provided for @whisperApiSection.
   ///
   /// In en, this message translates to:
   /// **'Whisper API'**
   String get whisperApiSection;
-
-  /// No description provided for @tencentCloudStreamingAsrSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Tencent Cloud Streaming ASR'**
-  String get tencentCloudStreamingAsrSection;
 
   /// No description provided for @bridgeLocalTtsHelp.
   ///
@@ -2006,23 +1958,11 @@ abstract class AppLocalizations {
   /// **'Uses the bridge-local /v1/audio/transcriptions endpoint for recorded voice input.'**
   String get bridgeLocalAsrHelp;
 
-  /// No description provided for @zhipuApiHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Requires a Zhipu API key.'**
-  String get zhipuApiHelp;
-
   /// No description provided for @whisperApiHelp.
   ///
   /// In en, this message translates to:
   /// **'Requires a Whisper-compatible base URL and API key.'**
   String get whisperApiHelp;
-
-  /// No description provided for @tencentStreamingAsrHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Uses Tencent Cloud websocket streaming for realtime transcription.'**
-  String get tencentStreamingAsrHelp;
 
   /// No description provided for @speechNotSelected.
   ///

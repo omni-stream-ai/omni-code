@@ -25,7 +25,6 @@
   "asrProviderLabel": "ASR Provider",
   "bridgeCloudProxy": "Bridge / Cloud relay",
   "whisperCompatible": "Whisper / OpenAI Compatible",
-  "tencentCloudStreamingAsr": "Tencent Cloud Streaming",
   "apiKey": "API Key",
   "appId": "App ID",
   "secretId": "Secret ID",
@@ -228,9 +227,12 @@
   "voiceInput": "Voice input",
   "voiceChatTitle": "Voice chat",
   "callModeListening": "Go ahead, I'm listening",
+  "callModePreparingListening": "Preparing microphone",
   "callModeSpeaking": "Replying out loud",
   "callModeWorking": "Thinking through your request",
   "callModeIdleSubtitle": "Speak naturally. I will listen, send, and read the reply back.",
+  "callModePreparingListeningLabel": "Preparing to listen",
+  "callModePreparingListeningDetail": "Microphone and speech recognition are starting. Speech may not be captured yet.",
   "callModeListeningReadyLabel": "Listening now",
   "callModeListeningReadyDetail": "Start speaking whenever you're ready. Live transcription will show up here.",
   "callModeSpeechDetectedLabel": "Speech detected",
@@ -243,7 +245,7 @@
   "startCallMode": "Start call mode",
   "stopCallMode": "Stop call mode",
   "callModeUnavailable": "Call mode is unavailable until speech services finish initializing.",
-  "callModeRequiresStreamingAsr": "Call mode currently requires System ASR, Omni Bridge Local, or Tencent Cloud Streaming.",
+  "callModeRequiresStreamingAsr": "Call mode currently requires System ASR or Omni Bridge Local.",
   "callModeSection": "Call mode",
   "callModeAllowInterruptionsLabel": "Allow speaking over replies",
   "callModeAllowInterruptionsHelp": "When enabled, speaking again during call mode will stop the current spoken reply and take over the turn.",
@@ -415,15 +417,6 @@
   "phaseStarted": "Started",
   "draftPending": "Pending sync",
   "draftFailed": "Send failed, tap to retry",
-  "zhipuApiKeyRequired": "Fill in the Zhipu API key in settings first",
-  "zhipuAsrRequestFailed": "Zhipu ASR request failed ({statusCode}): {body}",
-  "@zhipuAsrRequestFailed": {
-    "placeholders": {
-      "statusCode": {},
-      "body": {}
-    }
-  },
-  "zhipuAsrMissingText": "Zhipu ASR response is missing text",
   "whisperApiKeyRequired": "Fill in the Whisper/OpenAI API key in settings first",
   "whisperAsrRequestFailed": "Whisper ASR request failed ({statusCode}): {body}",
   "@whisperAsrRequestFailed": {
@@ -433,17 +426,6 @@
     }
   },
   "whisperAsrMissingText": "Whisper ASR response is missing text",
-  "tencentCloudAppIdRequired": "Fill in the Tencent Cloud App ID in settings first",
-  "tencentCloudAppIdInvalid": "Tencent Cloud App ID must be a number",
-  "tencentCloudSecretIdRequired": "Fill in the Tencent Cloud Secret ID in settings first",
-  "tencentCloudSecretKeyRequired": "Fill in the Tencent Cloud Secret Key in settings first",
-  "zhipuTtsRequestFailed": "Zhipu TTS request failed ({statusCode}): {body}",
-  "@zhipuTtsRequestFailed": {
-    "placeholders": {
-      "statusCode": {},
-      "body": {}
-    }
-  },
   "updateManifestUrlRequired": "Enter the manifest URL first",
   "updateManifestUrlInvalid": "Manifest URL is invalid",
   "updateCheckHttpFailed": "Update check failed: HTTP {statusCode}",
@@ -544,14 +526,10 @@
   "speechVoiceAccentBrazilianPortuguese": "Brazilian Portuguese",
   "speechVoiceGenderFemale": "Female",
   "speechVoiceGenderMale": "Male",
-  "zhipuApiSection": "Zhipu API",
   "whisperApiSection": "Whisper API",
-  "tencentCloudStreamingAsrSection": "Tencent Cloud Streaming ASR",
   "bridgeLocalTtsHelp": "Uses the bridge-local /v1/audio/speech endpoint and the selected TTS model below.",
   "bridgeLocalAsrHelp": "Uses the bridge-local /v1/audio/transcriptions endpoint for recorded voice input.",
-  "zhipuApiHelp": "Requires a Zhipu API key.",
   "whisperApiHelp": "Requires a Whisper-compatible base URL and API key.",
-  "tencentStreamingAsrHelp": "Uses Tencent Cloud websocket streaming for realtime transcription.",
   "speechNotSelected": "Not selected",
   "speechInstalled": "Installed",
   "speechNotInstalled": "Not installed",

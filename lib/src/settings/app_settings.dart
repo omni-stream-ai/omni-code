@@ -12,14 +12,12 @@ const int defaultCallModeSpeechPauseMillis = 1200;
 const int minCallModeSpeechPauseMillis = 600;
 const int maxCallModeSpeechPauseMillis = 2400;
 
-enum TtsProvider { system, bridgeLocal, zhipu }
+enum TtsProvider { system, bridgeLocal }
 
 enum AsrProvider {
   system,
   bridgeLocal,
-  zhipu,
   whisper,
-  tencentCloudStreaming,
 }
 
 enum AppThemeModeSetting { system, light, dark }
@@ -37,12 +35,8 @@ class AppSettings {
     required this.bridgeLocalTtsVoice,
     required this.bridgeLocalTtsStreaming,
     required this.asrProvider,
-    required this.zhipuApiKey,
     required this.whisperApiKey,
     required this.whisperBaseUrl,
-    required String tencentCloudAppId,
-    required String tencentCloudSecretId,
-    required String tencentCloudSecretKey,
     required this.updateManifestUrl,
     required this.updateTargetVersion,
     required this.aiApprovalEnabled,
@@ -55,9 +49,7 @@ class AppSettings {
     required this.compressAssistantReplies,
     required this.callModeAllowInterruptions,
     required this.callModeSpeechPauseMillis,
-  })  : _tencentCloudAppId = tencentCloudAppId,
-        _tencentCloudSecretId = tencentCloudSecretId,
-        _tencentCloudSecretKey = tencentCloudSecretKey;
+  });
 
   final String bridgeUrl;
   final String bridgeToken;
@@ -69,15 +61,8 @@ class AppSettings {
   final String bridgeLocalTtsVoice;
   final bool bridgeLocalTtsStreaming;
   final AsrProvider asrProvider;
-  final String zhipuApiKey;
   final String whisperApiKey;
   final String whisperBaseUrl;
-  final String? _tencentCloudAppId;
-  final String? _tencentCloudSecretId;
-  final String? _tencentCloudSecretKey;
-  String get tencentCloudAppId => _tencentCloudAppId ?? '';
-  String get tencentCloudSecretId => _tencentCloudSecretId ?? '';
-  String get tencentCloudSecretKey => _tencentCloudSecretKey ?? '';
   final String updateManifestUrl;
   final String updateTargetVersion;
   final bool aiApprovalEnabled;
@@ -109,12 +94,8 @@ class AppSettings {
       bridgeLocalTtsVoice: '',
       bridgeLocalTtsStreaming: false,
       asrProvider: AsrProvider.system,
-      zhipuApiKey: '',
       whisperApiKey: '',
       whisperBaseUrl: 'https://api.openai.com/v1',
-      tencentCloudAppId: '',
-      tencentCloudSecretId: '',
-      tencentCloudSecretKey: '',
       updateManifestUrl: updateManifestUrl.trim().isNotEmpty
           ? updateManifestUrl.trim()
           : _defaultUpdateManifestUrl,
@@ -143,12 +124,8 @@ class AppSettings {
     String? bridgeLocalTtsVoice,
     bool? bridgeLocalTtsStreaming,
     AsrProvider? asrProvider,
-    String? zhipuApiKey,
     String? whisperApiKey,
     String? whisperBaseUrl,
-    String? tencentCloudAppId,
-    String? tencentCloudSecretId,
-    String? tencentCloudSecretKey,
     String? updateManifestUrl,
     String? updateTargetVersion,
     bool? aiApprovalEnabled,
@@ -176,13 +153,8 @@ class AppSettings {
       bridgeLocalTtsStreaming:
           bridgeLocalTtsStreaming ?? this.bridgeLocalTtsStreaming,
       asrProvider: asrProvider ?? this.asrProvider,
-      zhipuApiKey: zhipuApiKey ?? this.zhipuApiKey,
       whisperApiKey: whisperApiKey ?? this.whisperApiKey,
       whisperBaseUrl: whisperBaseUrl ?? this.whisperBaseUrl,
-      tencentCloudAppId: tencentCloudAppId ?? this.tencentCloudAppId,
-      tencentCloudSecretId: tencentCloudSecretId ?? this.tencentCloudSecretId,
-      tencentCloudSecretKey:
-          tencentCloudSecretKey ?? this.tencentCloudSecretKey,
       updateManifestUrl: updateManifestUrl ?? this.updateManifestUrl,
       updateTargetVersion: updateTargetVersion ?? this.updateTargetVersion,
       aiApprovalEnabled: aiApprovalEnabled ?? this.aiApprovalEnabled,
@@ -215,12 +187,8 @@ class AppSettings {
       'bridge_local_tts_voice': bridgeLocalTtsVoice,
       'bridge_local_tts_streaming': bridgeLocalTtsStreaming,
       'asr_provider': asrProvider.name,
-      'zhipu_api_key': zhipuApiKey,
       'whisper_api_key': whisperApiKey,
       'whisper_base_url': whisperBaseUrl,
-      'tencent_cloud_app_id': tencentCloudAppId,
-      'tencent_cloud_secret_id': tencentCloudSecretId,
-      'tencent_cloud_secret_key': tencentCloudSecretKey,
       'update_manifest_url': updateManifestUrl,
       'update_target_version': updateTargetVersion,
       'ai_approval_enabled': aiApprovalEnabled,
@@ -265,13 +233,9 @@ class AppSettings {
       ),
       asrProvider: _parseAsrProvider(
           _readNullableString(json, 'asr_provider'), defaults.asrProvider),
-      zhipuApiKey: _readString(json, 'zhipu_api_key'),
       whisperApiKey: _readString(json, 'whisper_api_key'),
       whisperBaseUrl:
           _readString(json, 'whisper_base_url', defaults.whisperBaseUrl),
-      tencentCloudAppId: _readString(json, 'tencent_cloud_app_id'),
-      tencentCloudSecretId: _readString(json, 'tencent_cloud_secret_id'),
-      tencentCloudSecretKey: _readString(json, 'tencent_cloud_secret_key'),
       updateManifestUrl:
           _readString(json, 'update_manifest_url').trim().isNotEmpty
               ? _readString(json, 'update_manifest_url').trim()
@@ -408,6 +372,9 @@ class AppSettings {
     if (raw == 'bridge') {
       return TtsProvider.bridgeLocal;
     }
+    if (raw == 'zhipu') {
+      return TtsProvider.system;
+    }
     for (final item in TtsProvider.values) {
       if (item.name == raw) {
         return item;
@@ -419,6 +386,9 @@ class AppSettings {
   static AsrProvider _parseAsrProvider(String? raw, AsrProvider fallback) {
     if (raw == 'bridge') {
       return AsrProvider.bridgeLocal;
+    }
+    if (raw == 'zhipu' || raw == 'tencentCloudStreaming') {
+      return AsrProvider.system;
     }
     for (final item in AsrProvider.values) {
       if (item.name == raw) {
@@ -498,6 +468,15 @@ class AppSettingsController extends ChangeNotifier {
           shouldPersist = true;
         }
         if (json['asr_provider'] == 'bridge') {
+          shouldPersist = true;
+        }
+        if (json['tts_provider'] == 'zhipu' ||
+            json['asr_provider'] == 'zhipu' ||
+            json['asr_provider'] == 'tencentCloudStreaming' ||
+            json.containsKey('zhipu_api_key') ||
+            json.containsKey('tencent_cloud_app_id') ||
+            json.containsKey('tencent_cloud_secret_id') ||
+            json.containsKey('tencent_cloud_secret_key')) {
           shouldPersist = true;
         }
         final updateManifestUrl =

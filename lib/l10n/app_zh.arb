@@ -25,7 +25,6 @@
   "asrProviderLabel": "ASR Provider",
   "bridgeCloudProxy": "Bridge / 云端中转",
   "whisperCompatible": "Whisper / OpenAI Compatible",
-  "tencentCloudStreamingAsr": "腾讯云流式识别",
   "apiKey": "API Key",
   "appId": "App ID",
   "secretId": "Secret ID",
@@ -228,9 +227,12 @@
   "voiceInput": "语音输入",
   "voiceChatTitle": "通话模式",
   "callModeListening": "可以开始说了，我正在听",
+  "callModePreparingListening": "正在准备麦克风",
   "callModeSpeaking": "正在语音回复",
   "callModeWorking": "正在思考你的请求",
   "callModeIdleSubtitle": "直接说就行，我会自动听、自动发、再把回复念给你。",
+  "callModePreparingListeningLabel": "正在准备监听",
+  "callModePreparingListeningDetail": "麦克风和语音识别正在启动，这时说话可能还不会被捕获。",
   "callModeListeningReadyLabel": "正在监听",
   "callModeListeningReadyDetail": "可以直接开始说，识别内容会实时显示在这里。",
   "callModeSpeechDetectedLabel": "检测到你在说话",
@@ -243,7 +245,7 @@
   "startCallMode": "开启通话模式",
   "stopCallMode": "停止通话模式",
   "callModeUnavailable": "语音服务尚未初始化完成，暂时无法使用通话模式。",
-  "callModeRequiresStreamingAsr": "通话模式当前仅支持系统语音识别、Omni Bridge Local 或腾讯云流式识别。",
+  "callModeRequiresStreamingAsr": "通话模式当前仅支持系统语音识别或 Omni Bridge Local。",
   "callModeSection": "通话模式",
   "callModeAllowInterruptionsLabel": "允许说话打断回复",
   "callModeAllowInterruptionsHelp": "开启后，通话模式下如果你在回复播报过程中再次开口，会停止当前语音回复并接管这一轮。",
@@ -415,15 +417,6 @@
   "phaseStarted": "已开始",
   "draftPending": "待同步",
   "draftFailed": "发送失败，点击重发",
-  "zhipuApiKeyRequired": "请先在设置中填写智谱 API Key",
-  "zhipuAsrRequestFailed": "智谱 ASR 请求失败 ({statusCode}): {body}",
-  "@zhipuAsrRequestFailed": {
-    "placeholders": {
-      "statusCode": {},
-      "body": {}
-    }
-  },
-  "zhipuAsrMissingText": "智谱 ASR 响应缺少 text",
   "whisperApiKeyRequired": "请先在设置中填写 Whisper/OpenAI API Key",
   "whisperAsrRequestFailed": "Whisper ASR 请求失败 ({statusCode}): {body}",
   "@whisperAsrRequestFailed": {
@@ -433,17 +426,6 @@
     }
   },
   "whisperAsrMissingText": "Whisper ASR 响应缺少 text",
-  "tencentCloudAppIdRequired": "请先在设置中填写腾讯云 App ID",
-  "tencentCloudAppIdInvalid": "腾讯云 App ID 必须是数字",
-  "tencentCloudSecretIdRequired": "请先在设置中填写腾讯云 Secret ID",
-  "tencentCloudSecretKeyRequired": "请先在设置中填写腾讯云 Secret Key",
-  "zhipuTtsRequestFailed": "智谱 TTS 请求失败 ({statusCode}): {body}",
-  "@zhipuTtsRequestFailed": {
-    "placeholders": {
-      "statusCode": {},
-      "body": {}
-    }
-  },
   "updateManifestUrlRequired": "请先填写更新清单 URL",
   "updateManifestUrlInvalid": "更新清单 URL 无效",
   "updateCheckHttpFailed": "更新检查失败：HTTP {statusCode}",
@@ -544,14 +526,10 @@
   "speechVoiceAccentBrazilianPortuguese": "巴西葡萄牙文",
   "speechVoiceGenderFemale": "女声",
   "speechVoiceGenderMale": "男声",
-  "zhipuApiSection": "Zhipu API",
   "whisperApiSection": "Whisper API",
-  "tencentCloudStreamingAsrSection": "腾讯云流式识别",
   "bridgeLocalTtsHelp": "通过 bridge-local 的 /v1/audio/speech 接口和下方选中的 TTS 模型进行本地播报。",
   "bridgeLocalAsrHelp": "通过 bridge-local 的 /v1/audio/transcriptions 接口处理录音后的语音转写。",
-  "zhipuApiHelp": "需要填写 Zhipu API Key。",
   "whisperApiHelp": "需要填写兼容 Whisper 的 Base URL 和 API Key。",
-  "tencentStreamingAsrHelp": "通过腾讯云 websocket 流式接口进行实时转写。",
   "speechNotSelected": "未选择",
   "speechInstalled": "已安装",
   "speechNotInstalled": "未安装",

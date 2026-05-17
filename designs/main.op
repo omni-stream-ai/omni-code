@@ -4457,7 +4457,7 @@
                   "children": [
                     {
                       "type": "text",
-                      "content": "Zhipu",
+                      "content": "Omni Bridge Local",
                       "fontFamily": "JetBrains Mono",
                       "fontSize": 12,
                       "fontWeight": 500,
@@ -4594,7 +4594,7 @@
                   "children": [
                     {
                       "type": "text",
-                      "content": "Zhipu",
+                      "content": "Whisper / OpenAI Compatible",
                       "fontFamily": "JetBrains Mono",
                       "fontSize": 12,
                       "fontWeight": 500,

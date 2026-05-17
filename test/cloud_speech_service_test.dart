@@ -69,7 +69,31 @@ void main() {
     final speech = await service.synthesizeSpeech('Reply for call mode');
 
     expect(body['stream'], isTrue);
-    expect(speech.streamUrl, 'http://127.0.0.1:8787/v1/audio/speech/streams/test-token');
+    expect(speech.streamUrl,
+        'http://127.0.0.1:8787/v1/audio/speech/streams/test-token');
+  });
+
+  test('bridge local synthesizeSpeech strips emoji unsupported by lexicon',
+      () async {
+    late Map<String, dynamic> body;
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(ttsProvider: TtsProvider.bridgeLocal),
+    );
+
+    final service = CloudSpeechService(
+      httpClient: _FakeHttpClient((request) async {
+        body = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response.bytes(
+          [1, 2, 3],
+          200,
+          headers: {'content-type': 'audio/wav'},
+        );
+      }),
+    );
+
+    await service.synthesizeSpeech('Why ❓ now');
+
+    expect(body['input'], 'Why now');
   });
 }
 

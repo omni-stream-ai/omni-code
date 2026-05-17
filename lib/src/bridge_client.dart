@@ -701,6 +701,10 @@ class BridgeClient {
     String responseFormat = 'wav',
     bool stream = false,
   }) async {
+    final input = _sanitizeSpeechInput(text);
+    if (input.isEmpty) {
+      throw Exception('TTS request missing speakable text.');
+    }
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/v1/audio/speech'),
       headers: {
@@ -709,7 +713,7 @@ class BridgeClient {
       },
       body: jsonEncode({
         if (model?.trim().isNotEmpty == true) 'model': model!.trim(),
-        'input': text,
+        'input': input,
         'voice': voice,
         'speed': speed,
         'response_format': responseFormat,
@@ -1036,6 +1040,69 @@ class BridgeClient {
       SpeechProfile.ttsDefault => 'tts.default',
       SpeechProfile.vadDefault => 'vad.default',
     };
+  }
+
+  static String _sanitizeSpeechInput(String value) {
+    final buffer = StringBuffer();
+    var previousWasWhitespace = false;
+
+    for (final rune in value.runes) {
+      if (_isEmojiLikeRune(rune)) {
+        continue;
+      }
+      final character = _normalizeSpeechRune(rune);
+      if (character.trim().isEmpty) {
+        if (!previousWasWhitespace && buffer.isNotEmpty) {
+          buffer.write(' ');
+          previousWasWhitespace = true;
+        }
+        continue;
+      }
+      buffer.write(character);
+      previousWasWhitespace = false;
+    }
+
+    return buffer.toString().trim();
+  }
+
+  static String _normalizeSpeechRune(int rune) {
+    return switch (rune) {
+      0x2018 || 0x2019 || 0x201A || 0x201B => "'",
+      0x201C || 0x201D || 0x201E || 0x201F => '"',
+      0x300C || 0x300D || 0x300E || 0x300F => '"',
+      0x301D || 0x301E || 0x301F => '"',
+      _ => String.fromCharCode(rune),
+    };
+  }
+
+  static bool _isEmojiLikeRune(int rune) {
+    return rune == 0x00A9 ||
+        rune == 0x00AE ||
+        rune == 0x200D ||
+        rune == 0x203C ||
+        rune == 0x2049 ||
+        rune == 0x2122 ||
+        rune == 0x2139 ||
+        (rune >= 0x2194 && rune <= 0x21AA) ||
+        (rune >= 0x231A && rune <= 0x231B) ||
+        rune == 0x2328 ||
+        rune == 0x23CF ||
+        (rune >= 0x23E9 && rune <= 0x23F3) ||
+        (rune >= 0x23F8 && rune <= 0x23FA) ||
+        rune == 0x24C2 ||
+        (rune >= 0x25AA && rune <= 0x25AB) ||
+        rune == 0x25B6 ||
+        rune == 0x25C0 ||
+        (rune >= 0x25FB && rune <= 0x25FE) ||
+        (rune >= 0x2600 && rune <= 0x27BF) ||
+        (rune >= 0x2934 && rune <= 0x2935) ||
+        (rune >= 0x2B05 && rune <= 0x2B55) ||
+        rune == 0x3030 ||
+        rune == 0x303D ||
+        rune == 0x3297 ||
+        rune == 0x3299 ||
+        (rune >= 0xFE00 && rune <= 0xFE0F) ||
+        (rune >= 0x1F000 && rune <= 0x1FAFF);
   }
 }
 

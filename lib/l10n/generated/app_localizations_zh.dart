@@ -87,9 +87,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whisperCompatible => 'Whisper / OpenAI Compatible';
 
   @override
-  String get tencentCloudStreamingAsr => '腾讯云流式识别';
-
-  @override
   String get apiKey => 'API Key';
 
   @override
@@ -440,6 +437,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get callModeListening => '可以开始说了，我正在听';
 
   @override
+  String get callModePreparingListening => '正在准备麦克风';
+
+  @override
   String get callModeSpeaking => '正在语音回复';
 
   @override
@@ -447,6 +447,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get callModeIdleSubtitle => '直接说就行，我会自动听、自动发、再把回复念给你。';
+
+  @override
+  String get callModePreparingListeningLabel => '正在准备监听';
+
+  @override
+  String get callModePreparingListeningDetail => '麦克风和语音识别正在启动，这时说话可能还不会被捕获。';
 
   @override
   String get callModeListeningReadyLabel => '正在监听';
@@ -486,7 +492,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get callModeRequiresStreamingAsr =>
-      '通话模式当前仅支持系统语音识别、Omni Bridge Local 或腾讯云流式识别。';
+      '通话模式当前仅支持系统语音识别或 Omni Bridge Local。';
 
   @override
   String get callModeSection => '通话模式';
@@ -796,17 +802,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get draftFailed => '发送失败，点击重发';
 
   @override
-  String get zhipuApiKeyRequired => '请先在设置中填写智谱 API Key';
-
-  @override
-  String zhipuAsrRequestFailed(Object statusCode, Object body) {
-    return '智谱 ASR 请求失败 ($statusCode): $body';
-  }
-
-  @override
-  String get zhipuAsrMissingText => '智谱 ASR 响应缺少 text';
-
-  @override
   String get whisperApiKeyRequired => '请先在设置中填写 Whisper/OpenAI API Key';
 
   @override
@@ -816,23 +811,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get whisperAsrMissingText => 'Whisper ASR 响应缺少 text';
-
-  @override
-  String get tencentCloudAppIdRequired => '请先在设置中填写腾讯云 App ID';
-
-  @override
-  String get tencentCloudAppIdInvalid => '腾讯云 App ID 必须是数字';
-
-  @override
-  String get tencentCloudSecretIdRequired => '请先在设置中填写腾讯云 Secret ID';
-
-  @override
-  String get tencentCloudSecretKeyRequired => '请先在设置中填写腾讯云 Secret Key';
-
-  @override
-  String zhipuTtsRequestFailed(Object statusCode, Object body) {
-    return '智谱 TTS 请求失败 ($statusCode): $body';
-  }
 
   @override
   String get updateManifestUrlRequired => '请先填写更新清单 URL';
@@ -1054,13 +1032,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speechVoiceGenderMale => '男声';
 
   @override
-  String get zhipuApiSection => 'Zhipu API';
-
-  @override
   String get whisperApiSection => 'Whisper API';
-
-  @override
-  String get tencentCloudStreamingAsrSection => '腾讯云流式识别';
 
   @override
   String get bridgeLocalTtsHelp =>
@@ -1071,13 +1043,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '通过 bridge-local 的 /v1/audio/transcriptions 接口处理录音后的语音转写。';
 
   @override
-  String get zhipuApiHelp => '需要填写 Zhipu API Key。';
-
-  @override
   String get whisperApiHelp => '需要填写兼容 Whisper 的 Base URL 和 API Key。';
-
-  @override
-  String get tencentStreamingAsrHelp => '通过腾讯云 websocket 流式接口进行实时转写。';
 
   @override
   String get speechNotSelected => '未选择';

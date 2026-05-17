@@ -13,6 +13,8 @@ import '../widgets/app_back_header.dart';
 import '../widgets/app_card.dart';
 import '../../l10n/generated/app_localizations.dart';
 
+SpeechStatus? _cachedSpeechStatus;
+
 class SpeechSettingsScreen extends StatefulWidget {
   const SpeechSettingsScreen({
     super.key,
@@ -32,12 +34,8 @@ class SpeechSettingsScreen extends StatefulWidget {
 }
 
 class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
-  final _zhipuApiKeyController = TextEditingController();
   final _whisperApiKeyController = TextEditingController();
   final _whisperBaseUrlController = TextEditingController();
-  final _tencentCloudAppIdController = TextEditingController();
-  final _tencentCloudSecretIdController = TextEditingController();
-  final _tencentCloudSecretKeyController = TextEditingController();
   final Set<String> _downloadingModelIds = <String>{};
   final Map<String, String> _downloadErrorsByModelId = <String, String>{};
   final Set<String> _updatingProfileKeys = <String>{};
@@ -95,19 +93,22 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     super.initState();
     _syncFromSettings(appSettingsController.settings);
     appSettingsController.addListener(_onSettingsChanged);
-    unawaited(_refreshSpeechStatus());
+    final cachedStatus = _cachedSpeechStatus;
+    if (cachedStatus != null) {
+      _speechStatus = cachedStatus;
+      _syncSpeechPolling(cachedStatus);
+      unawaited(_refreshSpeechStatus(silent: true));
+    } else {
+      unawaited(_refreshSpeechStatus());
+    }
   }
 
   @override
   void dispose() {
     appSettingsController.removeListener(_onSettingsChanged);
     _speechPollingTimer?.cancel();
-    _zhipuApiKeyController.dispose();
     _whisperApiKeyController.dispose();
     _whisperBaseUrlController.dispose();
-    _tencentCloudAppIdController.dispose();
-    _tencentCloudSecretIdController.dispose();
-    _tencentCloudSecretKeyController.dispose();
     super.dispose();
   }
 
@@ -118,12 +119,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     _asrProvider = settings.asrProvider;
     _callModeAllowInterruptions = settings.callModeAllowInterruptions;
     _callModeSpeechPauseMillis = settings.callModeSpeechPauseMillis;
-    _zhipuApiKeyController.text = settings.zhipuApiKey;
     _whisperApiKeyController.text = settings.whisperApiKey;
     _whisperBaseUrlController.text = settings.whisperBaseUrl;
-    _tencentCloudAppIdController.text = settings.tencentCloudAppId;
-    _tencentCloudSecretIdController.text = settings.tencentCloudSecretId;
-    _tencentCloudSecretKeyController.text = settings.tencentCloudSecretKey;
   }
 
   void _onSettingsChanged() {
@@ -205,10 +202,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                                       value: TtsProvider.bridgeLocal,
                                       child: Text(l10n.omniBridgeLocal),
                                     ),
-                                    const DropdownMenuItem(
-                                      value: TtsProvider.zhipu,
-                                      child: Text('Zhipu'),
-                                    ),
                                   ],
                                   onChanged: (value) {
                                     if (value != null) {
@@ -248,18 +241,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                                       value: AsrProvider.bridgeLocal,
                                       child: Text(l10n.omniBridgeLocal),
                                     ),
-                                    const DropdownMenuItem(
-                                      value: AsrProvider.zhipu,
-                                      child: Text('Zhipu'),
-                                    ),
                                     DropdownMenuItem(
                                       value: AsrProvider.whisper,
                                       child: Text(l10n.whisperCompatible),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: AsrProvider.tencentCloudStreaming,
-                                      child:
-                                          Text(l10n.tencentCloudStreamingAsr),
                                     ),
                                   ],
                                   onChanged: (value) {
@@ -316,21 +300,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                         const SizedBox(height: AppSpacing.stackTight),
                         _buildSectionCard(
                           context,
-                          title: l10n.zhipuApiSection,
-                          children: [
-                            TextField(
-                              controller: _zhipuApiKeyController,
-                              obscureText: true,
-                              style: formValueTextStyle,
-                              decoration: InputDecoration(
-                                labelText: l10n.apiKey,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.stackTight),
-                        _buildSectionCard(
-                          context,
                           title: l10n.whisperApiSection,
                           children: [
                             TextField(
@@ -347,35 +316,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                               decoration: InputDecoration(
                                 labelText: l10n.baseUrl,
                                 hintText: 'https://api.openai.com/v1',
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.stackTight),
-                        _buildSectionCard(
-                          context,
-                          title: l10n.tencentCloudStreamingAsrSection,
-                          children: [
-                            TextField(
-                              controller: _tencentCloudAppIdController,
-                              style: formValueTextStyle,
-                              decoration: InputDecoration(
-                                labelText: l10n.appId,
-                              ),
-                            ),
-                            TextField(
-                              controller: _tencentCloudSecretIdController,
-                              style: formValueTextStyle,
-                              decoration: InputDecoration(
-                                labelText: l10n.secretId,
-                              ),
-                            ),
-                            TextField(
-                              controller: _tencentCloudSecretKeyController,
-                              obscureText: true,
-                              style: formValueTextStyle,
-                              decoration: InputDecoration(
-                                labelText: l10n.secretKey,
                               ),
                             ),
                           ],
@@ -615,6 +555,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         selectedModel ?? (models.isEmpty ? null : models.first);
     final downloadTask = _activeDownloadForModels(status, models);
     final downloadError = _downloadErrorForModels(models);
+    final updatingProfile = _isUpdatingSpeechProfile(profile);
     final actionLabel = _profileSummaryActionLabel(
       l10n,
       models: models,
@@ -622,7 +563,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       downloadTask: downloadTask,
     );
     final highlighted = selectedModel?.installed ?? false;
-    final canOpenSheet = models.isNotEmpty && downloadTask == null;
+    final canOpenSheet =
+        models.isNotEmpty && downloadTask == null && !updatingProfile;
     final accent = downloadTask != null
         ? AppColors.accentBlueFor(brightness)
         : highlighted
@@ -684,7 +626,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                 context,
                 label: actionLabel,
                 highlighted: highlighted,
-                downloading: downloadTask != null,
+                loading: downloadTask != null || updatingProfile,
                 onPressed: canOpenSheet
                     ? () => _showModelPickerSheet(status, profile)
                     : null,
@@ -760,15 +702,15 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     BuildContext context, {
     required String label,
     required bool highlighted,
-    required bool downloading,
+    required bool loading,
     required VoidCallback? onPressed,
   }) {
     const minSize = Size(0, 38);
-    if (downloading) {
+    if (loading) {
       return FilledButton(
         onPressed: null,
         style: FilledButton.styleFrom(minimumSize: minSize),
-        child: Text(label),
+        child: _buildButtonLoadingChild(context, label),
       );
     }
     if (highlighted) {
@@ -816,189 +758,260 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       builder: (sheetContext) {
         final sheetTheme = Theme.of(sheetContext);
         final height = MediaQuery.of(sheetContext).size.height * 0.72;
-        return SafeArea(
-          child: SizedBox(
-            height: height,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.block,
-                    AppSpacing.block,
-                    AppSpacing.block,
-                    AppSpacing.compact,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _profileLabel(l10n, profile),
-                              style: sheetTheme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.micro),
-                            Text(
-                              _profileSubtitle(l10n, profile),
-                              style: sheetTheme.textTheme.bodySmall?.copyWith(
-                                color: AppColors.mutedSoftFor(brightness),
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ),
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            return SafeArea(
+              child: SizedBox(
+                height: height,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.block,
+                        AppSpacing.block,
+                        AppSpacing.block,
+                        AppSpacing.compact,
                       ),
-                      IconButton(
-                        onPressed: () => Navigator.of(sheetContext).pop(),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.block,
-                      0,
-                      AppSpacing.block,
-                      AppSpacing.block,
-                    ),
-                    itemCount: models.length,
-                    itemBuilder: (context, index) {
-                      final model = models[index];
-                      final selected = selectedModelId == model.id;
-                      final downloading =
-                          _downloadingModelIds.contains(model.id) ||
-                              status.activeDownloads.any(
-                                (task) => task.modelId == model.id,
-                              );
-                      return Padding(
-                        padding: const EdgeInsets.only(
-                          bottom: AppSpacing.compact,
-                        ),
-                        child: Container(
-                          padding: AppSpacing.tilePadding,
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceDeepFor(brightness),
-                            borderRadius: BorderRadius.circular(
-                              AppSpacing.radiusTile,
-                            ),
-                            border: Border.all(
-                              color: selected
-                                  ? AppColors.outlineStrongFor(brightness)
-                                  : AppColors.outlineFor(brightness),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _profileLabel(l10n, profile),
+                                  style: sheetTheme.textTheme.titleMedium
+                                      ?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpacing.micro),
+                                Text(
+                                  _profileSubtitle(l10n, profile),
+                                  style:
+                                      sheetTheme.textTheme.bodySmall?.copyWith(
+                                    color: AppColors.mutedSoftFor(brightness),
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      model.displayName,
-                                      style: sheetTheme.textTheme.bodyMedium
-                                          ?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: AppSpacing.micro),
-                                    Text(
-                                      _profileSummaryLine(l10n, model),
-                                      style: sheetTheme.textTheme.bodySmall
-                                          ?.copyWith(
-                                        color: AppColors.mutedSoftFor(
-                                          brightness,
-                                        ),
-                                        height: 1.35,
-                                      ),
-                                    ),
-                                  ],
+                          IconButton(
+                            onPressed: () => Navigator.of(sheetContext).pop(),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.block,
+                          0,
+                          AppSpacing.block,
+                          AppSpacing.block,
+                        ),
+                        itemCount: models.length,
+                        itemBuilder: (context, index) {
+                          final model = models[index];
+                          final selected = selectedModelId == model.id;
+                          final updateKey =
+                              _speechProfileUpdateKey(profile, model.id);
+                          final selecting =
+                              _updatingProfileKeys.contains(updateKey);
+                          final downloading =
+                              _downloadingModelIds.contains(model.id) ||
+                                  status.activeDownloads.any(
+                                    (task) => task.modelId == model.id,
+                                  );
+                          return Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.compact,
+                            ),
+                            child: Container(
+                              padding: AppSpacing.tilePadding,
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceDeepFor(brightness),
+                                borderRadius: BorderRadius.circular(
+                                  AppSpacing.radiusTile,
+                                ),
+                                border: Border.all(
+                                  color: selected
+                                      ? AppColors.outlineStrongFor(brightness)
+                                      : AppColors.outlineFor(brightness),
                                 ),
                               ),
-                              const SizedBox(width: AppSpacing.compact),
-                              ConstrainedBox(
-                                constraints:
-                                    const BoxConstraints(minHeight: 42),
-                                child: downloading
-                                    ? FilledButton(
-                                        onPressed: null,
-                                        style: _sheetActionButtonStyle(
-                                          filled: true,
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          model.displayName,
+                                          style: sheetTheme.textTheme.bodyMedium
+                                              ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                          ),
                                         ),
-                                        child: Text(l10n.speechDownloading),
-                                      )
-                                    : !model.installed
+                                        const SizedBox(
+                                          height: AppSpacing.micro,
+                                        ),
+                                        Text(
+                                          _profileSummaryLine(l10n, model),
+                                          style: sheetTheme.textTheme.bodySmall
+                                              ?.copyWith(
+                                            color: AppColors.mutedSoftFor(
+                                              brightness,
+                                            ),
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppSpacing.compact),
+                                  ConstrainedBox(
+                                    constraints:
+                                        const BoxConstraints(minHeight: 42),
+                                    child: downloading
                                         ? FilledButton(
-                                            onPressed: () async {
-                                              Navigator.of(sheetContext).pop();
-                                              await _downloadSpeechModel(
-                                                model.id,
-                                              );
-                                            },
+                                            onPressed: null,
                                             style: _sheetActionButtonStyle(
                                               filled: true,
                                             ),
-                                            child: Text(l10n.speechDownload),
+                                            child: Text(l10n.speechDownloading),
                                           )
-                                        : selected
-                                            ? FilledButton.tonal(
+                                        : selecting
+                                            ? OutlinedButton(
                                                 onPressed: null,
-                                                style: FilledButton.styleFrom(
-                                                  minimumSize: const Size(
-                                                    84,
-                                                    42,
-                                                  ),
-                                                  maximumSize: const Size(
-                                                    140,
-                                                    42,
-                                                  ),
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                    horizontal:
-                                                        AppSpacing.tileX,
-                                                  ),
-                                                  tapTargetSize:
-                                                      MaterialTapTargetSize
-                                                          .shrinkWrap,
-                                                  visualDensity:
-                                                      VisualDensity.compact,
-                                                ),
-                                                child: Text(
-                                                  l10n.speechSelected,
-                                                ),
-                                              )
-                                            : OutlinedButton(
-                                                onPressed: () async {
-                                                  Navigator.of(sheetContext)
-                                                      .pop();
-                                                  await _updateSpeechProfile(
-                                                    profile,
-                                                    model.id,
-                                                  );
-                                                },
                                                 style: _sheetActionButtonStyle(
                                                   filled: false,
                                                 ),
-                                                child: Text(l10n.speechSelect),
-                                              ),
+                                                child: _buildButtonLoadingChild(
+                                                  sheetContext,
+                                                  l10n.speechSelect,
+                                                ),
+                                              )
+                                            : !model.installed
+                                                ? FilledButton(
+                                                    onPressed: () async {
+                                                      Navigator.of(sheetContext)
+                                                          .pop();
+                                                      await _downloadSpeechModel(
+                                                        model.id,
+                                                      );
+                                                    },
+                                                    style:
+                                                        _sheetActionButtonStyle(
+                                                      filled: true,
+                                                    ),
+                                                    child: Text(
+                                                      l10n.speechDownload,
+                                                    ),
+                                                  )
+                                                : selected
+                                                    ? FilledButton.tonal(
+                                                        onPressed: null,
+                                                        style: FilledButton
+                                                            .styleFrom(
+                                                          minimumSize:
+                                                              const Size(
+                                                            84,
+                                                            42,
+                                                          ),
+                                                          maximumSize:
+                                                              const Size(
+                                                            140,
+                                                            42,
+                                                          ),
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                            horizontal:
+                                                                AppSpacing
+                                                                    .tileX,
+                                                          ),
+                                                          tapTargetSize:
+                                                              MaterialTapTargetSize
+                                                                  .shrinkWrap,
+                                                          visualDensity:
+                                                              VisualDensity
+                                                                  .compact,
+                                                        ),
+                                                        child: Text(
+                                                          l10n.speechSelected,
+                                                        ),
+                                                      )
+                                                    : OutlinedButton(
+                                                        onPressed: () async {
+                                                          setSheetState(() {
+                                                            _updatingProfileKeys
+                                                                .add(updateKey);
+                                                          });
+                                                          final updated =
+                                                              await _updateSpeechProfile(
+                                                            profile,
+                                                            model.id,
+                                                          );
+                                                          if (!sheetContext
+                                                              .mounted) {
+                                                            return;
+                                                          }
+                                                          if (updated) {
+                                                            Navigator.of(
+                                                              sheetContext,
+                                                            ).pop();
+                                                          } else {
+                                                            setSheetState(
+                                                                () {});
+                                                          }
+                                                        },
+                                                        style:
+                                                            _sheetActionButtonStyle(
+                                                          filled: false,
+                                                        ),
+                                                        child: Text(
+                                                          l10n.speechSelect,
+                                                        ),
+                                                      ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
+    );
+  }
+
+  Widget _buildButtonLoadingChild(BuildContext context, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox.square(
+          dimension: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: Theme.of(context).colorScheme.onSurface.withValues(
+                  alpha: 0.72,
+                ),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.micro),
+        Text(label),
+      ],
     );
   }
 
@@ -1278,9 +1291,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     if (_ttsProvider == TtsProvider.bridgeLocal) {
       return l10n.bridgeLocalTtsHelp;
     }
-    if (_ttsProvider == TtsProvider.zhipu) {
-      return l10n.zhipuApiHelp;
-    }
     if (!_systemTtsSupportedOnPlatform && !_isWebPlatform) {
       return switch (_platform) {
         TargetPlatform.linux => l10n.systemTtsUnavailableOnLinux,
@@ -1294,14 +1304,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     if (_asrProvider == AsrProvider.bridgeLocal) {
       return l10n.bridgeLocalAsrHelp;
     }
-    if (_asrProvider == AsrProvider.zhipu) {
-      return l10n.zhipuApiHelp;
-    }
     if (_asrProvider == AsrProvider.whisper) {
       return l10n.whisperApiHelp;
-    }
-    if (_asrProvider == AsrProvider.tencentCloudStreaming) {
-      return l10n.tencentStreamingAsrHelp;
     }
     if (!_systemAsrSupportedOnPlatform && !_isWebPlatform) {
       return switch (_platform) {
@@ -1347,6 +1351,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         _speechStatus = status;
         _speechStatusError = null;
       });
+      _cachedSpeechStatus = status;
       _syncSpeechPolling(status);
     } catch (error) {
       if (!mounted) {
@@ -1402,11 +1407,20 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     }
   }
 
-  Future<void> _updateSpeechProfile(
+  String _speechProfileUpdateKey(SpeechProfile profile, String? modelId) {
+    return '${profile.name}:${modelId ?? 'clear'}';
+  }
+
+  bool _isUpdatingSpeechProfile(SpeechProfile profile) {
+    final prefix = '${profile.name}:';
+    return _updatingProfileKeys.any((key) => key.startsWith(prefix));
+  }
+
+  Future<bool> _updateSpeechProfile(
     SpeechProfile profile,
     String? modelId,
   ) async {
-    final updateKey = '${profile.name}:${modelId ?? 'clear'}';
+    final updateKey = _speechProfileUpdateKey(profile, modelId);
     setState(() {
       _updatingProfileKeys.add(updateKey);
       _speechStatusError = null;
@@ -1414,9 +1428,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     try {
       await _client.updateSpeechProfileModel(profile, modelId: modelId);
       await _refreshSpeechStatus(silent: true);
+      return true;
     } catch (error) {
       if (!mounted) {
-        return;
+        return false;
       }
       final l10n = context.l10n;
       setState(() {
@@ -1425,6 +1440,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
           error.toString(),
         );
       });
+      return false;
     } finally {
       if (mounted) {
         setState(() {
@@ -1783,12 +1799,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         asrProvider: _asrProvider,
         callModeAllowInterruptions: _callModeAllowInterruptions,
         callModeSpeechPauseMillis: _callModeSpeechPauseMillis,
-        zhipuApiKey: _zhipuApiKeyController.text.trim(),
         whisperApiKey: _whisperApiKeyController.text.trim(),
         whisperBaseUrl: _whisperBaseUrlController.text.trim(),
-        tencentCloudAppId: _tencentCloudAppIdController.text.trim(),
-        tencentCloudSecretId: _tencentCloudSecretIdController.text.trim(),
-        tencentCloudSecretKey: _tencentCloudSecretKeyController.text.trim(),
       );
       await appSettingsController.save(next);
       if (!mounted) {

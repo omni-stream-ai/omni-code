@@ -87,9 +87,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whisperCompatible => 'Whisper / OpenAI Compatible';
 
   @override
-  String get tencentCloudStreamingAsr => 'Tencent Cloud Streaming';
-
-  @override
   String get apiKey => 'API Key';
 
   @override
@@ -453,6 +450,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get callModeListening => 'Go ahead, I\'m listening';
 
   @override
+  String get callModePreparingListening => 'Preparing microphone';
+
+  @override
   String get callModeSpeaking => 'Replying out loud';
 
   @override
@@ -461,6 +461,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get callModeIdleSubtitle =>
       'Speak naturally. I will listen, send, and read the reply back.';
+
+  @override
+  String get callModePreparingListeningLabel => 'Preparing to listen';
+
+  @override
+  String get callModePreparingListeningDetail =>
+      'Microphone and speech recognition are starting. Speech may not be captured yet.';
 
   @override
   String get callModeListeningReadyLabel => 'Listening now';
@@ -504,7 +511,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get callModeRequiresStreamingAsr =>
-      'Call mode currently requires System ASR, Omni Bridge Local, or Tencent Cloud Streaming.';
+      'Call mode currently requires System ASR or Omni Bridge Local.';
 
   @override
   String get callModeSection => 'Call mode';
@@ -822,18 +829,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get draftFailed => 'Send failed, tap to retry';
 
   @override
-  String get zhipuApiKeyRequired =>
-      'Fill in the Zhipu API key in settings first';
-
-  @override
-  String zhipuAsrRequestFailed(Object statusCode, Object body) {
-    return 'Zhipu ASR request failed ($statusCode): $body';
-  }
-
-  @override
-  String get zhipuAsrMissingText => 'Zhipu ASR response is missing text';
-
-  @override
   String get whisperApiKeyRequired =>
       'Fill in the Whisper/OpenAI API key in settings first';
 
@@ -844,27 +839,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get whisperAsrMissingText => 'Whisper ASR response is missing text';
-
-  @override
-  String get tencentCloudAppIdRequired =>
-      'Fill in the Tencent Cloud App ID in settings first';
-
-  @override
-  String get tencentCloudAppIdInvalid =>
-      'Tencent Cloud App ID must be a number';
-
-  @override
-  String get tencentCloudSecretIdRequired =>
-      'Fill in the Tencent Cloud Secret ID in settings first';
-
-  @override
-  String get tencentCloudSecretKeyRequired =>
-      'Fill in the Tencent Cloud Secret Key in settings first';
-
-  @override
-  String zhipuTtsRequestFailed(Object statusCode, Object body) {
-    return 'Zhipu TTS request failed ($statusCode): $body';
-  }
 
   @override
   String get updateManifestUrlRequired => 'Enter the manifest URL first';
@@ -1100,13 +1074,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get speechVoiceGenderMale => 'Male';
 
   @override
-  String get zhipuApiSection => 'Zhipu API';
-
-  @override
   String get whisperApiSection => 'Whisper API';
-
-  @override
-  String get tencentCloudStreamingAsrSection => 'Tencent Cloud Streaming ASR';
 
   @override
   String get bridgeLocalTtsHelp =>
@@ -1117,15 +1085,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'Uses the bridge-local /v1/audio/transcriptions endpoint for recorded voice input.';
 
   @override
-  String get zhipuApiHelp => 'Requires a Zhipu API key.';
-
-  @override
   String get whisperApiHelp =>
       'Requires a Whisper-compatible base URL and API key.';
-
-  @override
-  String get tencentStreamingAsrHelp =>
-      'Uses Tencent Cloud websocket streaming for realtime transcription.';
 
   @override
   String get speechNotSelected => 'Not selected';

@@ -624,6 +624,25 @@ void main() {
       expect(body['voice'], '2');
       expect(body['response_format'], 'wav');
     });
+
+    test('synthesizeSpeech sanitizes punctuation and emoji for local TTS',
+        () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response.bytes(
+            [1, 2, 3],
+            200,
+            headers: {'content-type': 'audio/wav'},
+          );
+        }),
+      );
+
+      await client.synthesizeSpeech('他说：“为什么❓”');
+
+      expect(body['input'], '他说："为什么"');
+    });
   });
 }
 

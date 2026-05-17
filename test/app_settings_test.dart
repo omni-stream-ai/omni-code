@@ -27,22 +27,6 @@ void main() {
     expect(settings.notificationMaxChars, 160);
   });
 
-  test('tencent cloud streaming settings round-trip through json', () {
-    final settings = AppSettings.defaults().copyWith(
-      asrProvider: AsrProvider.tencentCloudStreaming,
-      tencentCloudAppId: '1234567890',
-      tencentCloudSecretId: 'secret-id',
-      tencentCloudSecretKey: 'secret-key',
-    );
-
-    final restored = AppSettings.fromJson(settings.toJson());
-
-    expect(restored.asrProvider, AsrProvider.tencentCloudStreaming);
-    expect(restored.tencentCloudAppId, '1234567890');
-    expect(restored.tencentCloudSecretId, 'secret-id');
-    expect(restored.tencentCloudSecretKey, 'secret-key');
-  });
-
   test('bridge local speech providers round-trip through json', () {
     final settings = AppSettings.defaults().copyWith(
       asrProvider: AsrProvider.bridgeLocal,
@@ -71,6 +55,16 @@ void main() {
 
     expect(settings.asrProvider, AsrProvider.bridgeLocal);
     expect(settings.ttsProvider, TtsProvider.bridgeLocal);
+  });
+
+  test('removed speech provider values migrate to system', () {
+    final settings = AppSettings.fromJson(<String, dynamic>{
+      'asr_provider': 'tencentCloudStreaming',
+      'tts_provider': 'zhipu',
+    });
+
+    expect(settings.asrProvider, AsrProvider.system);
+    expect(settings.ttsProvider, TtsProvider.system);
   });
 
   test('updateTargetVersion defaults to empty string', () {

@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,7 +10,6 @@ import 'package:omni_code/src/bridge_client.dart';
 import 'package:omni_code/src/screens/speech_settings_screen.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 import 'package:omni_code/src/theme/app_theme.dart';
-import 'dart:convert';
 
 void main() {
   setUp(() {
@@ -63,7 +65,7 @@ void main() {
     },
   );
 
-  testWidgets('shows Tencent Cloud streaming ASR as a provider option',
+  testWidgets('speech provider pickers omit removed cloud providers',
       (tester) async {
     await tester.pumpWidget(
       _TestApp(
@@ -77,22 +79,12 @@ void main() {
     await tester.tap(find.text('System').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('Tencent Cloud Streaming'), findsOneWidget);
-  });
-
-  testWidgets('shows Tencent Cloud credential fields', (tester) async {
-    await tester.pumpWidget(
-      _TestApp(
-        home: SpeechSettingsScreen(
-          client: _bridgeClientForSpeechSettings(),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    expect(find.widgetWithText(TextField, 'App ID'), findsOneWidget);
-    expect(find.widgetWithText(TextField, 'Secret ID'), findsOneWidget);
-    expect(find.widgetWithText(TextField, 'Secret Key'), findsOneWidget);
+    expect(find.text('Whisper / OpenAI Compatible'), findsOneWidget);
+    expect(find.text('Tencent Cloud Streaming'), findsNothing);
+    expect(find.text('Zhipu'), findsNothing);
+    expect(find.widgetWithText(TextField, 'App ID'), findsNothing);
+    expect(find.widgetWithText(TextField, 'Secret ID'), findsNothing);
+    expect(find.widgetWithText(TextField, 'Secret Key'), findsNothing);
   });
 
   testWidgets('shows Omni Bridge Local model, voice, and call mode cards',
@@ -202,6 +194,40 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Download'), findsOneWidget);
   });
 
+  testWidgets('shows loading state while selecting a local bridge model',
+      (tester) async {
+    final updateCompleter = Completer<void>();
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        ttsProvider: TtsProvider.bridgeLocal,
+      ),
+    );
+    await tester.pumpWidget(
+      _TestApp(
+        home: SpeechSettingsScreen(
+          client: _bridgeClientForPendingProfileSelection(updateCompleter),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Change'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Change'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Select'));
+    await tester.pump();
+
+    expect(find.text('Alternate TTS'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNWidgets(2));
+
+    updateCompleter.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Alternate TTS'), findsNothing);
+  });
+
   testWidgets('download failure is shown inline on the model card',
       (tester) async {
     await tester.pumpWidget(
@@ -232,6 +258,103 @@ void main() {
 
     expect(find.textContaining('Bridge error (404)'), findsNothing);
   });
+}
+
+BridgeClient _bridgeClientForPendingProfileSelection(
+  Completer<void> updateCompleter,
+) {
+  return BridgeClient(
+    httpClient: _FakeHttpClient((request) async {
+      if (request.method == 'PUT' &&
+          request.url.path == '/speech/profiles/tts.default/model') {
+        await updateCompleter.future;
+        return http.Response(
+          jsonEncode({
+            'data': {'tts_default': 'alternate-tts'},
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      if (request.method == 'GET' && request.url.path == '/speech') {
+        return http.Response(
+          jsonEncode({
+            'data': {
+              'root_dir': '/tmp/omni-code-bridge/speech',
+              'profiles': {
+                'tts_default': 'vits-melo-tts-zh-en',
+              },
+              'models': [
+                {
+                  'id': 'vits-melo-tts-zh-en',
+                  'kind': 'tts',
+                  'display_name': 'VITS Melo TTS',
+                  'description': 'Local bilingual TTS model',
+                  'languages': ['zh', 'en'],
+                  'runtime': 'offline',
+                  'backend': 'onnx',
+                  'capabilities': {
+                    'streaming': false,
+                    'realtime_asr': false,
+                    'batch_asr': false,
+                    'speech_synthesis': true,
+                    'vad': false,
+                    'endpointing': false,
+                    'punctuation': false,
+                    'inverse_text_normalization': false,
+                    'multilingual': true,
+                  },
+                  'features': ['female-voice'],
+                  'supports_profiles': ['tts_default'],
+                  'recommended_profiles': ['tts_default'],
+                  'download_url': 'https://example.com/vits-melo-tts',
+                  'download_size_mb': 320,
+                  'default_voice': '0',
+                  'installed': true,
+                  'selected_by': ['tts_default'],
+                  'voices': ['0'],
+                },
+                {
+                  'id': 'alternate-tts',
+                  'kind': 'tts',
+                  'display_name': 'Alternate TTS',
+                  'description': 'Second local TTS model',
+                  'languages': ['zh', 'en'],
+                  'runtime': 'offline',
+                  'backend': 'onnx',
+                  'capabilities': {
+                    'streaming': false,
+                    'realtime_asr': false,
+                    'batch_asr': false,
+                    'speech_synthesis': true,
+                    'vad': false,
+                    'endpointing': false,
+                    'punctuation': false,
+                    'inverse_text_normalization': false,
+                    'multilingual': true,
+                  },
+                  'features': ['multi-speaker'],
+                  'supports_profiles': ['tts_default'],
+                  'recommended_profiles': ['tts_default'],
+                  'download_url': 'https://example.com/alternate-tts',
+                  'download_size_mb': 215,
+                  'default_voice': '0',
+                  'installed': true,
+                  'selected_by': [],
+                  'voices': ['0'],
+                },
+              ],
+              'downloads': [],
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      return http.Response('not found', 404);
+    }),
+  );
 }
 
 class _TestApp extends StatelessWidget {

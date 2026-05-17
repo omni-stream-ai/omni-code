@@ -103,8 +103,8 @@
     </g>
     <g transform="translate(363 1075)">
       <rect width="354" height="62" rx="14" fill="#FFF8E8" stroke="#F2B57E"/>
-      <text x="14" y="26" class="section" fill="#8C4A18">CLOUD PROVIDERS</text>
-      <text x="14" y="47" class="muted" fill="#8C4A18">Zhipu / Whisper / Tencent credentials fold below</text>
+      <text x="14" y="26" class="section" fill="#8C4A18">WHISPER API</text>
+      <text x="14" y="47" class="muted" fill="#8C4A18">Whisper-compatible credentials fold below</text>
     </g>
   </g>
 
