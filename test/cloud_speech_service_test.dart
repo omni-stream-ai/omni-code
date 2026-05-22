@@ -10,12 +10,12 @@ void main() {
     appSettingsController.debugReplaceSettings(AppSettings.defaults());
   });
 
-  test('bridge local synthesizeSpeech forwards configured TTS voice', () async {
+  test('bridge local synthesizeSpeech uses bridge model voice binding',
+      () async {
     late Map<String, dynamic> body;
     appSettingsController.debugReplaceSettings(
       AppSettings.defaults().copyWith(
         ttsProvider: TtsProvider.bridgeLocal,
-        bridgeLocalTtsVoice: '2',
       ),
     );
 
@@ -35,7 +35,7 @@ void main() {
     await service.synthesizeSpeech('Reply for call mode');
 
     expect(body['input'], 'Reply for call mode');
-    expect(body['voice'], '2');
+    expect(body.containsKey('voice'), isFalse);
     expect(body.containsKey('stream'), isFalse);
   });
 

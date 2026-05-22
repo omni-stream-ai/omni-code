@@ -598,6 +598,22 @@ class BridgeClient {
     return SpeechDownloadTask.fromJson(_decodeApiData(response.body));
   }
 
+  Future<void> deleteSpeechModel(String modelId) async {
+    final response = await _httpClient.delete(
+      Uri.parse('$baseUrl/speech/models/$modelId'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Delete speech model failed (${response.statusCode}): '
+        '${response.body}',
+      );
+    }
+  }
+
   Future<SpeechProfileBinding> getSpeechProfileModel(
       SpeechProfile profile) async {
     final response = await _httpClient.get(
@@ -630,6 +646,118 @@ class BridgeClient {
     }
     _assertJsonResponse(response);
     return SpeechProfileSelection.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<SpeechModelVoiceBinding> getSpeechModelVoice(String modelId) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/speech/models/$modelId/voice'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeechModelVoiceBinding.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<SpeechVoiceSelection> updateSpeechModelVoice(
+    String modelId, {
+    String? voice,
+  }) async {
+    final response = await _httpClient.put(
+      Uri.parse('$baseUrl/speech/models/$modelId/voice'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'voice': voice}),
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeechVoiceSelection.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<List<SpeakerRecord>> listSpeakers() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/speech/speakers'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return _decodeApiListData(response.body)
+        .whereType<Map<String, dynamic>>()
+        .map(SpeakerRecord.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<SpeakerEnrollmentResult> enrollSpeaker(
+    File audioFile, {
+    required String name,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/speech/speakers'),
+    );
+    request.headers.addAll(_defaultHeaders);
+    request.fields['name'] = name;
+    request.files
+        .add(await http.MultipartFile.fromPath('file', audioFile.path));
+    final response = await _httpClient.send(request);
+    final body = await response.stream.bytesToString();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+          'Speaker enrollment failed (${response.statusCode}): $body');
+    }
+    return SpeakerEnrollmentResult.fromJson(_decodeApiData(body));
+  }
+
+  Future<void> deleteSpeaker(String speakerId) async {
+    final response = await _httpClient.delete(
+      Uri.parse('$baseUrl/speech/speakers/$speakerId'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Delete speaker failed (${response.statusCode}): ${response.body}',
+      );
+    }
+  }
+
+  Future<SpeakerFilterSettings> getSpeakerFilter() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/speech/speaker-filter'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeakerFilterSettings.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<SpeakerFilterSettings> updateSpeakerFilter(
+    SpeakerFilterSettings settings,
+  ) async {
+    final response = await _httpClient.put(
+      Uri.parse('$baseUrl/speech/speaker-filter'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(settings.toJson()),
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeakerFilterSettings.fromJson(_decodeApiData(response.body));
   }
 
   Future<Map<String, dynamic>> getSpeechRealtimeDescriptor() async {
@@ -696,7 +824,7 @@ class BridgeClient {
   Future<SynthesizedSpeech> synthesizeSpeech(
     String text, {
     String? model,
-    String voice = 'female',
+    String? voice,
     double speed = 1.0,
     String responseFormat = 'wav',
     bool stream = false,
@@ -714,7 +842,7 @@ class BridgeClient {
       body: jsonEncode({
         if (model?.trim().isNotEmpty == true) 'model': model!.trim(),
         'input': input,
-        'voice': voice,
+        if (voice?.trim().isNotEmpty == true) 'voice': voice!.trim(),
         'speed': speed,
         'response_format': responseFormat,
         if (stream) 'stream': true,
@@ -1039,6 +1167,7 @@ class BridgeClient {
       SpeechProfile.asrRealtime => 'asr.realtime',
       SpeechProfile.ttsDefault => 'tts.default',
       SpeechProfile.vadDefault => 'vad.default',
+      SpeechProfile.wakeWordDefault => 'wake_word.default',
     };
   }
 

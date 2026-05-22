@@ -235,6 +235,28 @@
   "callModePreparingListeningDetail": "麦克风和语音识别正在启动，这时说话可能还不会被捕获。",
   "callModeListeningReadyLabel": "正在监听",
   "callModeListeningReadyDetail": "可以直接开始说，识别内容会实时显示在这里。",
+  "callModeWaitingWakeWordLabel": "等待唤醒词",
+  "callModeWaitingWakeWordDetail": "请把设置里的唤醒词放在这句话的开头或结尾，中间命中会被忽略。",
+  "callModeWakeWordDetectedLabel": "已检测到唤醒词",
+  "callModeWakeWordDetectedDetail": "在呢。下一句话会被识别并发送。",
+  "callModeWakeWordAck": "在呢",
+  "callModeCommandAccepted": "让我思考一下",
+  "callModeRejectedSpeakerTranscript": "{transcript}（非指定说话人）",
+  "@callModeRejectedSpeakerTranscript": {
+    "placeholders": {
+      "transcript": {
+        "type": "String"
+      }
+    }
+  },
+  "callModeRejectedWakeWordTranscript": "{transcript}（未匹配唤醒词）",
+  "@callModeRejectedWakeWordTranscript": {
+    "placeholders": {
+      "transcript": {
+        "type": "String"
+      }
+    }
+  },
   "callModeSpeechDetectedLabel": "检测到你在说话",
   "callModeSpeechDetectedDetail": "继续自然说下去，系统会持续补全这句内容。",
   "callModeWaitingForPauseLabel": "等待你这句话结束",
@@ -258,6 +280,23 @@
     }
   },
   "callModeSpeechPauseBridgeOnlyHint": "这个停顿时长目前会精确作用在 Omni Bridge Local 的实时通话模式上。其他 ASR 提供方可能仍使用各自内置的停顿策略。",
+  "callModeWakeWordLabel": "需要唤醒词",
+  "callModeWakeWordHelp": "开启后，Omni Bridge Local 会先用本地关键词检测器识别唤醒词，再处理实时语音。不支持的短语会返回配置错误。",
+  "callModeWakeWordsLabel": "唤醒词",
+  "callModeWakeWordsHelp": "多个短语用逗号分隔。支持英文字母短语，或带声调数字的拼音，例如 xiao3 ou1；不支持直接输入汉字。",
+  "callModeWakeWordsEmptyError": "请至少输入一个唤醒词。",
+  "callModeWakeWordsUnsupportedError": "本地唤醒词模型不支持“{wakeWord}”。请使用英文字母短语或带声调数字的拼音，例如“{example}”。",
+  "@callModeWakeWordsUnsupportedError": {
+    "placeholders": {
+      "wakeWord": {
+        "type": "String"
+      },
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "callModeWakeWordModelUnsupported": "当前语音模型不支持唤醒词，已自动关闭唤醒词功能。",
   "send": "发送",
   "imageAttachment": "图片附件",
   "previewImage": "预览",
@@ -479,6 +518,8 @@
   "localBridgeSpeechSection": "本地 Bridge 语音",
   "localBridgeModelsSection": "本地 Bridge 模型",
   "localBridgeSpeechIntro": "通过本地 Bridge 在自己的机器上运行离线 ASR、TTS、VAD，并下载所需模型。",
+  "localBridgeModelsUnavailable": "本地 Bridge 模型状态尚未加载。",
+  "bridgeDetails": "Bridge 详情",
   "localBridgeModelRoot": "模型目录",
   "localBridgeDownloadTasksSection": "下载任务",
   "localBridgeNoCompatibleModels": "当前这个类型还没有可用的兼容模型。",
@@ -535,6 +576,9 @@
   "speechNotInstalled": "未安装",
   "speechDownload": "下载",
   "speechDownloading": "下载中...",
+  "speechDelete": "删除",
+  "speechInstalledModels": "已安装模型",
+  "speechNoInstalledModels": "还没有已安装模型。",
   "speechSelect": "选择",
   "speechChange": "更换",
   "speechSelected": "已选中",
@@ -555,6 +599,9 @@
   "speechProfileVadTitle": "VAD",
   "speechProfileVadHelp": "用于实时模式下检测说话开始和结束。适合希望抢话更灵敏、断句更干净的场景。",
   "speechProfileVadAction": "设为 VAD",
+  "speechProfileWakeWordTitle": "唤醒词",
+  "speechProfileWakeWordHelp": "用于 Omni Bridge Local 在接受实时通话语音前先检测唤醒词。",
+  "speechProfileWakeWordAction": "设为唤醒词",
   "speechDownloadStatusQueued": "排队中",
   "speechDownloadStatusDownloading": "下载中",
   "speechDownloadStatusExtracting": "解压中",

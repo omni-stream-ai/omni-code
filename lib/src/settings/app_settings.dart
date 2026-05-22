@@ -11,6 +11,7 @@ const _defaultNotificationMaxChars = 160;
 const int defaultCallModeSpeechPauseMillis = 1200;
 const int minCallModeSpeechPauseMillis = 600;
 const int maxCallModeSpeechPauseMillis = 2400;
+const String defaultCallModeWakeWords = 'hey omni';
 
 enum TtsProvider { system, bridgeLocal }
 
@@ -49,6 +50,8 @@ class AppSettings {
     required this.compressAssistantReplies,
     required this.callModeAllowInterruptions,
     required this.callModeSpeechPauseMillis,
+    required this.callModeWakeWordEnabled,
+    required this.callModeWakeWords,
   });
 
   final String bridgeUrl;
@@ -75,6 +78,8 @@ class AppSettings {
   final bool compressAssistantReplies;
   final bool callModeAllowInterruptions;
   final int callModeSpeechPauseMillis;
+  final bool callModeWakeWordEnabled;
+  final String callModeWakeWords;
 
   factory AppSettings.defaults() {
     const configuredUrl = String.fromEnvironment('ECHO_MATE_BRIDGE_URL');
@@ -110,6 +115,8 @@ class AppSettings {
       compressAssistantReplies: false,
       callModeAllowInterruptions: true,
       callModeSpeechPauseMillis: defaultCallModeSpeechPauseMillis,
+      callModeWakeWordEnabled: false,
+      callModeWakeWords: defaultCallModeWakeWords,
     );
   }
 
@@ -138,6 +145,8 @@ class AppSettings {
     bool? compressAssistantReplies,
     bool? callModeAllowInterruptions,
     int? callModeSpeechPauseMillis,
+    bool? callModeWakeWordEnabled,
+    String? callModeWakeWords,
   }) {
     return AppSettings(
       bridgeUrl: bridgeUrl ?? this.bridgeUrl,
@@ -172,6 +181,10 @@ class AppSettings {
         callModeSpeechPauseMillis ?? this.callModeSpeechPauseMillis,
         this.callModeSpeechPauseMillis,
       ),
+      callModeWakeWordEnabled:
+          callModeWakeWordEnabled ?? this.callModeWakeWordEnabled,
+      callModeWakeWords: _normalizeCallModeWakeWords(
+          callModeWakeWords ?? this.callModeWakeWords),
     );
   }
 
@@ -201,6 +214,8 @@ class AppSettings {
       'compress_assistant_replies': compressAssistantReplies,
       'call_mode_allow_interruptions': callModeAllowInterruptions,
       'call_mode_speech_pause_millis': callModeSpeechPauseMillis,
+      'call_mode_wake_word_enabled': callModeWakeWordEnabled,
+      'call_mode_wake_words': callModeWakeWords,
     };
   }
 
@@ -283,6 +298,18 @@ class AppSettings {
         ),
         defaults.callModeSpeechPauseMillis,
       ),
+      callModeWakeWordEnabled: _readBool(
+        json,
+        'call_mode_wake_word_enabled',
+        defaults.callModeWakeWordEnabled,
+      ),
+      callModeWakeWords: _normalizeCallModeWakeWords(
+        _readString(
+          json,
+          'call_mode_wake_words',
+          defaults.callModeWakeWords,
+        ),
+      ),
     );
   }
 
@@ -358,6 +385,18 @@ class AppSettings {
       return fallback;
     }
     return value;
+  }
+
+  static String _normalizeCallModeWakeWords(String value) {
+    final words = value
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+    if (words.isEmpty) {
+      return defaultCallModeWakeWords;
+    }
+    return words.join(', ');
   }
 
   static String _normalizeLanguage(String value) {

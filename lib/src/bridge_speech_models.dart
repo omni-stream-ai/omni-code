@@ -1,10 +1,16 @@
-enum SpeechModelKind { asr, tts, vad }
+enum SpeechModelKind { asr, tts, vad, speaker, wakeWord }
 
 enum SpeechRuntime { offline, streaming }
 
 enum SpeechComputeBackend { cpu, onnx }
 
-enum SpeechProfile { asrBatch, asrRealtime, ttsDefault, vadDefault }
+enum SpeechProfile {
+  asrBatch,
+  asrRealtime,
+  ttsDefault,
+  vadDefault,
+  wakeWordDefault,
+}
 
 enum SpeechDownloadStatus {
   queued,
@@ -22,6 +28,8 @@ class SpeechModelCapabilities {
     required this.batchAsr,
     required this.speechSynthesis,
     required this.vad,
+    required this.speakerEmbedding,
+    required this.wakeWord,
     required this.endpointing,
     required this.punctuation,
     required this.inverseTextNormalization,
@@ -33,6 +41,8 @@ class SpeechModelCapabilities {
   final bool batchAsr;
   final bool speechSynthesis;
   final bool vad;
+  final bool speakerEmbedding;
+  final bool wakeWord;
   final bool endpointing;
   final bool punctuation;
   final bool inverseTextNormalization;
@@ -40,16 +50,17 @@ class SpeechModelCapabilities {
 
   factory SpeechModelCapabilities.fromJson(Map<String, dynamic> json) {
     return SpeechModelCapabilities(
-      streaming: json['streaming'] as bool? ?? false,
-      realtimeAsr: json['realtime_asr'] as bool? ?? false,
-      batchAsr: json['batch_asr'] as bool? ?? false,
-      speechSynthesis: json['speech_synthesis'] as bool? ?? false,
-      vad: json['vad'] as bool? ?? false,
-      endpointing: json['endpointing'] as bool? ?? false,
-      punctuation: json['punctuation'] as bool? ?? false,
-      inverseTextNormalization:
-          json['inverse_text_normalization'] as bool? ?? false,
-      multilingual: json['multilingual'] as bool? ?? false,
+      streaming: _readBool(json['streaming']),
+      realtimeAsr: _readBool(json['realtime_asr']),
+      batchAsr: _readBool(json['batch_asr']),
+      speechSynthesis: _readBool(json['speech_synthesis']),
+      vad: _readBool(json['vad']),
+      speakerEmbedding: _readBool(json['speaker_embedding']),
+      wakeWord: _readBool(json['wake_word']),
+      endpointing: _readBool(json['endpointing']),
+      punctuation: _readBool(json['punctuation']),
+      inverseTextNormalization: _readBool(json['inverse_text_normalization']),
+      multilingual: _readBool(json['multilingual']),
     );
   }
 }
@@ -60,12 +71,14 @@ class SpeechProfileSelection {
     this.asrRealtime,
     this.ttsDefault,
     this.vadDefault,
+    this.wakeWordDefault,
   });
 
   final String? asrBatch;
   final String? asrRealtime;
   final String? ttsDefault;
   final String? vadDefault;
+  final String? wakeWordDefault;
 
   String? modelForProfile(SpeechProfile profile) {
     return switch (profile) {
@@ -73,6 +86,7 @@ class SpeechProfileSelection {
       SpeechProfile.asrRealtime => asrRealtime,
       SpeechProfile.ttsDefault => ttsDefault,
       SpeechProfile.vadDefault => vadDefault,
+      SpeechProfile.wakeWordDefault => wakeWordDefault,
     };
   }
 
@@ -82,6 +96,38 @@ class SpeechProfileSelection {
       asrRealtime: _readNullableString(json['asr_realtime']),
       ttsDefault: _readNullableString(json['tts_default']),
       vadDefault: _readNullableString(json['vad_default']),
+      wakeWordDefault: _readNullableString(json['wake_word_default']),
+    );
+  }
+}
+
+class SpeechVoiceSelection {
+  const SpeechVoiceSelection({
+    required this.ttsByModel,
+  });
+
+  final Map<String, String> ttsByModel;
+
+  String? voiceForModel(String? modelId) {
+    final trimmed = modelId?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+    return _readNullableString(ttsByModel[trimmed]);
+  }
+
+  factory SpeechVoiceSelection.fromJson(Map<String, dynamic> json) {
+    final raw = json['tts_by_model'];
+    if (raw is! Map<String, dynamic>) {
+      return const SpeechVoiceSelection(ttsByModel: <String, String>{});
+    }
+    return SpeechVoiceSelection(
+      ttsByModel: raw.map(
+        (key, value) => MapEntry(
+          key.trim(),
+          value is String ? value.trim() : '',
+        ),
+      )..removeWhere((key, value) => key.isEmpty || value.isEmpty),
     );
   }
 }
@@ -162,7 +208,7 @@ class SpeechModelSummary {
       defaultVoice: _readNullableString(json['default_voice']),
       voices: _readStringList(json['voices']),
       voiceDetails: _readVoiceSummaries(json['voice_details']),
-      installed: json['installed'] as bool? ?? false,
+      installed: _readBool(json['installed']),
       installPath: _readNullableString(json['install_path']),
       selectedBy: _readSpeechProfiles(json['selected_by']),
     );
@@ -250,12 +296,14 @@ class SpeechStatus {
   const SpeechStatus({
     required this.rootDir,
     required this.profiles,
+    required this.voices,
     required this.models,
     required this.downloads,
   });
 
   final String rootDir;
   final SpeechProfileSelection profiles;
+  final SpeechVoiceSelection voices;
   final List<SpeechModelSummary> models;
   final List<SpeechDownloadTask> downloads;
 
@@ -268,6 +316,9 @@ class SpeechStatus {
       profiles: SpeechProfileSelection.fromJson(
         (json['profiles'] as Map<String, dynamic>?) ??
             const <String, dynamic>{},
+      ),
+      voices: SpeechVoiceSelection.fromJson(
+        (json['voices'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
       ),
       models: _readModelList(json['models']),
       downloads: _readDownloadList(json['downloads']),
@@ -292,10 +343,107 @@ class SpeechProfileBinding {
   }
 }
 
+class SpeechModelVoiceBinding {
+  const SpeechModelVoiceBinding({
+    required this.modelId,
+    required this.voice,
+  });
+
+  final String modelId;
+  final String? voice;
+
+  factory SpeechModelVoiceBinding.fromJson(Map<String, dynamic> json) {
+    return SpeechModelVoiceBinding(
+      modelId: json['model_id'] as String? ?? '',
+      voice: _readNullableString(json['voice']),
+    );
+  }
+}
+
+class SpeakerFilterSettings {
+  const SpeakerFilterSettings({
+    required this.enabled,
+    this.speakerId,
+    this.threshold,
+  });
+
+  final bool enabled;
+  final String? speakerId;
+  final double? threshold;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'enabled': enabled,
+      'speaker_id': speakerId,
+      'threshold': threshold,
+    };
+  }
+
+  factory SpeakerFilterSettings.fromJson(Map<String, dynamic> json) {
+    return SpeakerFilterSettings(
+      enabled: _readBool(json['enabled']),
+      speakerId: _readNullableString(json['speaker_id']),
+      threshold: _readNullableDouble(json['threshold']),
+    );
+  }
+}
+
+class SpeakerRecord {
+  const SpeakerRecord({
+    required this.id,
+    required this.name,
+    required this.embeddingModelId,
+    required this.embeddingCount,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final String name;
+  final String embeddingModelId;
+  final int embeddingCount;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  factory SpeakerRecord.fromJson(Map<String, dynamic> json) {
+    return SpeakerRecord(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      embeddingModelId: json['embedding_model_id'] as String? ?? '',
+      embeddingCount: _readNullableInt(json['embedding_count']) ?? 0,
+      createdAt: _readDateTime(json['created_at']),
+      updatedAt: _readDateTime(json['updated_at']),
+    );
+  }
+}
+
+class SpeakerEnrollmentResult {
+  const SpeakerEnrollmentResult({
+    required this.speaker,
+    required this.sampleDurationSecs,
+  });
+
+  final SpeakerRecord speaker;
+  final double sampleDurationSecs;
+
+  factory SpeakerEnrollmentResult.fromJson(Map<String, dynamic> json) {
+    return SpeakerEnrollmentResult(
+      speaker: SpeakerRecord.fromJson(
+        (json['speaker'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
+      ),
+      sampleDurationSecs:
+          _readNullableDouble(json['sample_duration_secs']) ?? 0,
+    );
+  }
+}
+
 SpeechModelKind _parseSpeechModelKind(String? raw) {
   return switch (raw) {
     'tts' => SpeechModelKind.tts,
     'vad' => SpeechModelKind.vad,
+    'speaker' => SpeechModelKind.speaker,
+    'wake_word' => SpeechModelKind.wakeWord,
+    'wakeWord' => SpeechModelKind.wakeWord,
     _ => SpeechModelKind.asr,
   };
 }
@@ -313,6 +461,7 @@ SpeechProfile _parseSpeechProfile(String? raw) {
     'asr_realtime' => SpeechProfile.asrRealtime,
     'tts_default' => SpeechProfile.ttsDefault,
     'vad_default' => SpeechProfile.vadDefault,
+    'wake_word_default' => SpeechProfile.wakeWordDefault,
     _ => SpeechProfile.asrBatch,
   };
 }
@@ -348,7 +497,7 @@ List<SpeechVoiceSummary> _readVoiceSummaries(Object? raw) {
 List<SpeechProfile> _readSpeechProfiles(Object? raw) {
   final values = raw as List<dynamic>? ?? const <dynamic>[];
   return values
-      .map((item) => _parseSpeechProfile(item as String?))
+      .map((item) => _parseSpeechProfile(item?.toString()))
       .toList(growable: false);
 }
 
@@ -384,6 +533,27 @@ int? _readNullableInt(Object? raw) {
     return raw.toInt();
   }
   return int.tryParse(raw?.toString() ?? '');
+}
+
+double? _readNullableDouble(Object? raw) {
+  if (raw is double) {
+    return raw;
+  }
+  if (raw is num) {
+    return raw.toDouble();
+  }
+  return double.tryParse(raw?.toString() ?? '');
+}
+
+bool _readBool(Object? raw) {
+  if (raw is bool) {
+    return raw;
+  }
+  if (raw is num) {
+    return raw != 0;
+  }
+  final value = raw?.toString().trim().toLowerCase();
+  return value == 'true' || value == '1' || value == 'yes';
 }
 
 DateTime _readDateTime(Object? raw) {

@@ -11,10 +11,32 @@ class BridgeRealtimeAsrUtterance {
   const BridgeRealtimeAsrUtterance({
     required this.text,
     required this.isFinal,
+    this.speakerFilterActive = false,
+    this.speakerVerified = false,
+    this.speakerMatched,
+    this.wakeWordActive = false,
+    this.wakeWordVerified = false,
+    this.wakeWordMatched,
   });
 
   final String text;
   final bool isFinal;
+  final bool speakerFilterActive;
+  final bool speakerVerified;
+  final bool? speakerMatched;
+  final bool wakeWordActive;
+  final bool wakeWordVerified;
+  final bool? wakeWordMatched;
+
+  bool get speakerAccepted => !speakerFilterActive || speakerMatched == true;
+  bool get wakeWordAccepted => !wakeWordActive || wakeWordMatched == true;
+  bool get accepted => speakerAccepted && wakeWordAccepted;
+  bool get pendingVerification =>
+      (speakerFilterActive && !speakerVerified) ||
+      (wakeWordActive && !wakeWordVerified);
+  bool get rejected =>
+      (speakerFilterActive && speakerVerified && speakerMatched == false) ||
+      (wakeWordActive && wakeWordVerified && wakeWordMatched == false);
 }
 
 class BridgeRealtimeAsrConfig {
@@ -24,6 +46,10 @@ class BridgeRealtimeAsrConfig {
     this.sampleRateHz = 16000,
     this.channels = 1,
     this.enableVad = true,
+    this.enableWakeWord = false,
+    this.wakeWordDetector,
+    this.wakeWords = const <String>[],
+    this.stripWakeWord = true,
     this.endpointTrailingSilenceMs,
     this.vadMinSilenceMs,
   });
@@ -33,6 +59,10 @@ class BridgeRealtimeAsrConfig {
   final int sampleRateHz;
   final int channels;
   final bool enableVad;
+  final bool enableWakeWord;
+  final String? wakeWordDetector;
+  final List<String> wakeWords;
+  final bool stripWakeWord;
   final int? endpointTrailingSilenceMs;
   final int? vadMinSilenceMs;
 
@@ -45,6 +75,10 @@ class BridgeRealtimeAsrConfig {
         'sample_rate_hz': sampleRateHz,
         'channels': channels,
         'enable_vad': enableVad,
+        'enable_wake_word': enableWakeWord,
+        if (wakeWordDetector != null) 'wake_word_detector': wakeWordDetector,
+        if (wakeWords.isNotEmpty) 'wake_words': wakeWords,
+        'strip_wake_word': stripWakeWord,
         if (endpointTrailingSilenceMs != null)
           'endpoint_trailing_silence_ms': endpointTrailingSilenceMs,
         if (vadMinSilenceMs != null) 'vad_min_silence_ms': vadMinSilenceMs,
@@ -67,6 +101,7 @@ class BridgeRealtimeAsrService {
   StreamSubscription<dynamic>? _socketSubscription;
   StreamSubscription<Uint8List>? _audioSubscription;
   Completer<void>? _startCompleter;
+  bool _awaitingConfiguredSession = false;
   bool _running = false;
   bool _connected = false;
 
@@ -76,6 +111,7 @@ class BridgeRealtimeAsrService {
     required Stream<Uint8List> audioStream,
     required void Function(BridgeRealtimeAsrUtterance utterance) onUtterance,
     void Function()? onSpeechStarted,
+    void Function(String keyword)? onWakeWordDetected,
     void Function(String error)? onError,
     BridgeRealtimeAsrConfig? config,
   }) async {
@@ -85,6 +121,7 @@ class BridgeRealtimeAsrService {
 
     _running = true;
     _connected = false;
+    _awaitingConfiguredSession = config != null;
     _startCompleter = Completer<void>();
 
     try {
@@ -124,6 +161,7 @@ class BridgeRealtimeAsrService {
             message,
             onUtterance: onUtterance,
             onSpeechStarted: onSpeechStarted,
+            onWakeWordDetected: onWakeWordDetected,
             onError: onError,
           );
         },
@@ -160,13 +198,16 @@ class BridgeRealtimeAsrService {
         cancelOnError: true,
       );
 
-      await _startCompleter!.future.timeout(const Duration(seconds: 6));
       if (config != null) {
-        _socket?.add(jsonEncode(config.toSessionUpdateJson()));
+        final update = jsonEncode(config.toSessionUpdateJson());
+        debugPrint('[bridge-realtime-asr] sending session.update $update');
+        _socket?.add(update);
       }
+      await _startCompleter!.future.timeout(const Duration(seconds: 6));
     } catch (_) {
       _running = false;
       _connected = false;
+      _awaitingConfiguredSession = false;
       rethrow;
     }
   }
@@ -183,6 +224,7 @@ class BridgeRealtimeAsrService {
   Future<void> cancel() async {
     _running = false;
     _connected = false;
+    _awaitingConfiguredSession = false;
     await _audioSubscription?.cancel();
     _audioSubscription = null;
     await _socketSubscription?.cancel();
@@ -195,6 +237,7 @@ class BridgeRealtimeAsrService {
     String message, {
     required void Function(BridgeRealtimeAsrUtterance utterance) onUtterance,
     void Function()? onSpeechStarted,
+    void Function(String keyword)? onWakeWordDetected,
     void Function(String error)? onError,
   }) {
     final decoded = jsonDecode(message);
@@ -208,7 +251,17 @@ class BridgeRealtimeAsrService {
           const <String, dynamic>{};
       final ready = session['ready'] as bool? ?? false;
       final lastError = session['last_error']?.toString();
+      debugPrint(
+        '[bridge-realtime-asr] received $type ready=$ready '
+        'enableWakeWord=${session['enable_wake_word']} '
+        'wakeWordDetector=${session['wake_word_detector']} '
+        'wakeWords=${session['wake_words']} lastError=$lastError',
+      );
       if (ready) {
+        if (_awaitingConfiguredSession && type != 'session.updated') {
+          return;
+        }
+        _awaitingConfiguredSession = false;
         _connected = true;
         if (!_startCompleterCompleted) {
           _startCompleter?.complete();
@@ -242,6 +295,12 @@ class BridgeRealtimeAsrService {
       return;
     }
 
+    if (type == 'input_audio_buffer.wake_word_detected') {
+      final keyword = decoded['keyword']?.toString().trim() ?? '';
+      onWakeWordDetected?.call(keyword);
+      return;
+    }
+
     if (type == 'response.audio_transcript.delta') {
       final text = decoded['text']?.toString().trim() ?? '';
       if (text.isEmpty) {
@@ -251,6 +310,12 @@ class BridgeRealtimeAsrService {
         BridgeRealtimeAsrUtterance(
           text: text,
           isFinal: false,
+          speakerFilterActive: _speakerFilterActive(decoded),
+          speakerVerified: _speakerFilterVerified(decoded),
+          speakerMatched: _speakerFilterMatched(decoded),
+          wakeWordActive: _wakeWordActive(decoded),
+          wakeWordVerified: _wakeWordVerified(decoded),
+          wakeWordMatched: _wakeWordMatched(decoded),
         ),
       );
       return;
@@ -265,9 +330,63 @@ class BridgeRealtimeAsrService {
         BridgeRealtimeAsrUtterance(
           text: text,
           isFinal: true,
+          speakerFilterActive: _speakerFilterActive(decoded),
+          speakerVerified: _speakerFilterVerified(decoded),
+          speakerMatched: _speakerFilterMatched(decoded),
+          wakeWordActive: _wakeWordActive(decoded),
+          wakeWordVerified: _wakeWordVerified(decoded),
+          wakeWordMatched: _wakeWordMatched(decoded),
         ),
       );
     }
+  }
+
+  bool _speakerFilterActive(Map<String, dynamic> event) {
+    final status = event['speaker_filter'];
+    if (status is! Map<String, dynamic>) {
+      return false;
+    }
+    return status['active'] as bool? ?? false;
+  }
+
+  bool _speakerFilterVerified(Map<String, dynamic> event) {
+    final status = event['speaker_filter'];
+    if (status is! Map<String, dynamic>) {
+      return false;
+    }
+    return status['verified'] as bool? ?? false;
+  }
+
+  bool? _speakerFilterMatched(Map<String, dynamic> event) {
+    final status = event['speaker_filter'];
+    if (status is! Map<String, dynamic>) {
+      return null;
+    }
+    return status['matched'] as bool?;
+  }
+
+  bool _wakeWordActive(Map<String, dynamic> event) {
+    final status = event['wake_word'];
+    if (status is! Map<String, dynamic>) {
+      return false;
+    }
+    return status['active'] as bool? ?? false;
+  }
+
+  bool _wakeWordVerified(Map<String, dynamic> event) {
+    final status = event['wake_word'];
+    if (status is! Map<String, dynamic>) {
+      return false;
+    }
+    return status['verified'] as bool? ?? false;
+  }
+
+  bool? _wakeWordMatched(Map<String, dynamic> event) {
+    final status = event['wake_word'];
+    if (status is! Map<String, dynamic>) {
+      return null;
+    }
+    return status['matched'] as bool?;
   }
 
   bool get _startCompleterCompleted {

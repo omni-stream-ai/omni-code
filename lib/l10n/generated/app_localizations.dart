@@ -920,6 +920,54 @@ abstract class AppLocalizations {
   /// **'Start speaking whenever you\'re ready. Live transcription will show up here.'**
   String get callModeListeningReadyDetail;
 
+  /// No description provided for @callModeWaitingWakeWordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for wake word'**
+  String get callModeWaitingWakeWordLabel;
+
+  /// No description provided for @callModeWaitingWakeWordDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Put the configured wake word at the start or end of the utterance. Middle matches are ignored.'**
+  String get callModeWaitingWakeWordDetail;
+
+  /// No description provided for @callModeWakeWordDetectedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Wake word detected'**
+  String get callModeWakeWordDetectedLabel;
+
+  /// No description provided for @callModeWakeWordDetectedDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'I am listening. The next utterance will be captured and sent.'**
+  String get callModeWakeWordDetectedDetail;
+
+  /// No description provided for @callModeWakeWordAck.
+  ///
+  /// In en, this message translates to:
+  /// **'I am listening'**
+  String get callModeWakeWordAck;
+
+  /// No description provided for @callModeCommandAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'Let me think'**
+  String get callModeCommandAccepted;
+
+  /// No description provided for @callModeRejectedSpeakerTranscript.
+  ///
+  /// In en, this message translates to:
+  /// **'{transcript} (not selected speaker)'**
+  String callModeRejectedSpeakerTranscript(String transcript);
+
+  /// No description provided for @callModeRejectedWakeWordTranscript.
+  ///
+  /// In en, this message translates to:
+  /// **'{transcript} (wake word not matched)'**
+  String callModeRejectedWakeWordTranscript(String transcript);
+
   /// No description provided for @callModeSpeechDetectedLabel.
   ///
   /// In en, this message translates to:
@@ -1027,6 +1075,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This pause setting currently applies precisely to Omni Bridge Local realtime call mode. Other ASR providers may keep their own built-in pause behavior.'**
   String get callModeSpeechPauseBridgeOnlyHint;
+
+  /// No description provided for @callModeWakeWordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Require wake word'**
+  String get callModeWakeWordLabel;
+
+  /// No description provided for @callModeWakeWordHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, Omni Bridge Local uses its local keyword detector before accepting realtime speech. Unsupported phrases are rejected with a setup error.'**
+  String get callModeWakeWordHelp;
+
+  /// No description provided for @callModeWakeWordsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Wake words'**
+  String get callModeWakeWordsLabel;
+
+  /// No description provided for @callModeWakeWordsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Separate multiple phrases with commas. Use English phrases or numbered pinyin such as xiao3 ou1; direct Chinese characters are not supported.'**
+  String get callModeWakeWordsHelp;
+
+  /// No description provided for @callModeWakeWordsEmptyError.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter at least one wake word.'**
+  String get callModeWakeWordsEmptyError;
+
+  /// No description provided for @callModeWakeWordsUnsupportedError.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{wakeWord}\" is not supported by the local wake-word model. Use an English phrase or numbered pinyin, such as \"{example}\".'**
+  String callModeWakeWordsUnsupportedError(String wakeWord, String example);
+
+  /// No description provided for @callModeWakeWordModelUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'The current speech model does not support wake words. Wake word detection has been automatically disabled.'**
+  String get callModeWakeWordModelUnsupported;
 
   /// No description provided for @send.
   ///
@@ -1778,6 +1868,18 @@ abstract class AppLocalizations {
   /// **'Use the local Bridge to run offline ASR, TTS, VAD, and model downloads on your own machine.'**
   String get localBridgeSpeechIntro;
 
+  /// No description provided for @localBridgeModelsUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Local Bridge model status has not loaded yet.'**
+  String get localBridgeModelsUnavailable;
+
+  /// No description provided for @bridgeDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Bridge details'**
+  String get bridgeDetails;
+
   /// No description provided for @localBridgeModelRoot.
   ///
   /// In en, this message translates to:
@@ -1994,6 +2096,24 @@ abstract class AppLocalizations {
   /// **'Downloading...'**
   String get speechDownloading;
 
+  /// No description provided for @speechDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get speechDelete;
+
+  /// No description provided for @speechInstalledModels.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed models'**
+  String get speechInstalledModels;
+
+  /// No description provided for @speechNoInstalledModels.
+  ///
+  /// In en, this message translates to:
+  /// **'No installed models yet.'**
+  String get speechNoInstalledModels;
+
   /// No description provided for @speechSelect.
   ///
   /// In en, this message translates to:
@@ -2113,6 +2233,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use for VAD'**
   String get speechProfileVadAction;
+
+  /// No description provided for @speechProfileWakeWordTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Wake word'**
+  String get speechProfileWakeWordTitle;
+
+  /// No description provided for @speechProfileWakeWordHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Used by Omni Bridge Local to detect the wake word before accepting realtime call-mode speech.'**
+  String get speechProfileWakeWordHelp;
+
+  /// No description provided for @speechProfileWakeWordAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Use for Wake word'**
+  String get speechProfileWakeWordAction;
 
   /// No description provided for @speechDownloadStatusQueued.
   ///

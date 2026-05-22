@@ -93,7 +93,6 @@ void main() {
       AppSettings.defaults().copyWith(
         ttsProvider: TtsProvider.bridgeLocal,
         asrProvider: AsrProvider.bridgeLocal,
-        bridgeLocalTtsVoice: '1',
       ),
     );
     await tester.pumpWidget(
@@ -111,7 +110,7 @@ void main() {
     expect(find.text('Realtime ASR'), findsWidgets);
     expect(find.text('TTS'), findsWidgets);
     expect(find.text('VAD'), findsWidgets);
-    expect(find.text('Bridge URL'), findsOneWidget);
+    expect(find.text('Bridge details'), findsOneWidget);
     expect(find.text('streaming-paraformer-zh-en · 220 MB'), findsOneWidget);
     expect(find.text('vits-melo-tts-zh-en · 320 MB'), findsWidgets);
     expect(find.text('sensevoice-small-int8 · 180 MB'), findsOneWidget);
@@ -137,13 +136,71 @@ void main() {
     expect(find.text('Female · ID 1'), findsOneWidget);
   });
 
+  testWidgets('saving TTS voice updates bridge per-model voice',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        ttsProvider: TtsProvider.bridgeLocal,
+        asrProvider: AsrProvider.bridgeLocal,
+      ),
+    );
+    await tester.pumpWidget(
+      _TestApp(
+        home: SpeechSettingsScreen(
+          client: _bridgeClientForSpeechSettings(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.ensureVisible(find.text('zf_xiaobei · Chinese'));
+    await tester.tap(find.text('zf_xiaobei · Chinese'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Female · ID 0'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(appSettingsController.settings.bridgeLocalTtsVoice, isEmpty);
+  });
+
+  testWidgets('deletes enrolled speaker from speech settings', (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        ttsProvider: TtsProvider.bridgeLocal,
+        asrProvider: AsrProvider.bridgeLocal,
+      ),
+    );
+    var deleted = false;
+    await tester.pumpWidget(
+      _TestApp(
+        home: SpeechSettingsScreen(
+          client: _bridgeClientForSpeakerDeletion(
+            onDeleted: () => deleted = true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.ensureVisible(find.text('Jun'));
+    expect(find.text('Jun'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('delete-speaker-speaker-1')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(deleted, isTrue);
+    expect(find.text('Jun'), findsNothing);
+  });
+
   testWidgets('localizes bridge speech grouping in Chinese', (tester) async {
     appSettingsController.debugReplaceSettings(
       AppSettings.defaults().copyWith(
         appLanguage: 'zh',
         ttsProvider: TtsProvider.bridgeLocal,
         asrProvider: AsrProvider.bridgeLocal,
-        bridgeLocalTtsVoice: '1',
       ),
     );
     await tester.pumpWidget(
@@ -162,9 +219,66 @@ void main() {
     expect(find.text('实时 ASR'), findsWidgets);
     expect(find.text('通话模式'), findsOneWidget);
     expect(find.text('允许说话打断回复'), findsOneWidget);
-    expect(find.text('模型目录'), findsOneWidget);
+    expect(find.text('Bridge 详情'), findsOneWidget);
     expect(find.text('TTS 音色'), findsOneWidget);
     expect(find.text('zf_xiaobei · 中文'), findsOneWidget);
+  });
+
+  testWidgets('rejects unsupported local wake words before saving',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(callModeWakeWordEnabled: true),
+    );
+    await tester.pumpWidget(
+      _TestApp(
+        home: SpeechSettingsScreen(
+          client: _bridgeClientForSpeechSettings(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.ensureVisible(find.widgetWithText(TextField, 'Wake words'));
+    await tester.enterText(find.widgetWithText(TextField, 'Wake words'), '小欧');
+    await tester.ensureVisible(find.text('Save'));
+    await tester.tap(find.text('Save'));
+    await tester.pump();
+
+    expect(
+      find.text(
+        '"小欧" is not supported by the local wake-word model. Use an English phrase or numbered pinyin, such as "hey omni / xiao3 ou1".',
+      ),
+      findsOneWidget,
+    );
+    expect(appSettingsController.settings.callModeWakeWords, 'hey omni');
+  });
+
+  testWidgets('shows unsupported local wake word error while typing',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(callModeWakeWordEnabled: true),
+    );
+    await tester.pumpWidget(
+      _TestApp(
+        home: SpeechSettingsScreen(
+          client: _bridgeClientForSpeechSettings(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.ensureVisible(find.widgetWithText(TextField, 'Wake words'));
+    await tester.enterText(find.widgetWithText(TextField, 'Wake words'), '小欧');
+    await tester.pump();
+
+    expect(
+      find.text(
+        '"小欧" is not supported by the local wake-word model. Use an English phrase or numbered pinyin, such as "hey omni / xiao3 ou1".',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('opens model picker sheet from local bridge model card',
@@ -194,6 +308,138 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Download'), findsOneWidget);
   });
 
+  testWidgets('keeps model picker open and shows download progress',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        ttsProvider: TtsProvider.bridgeLocal,
+        asrProvider: AsrProvider.bridgeLocal,
+      ),
+    );
+    await tester.pumpWidget(
+      _TestApp(
+        home: SpeechSettingsScreen(
+          client: _bridgeClientForModelDownloadProgress(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Change'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Change').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Download').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('Kokoro INT8 Multi-Lang v1.1'), findsOneWidget);
+    expect(find.text('Downloading...'), findsWidgets);
+    expect(find.text('Downloading · 50% complete'), findsWidgets);
+  });
+
+  testWidgets('download button switches to loading immediately',
+      (tester) async {
+    final downloadCompleter = Completer<void>();
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        ttsProvider: TtsProvider.bridgeLocal,
+        asrProvider: AsrProvider.bridgeLocal,
+      ),
+    );
+    await tester.pumpWidget(
+      _TestApp(
+        home: SpeechSettingsScreen(
+          client: _bridgeClientForPendingModelDownload(downloadCompleter),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Change'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Change').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Download').first);
+    await tester.pump();
+
+    expect(find.text('Downloading...'), findsWidgets);
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
+
+    downloadCompleter.complete();
+    await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('installed unselected local model can be deleted',
+      (tester) async {
+    var deleted = false;
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        ttsProvider: TtsProvider.bridgeLocal,
+      ),
+    );
+    await tester.pumpWidget(
+      _TestApp(
+        home: SpeechSettingsScreen(
+          client: _bridgeClientForInstalledModelDeletion(
+            onDeleted: () => deleted = true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.ensureVisible(find.text('Installed models'));
+    await tester.tap(find.text('Installed models'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+        find.byKey(const ValueKey('delete-installed-model-alternate-tts')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(deleted, isTrue);
+  });
+
+  testWidgets('installed unmanaged local model can be deleted from model panel',
+      (tester) async {
+    var deleted = false;
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        ttsProvider: TtsProvider.bridgeLocal,
+      ),
+    );
+    await tester.pumpWidget(
+      _TestApp(
+        home: SpeechSettingsScreen(
+          client: _bridgeClientForInstalledModelDeletion(
+            onDeleted: () => deleted = true,
+            unmanagedModel: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('Installed models'), findsOneWidget);
+    await tester.ensureVisible(find.text('Installed models'));
+    await tester.tap(find.text('Installed models'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Unused Speaker Model'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('delete-installed-model-unused-speaker-model')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(deleted, isTrue);
+  });
+
   testWidgets('shows loading state while selecting a local bridge model',
       (tester) async {
     final updateCompleter = Completer<void>();
@@ -216,16 +462,16 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Change'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Select'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Select'));
     await tester.pump();
 
-    expect(find.text('Alternate TTS'), findsOneWidget);
+    expect(find.text('Alternate TTS'), findsWidgets);
     expect(find.byType(CircularProgressIndicator), findsNWidgets(2));
 
     updateCompleter.complete();
     await tester.pumpAndSettle();
 
-    expect(find.text('Alternate TTS'), findsNothing);
+    expect(find.widgetWithText(OutlinedButton, 'Select'), findsNothing);
   });
 
   testWidgets('download failure is shown inline on the model card',
@@ -252,11 +498,39 @@ void main() {
     expect(find.text('DOWNLOAD TASKS'), findsNothing);
     expect(find.textContaining('Bridge error (404)'), findsOneWidget);
 
+    Navigator.of(tester.element(find.byType(SpeechSettingsScreen))).pop();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Bridge error (404)'), findsOneWidget);
+
     await tester.ensureVisible(find.byIcon(Icons.close));
     await tester.tap(find.byIcon(Icons.close));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.textContaining('Bridge error (404)'), findsNothing);
+  });
+
+  testWidgets('download task failure is shown inline on the model card',
+      (tester) async {
+    await tester.pumpWidget(
+      _TestApp(
+        home: SpeechSettingsScreen(
+          client: _bridgeClientForFailedDownloadTask(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Change'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Change').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Download').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.textContaining('download checksum mismatch'), findsWidgets);
+    expect(find.widgetWithText(FilledButton, 'Download'), findsWidgets);
   });
 }
 
@@ -284,6 +558,9 @@ BridgeClient _bridgeClientForPendingProfileSelection(
               'root_dir': '/tmp/omni-code-bridge/speech',
               'profiles': {
                 'tts_default': 'vits-melo-tts-zh-en',
+              },
+              'voices': {
+                'tts_by_model': {},
               },
               'models': [
                 {
@@ -357,6 +634,310 @@ BridgeClient _bridgeClientForPendingProfileSelection(
   );
 }
 
+BridgeClient _bridgeClientForModelDownloadProgress() {
+  var downloadStarted = false;
+  return BridgeClient(
+    httpClient: _FakeHttpClient((request) async {
+      if (request.method == 'POST' &&
+          request.url.path == '/speech/models/downloads') {
+        downloadStarted = true;
+        return http.Response(
+          jsonEncode({
+            'data': {
+              'task_id': 'task-kokoro',
+              'model_id': 'kokoro-int8-multi-lang-v1_1',
+              'status': 'downloading',
+              'progress_bytes': 50,
+              'total_bytes': 100,
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      if (request.method == 'GET' && request.url.path == '/speech') {
+        return _speechStatusResponse(
+          models: [
+            _ttsModelJson(
+              id: 'vits-melo-tts-zh-en',
+              displayName: 'VITS Melo TTS',
+              installed: true,
+              selected: true,
+            ),
+            _ttsModelJson(
+              id: 'kokoro-int8-multi-lang-v1_1',
+              displayName: 'Kokoro INT8 Multi-Lang v1.1',
+              installed: false,
+              selected: false,
+            ),
+          ],
+          downloads: downloadStarted
+              ? [
+                  {
+                    'task_id': 'task-kokoro',
+                    'model_id': 'kokoro-int8-multi-lang-v1_1',
+                    'status': 'downloading',
+                    'progress_bytes': 50,
+                    'total_bytes': 100,
+                  },
+                ]
+              : [],
+        );
+      }
+      return http.Response('not found', 404);
+    }),
+  );
+}
+
+BridgeClient _bridgeClientForPendingModelDownload(Completer<void> completer) {
+  var downloadStarted = false;
+  return BridgeClient(
+    httpClient: _FakeHttpClient((request) async {
+      if (request.method == 'POST' &&
+          request.url.path == '/speech/models/downloads') {
+        downloadStarted = true;
+        await completer.future;
+        return http.Response(
+          jsonEncode({
+            'data': {
+              'task_id': 'task-kokoro',
+              'model_id': 'kokoro-int8-multi-lang-v1_1',
+              'status': 'downloading',
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      if (request.method == 'GET' && request.url.path == '/speech') {
+        return _speechStatusResponse(
+          models: [
+            _ttsModelJson(
+              id: 'vits-melo-tts-zh-en',
+              displayName: 'VITS Melo TTS',
+              installed: true,
+              selected: true,
+            ),
+            _ttsModelJson(
+              id: 'kokoro-int8-multi-lang-v1_1',
+              displayName: 'Kokoro INT8 Multi-Lang v1.1',
+              installed: false,
+              selected: false,
+            ),
+          ],
+          downloads: downloadStarted
+              ? [
+                  {
+                    'task_id': 'task-kokoro',
+                    'model_id': 'kokoro-int8-multi-lang-v1_1',
+                    'status': 'downloading',
+                  },
+                ]
+              : [],
+        );
+      }
+      return http.Response('not found', 404);
+    }),
+  );
+}
+
+BridgeClient _bridgeClientForFailedDownloadTask() {
+  var downloadStarted = false;
+  return BridgeClient(
+    httpClient: _FakeHttpClient((request) async {
+      if (request.method == 'POST' &&
+          request.url.path == '/speech/models/downloads') {
+        downloadStarted = true;
+        return http.Response(
+          jsonEncode({
+            'data': {
+              'task_id': 'task-kokoro',
+              'model_id': 'kokoro-int8-multi-lang-v1_1',
+              'status': 'failed',
+              'error': 'download checksum mismatch',
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      if (request.method == 'GET' && request.url.path == '/speech') {
+        return _speechStatusResponse(
+          models: [
+            _ttsModelJson(
+              id: 'vits-melo-tts-zh-en',
+              displayName: 'VITS Melo TTS',
+              installed: true,
+              selected: true,
+            ),
+            _ttsModelJson(
+              id: 'kokoro-int8-multi-lang-v1_1',
+              displayName: 'Kokoro INT8 Multi-Lang v1.1',
+              installed: false,
+              selected: false,
+            ),
+          ],
+          downloads: downloadStarted
+              ? [
+                  {
+                    'task_id': 'task-kokoro',
+                    'model_id': 'kokoro-int8-multi-lang-v1_1',
+                    'status': 'failed',
+                    'error': 'download checksum mismatch',
+                  },
+                ]
+              : [],
+        );
+      }
+      return http.Response('not found', 404);
+    }),
+  );
+}
+
+BridgeClient _bridgeClientForInstalledModelDeletion({
+  required VoidCallback onDeleted,
+  bool unmanagedModel = false,
+}) {
+  var deleted = false;
+  return BridgeClient(
+    httpClient: _FakeHttpClient((request) async {
+      final deletedModelId =
+          unmanagedModel ? 'unused-speaker-model' : 'alternate-tts';
+      if (request.method == 'DELETE' &&
+          request.url.path == '/speech/models/$deletedModelId') {
+        deleted = true;
+        onDeleted();
+        return http.Response('', 204);
+      }
+
+      if (request.method == 'GET' && request.url.path == '/speech') {
+        return _speechStatusResponse(
+          models: [
+            _ttsModelJson(
+              id: 'vits-melo-tts-zh-en',
+              displayName: 'VITS Melo TTS',
+              installed: true,
+              selected: true,
+            ),
+            _ttsModelJson(
+              id: 'alternate-tts',
+              displayName: 'Alternate TTS',
+              installed: !deleted,
+              selected: false,
+            ),
+            if (unmanagedModel)
+              _speakerModelJson(
+                id: 'unused-speaker-model',
+                displayName: 'Unused Speaker Model',
+                installed: !deleted,
+              ),
+          ],
+        );
+      }
+      return http.Response('not found', 404);
+    }),
+  );
+}
+
+Map<String, Object?> _speakerModelJson({
+  required String id,
+  required String displayName,
+  required bool installed,
+}) {
+  return {
+    'id': id,
+    'kind': 'speaker',
+    'display_name': displayName,
+    'description': 'Speaker embedding model',
+    'languages': ['multilingual'],
+    'runtime': 'offline',
+    'backend': 'onnx',
+    'capabilities': {
+      'streaming': false,
+      'realtime_asr': false,
+      'batch_asr': false,
+      'speech_synthesis': false,
+      'vad': false,
+      'endpointing': false,
+      'punctuation': false,
+      'inverse_text_normalization': false,
+      'multilingual': true,
+      'speaker_embedding': true,
+    },
+    'features': ['speaker-embedding'],
+    'supports_profiles': [],
+    'recommended_profiles': [],
+    'download_url': 'https://example.com/$id',
+    'download_size_mb': 90,
+    'installed': installed,
+    'selected_by': [],
+    'voices': [],
+  };
+}
+
+http.Response _speechStatusResponse({
+  required List<Map<String, Object?>> models,
+  List<Map<String, Object?>> downloads = const [],
+}) {
+  return http.Response(
+    jsonEncode({
+      'data': {
+        'root_dir': '/tmp/omni-code-bridge/speech',
+        'profiles': {
+          'tts_default': 'vits-melo-tts-zh-en',
+        },
+        'voices': {
+          'tts_by_model': {},
+        },
+        'models': models,
+        'downloads': downloads,
+      },
+    }),
+    200,
+    headers: {'content-type': 'application/json'},
+  );
+}
+
+Map<String, Object?> _ttsModelJson({
+  required String id,
+  required String displayName,
+  required bool installed,
+  required bool selected,
+}) {
+  return {
+    'id': id,
+    'kind': 'tts',
+    'display_name': displayName,
+    'description': 'Local TTS model',
+    'languages': ['zh', 'en'],
+    'runtime': 'offline',
+    'backend': 'onnx',
+    'capabilities': {
+      'streaming': false,
+      'realtime_asr': false,
+      'batch_asr': false,
+      'speech_synthesis': true,
+      'vad': false,
+      'endpointing': false,
+      'punctuation': false,
+      'inverse_text_normalization': false,
+      'multilingual': true,
+    },
+    'features': ['multi-speaker'],
+    'supports_profiles': ['tts_default'],
+    'recommended_profiles': ['tts_default'],
+    'download_url': 'https://example.com/$id',
+    'download_size_mb': 215,
+    'default_voice': '0',
+    'installed': installed,
+    'selected_by': selected ? ['tts_default'] : [],
+    'voices': ['0'],
+  };
+}
+
 class _TestApp extends StatelessWidget {
   const _TestApp({
     required this.home,
@@ -387,6 +968,20 @@ class _TestApp extends StatelessWidget {
 BridgeClient _bridgeClientForSpeechSettings() {
   return BridgeClient(
     httpClient: _FakeHttpClient((request) async {
+      if (request.method == 'PUT' &&
+          request.url.path == '/speech/models/vits-melo-tts-zh-en/voice') {
+        return http.Response(
+          jsonEncode({
+            'data': {
+              'tts_by_model': {
+                'vits-melo-tts-zh-en': '0',
+              },
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
       if (request.method == 'GET' && request.url.path == '/speech') {
         return http.Response(
           jsonEncode({
@@ -397,6 +992,11 @@ BridgeClient _bridgeClientForSpeechSettings() {
                 'asr_realtime': 'streaming-paraformer-zh-en',
                 'tts_default': 'vits-melo-tts-zh-en',
                 'vad_default': 'silero-vad',
+              },
+              'voices': {
+                'tts_by_model': {
+                  'vits-melo-tts-zh-en': '1',
+                },
               },
               'models': [
                 {
@@ -541,6 +1141,68 @@ BridgeClient _bridgeClientForSpeechSettings() {
   );
 }
 
+BridgeClient _bridgeClientForSpeakerDeletion({
+  required VoidCallback onDeleted,
+}) {
+  var deleted = false;
+  return BridgeClient(
+    httpClient: _FakeHttpClient((request) async {
+      if (request.method == 'DELETE' &&
+          request.url.path == '/speech/speakers/speaker-1') {
+        deleted = true;
+        onDeleted();
+        return http.Response('', 204);
+      }
+      if (request.method == 'GET' && request.url.path == '/speech/speakers') {
+        return http.Response(
+          jsonEncode({
+            'data': deleted
+                ? <Object?>[]
+                : [
+                    {
+                      'id': 'speaker-1',
+                      'name': 'Jun',
+                      'embedding_model_id': '3dspeaker-speech-eres2net-base',
+                      'embedding_count': 2,
+                      'created_at': '2026-05-09T10:00:00.000Z',
+                      'updated_at': '2026-05-09T10:00:00.000Z',
+                    },
+                  ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/speech/speaker-filter') {
+        return http.Response(
+          jsonEncode({
+            'data': {
+              'enabled': !deleted,
+              'speaker_id': deleted ? null : 'speaker-1',
+              'threshold': 0.65,
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      if (request.method == 'GET' && request.url.path == '/speech') {
+        return _speechStatusResponse(
+          models: [
+            _speakerModelJson(
+              id: '3dspeaker-speech-eres2net-base',
+              displayName: '3D Speaker',
+              installed: true,
+            ),
+          ],
+        );
+      }
+      return http.Response('not found', 404);
+    }),
+  );
+}
+
 BridgeClient _bridgeClientForInlineDownloadFailure() {
   return BridgeClient(
     httpClient: _FakeHttpClient((request) async {
@@ -559,6 +1221,11 @@ BridgeClient _bridgeClientForInlineDownloadFailure() {
                 'asr_realtime': 'streaming-paraformer-zh-en',
                 'tts_default': 'vits-melo-tts-zh-en',
                 'vad_default': 'silero-vad',
+              },
+              'voices': {
+                'tts_by_model': {
+                  'vits-melo-tts-zh-en': '1',
+                },
               },
               'models': [
                 {

@@ -477,6 +477,36 @@ class AppLocalizationsEn extends AppLocalizations {
       'Start speaking whenever you\'re ready. Live transcription will show up here.';
 
   @override
+  String get callModeWaitingWakeWordLabel => 'Waiting for wake word';
+
+  @override
+  String get callModeWaitingWakeWordDetail =>
+      'Put the configured wake word at the start or end of the utterance. Middle matches are ignored.';
+
+  @override
+  String get callModeWakeWordDetectedLabel => 'Wake word detected';
+
+  @override
+  String get callModeWakeWordDetectedDetail =>
+      'I am listening. The next utterance will be captured and sent.';
+
+  @override
+  String get callModeWakeWordAck => 'I am listening';
+
+  @override
+  String get callModeCommandAccepted => 'Let me think';
+
+  @override
+  String callModeRejectedSpeakerTranscript(String transcript) {
+    return '$transcript (not selected speaker)';
+  }
+
+  @override
+  String callModeRejectedWakeWordTranscript(String transcript) {
+    return '$transcript (wake word not matched)';
+  }
+
+  @override
   String get callModeSpeechDetectedLabel => 'Speech detected';
 
   @override
@@ -538,6 +568,32 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get callModeSpeechPauseBridgeOnlyHint =>
       'This pause setting currently applies precisely to Omni Bridge Local realtime call mode. Other ASR providers may keep their own built-in pause behavior.';
+
+  @override
+  String get callModeWakeWordLabel => 'Require wake word';
+
+  @override
+  String get callModeWakeWordHelp =>
+      'When enabled, Omni Bridge Local uses its local keyword detector before accepting realtime speech. Unsupported phrases are rejected with a setup error.';
+
+  @override
+  String get callModeWakeWordsLabel => 'Wake words';
+
+  @override
+  String get callModeWakeWordsHelp =>
+      'Separate multiple phrases with commas. Use English phrases or numbered pinyin such as xiao3 ou1; direct Chinese characters are not supported.';
+
+  @override
+  String get callModeWakeWordsEmptyError => 'Enter at least one wake word.';
+
+  @override
+  String callModeWakeWordsUnsupportedError(String wakeWord, String example) {
+    return '\"$wakeWord\" is not supported by the local wake-word model. Use an English phrase or numbered pinyin, such as \"$example\".';
+  }
+
+  @override
+  String get callModeWakeWordModelUnsupported =>
+      'The current speech model does not support wake words. Wake word detection has been automatically disabled.';
 
   @override
   String get send => 'Send';
@@ -982,6 +1038,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Use the local Bridge to run offline ASR, TTS, VAD, and model downloads on your own machine.';
 
   @override
+  String get localBridgeModelsUnavailable =>
+      'Local Bridge model status has not loaded yet.';
+
+  @override
+  String get bridgeDetails => 'Bridge details';
+
+  @override
   String get localBridgeModelRoot => 'Model root';
 
   @override
@@ -1104,6 +1167,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get speechDownloading => 'Downloading...';
 
   @override
+  String get speechDelete => 'Delete';
+
+  @override
+  String get speechInstalledModels => 'Installed models';
+
+  @override
+  String get speechNoInstalledModels => 'No installed models yet.';
+
+  @override
   String get speechSelect => 'Select';
 
   @override
@@ -1166,6 +1238,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get speechProfileVadAction => 'Use for VAD';
+
+  @override
+  String get speechProfileWakeWordTitle => 'Wake word';
+
+  @override
+  String get speechProfileWakeWordHelp =>
+      'Used by Omni Bridge Local to detect the wake word before accepting realtime call-mode speech.';
+
+  @override
+  String get speechProfileWakeWordAction => 'Use for Wake word';
 
   @override
   String get speechDownloadStatusQueued => 'Queued';

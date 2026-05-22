@@ -75,6 +75,10 @@ void main() {
     expect(AppSettings.defaults().callModeAllowInterruptions, isTrue);
   });
 
+  test('call mode wake words default to English local KWS phrase', () {
+    expect(AppSettings.defaults().callModeWakeWords, 'hey omni');
+  });
+
   test('invalid call mode speech pause falls back to default', () {
     final settings = AppSettings.fromJson(<String, dynamic>{
       'call_mode_speech_pause_millis': 100,

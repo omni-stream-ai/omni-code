@@ -461,6 +461,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get callModeListeningReadyDetail => '可以直接开始说，识别内容会实时显示在这里。';
 
   @override
+  String get callModeWaitingWakeWordLabel => '等待唤醒词';
+
+  @override
+  String get callModeWaitingWakeWordDetail => '请把设置里的唤醒词放在这句话的开头或结尾，中间命中会被忽略。';
+
+  @override
+  String get callModeWakeWordDetectedLabel => '已检测到唤醒词';
+
+  @override
+  String get callModeWakeWordDetectedDetail => '在呢。下一句话会被识别并发送。';
+
+  @override
+  String get callModeWakeWordAck => '在呢';
+
+  @override
+  String get callModeCommandAccepted => '让我思考一下';
+
+  @override
+  String callModeRejectedSpeakerTranscript(String transcript) {
+    return '$transcript（非指定说话人）';
+  }
+
+  @override
+  String callModeRejectedWakeWordTranscript(String transcript) {
+    return '$transcript（未匹配唤醒词）';
+  }
+
+  @override
   String get callModeSpeechDetectedLabel => '检测到你在说话';
 
   @override
@@ -518,6 +546,31 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get callModeSpeechPauseBridgeOnlyHint =>
       '这个停顿时长目前会精确作用在 Omni Bridge Local 的实时通话模式上。其他 ASR 提供方可能仍使用各自内置的停顿策略。';
+
+  @override
+  String get callModeWakeWordLabel => '需要唤醒词';
+
+  @override
+  String get callModeWakeWordHelp =>
+      '开启后，Omni Bridge Local 会先用本地关键词检测器识别唤醒词，再处理实时语音。不支持的短语会返回配置错误。';
+
+  @override
+  String get callModeWakeWordsLabel => '唤醒词';
+
+  @override
+  String get callModeWakeWordsHelp =>
+      '多个短语用逗号分隔。支持英文字母短语，或带声调数字的拼音，例如 xiao3 ou1；不支持直接输入汉字。';
+
+  @override
+  String get callModeWakeWordsEmptyError => '请至少输入一个唤醒词。';
+
+  @override
+  String callModeWakeWordsUnsupportedError(String wakeWord, String example) {
+    return '本地唤醒词模型不支持“$wakeWord”。请使用英文字母短语或带声调数字的拼音，例如“$example”。';
+  }
+
+  @override
+  String get callModeWakeWordModelUnsupported => '当前语音模型不支持唤醒词，已自动关闭唤醒词功能。';
 
   @override
   String get send => '发送';
@@ -942,6 +995,12 @@ class AppLocalizationsZh extends AppLocalizations {
       '通过本地 Bridge 在自己的机器上运行离线 ASR、TTS、VAD，并下载所需模型。';
 
   @override
+  String get localBridgeModelsUnavailable => '本地 Bridge 模型状态尚未加载。';
+
+  @override
+  String get bridgeDetails => 'Bridge 详情';
+
+  @override
   String get localBridgeModelRoot => '模型目录';
 
   @override
@@ -1061,6 +1120,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speechDownloading => '下载中...';
 
   @override
+  String get speechDelete => '删除';
+
+  @override
+  String get speechInstalledModels => '已安装模型';
+
+  @override
+  String get speechNoInstalledModels => '还没有已安装模型。';
+
+  @override
   String get speechSelect => '选择';
 
   @override
@@ -1122,6 +1190,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get speechProfileVadAction => '设为 VAD';
+
+  @override
+  String get speechProfileWakeWordTitle => '唤醒词';
+
+  @override
+  String get speechProfileWakeWordHelp =>
+      '用于 Omni Bridge Local 在接受实时通话语音前先检测唤醒词。';
+
+  @override
+  String get speechProfileWakeWordAction => '设为唤醒词';
 
   @override
   String get speechDownloadStatusQueued => '排队中';

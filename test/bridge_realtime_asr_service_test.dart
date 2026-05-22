@@ -36,6 +36,7 @@ void main() {
       connector: (uri, {headers}) async => socket,
     );
     final utterances = <BridgeRealtimeAsrUtterance>[];
+    final wakeWords = <String>[];
     var speechStartedCalls = 0;
     final audioController = StreamController<Uint8List>();
 
@@ -45,6 +46,7 @@ void main() {
       onSpeechStarted: () {
         speechStartedCalls += 1;
       },
+      onWakeWordDetected: wakeWords.add,
       config: const BridgeRealtimeAsrConfig(
         endpointTrailingSilenceMs: 1500,
         vadMinSilenceMs: 900,
@@ -56,6 +58,17 @@ void main() {
       'type': 'session.created',
       'session': {'ready': true},
     }));
+    await Future<void>.delayed(Duration.zero);
+    expect(socket.sentMessages.whereType<Uint8List>(), isEmpty);
+
+    socket.emitText(jsonEncode({
+      'type': 'session.updated',
+      'session': {
+        'ready': true,
+        'enable_wake_word': false,
+        'wake_word_detector': 'local_kws',
+      },
+    }));
     await startFuture;
     audioController.add(Uint8List.fromList([1, 2, 3]));
     await audioController.close();
@@ -64,22 +77,59 @@ void main() {
       'type': 'input_audio_buffer.speech_started',
     }));
     socket.emitText(jsonEncode({
+      'type': 'input_audio_buffer.wake_word_detected',
+      'keyword': '你好小欧',
+    }));
+    socket.emitText(jsonEncode({
       'type': 'response.audio_transcript.delta',
       'text': 'partial',
+      'speaker_filter': {
+        'active': true,
+        'verified': false,
+        'matched': null,
+      },
+      'wake_word': {
+        'active': true,
+        'verified': false,
+        'matched': null,
+      },
     }));
     socket.emitText(jsonEncode({
       'type': 'response.audio_transcript.completed',
       'text': 'final result',
+      'speaker_filter': {
+        'active': true,
+        'verified': true,
+        'matched': true,
+      },
+      'wake_word': {
+        'active': true,
+        'verified': true,
+        'matched': true,
+      },
     }));
 
     await Future<void>.delayed(Duration.zero);
 
     expect(utterances, hasLength(2));
     expect(speechStartedCalls, 1);
+    expect(wakeWords, ['你好小欧']);
     expect(utterances.first.text, 'partial');
     expect(utterances.first.isFinal, isFalse);
+    expect(utterances.first.speakerFilterActive, isTrue);
+    expect(utterances.first.speakerVerified, isFalse);
+    expect(utterances.first.speakerMatched, isNull);
+    expect(utterances.first.wakeWordActive, isTrue);
+    expect(utterances.first.wakeWordVerified, isFalse);
+    expect(utterances.first.wakeWordMatched, isNull);
     expect(utterances.last.text, 'final result');
     expect(utterances.last.isFinal, isTrue);
+    expect(utterances.last.speakerFilterActive, isTrue);
+    expect(utterances.last.speakerVerified, isTrue);
+    expect(utterances.last.speakerMatched, isTrue);
+    expect(utterances.last.wakeWordActive, isTrue);
+    expect(utterances.last.wakeWordVerified, isTrue);
+    expect(utterances.last.wakeWordMatched, isTrue);
     expect(
       socket.sentMessages.whereType<String>(),
       contains(jsonEncode({'type': 'input_audio_buffer.commit'})),
@@ -93,12 +143,36 @@ void main() {
             'sample_rate_hz': 16000,
             'channels': 1,
             'enable_vad': true,
+            'enable_wake_word': false,
+            'strip_wake_word': true,
             'endpoint_trailing_silence_ms': 1500,
             'vad_min_silence_ms': 900,
           },
         }),
       ),
     );
+  });
+
+  test('bridge realtime config can request local KWS wake word detector',
+      () async {
+    const config = BridgeRealtimeAsrConfig(
+      enableWakeWord: true,
+      wakeWordDetector: 'local_kws',
+      wakeWords: ['小欧', '欧米'],
+    );
+
+    expect(config.toSessionUpdateJson(), {
+      'type': 'session.update',
+      'session': {
+        'sample_rate_hz': 16000,
+        'channels': 1,
+        'enable_vad': true,
+        'enable_wake_word': true,
+        'wake_word_detector': 'local_kws',
+        'wake_words': ['小欧', '欧米'],
+        'strip_wake_word': true,
+      },
+    });
   });
 }
 

@@ -235,6 +235,28 @@
   "callModePreparingListeningDetail": "Microphone and speech recognition are starting. Speech may not be captured yet.",
   "callModeListeningReadyLabel": "Listening now",
   "callModeListeningReadyDetail": "Start speaking whenever you're ready. Live transcription will show up here.",
+  "callModeWaitingWakeWordLabel": "Waiting for wake word",
+  "callModeWaitingWakeWordDetail": "Put the configured wake word at the start or end of the utterance. Middle matches are ignored.",
+  "callModeWakeWordDetectedLabel": "Wake word detected",
+  "callModeWakeWordDetectedDetail": "I am listening. The next utterance will be captured and sent.",
+  "callModeWakeWordAck": "I am listening",
+  "callModeCommandAccepted": "Let me think",
+  "callModeRejectedSpeakerTranscript": "{transcript} (not selected speaker)",
+  "@callModeRejectedSpeakerTranscript": {
+    "placeholders": {
+      "transcript": {
+        "type": "String"
+      }
+    }
+  },
+  "callModeRejectedWakeWordTranscript": "{transcript} (wake word not matched)",
+  "@callModeRejectedWakeWordTranscript": {
+    "placeholders": {
+      "transcript": {
+        "type": "String"
+      }
+    }
+  },
   "callModeSpeechDetectedLabel": "Speech detected",
   "callModeSpeechDetectedDetail": "Keep talking naturally. The current utterance is still being captured.",
   "callModeWaitingForPauseLabel": "Waiting for you to finish",
@@ -258,6 +280,23 @@
     }
   },
   "callModeSpeechPauseBridgeOnlyHint": "This pause setting currently applies precisely to Omni Bridge Local realtime call mode. Other ASR providers may keep their own built-in pause behavior.",
+  "callModeWakeWordLabel": "Require wake word",
+  "callModeWakeWordHelp": "When enabled, Omni Bridge Local uses its local keyword detector before accepting realtime speech. Unsupported phrases are rejected with a setup error.",
+  "callModeWakeWordsLabel": "Wake words",
+  "callModeWakeWordsHelp": "Separate multiple phrases with commas. Use English phrases or numbered pinyin such as xiao3 ou1; direct Chinese characters are not supported.",
+  "callModeWakeWordsEmptyError": "Enter at least one wake word.",
+  "callModeWakeWordsUnsupportedError": "\"{wakeWord}\" is not supported by the local wake-word model. Use an English phrase or numbered pinyin, such as \"{example}\".",
+  "@callModeWakeWordsUnsupportedError": {
+    "placeholders": {
+      "wakeWord": {
+        "type": "String"
+      },
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "callModeWakeWordModelUnsupported": "The current speech model does not support wake words. Wake word detection has been automatically disabled.",
   "send": "Send",
   "imageAttachment": "Image attachment",
   "previewImage": "Preview",
@@ -479,6 +518,8 @@
   "localBridgeSpeechSection": "Local Bridge Speech",
   "localBridgeModelsSection": "Local Bridge Models",
   "localBridgeSpeechIntro": "Use the local Bridge to run offline ASR, TTS, VAD, and model downloads on your own machine.",
+  "localBridgeModelsUnavailable": "Local Bridge model status has not loaded yet.",
+  "bridgeDetails": "Bridge details",
   "localBridgeModelRoot": "Model root",
   "localBridgeDownloadTasksSection": "Download tasks",
   "localBridgeNoCompatibleModels": "No compatible models are available for this type yet.",
@@ -535,6 +576,9 @@
   "speechNotInstalled": "Not installed",
   "speechDownload": "Download",
   "speechDownloading": "Downloading...",
+  "speechDelete": "Delete",
+  "speechInstalledModels": "Installed models",
+  "speechNoInstalledModels": "No installed models yet.",
   "speechSelect": "Select",
   "speechChange": "Change",
   "speechSelected": "Selected",
@@ -555,6 +599,9 @@
   "speechProfileVadTitle": "VAD",
   "speechProfileVadHelp": "Used to detect when speech starts and ends in realtime mode. Pick this when you want faster turn-taking and cleaner cutoffs.",
   "speechProfileVadAction": "Use for VAD",
+  "speechProfileWakeWordTitle": "Wake word",
+  "speechProfileWakeWordHelp": "Used by Omni Bridge Local to detect the wake word before accepting realtime call-mode speech.",
+  "speechProfileWakeWordAction": "Use for Wake word",
   "speechDownloadStatusQueued": "Queued",
   "speechDownloadStatusDownloading": "Downloading",
   "speechDownloadStatusExtracting": "Extracting",

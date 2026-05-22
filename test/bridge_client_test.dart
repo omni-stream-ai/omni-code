@@ -490,6 +490,11 @@ void main() {
                   'asr_batch': 'sensevoice-small-int8',
                   'tts_default': 'vits-melo-tts-zh-en',
                 },
+                'voices': {
+                  'tts_by_model': {
+                    'vits-melo-tts-zh-en': '0',
+                  },
+                },
                 'models': [
                   {
                     'id': 'sensevoice-small-int8',
@@ -580,6 +585,7 @@ void main() {
       expect(status.rootDir, '/tmp/bridge/speech');
       expect(status.profiles.asrBatch, 'sensevoice-small-int8');
       expect(status.profiles.ttsDefault, 'vits-melo-tts-zh-en');
+      expect(status.voices.voiceForModel('vits-melo-tts-zh-en'), '0');
       expect(status.models, hasLength(2));
       expect(status.models.first.kind, SpeechModelKind.asr);
       expect(status.models.first.capabilities.batchAsr, isTrue);
@@ -596,6 +602,119 @@ void main() {
         SpeechDownloadStatus.downloading,
       );
       expect(status.activeDownloads.single.progress, 0.5);
+    });
+
+    test('updateSpeechModelVoice stores a per-model TTS voice', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'PUT');
+          expect(request.url.path,
+              '/speech/models/kokoro-int8-multi-lang-v1_1/voice');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'tts_by_model': {
+                  'kokoro-int8-multi-lang-v1_1': 'af_heart',
+                },
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final voices = await client.updateSpeechModelVoice(
+        'kokoro-int8-multi-lang-v1_1',
+        voice: 'af_heart',
+      );
+
+      expect(body['voice'], 'af_heart');
+      expect(voices.voiceForModel('kokoro-int8-multi-lang-v1_1'), 'af_heart');
+    });
+
+    test('deleteSpeechModel sends delete request for model id', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'DELETE');
+          expect(
+              request.url.path, '/speech/models/kokoro-int8-multi-lang-v1_1');
+          return http.Response('', 204);
+        }),
+      );
+
+      await client.deleteSpeechModel('kokoro-int8-multi-lang-v1_1');
+    });
+
+    test('listSpeakers parses enrolled speaker records', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.path, '/speech/speakers');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'speaker-1',
+                  'name': 'Jun',
+                  'embedding_model_id': '3dspeaker-speech-eres2net-base',
+                  'embedding_count': 2,
+                  'created_at': '2026-05-18T10:00:00.000',
+                  'updated_at': '2026-05-18T10:05:00.000',
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final speakers = await client.listSpeakers();
+
+      expect(speakers, hasLength(1));
+      expect(speakers.single.id, 'speaker-1');
+      expect(speakers.single.name, 'Jun');
+      expect(speakers.single.embeddingCount, 2);
+    });
+
+    test('updateSpeakerFilter sends target speaker settings', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'PUT');
+          expect(request.url.path, '/speech/speaker-filter');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'enabled': true,
+                'speaker_id': 'speaker-1',
+                'threshold': 0.7,
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final settings = await client.updateSpeakerFilter(
+        const SpeakerFilterSettings(
+          enabled: true,
+          speakerId: 'speaker-1',
+          threshold: 0.7,
+        ),
+      );
+
+      expect(body['enabled'], isTrue);
+      expect(body['speaker_id'], 'speaker-1');
+      expect(body['threshold'], 0.7);
+      expect(settings.enabled, isTrue);
+      expect(settings.speakerId, 'speaker-1');
+      expect(settings.threshold, 0.7);
     });
 
     test('synthesizeSpeech sends the selected voice', () async {
@@ -642,6 +761,7 @@ void main() {
       await client.synthesizeSpeech('他说：“为什么❓”');
 
       expect(body['input'], '他说："为什么"');
+      expect(body.containsKey('voice'), isFalse);
     });
   });
 }

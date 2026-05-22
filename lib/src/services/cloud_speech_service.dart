@@ -44,9 +44,6 @@ class CloudSpeechService {
       }
       return BridgeClient(httpClient: _httpClient).synthesizeSpeech(
         sanitizedText,
-        voice: settings.bridgeLocalTtsVoice.trim().isNotEmpty
-            ? settings.bridgeLocalTtsVoice.trim()
-            : '0',
         stream: settings.bridgeLocalTtsStreaming,
       );
     }
