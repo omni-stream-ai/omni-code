@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
@@ -11,6 +12,7 @@ class SessionCallModeView extends StatelessWidget {
     required this.voiceChatTitle,
     required this.statusText,
     required this.bodyText,
+    this.bodyTextMarkdown = false,
     this.bodyTextMuted = false,
     this.realtimeHintLabel,
     this.realtimeHintDetail,
@@ -34,6 +36,7 @@ class SessionCallModeView extends StatelessWidget {
   final String voiceChatTitle;
   final String statusText;
   final String bodyText;
+  final bool bodyTextMarkdown;
   final bool bodyTextMuted;
   final String? realtimeHintLabel;
   final String? realtimeHintDetail;
@@ -143,6 +146,7 @@ class SessionCallModeView extends StatelessWidget {
                                   child: subtitlesVisible
                                       ? _SubtitlePanel(
                                           bodyText: bodyText,
+                                          bodyTextMarkdown: bodyTextMarkdown,
                                           bodyTextMuted: bodyTextMuted,
                                           realtimeHintLabel: realtimeHintLabel,
                                           realtimeHintDetail:
@@ -451,6 +455,7 @@ class _VoiceAnimation extends StatelessWidget {
 class _SubtitlePanel extends StatelessWidget {
   const _SubtitlePanel({
     required this.bodyText,
+    required this.bodyTextMarkdown,
     required this.bodyTextMuted,
     required this.realtimeHintLabel,
     required this.realtimeHintDetail,
@@ -460,6 +465,7 @@ class _SubtitlePanel extends StatelessWidget {
   }) : super(key: const ValueKey('call-mode-subtitles-visible'));
 
   final String bodyText;
+  final bool bodyTextMarkdown;
   final bool bodyTextMuted;
   final String? realtimeHintLabel;
   final String? realtimeHintDetail;
@@ -500,20 +506,67 @@ class _SubtitlePanel extends StatelessWidget {
             _RealtimeBadge(palette: palette),
             const SizedBox(height: AppSpacing.block),
           ],
-          Text(
-            bodyText,
-            key: const Key('call-mode-body-text'),
-            maxLines: 4,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.titleLarge?.copyWith(
-              color: bodyTextMuted
-                  ? palette.text.withValues(alpha: 0.42)
-                  : palette.text,
-              fontWeight: bodyTextMuted ? FontWeight.w600 : FontWeight.w900,
-              height: 1.34,
-              letterSpacing: 0,
+          if (bodyTextMarkdown)
+            MarkdownBody(
+              key: const Key('call-mode-body-markdown'),
+              data: bodyText,
+              fitContent: true,
+              selectable: true,
+              shrinkWrap: true,
+              softLineBreak: true,
+              styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                p: theme.textTheme.bodyLarge?.copyWith(
+                  color: palette.text,
+                  height: 1.45,
+                ),
+                a: theme.textTheme.bodyLarge?.copyWith(
+                  color: palette.text,
+                  decoration: TextDecoration.underline,
+                  decorationColor: palette.text,
+                  height: 1.45,
+                ),
+                strong: theme.textTheme.bodyLarge?.copyWith(
+                  color: palette.text,
+                  fontWeight: FontWeight.w800,
+                ),
+                em: theme.textTheme.bodyLarge?.copyWith(
+                  color: palette.text,
+                  fontStyle: FontStyle.italic,
+                ),
+                listBullet:
+                    theme.textTheme.bodyLarge?.copyWith(color: palette.text),
+                code: theme.textTheme.bodyMedium?.copyWith(
+                  color: palette.text,
+                  fontFamily: 'JetBrains Mono',
+                  fontFamilyFallback: const <String>['monospace'],
+                  height: 1.45,
+                  backgroundColor: palette.panelDeep,
+                ),
+                codeblockPadding: const EdgeInsets.all(AppSpacing.tileX),
+                codeblockDecoration: BoxDecoration(
+                  color: palette.panelDeep,
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+                  border: Border.all(color: palette.outline),
+                ),
+                blockSpacing: AppSpacing.compact,
+                pPadding: const EdgeInsets.symmetric(vertical: 1),
+              ),
+            )
+          else
+            Text(
+              bodyText,
+              key: const Key('call-mode-body-text'),
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleLarge?.copyWith(
+                color: bodyTextMuted
+                    ? palette.text.withValues(alpha: 0.42)
+                    : palette.text,
+                fontWeight: bodyTextMuted ? FontWeight.w600 : FontWeight.w900,
+                height: 1.34,
+                letterSpacing: 0,
+              ),
             ),
-          ),
           if (hasRealtimeHint) ...[
             const SizedBox(height: AppSpacing.section),
             _RealtimeHint(

@@ -1450,6 +1450,94 @@ void main() {
     );
   });
 
+  testWidgets('bridge local call mode does not fill composer text',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        asrProvider: AsrProvider.bridgeLocal,
+        ttsProvider: TtsProvider.bridgeLocal,
+        callModeAllowInterruptions: false,
+      ),
+    );
+    final audioService = _FakeAudioRecordingService(hasPermissionResult: true);
+    final bridgeRealtimeService = _FakeBridgeRealtimeAsrService();
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': <Object?>[]}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response('', 200,
+              headers: {'content-type': 'text/event-stream'});
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-bridge-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:02.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-bridge-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:03.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          audioRecordingService: audioService,
+          bridgeRealtimeAsrService: bridgeRealtimeService,
+          ttsService: _FakeTtsService(
+            systemAvailable: false,
+            completeOnSpeak: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-call-mode-button')));
+    await tester.pump();
+
+    bridgeRealtimeService.emitPartial('Bridge partial transcript');
+    await tester.pump();
+    bridgeRealtimeService.emitFinal('Bridge final transcript');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.tap(find.byKey(const Key('call-mode-close-button')));
+    await tester.pump();
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.controller!.text, isEmpty);
+  });
+
   testWidgets('bridge realtime startup failure cancels active recorder',
       (tester) async {
     appSettingsController.debugReplaceSettings(
@@ -1881,6 +1969,57 @@ void main() {
     expect(find.text('Waiting for you to finish'), findsOneWidget);
   });
 
+  testWidgets('call mode shows spoken assistant reply instead of ASR subtitles',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        asrProvider: AsrProvider.bridgeLocal,
+        ttsProvider: TtsProvider.bridgeLocal,
+        callModeAllowInterruptions: true,
+      ),
+    );
+    final audioService = _FakeAudioRecordingService(hasPermissionResult: true);
+    final bridgeRealtimeService = _FakeBridgeRealtimeAsrService();
+    final ttsService = _FakeTtsService(systemAvailable: false);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages([
+            _messageJson(
+              id: 'assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: '**Reply** ready',
+              createdAt: '2026-05-09T10:00:01.000',
+            ),
+          ]),
+          audioRecordingService: audioService,
+          bridgeRealtimeAsrService: bridgeRealtimeService,
+          ttsService: ttsService,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-call-mode-button')));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('call-mode-primary-button')));
+    await tester.pump();
+
+    expect(ttsService.spokenTexts, ['**Reply** ready']);
+    expect(find.byKey(const Key('call-mode-body-markdown')), findsOneWidget);
+
+    bridgeRealtimeService.emitPartial('bad subtitle from speaker');
+    await tester.pump();
+
+    expect(find.byKey(const Key('call-mode-body-markdown')), findsOneWidget);
+    expect(find.text('bad subtitle from speaker'), findsNothing);
+    expect(find.byKey(const Key('call-mode-body-text')), findsNothing);
+  });
+
   testWidgets(
       'call mode shows pending speaker transcript but does not interrupt until matched',
       (tester) async {
@@ -2188,6 +2327,104 @@ void main() {
     expect(sentBodies, hasLength(1));
     expect(sentBodies.single['content'], '帮我总结这个项目');
     expect(bridgeRealtimeService.startCalls, 2);
+  });
+
+  testWidgets(
+      'call mode resumes bridge ASR after command ack before send returns',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        asrProvider: AsrProvider.bridgeLocal,
+        ttsProvider: TtsProvider.bridgeLocal,
+        callModeAllowInterruptions: true,
+      ),
+    );
+    final audioService = _FakeAudioRecordingService(hasPermissionResult: true);
+    final bridgeRealtimeService = _FakeBridgeRealtimeAsrService();
+    final ttsService = _FakeTtsService(systemAvailable: false);
+    final sendCompleter = Completer<http.Response>();
+    final sentBodies = <Map<String, dynamic>>[];
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': <Object?>[]}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response('', 200,
+              headers: {'content-type': 'text/event-stream'});
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sentBodies.add(body);
+          return sendCompleter.future;
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          audioRecordingService: audioService,
+          bridgeRealtimeAsrService: bridgeRealtimeService,
+          ttsService: ttsService,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-call-mode-button')));
+    await tester.pump();
+
+    bridgeRealtimeService.emitFinal('帮我总结这个项目');
+    await tester.pump();
+
+    expect(bridgeRealtimeService.startCalls, 1);
+    expect(bridgeRealtimeService.cancelCalls, 1);
+    expect(sentBodies, isEmpty);
+
+    ttsService.completeSpeech();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(sentBodies, hasLength(1));
+    expect(bridgeRealtimeService.startCalls, 2);
+
+    final body = sentBodies.single;
+    sendCompleter.complete(
+      http.Response(
+        jsonEncode({
+          'data': {
+            'user_message': _messageJson(
+              id: 'server-user-1',
+              sessionId: 'session-1',
+              role: 'user',
+              content: body['content'] as String,
+              createdAt: '2026-05-09T10:00:02.000',
+            ),
+            'reply': _messageJson(
+              id: 'server-reply-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: '',
+              createdAt: '2026-05-09T10:00:03.000',
+            ),
+          },
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      ),
+    );
+    await tester.pump();
   });
 
   testWidgets('call mode submits command that starts with and', (tester) async {

@@ -115,6 +115,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _callModeInterruptedCurrentReply = false;
   Future<void>? _callModeInterruptFuture;
   bool _callModeSubmittingVoiceUtterance = false;
+  bool _callModeSendingVoiceUtterance = false;
   Completer<void>? _callModeCommandAcceptedSpeechCompleter;
   _CallModeSpeechHintState? _callModeSpeechHintState;
   final Map<String, int> _unreadToolCounts = <String, int>{};
@@ -507,17 +508,22 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ? _recognizedSpeech.trim()
         : _controller.text.trim();
     final spokenReplyPreview = _previewText(_callModeSpokenReplyText);
+    final spokenReplyText = _callModeSpokenReplyText?.trim();
+    final showingSpokenReplyMarkdown =
+        spokenReplyText != null && spokenReplyText.isNotEmpty;
     final statusLine = _callModeStatusLine(l10n);
     final realtimeHint = _callModeRealtimeHint(l10n);
     final rawSubtitle = showVoiceInputStarting
         ? l10n.callModePreparingListening
-        : liveTranscript.isNotEmpty
-            ? liveTranscript
-            : _session.status == SessionStatus.running
-                ? l10n.callModeWorking
-                : (spokenReplyPreview.isNotEmpty
-                    ? spokenReplyPreview
-                    : _callModeIdleSubtitle(l10n));
+        : showingSpokenReplyMarkdown
+            ? spokenReplyText
+            : liveTranscript.isNotEmpty
+                ? liveTranscript
+                : _session.status == SessionStatus.running
+                    ? l10n.callModeWorking
+                    : (spokenReplyPreview.isNotEmpty
+                        ? spokenReplyPreview
+                        : _callModeIdleSubtitle(l10n));
     final subtitle = liveTranscript.isNotEmpty
         ? _callModeRejectedTranscriptLabel(l10n, rawSubtitle)
         : rawSubtitle;
@@ -525,6 +531,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       voiceChatTitle: l10n.voiceChatTitle,
       statusText: statusLine,
       bodyText: subtitle,
+      bodyTextMarkdown: showingSpokenReplyMarkdown,
       bodyTextMuted: _recognizedSpeechPendingSpeakerVerification ||
           _recognizedSpeechRejectedSpeaker ||
           _recognizedSpeechRejectedWakeWord ||
@@ -2665,10 +2672,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             }
             setState(() {
               _recognizedSpeech = words;
-              _controller.text = words;
-              _controller.selection = TextSelection.fromPosition(
-                TextPosition(offset: _controller.text.length),
-              );
+              if (!_callModeEnabled) {
+                _controller.text = words;
+                _controller.selection = TextSelection.fromPosition(
+                  TextPosition(offset: _controller.text.length),
+                );
+              }
               if (isFinal) {
                 _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
                 _speechError = null;
@@ -3334,6 +3343,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _streamingAsrActive ||
         _callModeSubmittingVoiceUtterance ||
         (_session.status == SessionStatus.running &&
+            !_callModeSendingVoiceUtterance &&
             !listeningForInterruptions) ||
         ((_callModeAwaitingPlaybackCompletion || _isSpeaking) &&
             !listeningForInterruptions) ||
@@ -3632,10 +3642,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     setState(() {
       _isListening = false;
       _voiceInputStarting = false;
-      _controller.text = trimmedTranscript;
-      _controller.selection = TextSelection.fromPosition(
-        TextPosition(offset: _controller.text.length),
-      );
+      if (!autoSend) {
+        _controller.text = trimmedTranscript;
+        _controller.selection = TextSelection.fromPosition(
+          TextPosition(offset: _controller.text.length),
+        );
+      }
       _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
       _speechError = null;
     });
@@ -3699,7 +3711,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           if (!mounted) {
             return;
           }
-          if (_callModeSubmittingVoiceUtterance) {
+          if (_callModeSubmittingVoiceUtterance &&
+              !_callModeSendingVoiceUtterance) {
             return;
           }
           final rawTranscript = utterance.text;
@@ -3745,10 +3758,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             _recognizedSpeechRejectedSpeaker = rejectedSpeaker;
             _recognizedSpeechRejectedWakeWord = false;
             _recognizedSpeechRejectedOther = rejectedOther;
-            _controller.text = transcriptText;
-            _controller.selection = TextSelection.fromPosition(
-              TextPosition(offset: _controller.text.length),
-            );
+            if (!_callModeEnabled) {
+              _controller.text = transcriptText;
+              _controller.selection = TextSelection.fromPosition(
+                TextPosition(offset: _controller.text.length),
+              );
+            }
             if (utterance.isFinal) {
               _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
               _speechError = null;
@@ -3881,7 +3896,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       setState(() {
         _clearRecognizedSpeechState();
         _resetBridgeRealtimeUtteranceGateState();
-        _controller.clear();
+        if (!_callModeEnabled) {
+          _controller.clear();
+        }
         _setSpeechStatus(context.l10n.voiceInputInProgress);
         _speechError = null;
       });
@@ -3894,10 +3911,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _recognizedSpeechRejectedWakeWord = false;
       _recognizedSpeechRejectedOther = false;
       _callModeSubmittingVoiceUtterance = true;
-      _controller.text = trimmedTranscript;
-      _controller.selection = TextSelection.fromPosition(
-        TextPosition(offset: _controller.text.length),
-      );
+      _callModeSendingVoiceUtterance = false;
+      if (!_callModeEnabled) {
+        _controller.text = trimmedTranscript;
+        _controller.selection = TextSelection.fromPosition(
+          TextPosition(offset: _controller.text.length),
+        );
+      }
       _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
       _speechError = null;
     });
@@ -3912,6 +3932,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     await _speakCallModeCommandAcceptedBeforeListening();
     if (!mounted) {
       return;
+    }
+    if (_callModeAllowInterruptions) {
+      setState(() {
+        _callModeSubmittingVoiceUtterance = false;
+        _callModeSendingVoiceUtterance = true;
+      });
+      unawaited(_maybeResumeCallModeListening());
     }
     if (!_callModeAllowInterruptions) {
       await _stopBridgeRealtimeAsr();
@@ -3933,12 +3960,21 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         }
       }
     }
-    final submitted =
-        await _submitLocalMessage(trimmedTranscript, inputMode: 'voice');
-    debugPrint(
-      '[call-mode] bridge final submit completed submitted=$submitted text=$trimmedTranscript',
-    );
-    if (mounted) {
+    var submitted = false;
+    try {
+      submitted =
+          await _submitLocalMessage(trimmedTranscript, inputMode: 'voice');
+      debugPrint(
+        '[call-mode] bridge final submit completed submitted=$submitted text=$trimmedTranscript',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _callModeSendingVoiceUtterance = false;
+        });
+      }
+    }
+    if (mounted && !_callModeSendingVoiceUtterance) {
       setState(() {
         _callModeSubmittingVoiceUtterance = false;
         if (submitted) {
