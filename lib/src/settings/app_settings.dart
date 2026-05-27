@@ -47,6 +47,7 @@ class AppSettings {
     required this.aiApprovalMaxRisk,
     required this.notificationMaxChars,
     required this.autoSpeakReplies,
+    required this.speechPlaybackPromptEnabled,
     required this.compressAssistantReplies,
     required this.callModeAllowInterruptions,
     required this.callModeSpeechPauseMillis,
@@ -75,6 +76,7 @@ class AppSettings {
   final String aiApprovalMaxRisk;
   final int notificationMaxChars;
   final bool autoSpeakReplies;
+  final bool speechPlaybackPromptEnabled;
   final bool compressAssistantReplies;
   final bool callModeAllowInterruptions;
   final int callModeSpeechPauseMillis;
@@ -112,6 +114,7 @@ class AppSettings {
       aiApprovalMaxRisk: 'low',
       notificationMaxChars: _defaultNotificationMaxChars,
       autoSpeakReplies: false,
+      speechPlaybackPromptEnabled: true,
       compressAssistantReplies: false,
       callModeAllowInterruptions: true,
       callModeSpeechPauseMillis: defaultCallModeSpeechPauseMillis,
@@ -142,6 +145,7 @@ class AppSettings {
     String? aiApprovalMaxRisk,
     int? notificationMaxChars,
     bool? autoSpeakReplies,
+    bool? speechPlaybackPromptEnabled,
     bool? compressAssistantReplies,
     bool? callModeAllowInterruptions,
     int? callModeSpeechPauseMillis,
@@ -173,6 +177,8 @@ class AppSettings {
       aiApprovalMaxRisk: aiApprovalMaxRisk ?? this.aiApprovalMaxRisk,
       notificationMaxChars: notificationMaxChars ?? this.notificationMaxChars,
       autoSpeakReplies: autoSpeakReplies ?? this.autoSpeakReplies,
+      speechPlaybackPromptEnabled:
+          speechPlaybackPromptEnabled ?? this.speechPlaybackPromptEnabled,
       compressAssistantReplies:
           compressAssistantReplies ?? this.compressAssistantReplies,
       callModeAllowInterruptions:
@@ -211,6 +217,7 @@ class AppSettings {
       'ai_approval_max_risk': aiApprovalMaxRisk,
       'notification_max_chars': notificationMaxChars,
       'auto_speak_replies': autoSpeakReplies,
+      'speech_playback_prompt_enabled': speechPlaybackPromptEnabled,
       'compress_assistant_replies': compressAssistantReplies,
       'call_mode_allow_interruptions': callModeAllowInterruptions,
       'call_mode_speech_pause_millis': callModeSpeechPauseMillis,
@@ -280,6 +287,11 @@ class AppSettings {
       ),
       autoSpeakReplies:
           _readBool(json, 'auto_speak_replies', defaults.autoSpeakReplies),
+      speechPlaybackPromptEnabled: _readBool(
+        json,
+        'speech_playback_prompt_enabled',
+        defaults.speechPlaybackPromptEnabled,
+      ),
       compressAssistantReplies: _readBool(
         json,
         'compress_assistant_replies',

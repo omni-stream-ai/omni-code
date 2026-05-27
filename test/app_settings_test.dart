@@ -11,6 +11,15 @@ void main() {
     expect(settings.autoSpeakReplies, isFalse);
   });
 
+  test('speech playback prompt defaults to true', () {
+    expect(AppSettings.defaults().speechPlaybackPromptEnabled, isTrue);
+  });
+
+  test('missing speech_playback_prompt_enabled falls back to true', () {
+    final settings = AppSettings.fromJson(<String, dynamic>{});
+    expect(settings.speechPlaybackPromptEnabled, isTrue);
+  });
+
   test('notificationMaxChars defaults to 160', () {
     expect(AppSettings.defaults().notificationMaxChars, 160);
   });
@@ -33,6 +42,7 @@ void main() {
       ttsProvider: TtsProvider.bridgeLocal,
       bridgeLocalTtsVoice: '2',
       bridgeLocalTtsStreaming: true,
+      speechPlaybackPromptEnabled: false,
       callModeAllowInterruptions: false,
       callModeSpeechPauseMillis: 1800,
     );
@@ -43,6 +53,7 @@ void main() {
     expect(restored.ttsProvider, TtsProvider.bridgeLocal);
     expect(restored.bridgeLocalTtsVoice, '2');
     expect(restored.bridgeLocalTtsStreaming, isTrue);
+    expect(restored.speechPlaybackPromptEnabled, isFalse);
     expect(restored.callModeAllowInterruptions, isFalse);
     expect(restored.callModeSpeechPauseMillis, 1800);
   });

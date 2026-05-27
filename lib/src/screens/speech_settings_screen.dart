@@ -50,11 +50,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   late TtsProvider _ttsProvider;
   late bool _bridgeLocalTtsStreaming;
   late AsrProvider _asrProvider;
+  late bool _speechPlaybackPromptEnabled;
   late bool _callModeAllowInterruptions;
   late int _callModeSpeechPauseMillis;
-  late bool _callModeWakeWordEnabled;
-  late final TextEditingController _callModeWakeWordsController;
-  String? _callModeWakeWordsError;
   bool _saving = false;
   bool _speechLoading = false;
   bool _updatingSpeakerFilter = false;
@@ -107,7 +105,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _callModeWakeWordsController = TextEditingController();
     _syncFromSettings(appSettingsController.settings);
     appSettingsController.addListener(_onSettingsChanged);
     final cachedStatus = _cachedSpeechStatus;
@@ -127,7 +124,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     unawaited(_speakerEnrollmentRecorder.cancel());
     _whisperApiKeyController.dispose();
     _whisperBaseUrlController.dispose();
-    _callModeWakeWordsController.dispose();
     _speakerNameController.dispose();
     _modelPickerRevision.dispose();
     super.dispose();
@@ -137,10 +133,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     _ttsProvider = settings.ttsProvider;
     _bridgeLocalTtsStreaming = settings.bridgeLocalTtsStreaming;
     _asrProvider = settings.asrProvider;
+    _speechPlaybackPromptEnabled = settings.speechPlaybackPromptEnabled;
     _callModeAllowInterruptions = settings.callModeAllowInterruptions;
     _callModeSpeechPauseMillis = settings.callModeSpeechPauseMillis;
-    _callModeWakeWordEnabled = settings.callModeWakeWordEnabled;
-    _callModeWakeWordsController.text = settings.callModeWakeWords;
     _whisperApiKeyController.text = settings.whisperApiKey;
     _whisperBaseUrlController.text = settings.whisperBaseUrl;
   }
@@ -171,6 +166,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
     final ttsHelpText = _ttsPlatformHelp(l10n);
     final asrHelpText = _asrPlatformHelp(l10n);
     final formValueTextStyle = _formValueTextStyle(context);
@@ -288,6 +285,29 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                                         _platform == TargetPlatform.macOS &&
                                         _asrProvider == AsrProvider.system),
                               ),
+                            const SizedBox(height: AppSpacing.compact),
+                            SwitchListTile.adaptive(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                l10n.speechPlaybackPrompt,
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              subtitle: Text(
+                                l10n.speechPlaybackPromptSubtitle,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: AppColors.mutedSoftFor(brightness),
+                                  height: 1.35,
+                                ),
+                              ),
+                              value: _speechPlaybackPromptEnabled,
+                              onChanged: (value) {
+                                setState(() {
+                                  _speechPlaybackPromptEnabled = value;
+                                });
+                              },
+                            ),
                           ],
                         ),
                         const SizedBox(height: AppSpacing.stackTight),
@@ -663,15 +683,16 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final brightness = theme.brightness;
-    final installedModels =
-        status.models.where((model) => model.installed).toList(growable: false)
-          ..sort((left, right) {
-            final kindComparison = left.kind.name.compareTo(right.kind.name);
-            if (kindComparison != 0) {
-              return kindComparison;
-            }
-            return left.displayName.compareTo(right.displayName);
-          });
+    final installedModels = status.models
+        .where((model) => model.installed && !_isWakeWordModel(model))
+        .toList(growable: false)
+      ..sort((left, right) {
+        final kindComparison = left.kind.name.compareTo(right.kind.name);
+        if (kindComparison != 0) {
+          return kindComparison;
+        }
+        return left.displayName.compareTo(right.displayName);
+      });
 
     return Container(
       decoration: BoxDecoration(
@@ -1907,46 +1928,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
               height: 1.4,
             ),
           ),
-          const SizedBox(height: AppSpacing.compact),
-          _buildSwitchRow(
-            context,
-            title: l10n.callModeWakeWordLabel,
-            subtitle: l10n.callModeWakeWordHelp,
-            value: _callModeWakeWordEnabled,
-            onChanged: (value) {
-              setState(() {
-                _callModeWakeWordEnabled = value;
-                _callModeWakeWordsError = value
-                    ? _validateCallModeWakeWords(
-                        context.l10n,
-                        _callModeWakeWordsController.text,
-                      )
-                    : null;
-              });
-            },
-          ),
-          TextField(
-            controller: _callModeWakeWordsController,
-            enabled: _callModeWakeWordEnabled,
-            onChanged: (_) {
-              if (!_callModeWakeWordEnabled) {
-                return;
-              }
-              setState(() {
-                _callModeWakeWordsError = _validateCallModeWakeWords(
-                  context.l10n,
-                  _callModeWakeWordsController.text,
-                );
-              });
-            },
-            style: formValueTextStyle,
-            decoration: InputDecoration(
-              labelText: l10n.callModeWakeWordsLabel,
-              helperText: l10n.callModeWakeWordsHelp,
-              errorText: _callModeWakeWordsError,
-              hintText: defaultCallModeWakeWords,
-            ),
-          ),
         ],
       ),
     );
@@ -2355,13 +2336,18 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       ...model.supportsProfiles,
       ...model.recommendedProfiles,
       ...model.selectedBy,
-    };
+    }..remove(SpeechProfile.wakeWordDefault);
     if (profiles.isNotEmpty) {
       final sorted = profiles.toList(growable: false)
         ..sort((left, right) => left.index.compareTo(right.index));
       return sorted;
     }
     return _inferProfilesForModel(model);
+  }
+
+  bool _isWakeWordModel(SpeechModelSummary model) {
+    return model.kind == SpeechModelKind.wakeWord ||
+        model.capabilities.wakeWord;
   }
 
   List<SpeechProfile> _inferProfilesForModel(SpeechModelSummary model) {
@@ -2380,9 +2366,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     }
     if (model.kind == SpeechModelKind.vad || model.capabilities.vad) {
       profiles.add(SpeechProfile.vadDefault);
-    }
-    if (model.kind == SpeechModelKind.wakeWord || model.capabilities.wakeWord) {
-      profiles.add(SpeechProfile.wakeWordDefault);
     }
     return profiles;
   }
@@ -2666,18 +2649,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   }
 
   Future<void> _save() async {
-    final l10n = context.l10n;
-    final wakeWordsError = _callModeWakeWordEnabled
-        ? _validateCallModeWakeWords(l10n, _callModeWakeWordsController.text)
-        : null;
-    if (wakeWordsError != null) {
-      setState(() {
-        _callModeWakeWordsError = wakeWordsError;
-      });
-      return;
-    }
     setState(() {
-      _callModeWakeWordsError = null;
       _saving = true;
     });
     try {
@@ -2685,10 +2657,11 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         ttsProvider: _ttsProvider,
         bridgeLocalTtsStreaming: _bridgeLocalTtsStreaming,
         asrProvider: _asrProvider,
+        speechPlaybackPromptEnabled: _speechPlaybackPromptEnabled,
         callModeAllowInterruptions: _callModeAllowInterruptions,
         callModeSpeechPauseMillis: _callModeSpeechPauseMillis,
-        callModeWakeWordEnabled: _callModeWakeWordEnabled,
-        callModeWakeWords: _callModeWakeWordsController.text,
+        callModeWakeWordEnabled: false,
+        callModeWakeWords: defaultCallModeWakeWords,
         whisperApiKey: _whisperApiKeyController.text.trim(),
         whisperBaseUrl: _whisperBaseUrlController.text.trim(),
       );
@@ -2704,40 +2677,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         });
       }
     }
-  }
-
-  String? _validateCallModeWakeWords(AppLocalizations l10n, String value) {
-    final words = value
-        .split(',')
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty)
-        .toList(growable: false);
-    if (words.isEmpty) {
-      return l10n.callModeWakeWordsEmptyError;
-    }
-    final unsupportedWord = words.cast<String?>().firstWhere(
-          (word) => word != null && !_isSupportedLocalWakeWord(word),
-          orElse: () => null,
-        );
-    if (unsupportedWord != null) {
-      return l10n.callModeWakeWordsUnsupportedError(
-        unsupportedWord,
-        '$defaultCallModeWakeWords / xiao3 ou1',
-      );
-    }
-    return null;
-  }
-
-  bool _isSupportedLocalWakeWord(String value) {
-    if (value.runes.any((codeUnit) => codeUnit > 0x7f)) {
-      return false;
-    }
-    return value.runes.any((codeUnit) {
-      final isDigit = codeUnit >= 0x30 && codeUnit <= 0x39;
-      final isUpper = codeUnit >= 0x41 && codeUnit <= 0x5a;
-      final isLower = codeUnit >= 0x61 && codeUnit <= 0x7a;
-      return isDigit || isUpper || isLower;
-    });
   }
 
   Future<void> _deleteSpeaker(String speakerId) async {
@@ -2787,6 +2726,5 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     SpeechProfile.ttsDefault,
     SpeechProfile.asrBatch,
     SpeechProfile.vadDefault,
-    SpeechProfile.wakeWordDefault,
   ];
 }

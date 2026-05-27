@@ -338,6 +338,18 @@ abstract class AppLocalizations {
   /// **'Start playback automatically after the AI reply finishes'**
   String get autoSpeakRepliesSubtitle;
 
+  /// No description provided for @speechPlaybackPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Optimize replies for speech playback'**
+  String get speechPlaybackPrompt;
+
+  /// No description provided for @speechPlaybackPromptSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'When a reply will be spoken aloud, ask the agent to avoid hard-to-read-aloud content unless you explicitly request it.'**
+  String get speechPlaybackPromptSubtitle;
+
   /// No description provided for @compressReplies.
   ///
   /// In en, this message translates to:
@@ -1097,7 +1109,7 @@ abstract class AppLocalizations {
   /// No description provided for @callModeWakeWordsHelp.
   ///
   /// In en, this message translates to:
-  /// **'Separate multiple phrases with commas. Use English phrases or numbered pinyin such as xiao3 ou1; direct Chinese characters are not supported.'**
+  /// **'Separate multiple phrases with commas. English phrases and numbered pinyin such as ou1 mi3 are converted to model tokens. Direct Chinese characters are not supported.'**
   String get callModeWakeWordsHelp;
 
   /// No description provided for @callModeWakeWordsEmptyError.
@@ -1109,7 +1121,7 @@ abstract class AppLocalizations {
   /// No description provided for @callModeWakeWordsUnsupportedError.
   ///
   /// In en, this message translates to:
-  /// **'\"{wakeWord}\" is not supported by the local wake-word model. Use an English phrase or numbered pinyin, such as \"{example}\".'**
+  /// **'\"{wakeWord}\" is not supported by the local wake-word model. Use an English phrase, numbered pinyin, or model token sequence such as \"{example}\".'**
   String callModeWakeWordsUnsupportedError(String wakeWord, String example);
 
   /// No description provided for @callModeWakeWordModelUnsupported.

@@ -9,10 +9,12 @@ import 'package:omni_code/l10n/generated/app_localizations.dart';
 import 'package:omni_code/src/bridge_client.dart';
 import 'package:omni_code/src/screens/speech_settings_screen.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
+import 'package:omni_code/src/settings/app_settings_store.dart';
 import 'package:omni_code/src/theme/app_theme.dart';
 
 void main() {
   setUp(() {
+    appSettingsController.debugReplaceStore(_MemoryAppSettingsStore());
     appSettingsController.debugReplaceSettings(AppSettings.defaults());
   });
 
@@ -121,6 +123,7 @@ void main() {
       find.text('zf_xiaobei · Chinese'),
       findsOneWidget,
     );
+    expect(find.text('Optimize replies for speech playback'), findsOneWidget);
     expect(find.text('Allow speaking over replies'), findsOneWidget);
     expect(find.text('Pause 1.2s'), findsOneWidget);
 
@@ -224,10 +227,12 @@ void main() {
     expect(find.text('zf_xiaobei · 中文'), findsOneWidget);
   });
 
-  testWidgets('rejects unsupported local wake words before saving',
-      (tester) async {
+  testWidgets('does not show wake word settings', (tester) async {
     appSettingsController.debugReplaceSettings(
-      AppSettings.defaults().copyWith(callModeWakeWordEnabled: true),
+      AppSettings.defaults().copyWith(
+        callModeWakeWordEnabled: true,
+        callModeWakeWords: 'legacy wake word',
+      ),
     );
     await tester.pumpWidget(
       _TestApp(
@@ -239,26 +244,20 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    await tester.ensureVisible(find.widgetWithText(TextField, 'Wake words'));
-    await tester.enterText(find.widgetWithText(TextField, 'Wake words'), '小欧');
+    expect(find.text('Require wake word'), findsNothing);
+    expect(find.widgetWithText(TextField, 'Wake words'), findsNothing);
+    expect(find.text('本地唤醒词模型'), findsNothing);
+
     await tester.ensureVisible(find.text('Save'));
     await tester.tap(find.text('Save'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    expect(
-      find.text(
-        '"小欧" is not supported by the local wake-word model. Use an English phrase or numbered pinyin, such as "hey omni / xiao3 ou1".',
-      ),
-      findsOneWidget,
-    );
+    expect(appSettingsController.settings.callModeWakeWordEnabled, isFalse);
     expect(appSettingsController.settings.callModeWakeWords, 'hey omni');
   });
 
-  testWidgets('shows unsupported local wake word error while typing',
+  testWidgets('saving speech playback prompt toggle persists setting',
       (tester) async {
-    appSettingsController.debugReplaceSettings(
-      AppSettings.defaults().copyWith(callModeWakeWordEnabled: true),
-    );
     await tester.pumpWidget(
       _TestApp(
         home: SpeechSettingsScreen(
@@ -269,16 +268,34 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    await tester.ensureVisible(find.widgetWithText(TextField, 'Wake words'));
-    await tester.enterText(find.widgetWithText(TextField, 'Wake words'), '小欧');
-    await tester.pump();
+    expect(appSettingsController.settings.speechPlaybackPromptEnabled, isTrue);
 
-    expect(
-      find.text(
-        '"小欧" is not supported by the local wake-word model. Use an English phrase or numbered pinyin, such as "hey omni / xiao3 ou1".',
-      ),
-      findsOneWidget,
+    await tester.ensureVisible(
+      find.text('Optimize replies for speech playback'),
     );
+    await tester.tap(find.text('Optimize replies for speech playback'));
+    await tester.pump();
+    await tester.ensureVisible(find.text('Save'));
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(appSettingsController.settings.speechPlaybackPromptEnabled, isFalse);
+  });
+
+  testWidgets('does not show wake word bridge model profile', (tester) async {
+    await tester.pumpWidget(
+      _TestApp(
+        home: SpeechSettingsScreen(
+          client: _bridgeClientForWakeWordModelProfile(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('Wake word'), findsNothing);
+    expect(find.text('Sherpa Wake Word'), findsNothing);
+    expect(find.text('Use for Wake word'), findsNothing);
   });
 
   testWidgets('opens model picker sheet from local bridge model card',
@@ -965,6 +982,63 @@ class _TestApp extends StatelessWidget {
   }
 }
 
+BridgeClient _bridgeClientForWakeWordModelProfile() {
+  return BridgeClient(
+    httpClient: _FakeHttpClient((request) async {
+      if (request.method == 'GET' && request.url.path == '/speech/status') {
+        return http.Response(
+          jsonEncode({
+            'data': {
+              'root_dir': '/tmp/omni-code-bridge/speech',
+              'profiles': {
+                'wake_word_default': 'sherpa-kws',
+              },
+              'voices': {
+                'tts_by_model': <String, String>{},
+              },
+              'models': [
+                {
+                  'id': 'sherpa-kws',
+                  'kind': 'wake_word',
+                  'display_name': 'Sherpa Wake Word',
+                  'description': 'Local keyword spotting model',
+                  'languages': ['zh', 'en'],
+                  'runtime': 'offline',
+                  'backend': 'onnx',
+                  'capabilities': {
+                    'streaming': false,
+                    'realtime_asr': false,
+                    'batch_asr': false,
+                    'speech_synthesis': false,
+                    'vad': false,
+                    'wake_word': true,
+                    'endpointing': false,
+                    'punctuation': false,
+                    'inverse_text_normalization': false,
+                    'multilingual': true,
+                  },
+                  'features': ['kws'],
+                  'supports_profiles': ['wake_word_default'],
+                  'recommended_profiles': ['wake_word_default'],
+                  'download_url': 'https://example.com/kws',
+                  'download_size_mb': 38,
+                  'installed': true,
+                  'selected_by': ['wake_word_default'],
+                  'voices': [],
+                },
+              ],
+              'downloads': [],
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      return http.Response('not found', 404);
+    }),
+  );
+}
+
 BridgeClient _bridgeClientForSpeechSettings() {
   return BridgeClient(
     httpClient: _FakeHttpClient((request) async {
@@ -1420,5 +1494,17 @@ class _FakeHttpClient extends http.BaseClient {
       reasonPhrase: response.reasonPhrase,
       request: request,
     );
+  }
+}
+
+class _MemoryAppSettingsStore implements AppSettingsStore {
+  String? value;
+
+  @override
+  Future<String?> read() async => value;
+
+  @override
+  Future<void> write(String value) async {
+    this.value = value;
   }
 }

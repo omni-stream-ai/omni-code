@@ -135,6 +135,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Start playback automatically after the AI reply finishes';
 
   @override
+  String get speechPlaybackPrompt => 'Optimize replies for speech playback';
+
+  @override
+  String get speechPlaybackPromptSubtitle =>
+      'When a reply will be spoken aloud, ask the agent to avoid hard-to-read-aloud content unless you explicitly request it.';
+
+  @override
   String get compressReplies => 'Compress AI replies';
 
   @override
@@ -581,14 +588,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get callModeWakeWordsHelp =>
-      'Separate multiple phrases with commas. Use English phrases or numbered pinyin such as xiao3 ou1; direct Chinese characters are not supported.';
+      'Separate multiple phrases with commas. English phrases and numbered pinyin such as ou1 mi3 are converted to model tokens. Direct Chinese characters are not supported.';
 
   @override
   String get callModeWakeWordsEmptyError => 'Enter at least one wake word.';
 
   @override
   String callModeWakeWordsUnsupportedError(String wakeWord, String example) {
-    return '\"$wakeWord\" is not supported by the local wake-word model. Use an English phrase or numbered pinyin, such as \"$example\".';
+    return '\"$wakeWord\" is not supported by the local wake-word model. Use an English phrase, numbered pinyin, or model token sequence such as \"$example\".';
   }
 
   @override

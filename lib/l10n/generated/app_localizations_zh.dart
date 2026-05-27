@@ -134,6 +134,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoSpeakRepliesSubtitle => 'AI 回复完成后自动开始播报';
 
   @override
+  String get speechPlaybackPrompt => '为语音播报优化回复';
+
+  @override
+  String get speechPlaybackPromptSubtitle =>
+      '当回复会被朗读时，提醒 Agent 避免返回不适合朗读的内容；如果你明确要求，仍会返回。';
+
+  @override
   String get compressReplies => '压缩 AI 回复';
 
   @override
@@ -559,14 +566,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get callModeWakeWordsHelp =>
-      '多个短语用逗号分隔。支持英文字母短语，或带声调数字的拼音，例如 xiao3 ou1；不支持直接输入汉字。';
+      '多个短语用逗号分隔。支持英文短语和数字声调拼音，例如 ou1 mi3，会自动转换为模型 token；不支持直接输入汉字。';
 
   @override
   String get callModeWakeWordsEmptyError => '请至少输入一个唤醒词。';
 
   @override
   String callModeWakeWordsUnsupportedError(String wakeWord, String example) {
-    return '本地唤醒词模型不支持“$wakeWord”。请使用英文字母短语或带声调数字的拼音，例如“$example”。';
+    return '本地唤醒词模型不支持“$wakeWord”。请使用英文短语、数字声调拼音或模型 token 序列，例如“$example”。';
   }
 
   @override

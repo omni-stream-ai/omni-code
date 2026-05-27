@@ -381,14 +381,24 @@ class BridgeClient {
     String sessionId,
     String content, {
     String inputMode = 'text',
+    String? systemPrompt,
   }) async {
+    final body = <String, dynamic>{
+      'content': content,
+      'input_mode': inputMode,
+    };
+    final trimmedSystemPrompt = systemPrompt?.trim();
+    if (trimmedSystemPrompt != null && trimmedSystemPrompt.isNotEmpty) {
+      body['system_prompt'] = trimmedSystemPrompt;
+    }
+
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/sessions/$sessionId/messages'),
       headers: {
         ..._defaultHeaders,
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({'content': content, 'input_mode': inputMode}),
+      body: jsonEncode(body),
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {

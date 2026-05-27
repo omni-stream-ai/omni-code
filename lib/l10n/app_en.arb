@@ -40,6 +40,8 @@
   "riskHigh": "High",
   "autoSpeakReplies": "Auto-play agent replies",
   "autoSpeakRepliesSubtitle": "Start playback automatically after the AI reply finishes",
+  "speechPlaybackPrompt": "Optimize replies for speech playback",
+  "speechPlaybackPromptSubtitle": "When a reply will be spoken aloud, ask the agent to avoid hard-to-read-aloud content unless you explicitly request it.",
   "compressReplies": "Compress AI replies",
   "compressRepliesSubtitle": "When enabled, new sessions ask the AI to summarize what it did briefly, ideally within 50 characters",
   "notificationPreviewMaxChars": "Notification max chars",
@@ -283,9 +285,9 @@
   "callModeWakeWordLabel": "Require wake word",
   "callModeWakeWordHelp": "When enabled, Omni Bridge Local uses its local keyword detector before accepting realtime speech. Unsupported phrases are rejected with a setup error.",
   "callModeWakeWordsLabel": "Wake words",
-  "callModeWakeWordsHelp": "Separate multiple phrases with commas. Use English phrases or numbered pinyin such as xiao3 ou1; direct Chinese characters are not supported.",
+  "callModeWakeWordsHelp": "Separate multiple phrases with commas. English phrases and numbered pinyin such as ou1 mi3 are converted to model tokens. Direct Chinese characters are not supported.",
   "callModeWakeWordsEmptyError": "Enter at least one wake word.",
-  "callModeWakeWordsUnsupportedError": "\"{wakeWord}\" is not supported by the local wake-word model. Use an English phrase or numbered pinyin, such as \"{example}\".",
+  "callModeWakeWordsUnsupportedError": "\"{wakeWord}\" is not supported by the local wake-word model. Use an English phrase, numbered pinyin, or model token sequence such as \"{example}\".",
   "@callModeWakeWordsUnsupportedError": {
     "placeholders": {
       "wakeWord": {

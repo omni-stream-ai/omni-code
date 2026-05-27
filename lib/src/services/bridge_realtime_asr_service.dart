@@ -75,10 +75,6 @@ class BridgeRealtimeAsrConfig {
         'sample_rate_hz': sampleRateHz,
         'channels': channels,
         'enable_vad': enableVad,
-        'enable_wake_word': enableWakeWord,
-        if (wakeWordDetector != null) 'wake_word_detector': wakeWordDetector,
-        if (wakeWords.isNotEmpty) 'wake_words': wakeWords,
-        'strip_wake_word': stripWakeWord,
         if (endpointTrailingSilenceMs != null)
           'endpoint_trailing_silence_ms': endpointTrailingSilenceMs,
         if (vadMinSilenceMs != null) 'vad_min_silence_ms': vadMinSilenceMs,

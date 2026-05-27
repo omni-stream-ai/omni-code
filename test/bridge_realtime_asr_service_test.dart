@@ -143,8 +143,6 @@ void main() {
             'sample_rate_hz': 16000,
             'channels': 1,
             'enable_vad': true,
-            'enable_wake_word': false,
-            'strip_wake_word': true,
             'endpoint_trailing_silence_ms': 1500,
             'vad_min_silence_ms': 900,
           },
@@ -153,7 +151,7 @@ void main() {
     );
   });
 
-  test('bridge realtime config can request local KWS wake word detector',
+  test('bridge realtime config does not serialize wake word settings',
       () async {
     const config = BridgeRealtimeAsrConfig(
       enableWakeWord: true,
@@ -167,10 +165,6 @@ void main() {
         'sample_rate_hz': 16000,
         'channels': 1,
         'enable_vad': true,
-        'enable_wake_word': true,
-        'wake_word_detector': 'local_kws',
-        'wake_words': ['小欧', '欧米'],
-        'strip_wake_word': true,
       },
     });
   });
