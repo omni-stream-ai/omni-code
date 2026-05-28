@@ -1,15 +1,35 @@
-# Omni Code Client
+<p align="center">
+  <img src="assets/app-icon.svg" width="128" alt="Omni Code">
+</p>
 
-Flutter 客户端仓库。现在这个仓库只包含客户端代码，桌面 bridge 已拆到独立仓库：
-`https://github.com/omni-stream-ai/omni-code-bridge`。
+<h1 align="center">Omni Code Client</h1>
 
-Omni Code Client 是桌面 agent 会话的跨平台客户端。它通过 HTTP 和 SSE
-连接 bridge，让你可以在移动端和桌面端管理项目、打开会话、发送消息、接收
-回复通知，以及处理需要人工确认的审批请求。
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.5+-02569B?logo=flutter" alt="Flutter"></a>
+  <img src="https://img.shields.io/badge/platform-Android%20%7C%20iOS%20%7C%20Web%20%7C%20Desktop-lightgrey" alt="Platforms">
+  <a href="https://github.com/omni-stream-ai/omni-code/releases"><img src="https://img.shields.io/github/v/release/omni-stream-ai/omni-code" alt="Release"></a>
+</p>
+
+<p align="center">
+  <a href="README.md">English</a>
+</p>
+
+---
+
+Omni Code 是一个跨平台 Flutter 客户端，支持桌面端和移动端，核心目标是让你通过语音完成产品设计、开发、测试等全部工作流——不需要一直守在屏幕前。
+
+它连接 [omni-code-bridge](https://github.com/omni-stream-ai/omni-code-bridge)，让桌面 agent 的能力延伸到多端和语音交互中。
 
 ## 预览
 
 ![Omni Code](preview/omni-code-showcase.png)
+
+## 路线图 (V1)
+
+1. **完善基本交互** — 优化会话、审批、通知等核心流程的体验
+2. **跨项目跨会话语音交互** — 用语音在多个项目和会话间无缝切换
+3. **任务编排** — 支持多步骤任务的编排与自动化执行
 
 ## 安装
 
@@ -26,146 +46,13 @@ brew install --cask omni-code
 yay -S omni-code-bin
 ```
 
-稳定版 release 会通过 GitHub Actions 自动更新 Homebrew cask 和 AUR 包。
-
-## TODO 看板
-
-当前项目的 TODO 看板放在 GitHub Projects：
-
-- [omni-code Todo](https://github.com/orgs/omni-stream-ai/projects/2)
-
-这个看板用于当前的任务规划和执行跟踪。
-
-## 适合谁
-
-- 在桌面上运行 Codex 或类似命令行 agent 工作流的开发者。
-- 不想一直守在电脑前，但又需要审核敏感操作的用户。
-- 希望把 bridge 部署在自己电脑或局域网内、自己掌控访问方式的个人或团队。
-- 需要跨平台客户端、语音输入、语音播报和通知能力来配合编码会话的用户。
-
-## 这个客户端的优势
-
-- 跨平台接入桌面会话：可以在移动端或桌面端查看项目状态、继续已有会话，或新开会话。
-- 审批链路更实用：bridge 遇到敏感请求时，可以回退到显式人工确认，而不是直接执行。
-- 日常使用更顺手：通知、语音转文字、文字转语音，减少必须守着终端的时间。
-- Bridge 架构更可控：bridge URL、token、client ID 都可配置，不绑定单一托管后端。
-- Android 分发简单：客户端默认检查官方 GitHub Release 更新清单，也可以改成 bridge 提供的自托管更新清单。
-
-## 环境要求
-
-- `Flutter` 3.5+
-- Android Studio 或 Xcode
-
-## 启动客户端
+## 开发
 
 ```bash
 flutter pub get
 flutter run
 ```
 
-如果 bridge 不在默认地址，可以通过 Dart define 指定：
-
-```bash
-flutter run --dart-define=ECHO_MATE_BRIDGE_URL=http://127.0.0.1:8787
-```
-
-## Web 路由
-
-Web 端现在使用不带 `#` 的 history 路由，例如：
-
-- `/projects/<projectId>`
-- `/projects/<projectId>/<sessionId>`
-
-部署 web 构建产物时，HTTP 服务器必须把未知路径回退到 `index.html`。否则直接打开
-或刷新深链接时会返回 `404`。
-
-如果应用不是部署在根路径 `/` 下，而是在某个子路径下，需要用对应的 base href
-构建：
-
-```bash
-flutter build web --base-href /your-path/
-```
-
-## 连接 Bridge
-
-客户端通过 HTTP 和 SSE 访问桌面 bridge，地址可以在设置页里填写，也可以通过
-`ECHO_MATE_BRIDGE_URL` 传入。
-
-如果你使用独立 bridge 仓库：
-
-```bash
-git clone https://github.com/omni-stream-ai/omni-code-bridge.git
-cd omni-code-bridge
-cp .env.example .env
-cargo run
-```
-
-如果 bridge `.env` 里配置了 `ECHO_MATE_BRIDGE_TOKEN` 或
-`ECHO_MATE_ALLOWED_CLIENT_IDS`，客户端也要填对应值：
-
-1. 打开客户端设置页。
-2. 复制自动生成的 `Client ID`。
-3. 写入 `omni-code-bridge/.env`。
-4. 把 `.env` 里的 `ECHO_MATE_BRIDGE_TOKEN` 填到客户端的 `Bridge Token`。
-5. 重启 bridge，然后在客户端保存设置。
-
-## 目录
-
-```text
-android/
-ios/
-lib/
-linux/
-macos/
-test/
-web/
-windows/
-```
-
-## 开发检查
-
-```bash
-flutter pub get
-flutter analyze
-```
-
-## GitHub Actions 打包
-
-当前仓库包含一个客户端发布 workflow：
-
-- `.github/workflows/release.yml`
-- Workflow 名称：`Release Client`
-- 触发方式：手动 `workflow_dispatch`，或 `pubspec.yaml` / `.github/workflows/release.yml` 发生变更
-- 产物：通用 Android APK、按 ABI 拆分的 Android APK、Windows zip、Linux tar.gz、macOS Intel / Apple Silicon zip，以及 `update.json` GitHub Release
-- Release notes：基于上一个 tag 之后的 Conventional Commit 提交消息生成
-- `main` 只允许 stable 版本
-- 其他分支必须使用 prerelease 版本号，例如 `0.1.0-beta.1`
-- stable release 在配置好发布凭据后，还会同步更新 `omni-stream-ai/homebrew-omni-code` 和 AUR 包 `omni-code-bin`
-
-如果 `.github/workflows/release.yml` 发生变更，且当前 app 版本对应的 tag
-还不存在，workflow 仍会发布这个版本的 release。
-
-当前 release APK 在没有本地签名文件时会回退到 Android debug signing
-config。真正分发给用户前，需要先配置 release signing secrets。
-
-建议配置的 GitHub Actions secrets：
-
-- `ANDROID_KEYSTORE_BASE64`：base64 编码后的 Android keystore 文件，要求是单行内容，且不要带引号或 `data:...;base64,` 前缀
-- `ANDROID_KEY_ALIAS`：Android 签名 key alias
-- `ANDROID_KEY_PASSWORD`：Android 签名 key password
-- `ANDROID_STORE_PASSWORD`：Android keystore password
-- `ANDROID_GOOGLE_SERVICES_JSON_BASE64`：base64 编码后的 `android/app/google-services.json`，要求是单行内容，且不要带引号或 `data:...;base64,` 前缀
-- `HOMEBREW_TAP_TOKEN`：用于推送 `omni-stream-ai/homebrew-omni-code` 的 token
-- `AUR_SSH_PRIVATE_KEY`：AUR 包仓库 `omni-code-bin` 的 SSH 私钥
-
-## 文档
-
-- [TODO 看板](https://github.com/orgs/omni-stream-ai/projects/2)
-- [设计稿与主题看板](designs/README.md)
-- [客户端说明](CLIENT_README.md)
-- [贡献指南](CONTRIBUTING.md)
-- [安全策略](SECURITY.md)
-
 ## 许可证
 
-本项目使用 [MIT License](LICENSE)。
+[MIT](LICENSE)

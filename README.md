@@ -1,19 +1,35 @@
-# Omni Code Client
+<p align="center">
+  <img src="assets/app-icon.svg" width="128" alt="Omni Code">
+</p>
 
-[中文文档](README.zh-CN.md)
+<h1 align="center">Omni Code Client</h1>
 
-Flutter client for Omni Code. This repository now contains only the client app.
-The desktop bridge lives in a separate repository:
-`https://github.com/omni-stream-ai/omni-code-bridge`.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.5+-02569B?logo=flutter" alt="Flutter"></a>
+  <img src="https://img.shields.io/badge/platform-Android%20%7C%20iOS%20%7C%20Web%20%7C%20Desktop-lightgrey" alt="Platforms">
+  <a href="https://github.com/omni-stream-ai/omni-code/releases"><img src="https://img.shields.io/github/v/release/omni-stream-ai/omni-code" alt="Release"></a>
+</p>
 
-Omni Code Client is a cross-platform client for desktop agent sessions. It connects
-to the bridge over HTTP and SSE so you can manage projects, open sessions, send
-messages, receive reply notifications, and handle approval prompts across
-mobile and desktop devices.
+<p align="center">
+  <a href="README.zh-CN.md">中文文档</a>
+</p>
+
+---
+
+Omni Code 是一个跨平台 Flutter 客户端，支持桌面端和移动端，核心目标是让你通过语音完成产品设计、开发、测试等全部工作流——不需要一直守在屏幕前。
+
+它连接 [omni-code-bridge](https://github.com/omni-stream-ai/omni-code-bridge)，让桌面 agent 的能力延伸到多端和语音交互中。
 
 ## Preview
 
 ![Omni Code](preview/omni-code-showcase.png)
+
+## Roadmap (V1)
+
+1. **完善基本交互** — 优化会话、审批、通知等核心流程的体验
+2. **跨项目跨会话语音交互** — 用语音在多个项目和会话间无缝切换
+3. **任务编排** — 支持多步骤任务的编排与自动化执行
 
 ## Install
 
@@ -30,153 +46,13 @@ brew install --cask omni-code
 yay -S omni-code-bin
 ```
 
-Stable releases update the Homebrew cask and AUR package automatically from
-GitHub Actions.
-
-## TODO Board
-
-The current project TODO board lives in GitHub Projects:
-
-- [omni-code Todo](https://github.com/orgs/omni-stream-ai/projects/2)
-
-Use it as the current task board for planning and execution.
-
-## Who It's For
-
-- Developers running Codex or similar command-line agent workflows on a desktop machine.
-- Users who want to review or approve sensitive agent actions without staying at their desk.
-- Teams or individuals who prefer a self-hosted bridge they can point to their own machine or LAN.
-- Users who want a cross-platform client with voice input, speech playback, and notifications around coding sessions.
-
-## Why Use It
-
-- Cross-platform access to desktop sessions: check project state, continue a session, or start a new one from mobile or desktop clients.
-- Practical approval flow: sensitive bridge requests can fall back to explicit approval instead of silently executing.
-- Better day-to-day ergonomics: notifications, speech-to-text, and text-to-speech reduce the need to stay in front of the terminal.
-- Bridge-based architecture: bridge URL, token, and client ID are configurable, so the client is not tied to a single hosted backend.
-- Simple Android distribution: the app checks an official GitHub release manifest by default and can also use a bridge-served manifest for self-hosted updates.
-
-## Requirements
-
-- `Flutter` 3.5+
-- Android Studio or Xcode, depending on the target platform
-
-## Run The Client
+## Development
 
 ```bash
 flutter pub get
 flutter run
 ```
 
-If the bridge is not available at the default address, pass it with a Dart
-define:
-
-```bash
-flutter run --dart-define=ECHO_MATE_BRIDGE_URL=http://127.0.0.1:8787
-```
-
-## Web Routing
-
-The web client uses history-based URLs without `#`, for example:
-
-- `/projects/<projectId>`
-- `/projects/<projectId>/<sessionId>`
-
-When deploying the web build, your HTTP server must rewrite unknown paths back
-to `index.html`. Without that fallback, directly opening or refreshing a deep
-link will return `404`.
-
-If you serve the app from a subpath instead of `/`, build with the matching
-base href:
-
-```bash
-flutter build web --base-href /your-path/
-```
-
-## Connect To The Bridge
-
-The client talks to the desktop bridge over HTTP and SSE. By default it uses
-the current bridge URL configured in settings or via
-`ECHO_MATE_BRIDGE_URL`.
-
-If you are running the bridge from the bridge repository:
-
-```bash
-git clone https://github.com/omni-stream-ai/omni-code-bridge.git
-cd omni-code-bridge
-cp .env.example .env
-cargo run
-```
-
-If your bridge `.env` sets `ECHO_MATE_BRIDGE_TOKEN` or
-`ECHO_MATE_ALLOWED_CLIENT_IDS`, the client app needs matching values:
-
-1. Open the client app and go to Settings.
-2. Copy the generated `Client ID`.
-3. Put it in `omni-code-bridge/.env`.
-4. Put the `.env` value from `ECHO_MATE_BRIDGE_TOKEN` into the app's
-   `Bridge Token` field.
-5. Restart the desktop bridge, then save the app settings.
-
-## Repository Layout
-
-```text
-android/
-ios/
-lib/
-linux/
-macos/
-test/
-web/
-windows/
-```
-
-## Development Checks
-
-```bash
-flutter pub get
-flutter analyze
-```
-
-## GitHub Actions Builds
-
-This repository includes a client release workflow:
-
-- `.github/workflows/release.yml`
-- Workflow name: `Release Client`
-- Trigger: `workflow_dispatch` or pushes that change `pubspec.yaml` or `.github/workflows/release.yml`
-- Output: universal Android APK, split Android ABI APKs, Windows zip, Linux tar.gz, macOS Intel/Apple Silicon zips, plus `update.json` GitHub Release assets
-- Release notes: generated from Conventional Commit messages since the previous tag
-- `main` can publish stable versions only
-- Other branches can build with stable versions, but release publishing is skipped unless the version is a prerelease such as `0.1.0-beta.1`
-- Stable releases also update `omni-stream-ai/homebrew-omni-code` and the AUR package `omni-code-bin` when the required publishing secrets are configured
-
-If `.github/workflows/release.yml` changes and the current app version tag does
-not exist yet, the workflow will still publish that version's release.
-
-The release APK currently falls back to the Android debug signing config when
-no local signing files are present. Configure signing secrets before
-distributing release builds to users.
-
-Recommended GitHub Actions secrets:
-
-- `ANDROID_KEYSTORE_BASE64`: base64-encoded Android keystore file in a single line, without quotes or `data:...;base64,` prefixes
-- `ANDROID_KEY_ALIAS`: Android signing key alias
-- `ANDROID_KEY_PASSWORD`: Android signing key password
-- `ANDROID_STORE_PASSWORD`: Android keystore password
-- `ANDROID_GOOGLE_SERVICES_JSON_BASE64`: base64-encoded `android/app/google-services.json` in a single line, without quotes or `data:...;base64,` prefixes
-- `HOMEBREW_TAP_TOKEN`: token with push access to `omni-stream-ai/homebrew-omni-code`
-- `AUR_SSH_PRIVATE_KEY`: SSH private key for the `omni-code-bin` AUR package repository
-
-## Documentation
-
-- [TODO board](https://github.com/orgs/omni-stream-ai/projects/2)
-- [中文文档](README.zh-CN.md)
-- [Design assets and theme board](designs/README.md)
-- [Client app notes](CLIENT_README.md)
-- [Contributing](CONTRIBUTING.md)
-- [Security policy](SECURITY.md)
-
 ## License
 
-Omni Code is licensed under the [MIT License](LICENSE).
+[MIT](LICENSE)
