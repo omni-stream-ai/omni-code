@@ -365,7 +365,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final canCancelReply = hasActiveTurn && !_cancellingReply;
     final turns = _turns;
     final showHistoryLoader = _hasHiddenTurns || _expandingHistory;
-    final approvalCardMaxHeight = MediaQuery.of(context).size.height * 0.42;
+    final approvalCardMaxHeight = MediaQuery.of(context).size.height * 0.36;
     final systemSpeechUnavailableMessage = _systemSpeechUnavailableStatus;
     final callModeUnavailableMessage = _callModeUnavailableMessage;
     final showVoiceInputUnavailableTooltip =
@@ -766,121 +766,143 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       ),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: maxHeight),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              context.l10n.agentAwaitingPermission(_agentLabel(_session.agent)),
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: AppColors.warningTextFor(brightness),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.compact),
-            Flexible(
-              fit: FlexFit.loose,
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      summary,
-                      style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final actions = isAwaitingResolution
+                ? null
+                : SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        FilledButton(
+                          onPressed: approval.resolvable && !isSubmitting
+                              ? () => _submitApproval('accept')
+                              : null,
+                          child: _buildApprovalButtonChild(
+                            'accept',
+                            context.l10n.approve,
+                          ),
+                        ),
+                        if (approval.allowAcceptForSession) ...[
+                          const SizedBox(width: AppSpacing.compact),
+                          OutlinedButton(
+                            onPressed: approval.resolvable && !isSubmitting
+                                ? () => _submitApproval('accept_for_session')
+                                : null,
+                            child: _buildApprovalButtonChild(
+                              'accept_for_session',
+                              context.l10n.approveForSession,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(width: AppSpacing.compact),
+                        OutlinedButton(
+                          onPressed: approval.resolvable && !isSubmitting
+                              ? () => _submitApproval('decline')
+                              : null,
+                          child: _buildApprovalButtonChild(
+                            'decline',
+                            context.l10n.reject,
+                          ),
+                        ),
+                        if (approval.allowCancel) ...[
+                          const SizedBox(width: AppSpacing.compact),
+                          OutlinedButton(
+                            onPressed: approval.resolvable && !isSubmitting
+                                ? () => _submitApproval('cancel')
+                                : null,
+                            child: _buildApprovalButtonChild(
+                              'cancel',
+                              context.l10n.cancel,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    if (isAwaitingResolution) ...[
-                      const SizedBox(height: AppSpacing.compact),
-                      Text(
-                        context.l10n.waitingApprovalProcessing,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: AppColors.warningTextFor(brightness),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                    if (approval.command != null) ...[
-                      const SizedBox(height: AppSpacing.compact),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(AppSpacing.tileY),
-                        decoration: BoxDecoration(
-                          color: AppColors.panelDeepFor(brightness),
-                          borderRadius: BorderRadius.circular(
-                            AppSpacing.radiusControl,
-                          ),
-                          border: Border.all(
-                            color: AppColors.warningBorderFor(brightness),
-                          ),
-                        ),
-                        child: SelectableText(
-                          approval.command!,
-                          style: TextStyle(
-                            color: AppColors.warningTextFor(brightness),
-                            height: 1.4,
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (!approval.resolvable) ...[
-                      const SizedBox(height: AppSpacing.compact),
-                      Text(
-                        context.l10n.desktopOnlyApproval,
-                        style: TextStyle(
-                          color: AppColors.warningTextFor(brightness),
-                        ),
-                      ),
-                    ],
-                  ],
+                  );
+            final actionHeight = actions == null ? 0.0 : 48.0;
+            final reservedHeight =
+                22.0 + AppSpacing.compact + AppSpacing.stack + actionHeight;
+            final detailsMaxHeight =
+                math.max(0.0, constraints.maxHeight - reservedHeight);
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.l10n
+                      .agentAwaitingPermission(_agentLabel(_session.agent)),
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: AppColors.warningTextFor(brightness),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.stack),
-            if (!isAwaitingResolution)
-              Wrap(
-                spacing: AppSpacing.compact,
-                runSpacing: AppSpacing.compact,
-                children: [
-                  FilledButton(
-                    onPressed: approval.resolvable && !isSubmitting
-                        ? () => _submitApproval('accept')
-                        : null,
-                    child: _buildApprovalButtonChild(
-                      'accept',
-                      context.l10n.approve,
+                const SizedBox(height: AppSpacing.compact),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: detailsMaxHeight),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          summary,
+                          style:
+                              theme.textTheme.bodyMedium?.copyWith(height: 1.4),
+                        ),
+                        if (isAwaitingResolution) ...[
+                          const SizedBox(height: AppSpacing.compact),
+                          Text(
+                            context.l10n.waitingApprovalProcessing,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: AppColors.warningTextFor(brightness),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                        if (approval.command != null) ...[
+                          const SizedBox(height: AppSpacing.compact),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(AppSpacing.tileY),
+                            decoration: BoxDecoration(
+                              color: AppColors.panelDeepFor(brightness),
+                              borderRadius: BorderRadius.circular(
+                                AppSpacing.radiusControl,
+                              ),
+                              border: Border.all(
+                                color: AppColors.warningBorderFor(brightness),
+                              ),
+                            ),
+                            child: SelectableText(
+                              approval.command!,
+                              style: TextStyle(
+                                color: AppColors.warningTextFor(brightness),
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (!approval.resolvable) ...[
+                          const SizedBox(height: AppSpacing.compact),
+                          Text(
+                            context.l10n.desktopOnlyApproval,
+                            style: TextStyle(
+                              color: AppColors.warningTextFor(brightness),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  if (approval.allowAcceptForSession)
-                    OutlinedButton(
-                      onPressed: approval.resolvable && !isSubmitting
-                          ? () => _submitApproval('accept_for_session')
-                          : null,
-                      child: _buildApprovalButtonChild(
-                        'accept_for_session',
-                        context.l10n.approveForSession,
-                      ),
-                    ),
-                  OutlinedButton(
-                    onPressed: approval.resolvable && !isSubmitting
-                        ? () => _submitApproval('decline')
-                        : null,
-                    child: _buildApprovalButtonChild(
-                      'decline',
-                      context.l10n.reject,
-                    ),
-                  ),
-                  if (approval.allowCancel)
-                    OutlinedButton(
-                      onPressed: approval.resolvable && !isSubmitting
-                          ? () => _submitApproval('cancel')
-                          : null,
-                      child: _buildApprovalButtonChild(
-                        'cancel',
-                        context.l10n.cancel,
-                      ),
-                    ),
+                ),
+                if (actions != null) ...[
+                  const SizedBox(height: AppSpacing.stack),
+                  actions,
                 ],
-              ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );

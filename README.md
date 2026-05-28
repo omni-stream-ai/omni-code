@@ -11,6 +11,12 @@ to the bridge over HTTP and SSE so you can manage projects, open sessions, send
 messages, receive reply notifications, and handle approval prompts across
 mobile and desktop devices.
 
+## Preview
+
+| Home | Project sessions | Projects |
+| --- | --- | --- |
+| ![Home dashboard](preview/01-home-dashboard.png) | ![Project sessions](preview/02-project-sessions.png) | ![Projects list](preview/03-projects-list.png) |
+
 ## Install
 
 **Homebrew (macOS):**

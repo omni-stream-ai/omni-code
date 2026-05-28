@@ -3030,6 +3030,40 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Approve'), findsOneWidget);
   });
 
+  testWidgets('pending approval card does not overflow on short windows',
+      (tester) async {
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(668, 298);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final approval = _approvalRequest(
+      requestId: 'approval-1',
+      command: 'git reset --soft HEAD~1',
+      reason: '你想用哪个方案？如果选 reset --soft，我可以先帮你看看'
+          '哪些文件该归到哪个提交里。',
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(
+            status: SessionStatus.awaitingApproval,
+            pendingApproval: approval,
+          ),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.widgetWithText(FilledButton, 'Approve'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
       'submitting approval enters waiting processing state and hides actions',
       (tester) async {
