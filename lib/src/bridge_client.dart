@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'bridge_speech_models.dart';
 import 'models.dart';
 import 'settings/app_settings.dart';
 
@@ -81,6 +82,24 @@ class BridgeClient {
 
   bool _isUnauthorized(http.Response response) {
     return response.statusCode == 401 || response.statusCode == 403;
+  }
+
+  Map<String, dynamic> _decodeApiData(String body) {
+    final payload = jsonDecode(body) as Map<String, dynamic>;
+    final data = payload['data'];
+    if (data is! Map<String, dynamic>) {
+      throw Exception('Invalid bridge response: $body');
+    }
+    return data;
+  }
+
+  List<dynamic> _decodeApiListData(String body) {
+    final payload = jsonDecode(body) as Map<String, dynamic>;
+    final data = payload['data'];
+    if (data is! List<dynamic>) {
+      throw Exception('Invalid bridge response: $body');
+    }
+    return data;
   }
 
   Future<ClientAuthRequest> registerClient() async {
@@ -362,14 +381,24 @@ class BridgeClient {
     String sessionId,
     String content, {
     String inputMode = 'text',
+    String? systemPrompt,
   }) async {
+    final body = <String, dynamic>{
+      'content': content,
+      'input_mode': inputMode,
+    };
+    final trimmedSystemPrompt = systemPrompt?.trim();
+    if (trimmedSystemPrompt != null && trimmedSystemPrompt.isNotEmpty) {
+      body['system_prompt'] = trimmedSystemPrompt;
+    }
+
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/sessions/$sessionId/messages'),
       headers: {
         ..._defaultHeaders,
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({'content': content, 'input_mode': inputMode}),
+      body: jsonEncode(body),
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -524,12 +553,266 @@ class BridgeClient {
     }
   }
 
-  Future<String> transcribeAudio(File audioFile) async {
+  Future<SpeechStatus> getSpeechStatus() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/speech'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeechStatus.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<List<SpeechModelSummary>> listSpeechModels() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/speech/models'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return _decodeApiListData(response.body)
+        .whereType<Map<String, dynamic>>()
+        .map(SpeechModelSummary.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<SpeechDownloadTask> createSpeechDownload(String modelId) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/speech/models/downloads'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'model_id': modelId}),
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeechDownloadTask.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<SpeechDownloadTask> getSpeechDownload(String taskId) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/speech/models/downloads/$taskId'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeechDownloadTask.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<void> deleteSpeechModel(String modelId) async {
+    final response = await _httpClient.delete(
+      Uri.parse('$baseUrl/speech/models/$modelId'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Delete speech model failed (${response.statusCode}): '
+        '${response.body}',
+      );
+    }
+  }
+
+  Future<SpeechProfileBinding> getSpeechProfileModel(
+      SpeechProfile profile) async {
+    final response = await _httpClient.get(
+      Uri.parse(
+          '$baseUrl/speech/profiles/${_speechProfileSlug(profile)}/model'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeechProfileBinding.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<SpeechProfileSelection> updateSpeechProfileModel(
+    SpeechProfile profile, {
+    String? modelId,
+  }) async {
+    final response = await _httpClient.put(
+      Uri.parse(
+          '$baseUrl/speech/profiles/${_speechProfileSlug(profile)}/model'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'model_id': modelId}),
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeechProfileSelection.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<SpeechModelVoiceBinding> getSpeechModelVoice(String modelId) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/speech/models/$modelId/voice'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeechModelVoiceBinding.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<SpeechVoiceSelection> updateSpeechModelVoice(
+    String modelId, {
+    String? voice,
+  }) async {
+    final response = await _httpClient.put(
+      Uri.parse('$baseUrl/speech/models/$modelId/voice'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'voice': voice}),
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeechVoiceSelection.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<List<SpeakerRecord>> listSpeakers() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/speech/speakers'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return _decodeApiListData(response.body)
+        .whereType<Map<String, dynamic>>()
+        .map(SpeakerRecord.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<SpeakerEnrollmentResult> enrollSpeaker(
+    File audioFile, {
+    required String name,
+  }) async {
     final request = http.MultipartRequest(
       'POST',
-      Uri.parse('$baseUrl/audio/transcriptions'),
+      Uri.parse('$baseUrl/speech/speakers'),
     );
     request.headers.addAll(_defaultHeaders);
+    request.fields['name'] = name;
+    request.files
+        .add(await http.MultipartFile.fromPath('file', audioFile.path));
+    final response = await _httpClient.send(request);
+    final body = await response.stream.bytesToString();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+          'Speaker enrollment failed (${response.statusCode}): $body');
+    }
+    return SpeakerEnrollmentResult.fromJson(_decodeApiData(body));
+  }
+
+  Future<void> deleteSpeaker(String speakerId) async {
+    final response = await _httpClient.delete(
+      Uri.parse('$baseUrl/speech/speakers/$speakerId'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Delete speaker failed (${response.statusCode}): ${response.body}',
+      );
+    }
+  }
+
+  Future<SpeakerFilterSettings> getSpeakerFilter() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/speech/speaker-filter'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeakerFilterSettings.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<SpeakerFilterSettings> updateSpeakerFilter(
+    SpeakerFilterSettings settings,
+  ) async {
+    final response = await _httpClient.put(
+      Uri.parse('$baseUrl/speech/speaker-filter'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(settings.toJson()),
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return SpeakerFilterSettings.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<Map<String, dynamic>> getSpeechRealtimeDescriptor() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/speech/realtime'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return _decodeApiData(response.body);
+  }
+
+  Future<List<String>> listOpenAiSpeechModels() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/v1/models'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = payload['data'] as List<dynamic>? ?? const <dynamic>[];
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map((item) => item['id']?.toString() ?? '')
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Future<String> transcribeAudio(
+    File audioFile, {
+    String? model,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/v1/audio/transcriptions'),
+    );
+    request.headers.addAll(_defaultHeaders);
+    request.fields['response_format'] = 'json';
+    if (model?.trim().isNotEmpty == true) {
+      request.fields['model'] = model!.trim();
+    }
     request.files
         .add(await http.MultipartFile.fromPath('file', audioFile.path));
 
@@ -541,29 +824,38 @@ class BridgeClient {
     }
 
     final payload = jsonDecode(body) as Map<String, dynamic>;
-    final data = payload['data'] as Map<String, dynamic>;
-    return data['text'] as String;
+    final text = payload['text'] as String?;
+    if (text == null || text.trim().isEmpty) {
+      throw Exception('ASR response missing text.');
+    }
+    return text;
   }
 
   Future<SynthesizedSpeech> synthesizeSpeech(
     String text, {
-    String voice = 'female',
+    String? model,
+    String? voice,
     double speed = 1.0,
-    double volume = 1.0,
     String responseFormat = 'wav',
+    bool stream = false,
   }) async {
+    final input = _sanitizeSpeechInput(text);
+    if (input.isEmpty) {
+      throw Exception('TTS request missing speakable text.');
+    }
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/audio/speech'),
+      Uri.parse('$baseUrl/v1/audio/speech'),
       headers: {
         ..._defaultHeaders,
         'Content-Type': 'application/json',
       },
       body: jsonEncode({
-        'input': text,
-        'voice': voice,
+        if (model?.trim().isNotEmpty == true) 'model': model!.trim(),
+        'input': input,
+        if (voice?.trim().isNotEmpty == true) 'voice': voice!.trim(),
         'speed': speed,
-        'volume': volume,
         'response_format': responseFormat,
+        if (stream) 'stream': true,
       }),
     );
 
@@ -573,10 +865,32 @@ class BridgeClient {
       );
     }
 
+    final contentType = response.headers['content-type'] ?? 'audio/wav';
+    if (contentType.contains('application/json')) {
+      final payload = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = payload['data'] as Map<String, dynamic>? ?? payload;
+      final streamUrl = (data['stream_url'] as String?)?.trim();
+      if (streamUrl?.isNotEmpty == true) {
+        return SynthesizedSpeech(
+          bytes: Uint8List(0),
+          contentType: data['content_type'] as String? ?? 'audio/wav',
+          streamUrl: _resolveUrl(streamUrl!),
+        );
+      }
+    }
+
     return SynthesizedSpeech(
       bytes: response.bodyBytes,
-      contentType: response.headers['content-type'] ?? 'audio/wav',
+      contentType: contentType,
     );
+  }
+
+  String _resolveUrl(String value) {
+    final uri = Uri.parse(value);
+    if (uri.hasScheme) {
+      return uri.toString();
+    }
+    return Uri.parse(baseUrl).resolveUri(uri).toString();
   }
 
   Stream<Map<String, dynamic>> subscribeToSessionEvents(
@@ -856,6 +1170,79 @@ class BridgeClient {
     }
     return 'application/octet-stream';
   }
+
+  static String _speechProfileSlug(SpeechProfile profile) {
+    return switch (profile) {
+      SpeechProfile.asrBatch => 'asr.batch',
+      SpeechProfile.asrRealtime => 'asr.realtime',
+      SpeechProfile.ttsDefault => 'tts.default',
+      SpeechProfile.vadDefault => 'vad.default',
+      SpeechProfile.wakeWordDefault => 'wake_word.default',
+    };
+  }
+
+  static String _sanitizeSpeechInput(String value) {
+    final buffer = StringBuffer();
+    var previousWasWhitespace = false;
+
+    for (final rune in value.runes) {
+      if (_isEmojiLikeRune(rune)) {
+        continue;
+      }
+      final character = _normalizeSpeechRune(rune);
+      if (character.trim().isEmpty) {
+        if (!previousWasWhitespace && buffer.isNotEmpty) {
+          buffer.write(' ');
+          previousWasWhitespace = true;
+        }
+        continue;
+      }
+      buffer.write(character);
+      previousWasWhitespace = false;
+    }
+
+    return buffer.toString().trim();
+  }
+
+  static String _normalizeSpeechRune(int rune) {
+    return switch (rune) {
+      0x2018 || 0x2019 || 0x201A || 0x201B => "'",
+      0x201C || 0x201D || 0x201E || 0x201F => '"',
+      0x300C || 0x300D || 0x300E || 0x300F => '"',
+      0x301D || 0x301E || 0x301F => '"',
+      _ => String.fromCharCode(rune),
+    };
+  }
+
+  static bool _isEmojiLikeRune(int rune) {
+    return rune == 0x00A9 ||
+        rune == 0x00AE ||
+        rune == 0x200D ||
+        rune == 0x203C ||
+        rune == 0x2049 ||
+        rune == 0x2122 ||
+        rune == 0x2139 ||
+        (rune >= 0x2194 && rune <= 0x21AA) ||
+        (rune >= 0x231A && rune <= 0x231B) ||
+        rune == 0x2328 ||
+        rune == 0x23CF ||
+        (rune >= 0x23E9 && rune <= 0x23F3) ||
+        (rune >= 0x23F8 && rune <= 0x23FA) ||
+        rune == 0x24C2 ||
+        (rune >= 0x25AA && rune <= 0x25AB) ||
+        rune == 0x25B6 ||
+        rune == 0x25C0 ||
+        (rune >= 0x25FB && rune <= 0x25FE) ||
+        (rune >= 0x2600 && rune <= 0x27BF) ||
+        (rune >= 0x2934 && rune <= 0x2935) ||
+        (rune >= 0x2B05 && rune <= 0x2B55) ||
+        rune == 0x3030 ||
+        rune == 0x303D ||
+        rune == 0x3297 ||
+        rune == 0x3299 ||
+        (rune >= 0xFE00 && rune <= 0xFE0F) ||
+        (rune >= 0x1F000 && rune <= 0x1FAFF);
+  }
 }
 
 class _CacheEntry<T> {
@@ -874,10 +1261,14 @@ class SynthesizedSpeech {
   const SynthesizedSpeech({
     required this.bytes,
     required this.contentType,
+    this.streamUrl,
   });
 
   final Uint8List bytes;
   final String contentType;
+  final String? streamUrl;
+
+  bool get isStreaming => streamUrl?.isNotEmpty == true;
 }
 
 class BridgeFileResponse {

@@ -8,10 +8,18 @@ import 'app_settings_store.dart';
 const _defaultUpdateManifestUrl =
     'https://github.com/omni-stream-ai/omni-code/releases/latest/download/update.json';
 const _defaultNotificationMaxChars = 160;
+const int defaultCallModeSpeechPauseMillis = 1200;
+const int minCallModeSpeechPauseMillis = 600;
+const int maxCallModeSpeechPauseMillis = 2400;
+const String defaultCallModeWakeWords = 'hey omni';
 
-enum TtsProvider { system, zhipu }
+enum TtsProvider { system, bridgeLocal }
 
-enum AsrProvider { system, zhipu, whisper }
+enum AsrProvider {
+  system,
+  bridgeLocal,
+  whisper,
+}
 
 enum AppThemeModeSetting { system, light, dark }
 
@@ -25,8 +33,9 @@ class AppSettings {
     required this.appLanguage,
     required this.themeMode,
     required this.ttsProvider,
+    required this.bridgeLocalTtsVoice,
+    required this.bridgeLocalTtsStreaming,
     required this.asrProvider,
-    required this.zhipuApiKey,
     required this.whisperApiKey,
     required this.whisperBaseUrl,
     required this.updateManifestUrl,
@@ -38,7 +47,12 @@ class AppSettings {
     required this.aiApprovalMaxRisk,
     required this.notificationMaxChars,
     required this.autoSpeakReplies,
+    required this.speechPlaybackPromptEnabled,
     required this.compressAssistantReplies,
+    required this.callModeAllowInterruptions,
+    required this.callModeSpeechPauseMillis,
+    required this.callModeWakeWordEnabled,
+    required this.callModeWakeWords,
   });
 
   final String bridgeUrl;
@@ -48,8 +62,9 @@ class AppSettings {
   final String appLanguage;
   final AppThemeModeSetting themeMode;
   final TtsProvider ttsProvider;
+  final String bridgeLocalTtsVoice;
+  final bool bridgeLocalTtsStreaming;
   final AsrProvider asrProvider;
-  final String zhipuApiKey;
   final String whisperApiKey;
   final String whisperBaseUrl;
   final String updateManifestUrl;
@@ -61,7 +76,12 @@ class AppSettings {
   final String aiApprovalMaxRisk;
   final int notificationMaxChars;
   final bool autoSpeakReplies;
+  final bool speechPlaybackPromptEnabled;
   final bool compressAssistantReplies;
+  final bool callModeAllowInterruptions;
+  final int callModeSpeechPauseMillis;
+  final bool callModeWakeWordEnabled;
+  final String callModeWakeWords;
 
   factory AppSettings.defaults() {
     const configuredUrl = String.fromEnvironment('ECHO_MATE_BRIDGE_URL');
@@ -78,8 +98,9 @@ class AppSettings {
       appLanguage: 'system',
       themeMode: AppThemeModeSetting.system,
       ttsProvider: TtsProvider.system,
+      bridgeLocalTtsVoice: '',
+      bridgeLocalTtsStreaming: false,
       asrProvider: AsrProvider.system,
-      zhipuApiKey: '',
       whisperApiKey: '',
       whisperBaseUrl: 'https://api.openai.com/v1',
       updateManifestUrl: updateManifestUrl.trim().isNotEmpty
@@ -93,7 +114,12 @@ class AppSettings {
       aiApprovalMaxRisk: 'low',
       notificationMaxChars: _defaultNotificationMaxChars,
       autoSpeakReplies: false,
+      speechPlaybackPromptEnabled: true,
       compressAssistantReplies: false,
+      callModeAllowInterruptions: true,
+      callModeSpeechPauseMillis: defaultCallModeSpeechPauseMillis,
+      callModeWakeWordEnabled: false,
+      callModeWakeWords: defaultCallModeWakeWords,
     );
   }
 
@@ -105,8 +131,9 @@ class AppSettings {
     String? appLanguage,
     AppThemeModeSetting? themeMode,
     TtsProvider? ttsProvider,
+    String? bridgeLocalTtsVoice,
+    bool? bridgeLocalTtsStreaming,
     AsrProvider? asrProvider,
-    String? zhipuApiKey,
     String? whisperApiKey,
     String? whisperBaseUrl,
     String? updateManifestUrl,
@@ -118,7 +145,12 @@ class AppSettings {
     String? aiApprovalMaxRisk,
     int? notificationMaxChars,
     bool? autoSpeakReplies,
+    bool? speechPlaybackPromptEnabled,
     bool? compressAssistantReplies,
+    bool? callModeAllowInterruptions,
+    int? callModeSpeechPauseMillis,
+    bool? callModeWakeWordEnabled,
+    String? callModeWakeWords,
   }) {
     return AppSettings(
       bridgeUrl: bridgeUrl ?? this.bridgeUrl,
@@ -129,8 +161,11 @@ class AppSettings {
       appLanguage: _normalizeLanguage(appLanguage ?? this.appLanguage),
       themeMode: themeMode ?? this.themeMode,
       ttsProvider: ttsProvider ?? this.ttsProvider,
+      bridgeLocalTtsVoice:
+          (bridgeLocalTtsVoice ?? this.bridgeLocalTtsVoice).trim(),
+      bridgeLocalTtsStreaming:
+          bridgeLocalTtsStreaming ?? this.bridgeLocalTtsStreaming,
       asrProvider: asrProvider ?? this.asrProvider,
-      zhipuApiKey: zhipuApiKey ?? this.zhipuApiKey,
       whisperApiKey: whisperApiKey ?? this.whisperApiKey,
       whisperBaseUrl: whisperBaseUrl ?? this.whisperBaseUrl,
       updateManifestUrl: updateManifestUrl ?? this.updateManifestUrl,
@@ -142,8 +177,20 @@ class AppSettings {
       aiApprovalMaxRisk: aiApprovalMaxRisk ?? this.aiApprovalMaxRisk,
       notificationMaxChars: notificationMaxChars ?? this.notificationMaxChars,
       autoSpeakReplies: autoSpeakReplies ?? this.autoSpeakReplies,
+      speechPlaybackPromptEnabled:
+          speechPlaybackPromptEnabled ?? this.speechPlaybackPromptEnabled,
       compressAssistantReplies:
           compressAssistantReplies ?? this.compressAssistantReplies,
+      callModeAllowInterruptions:
+          callModeAllowInterruptions ?? this.callModeAllowInterruptions,
+      callModeSpeechPauseMillis: _normalizeCallModeSpeechPauseMillis(
+        callModeSpeechPauseMillis ?? this.callModeSpeechPauseMillis,
+        this.callModeSpeechPauseMillis,
+      ),
+      callModeWakeWordEnabled:
+          callModeWakeWordEnabled ?? this.callModeWakeWordEnabled,
+      callModeWakeWords: _normalizeCallModeWakeWords(
+          callModeWakeWords ?? this.callModeWakeWords),
     );
   }
 
@@ -156,8 +203,9 @@ class AppSettings {
       'app_language': appLanguage,
       'theme_mode': themeMode.name,
       'tts_provider': ttsProvider.name,
+      'bridge_local_tts_voice': bridgeLocalTtsVoice,
+      'bridge_local_tts_streaming': bridgeLocalTtsStreaming,
       'asr_provider': asrProvider.name,
-      'zhipu_api_key': zhipuApiKey,
       'whisper_api_key': whisperApiKey,
       'whisper_base_url': whisperBaseUrl,
       'update_manifest_url': updateManifestUrl,
@@ -169,7 +217,12 @@ class AppSettings {
       'ai_approval_max_risk': aiApprovalMaxRisk,
       'notification_max_chars': notificationMaxChars,
       'auto_speak_replies': autoSpeakReplies,
+      'speech_playback_prompt_enabled': speechPlaybackPromptEnabled,
       'compress_assistant_replies': compressAssistantReplies,
+      'call_mode_allow_interruptions': callModeAllowInterruptions,
+      'call_mode_speech_pause_millis': callModeSpeechPauseMillis,
+      'call_mode_wake_word_enabled': callModeWakeWordEnabled,
+      'call_mode_wake_words': callModeWakeWords,
     };
   }
 
@@ -194,9 +247,14 @@ class AppSettings {
       ),
       ttsProvider: _parseTtsProvider(
           _readNullableString(json, 'tts_provider'), defaults.ttsProvider),
+      bridgeLocalTtsVoice: _readString(json, 'bridge_local_tts_voice').trim(),
+      bridgeLocalTtsStreaming: _readBool(
+        json,
+        'bridge_local_tts_streaming',
+        defaults.bridgeLocalTtsStreaming,
+      ),
       asrProvider: _parseAsrProvider(
           _readNullableString(json, 'asr_provider'), defaults.asrProvider),
-      zhipuApiKey: _readString(json, 'zhipu_api_key'),
       whisperApiKey: _readString(json, 'whisper_api_key'),
       whisperBaseUrl:
           _readString(json, 'whisper_base_url', defaults.whisperBaseUrl),
@@ -204,8 +262,7 @@ class AppSettings {
           _readString(json, 'update_manifest_url').trim().isNotEmpty
               ? _readString(json, 'update_manifest_url').trim()
               : defaults.updateManifestUrl,
-      updateTargetVersion:
-          _readString(json, 'update_target_version').trim(),
+      updateTargetVersion: _readString(json, 'update_target_version').trim(),
       aiApprovalEnabled:
           _readBool(json, 'ai_approval_enabled', defaults.aiApprovalEnabled),
       aiApprovalBaseUrl: _readString(
@@ -230,10 +287,40 @@ class AppSettings {
       ),
       autoSpeakReplies:
           _readBool(json, 'auto_speak_replies', defaults.autoSpeakReplies),
+      speechPlaybackPromptEnabled: _readBool(
+        json,
+        'speech_playback_prompt_enabled',
+        defaults.speechPlaybackPromptEnabled,
+      ),
       compressAssistantReplies: _readBool(
         json,
         'compress_assistant_replies',
         defaults.compressAssistantReplies,
+      ),
+      callModeAllowInterruptions: _readBool(
+        json,
+        'call_mode_allow_interruptions',
+        defaults.callModeAllowInterruptions,
+      ),
+      callModeSpeechPauseMillis: _normalizeCallModeSpeechPauseMillis(
+        _readInt(
+          json,
+          'call_mode_speech_pause_millis',
+          defaults.callModeSpeechPauseMillis,
+        ),
+        defaults.callModeSpeechPauseMillis,
+      ),
+      callModeWakeWordEnabled: _readBool(
+        json,
+        'call_mode_wake_word_enabled',
+        defaults.callModeWakeWordEnabled,
+      ),
+      callModeWakeWords: _normalizeCallModeWakeWords(
+        _readString(
+          json,
+          'call_mode_wake_words',
+          defaults.callModeWakeWords,
+        ),
       ),
     );
   }
@@ -304,6 +391,26 @@ class AppSettings {
     return value > 0 ? value : fallback;
   }
 
+  static int _normalizeCallModeSpeechPauseMillis(int value, int fallback) {
+    if (value < minCallModeSpeechPauseMillis ||
+        value > maxCallModeSpeechPauseMillis) {
+      return fallback;
+    }
+    return value;
+  }
+
+  static String _normalizeCallModeWakeWords(String value) {
+    final words = value
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+    if (words.isEmpty) {
+      return defaultCallModeWakeWords;
+    }
+    return words.join(', ');
+  }
+
   static String _normalizeLanguage(String value) {
     final normalized = value.trim().toLowerCase();
     return switch (normalized) {
@@ -314,7 +421,10 @@ class AppSettings {
 
   static TtsProvider _parseTtsProvider(String? raw, TtsProvider fallback) {
     if (raw == 'bridge') {
-      return fallback;
+      return TtsProvider.bridgeLocal;
+    }
+    if (raw == 'zhipu') {
+      return TtsProvider.system;
     }
     for (final item in TtsProvider.values) {
       if (item.name == raw) {
@@ -326,7 +436,10 @@ class AppSettings {
 
   static AsrProvider _parseAsrProvider(String? raw, AsrProvider fallback) {
     if (raw == 'bridge') {
-      return fallback;
+      return AsrProvider.bridgeLocal;
+    }
+    if (raw == 'zhipu' || raw == 'tencentCloudStreaming') {
+      return AsrProvider.system;
     }
     for (final item in AsrProvider.values) {
       if (item.name == raw) {
@@ -393,10 +506,28 @@ class AppSettingsController extends ChangeNotifier {
         if (json['compress_assistant_replies'] == null) {
           shouldPersist = true;
         }
+        if (json['call_mode_allow_interruptions'] == null) {
+          shouldPersist = true;
+        }
+        if (json['call_mode_speech_pause_millis'] == null) {
+          shouldPersist = true;
+        }
+        if (json['bridge_local_tts_streaming'] == null) {
+          shouldPersist = true;
+        }
         if (json['tts_provider'] == 'bridge') {
           shouldPersist = true;
         }
         if (json['asr_provider'] == 'bridge') {
+          shouldPersist = true;
+        }
+        if (json['tts_provider'] == 'zhipu' ||
+            json['asr_provider'] == 'zhipu' ||
+            json['asr_provider'] == 'tencentCloudStreaming' ||
+            json.containsKey('zhipu_api_key') ||
+            json.containsKey('tencent_cloud_app_id') ||
+            json.containsKey('tencent_cloud_secret_id') ||
+            json.containsKey('tencent_cloud_secret_key')) {
           shouldPersist = true;
         }
         final updateManifestUrl =

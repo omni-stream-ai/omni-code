@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <rect width="390" height="844" fill="#0B1016"/>
+  <rect x="0" y="0" width="390" height="844" fill="#0E1319"/>
+  <circle cx="195" cy="334" r="180" fill="#122234" opacity="0.42"/>
+  <circle cx="195" cy="334" r="128" fill="#132018" opacity="0.22"/>
+
+  <text x="34" y="72" fill="#D7DEE5" font-family="JetBrains Mono, monospace" font-size="22" font-weight="800">‹</text>
+  <text x="72" y="72" fill="#E7EDF2" font-family="JetBrains Mono, monospace" font-size="18" font-weight="800">通话模式</text>
+  <rect x="278" y="50" width="78" height="30" rx="15" fill="#102C3A" stroke="#357DA4"/>
+  <circle cx="294" cy="65" r="4" fill="#6EC7FF"/>
+  <text x="306" y="69" fill="#E7EDF2" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700">聆听中</text>
+
+  <rect x="34" y="104" width="322" height="42" rx="8" fill="#151B22" stroke="#27313C"/>
+  <text x="52" y="130" fill="#9AA9B8" font-family="JetBrains Mono, monospace" font-size="12">实时转写已就绪 · 可打断播报</text>
+
+  <circle cx="195" cy="318" r="112" fill="#151B22" stroke="#31404D" stroke-width="2"/>
+  <circle cx="195" cy="318" r="86" fill="#0F151B" stroke="#A3FF12" stroke-width="2" opacity="0.92"/>
+  <circle cx="195" cy="318" r="50" fill="#A3FF12" opacity="0.95"/>
+  <path d="M105 318 C124 284 150 354 170 318 C190 282 210 354 230 318 C250 282 270 354 288 318" fill="none" stroke="#6EC7FF" stroke-width="5" stroke-linecap="round"/>
+  <path d="M124 382 C150 410 240 410 266 382" fill="none" stroke="#A78BFA" stroke-width="3" stroke-linecap="round" opacity="0.82"/>
+
+  <text x="126" y="474" fill="#E7EDF2" font-family="JetBrains Mono, monospace" font-size="20" font-weight="800">我在听，你可以继续说</text>
+  <text x="84" y="502" fill="#9AA9B8" font-family="JetBrains Mono, monospace" font-size="12">停顿后自动提交，中途开口可打断 AI 播报</text>
+
+  <rect x="34" y="534" width="322" height="122" rx="8" fill="#151B22" stroke="#31404D"/>
+  <text x="52" y="562" fill="#6EC7FF" font-family="JetBrains Mono, monospace" font-size="11" font-weight="800">实时字幕</text>
+  <text x="52" y="592" fill="#E7EDF2" font-family="JetBrains Mono, monospace" font-size="15" font-weight="800">把正在运行、等待停顿、AI 播报</text>
+  <text x="52" y="619" fill="#E7EDF2" font-family="JetBrains Mono, monospace" font-size="15" font-weight="800">这些瞬时状态都放通话页。</text>
+  <rect x="52" y="632" width="112" height="18" rx="9" fill="#102C3A"/>
+  <text x="66" y="645" fill="#9AA9B8" font-family="JetBrains Mono, monospace" font-size="9">VoiceActivityTag</text>
+
+  <rect x="78" y="708" width="54" height="54" rx="16" fill="#151B22" stroke="#31404D"/>
+  <text x="95" y="742" fill="#D7DEE5" font-family="JetBrains Mono, monospace" font-size="20">▣</text>
+  <rect x="164" y="696" width="62" height="62" rx="18" fill="#A3FF12" stroke="#A3FF12"/>
+  <text x="186" y="735" fill="#09110A" font-family="JetBrains Mono, monospace" font-size="22" font-weight="800">●</text>
+  <rect x="258" y="708" width="54" height="54" rx="16" fill="#351618" stroke="#77313A"/>
+  <text x="276" y="742" fill="#FF7A7A" font-family="JetBrains Mono, monospace" font-size="20">⌕</text>
+
+  <text x="38" y="832" fill="#7F92A3" font-family="JetBrains Mono, monospace" font-size="10">方案 B · 通话页雷达态：把瞬时语音状态放大</text>
+</svg>

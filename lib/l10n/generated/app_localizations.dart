@@ -254,6 +254,24 @@ abstract class AppLocalizations {
   /// **'API Key'**
   String get apiKey;
 
+  /// No description provided for @appId.
+  ///
+  /// In en, this message translates to:
+  /// **'App ID'**
+  String get appId;
+
+  /// No description provided for @secretId.
+  ///
+  /// In en, this message translates to:
+  /// **'Secret ID'**
+  String get secretId;
+
+  /// No description provided for @secretKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Secret Key'**
+  String get secretKey;
+
   /// No description provided for @baseUrl.
   ///
   /// In en, this message translates to:
@@ -319,6 +337,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Start playback automatically after the AI reply finishes'**
   String get autoSpeakRepliesSubtitle;
+
+  /// No description provided for @speechPlaybackPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Optimize replies for speech playback'**
+  String get speechPlaybackPrompt;
+
+  /// No description provided for @speechPlaybackPromptSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'When a reply will be spoken aloud, ask the agent to avoid hard-to-read-aloud content unless you explicitly request it.'**
+  String get speechPlaybackPromptSubtitle;
 
   /// No description provided for @compressReplies.
   ///
@@ -842,6 +872,264 @@ abstract class AppLocalizations {
   /// **'Voice input'**
   String get voiceInput;
 
+  /// No description provided for @voiceChatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice chat'**
+  String get voiceChatTitle;
+
+  /// No description provided for @callModeListening.
+  ///
+  /// In en, this message translates to:
+  /// **'Go ahead, I\'m listening'**
+  String get callModeListening;
+
+  /// No description provided for @callModePreparingListening.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing microphone'**
+  String get callModePreparingListening;
+
+  /// No description provided for @callModeSpeaking.
+  ///
+  /// In en, this message translates to:
+  /// **'Replying out loud'**
+  String get callModeSpeaking;
+
+  /// No description provided for @callModeWorking.
+  ///
+  /// In en, this message translates to:
+  /// **'Thinking through your request'**
+  String get callModeWorking;
+
+  /// No description provided for @callModeIdleSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Speak naturally. I will listen, send, and read the reply back.'**
+  String get callModeIdleSubtitle;
+
+  /// No description provided for @callModePreparingListeningLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing to listen'**
+  String get callModePreparingListeningLabel;
+
+  /// No description provided for @callModePreparingListeningDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone and speech recognition are starting. Speech may not be captured yet.'**
+  String get callModePreparingListeningDetail;
+
+  /// No description provided for @callModeListeningReadyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening now'**
+  String get callModeListeningReadyLabel;
+
+  /// No description provided for @callModeListeningReadyDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Start speaking whenever you\'re ready. Live transcription will show up here.'**
+  String get callModeListeningReadyDetail;
+
+  /// No description provided for @callModeWaitingWakeWordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for wake word'**
+  String get callModeWaitingWakeWordLabel;
+
+  /// No description provided for @callModeWaitingWakeWordDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Put the configured wake word at the start or end of the utterance. Middle matches are ignored.'**
+  String get callModeWaitingWakeWordDetail;
+
+  /// No description provided for @callModeWakeWordDetectedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Wake word detected'**
+  String get callModeWakeWordDetectedLabel;
+
+  /// No description provided for @callModeWakeWordDetectedDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'I am listening. The next utterance will be captured and sent.'**
+  String get callModeWakeWordDetectedDetail;
+
+  /// No description provided for @callModeWakeWordAck.
+  ///
+  /// In en, this message translates to:
+  /// **'I am listening'**
+  String get callModeWakeWordAck;
+
+  /// No description provided for @callModeCommandAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'Let me think'**
+  String get callModeCommandAccepted;
+
+  /// No description provided for @callModeRejectedSpeakerTranscript.
+  ///
+  /// In en, this message translates to:
+  /// **'{transcript} (not selected speaker)'**
+  String callModeRejectedSpeakerTranscript(String transcript);
+
+  /// No description provided for @callModeRejectedWakeWordTranscript.
+  ///
+  /// In en, this message translates to:
+  /// **'{transcript} (wake word not matched)'**
+  String callModeRejectedWakeWordTranscript(String transcript);
+
+  /// No description provided for @callModeSpeechDetectedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech detected'**
+  String get callModeSpeechDetectedLabel;
+
+  /// No description provided for @callModeSpeechDetectedDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep talking naturally. The current utterance is still being captured.'**
+  String get callModeSpeechDetectedDetail;
+
+  /// No description provided for @callModeWaitingForPauseLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for you to finish'**
+  String get callModeWaitingForPauseLabel;
+
+  /// No description provided for @callModeWaitingForPauseDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'After a short pause, this utterance will be sent automatically.'**
+  String get callModeWaitingForPauseDetail;
+
+  /// No description provided for @callModeOpenChatHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Open chat history'**
+  String get callModeOpenChatHistory;
+
+  /// No description provided for @showCallModeSubtitles.
+  ///
+  /// In en, this message translates to:
+  /// **'Show subtitles'**
+  String get showCallModeSubtitles;
+
+  /// No description provided for @hideCallModeSubtitles.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide subtitles'**
+  String get hideCallModeSubtitles;
+
+  /// No description provided for @startCallMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Start call mode'**
+  String get startCallMode;
+
+  /// No description provided for @stopCallMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop call mode'**
+  String get stopCallMode;
+
+  /// No description provided for @callModeUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Call mode is unavailable until speech services finish initializing.'**
+  String get callModeUnavailable;
+
+  /// No description provided for @callModeRequiresStreamingAsr.
+  ///
+  /// In en, this message translates to:
+  /// **'Call mode currently requires System ASR or Omni Bridge Local.'**
+  String get callModeRequiresStreamingAsr;
+
+  /// No description provided for @callModeSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Call mode'**
+  String get callModeSection;
+
+  /// No description provided for @callModeAllowInterruptionsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow speaking over replies'**
+  String get callModeAllowInterruptionsLabel;
+
+  /// No description provided for @callModeAllowInterruptionsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, speaking again during call mode will stop the current spoken reply and take over the turn.'**
+  String get callModeAllowInterruptionsHelp;
+
+  /// No description provided for @callModeSpeechPauseLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech pause detection'**
+  String get callModeSpeechPauseLabel;
+
+  /// No description provided for @callModeSpeechPauseHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'How long to wait after you stop speaking before the current utterance is sent automatically.'**
+  String get callModeSpeechPauseHelp;
+
+  /// No description provided for @callModeSpeechPauseOption.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause {seconds}s'**
+  String callModeSpeechPauseOption(Object seconds);
+
+  /// No description provided for @callModeSpeechPauseBridgeOnlyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'This pause setting currently applies precisely to Omni Bridge Local realtime call mode. Other ASR providers may keep their own built-in pause behavior.'**
+  String get callModeSpeechPauseBridgeOnlyHint;
+
+  /// No description provided for @callModeWakeWordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Require wake word'**
+  String get callModeWakeWordLabel;
+
+  /// No description provided for @callModeWakeWordHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, Omni Bridge Local uses its local keyword detector before accepting realtime speech. Unsupported phrases are rejected with a setup error.'**
+  String get callModeWakeWordHelp;
+
+  /// No description provided for @callModeWakeWordsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Wake words'**
+  String get callModeWakeWordsLabel;
+
+  /// No description provided for @callModeWakeWordsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Separate multiple phrases with commas. English phrases and numbered pinyin such as ou1 mi3 are converted to model tokens. Direct Chinese characters are not supported.'**
+  String get callModeWakeWordsHelp;
+
+  /// No description provided for @callModeWakeWordsEmptyError.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter at least one wake word.'**
+  String get callModeWakeWordsEmptyError;
+
+  /// No description provided for @callModeWakeWordsUnsupportedError.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{wakeWord}\" is not supported by the local wake-word model. Use an English phrase, numbered pinyin, or model token sequence such as \"{example}\".'**
+  String callModeWakeWordsUnsupportedError(String wakeWord, String example);
+
+  /// No description provided for @callModeWakeWordModelUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'The current speech model does not support wake words. Wake word detection has been automatically disabled.'**
+  String get callModeWakeWordModelUnsupported;
+
   /// No description provided for @send.
   ///
   /// In en, this message translates to:
@@ -1346,24 +1634,6 @@ abstract class AppLocalizations {
   /// **'Send failed, tap to retry'**
   String get draftFailed;
 
-  /// No description provided for @zhipuApiKeyRequired.
-  ///
-  /// In en, this message translates to:
-  /// **'Fill in the Zhipu API key in settings first'**
-  String get zhipuApiKeyRequired;
-
-  /// No description provided for @zhipuAsrRequestFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Zhipu ASR request failed ({statusCode}): {body}'**
-  String zhipuAsrRequestFailed(Object statusCode, Object body);
-
-  /// No description provided for @zhipuAsrMissingText.
-  ///
-  /// In en, this message translates to:
-  /// **'Zhipu ASR response is missing text'**
-  String get zhipuAsrMissingText;
-
   /// No description provided for @whisperApiKeyRequired.
   ///
   /// In en, this message translates to:
@@ -1381,12 +1651,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Whisper ASR response is missing text'**
   String get whisperAsrMissingText;
-
-  /// No description provided for @zhipuTtsRequestFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Zhipu TTS request failed ({statusCode}): {body}'**
-  String zhipuTtsRequestFailed(Object statusCode, Object body);
 
   /// No description provided for @updateManifestUrlRequired.
   ///
@@ -1544,6 +1808,30 @@ abstract class AppLocalizations {
   /// **'System'**
   String get speechSystem;
 
+  /// No description provided for @omniBridgeLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Omni Bridge Local'**
+  String get omniBridgeLocal;
+
+  /// No description provided for @refresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get refresh;
+
+  /// No description provided for @refreshing.
+  ///
+  /// In en, this message translates to:
+  /// **'Refreshing...'**
+  String get refreshing;
+
+  /// No description provided for @clear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get clear;
+
   /// No description provided for @speechSystemPreferredHelp.
   ///
   /// In en, this message translates to:
@@ -1573,6 +1861,474 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'System speech is unavailable on this device. Switch providers in Settings to use cloud speech.'**
   String get systemSpeechUnavailable;
+
+  /// No description provided for @localBridgeSpeechSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Local Bridge Speech'**
+  String get localBridgeSpeechSection;
+
+  /// No description provided for @localBridgeModelsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Local Bridge Models'**
+  String get localBridgeModelsSection;
+
+  /// No description provided for @localBridgeSpeechIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the local Bridge to run offline ASR, TTS, VAD, and model downloads on your own machine.'**
+  String get localBridgeSpeechIntro;
+
+  /// No description provided for @localBridgeModelsUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Local Bridge model status has not loaded yet.'**
+  String get localBridgeModelsUnavailable;
+
+  /// No description provided for @bridgeDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Bridge details'**
+  String get bridgeDetails;
+
+  /// No description provided for @localBridgeModelRoot.
+  ///
+  /// In en, this message translates to:
+  /// **'Model root'**
+  String get localBridgeModelRoot;
+
+  /// No description provided for @localBridgeDownloadTasksSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Download tasks'**
+  String get localBridgeDownloadTasksSection;
+
+  /// No description provided for @localBridgeNoCompatibleModels.
+  ///
+  /// In en, this message translates to:
+  /// **'No compatible models are available for this type yet.'**
+  String get localBridgeNoCompatibleModels;
+
+  /// No description provided for @localBridgeTtsVoiceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'TTS voice'**
+  String get localBridgeTtsVoiceLabel;
+
+  /// No description provided for @localBridgeTtsVoiceField.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice'**
+  String get localBridgeTtsVoiceField;
+
+  /// No description provided for @localBridgeTtsVoiceHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Used for local Bridge reply playback, auto-play, and call mode spoken replies.'**
+  String get localBridgeTtsVoiceHelp;
+
+  /// No description provided for @localBridgeTtsStreamingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Stream Bridge Local TTS'**
+  String get localBridgeTtsStreamingLabel;
+
+  /// No description provided for @localBridgeTtsStreamingHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Starts playback while the local Bridge is still generating speech. Disable this if you prefer full audio to be generated before playback begins.'**
+  String get localBridgeTtsStreamingHelp;
+
+  /// No description provided for @localBridgeTtsVoiceOption.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice {voice}'**
+  String localBridgeTtsVoiceOption(Object voice);
+
+  /// No description provided for @localBridgeTtsVoiceDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice {voice} (Default)'**
+  String localBridgeTtsVoiceDefault(Object voice);
+
+  /// No description provided for @localBridgeTtsNamedVoiceDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'{voice} (Default)'**
+  String localBridgeTtsNamedVoiceDefault(Object voice);
+
+  /// No description provided for @localBridgeTtsVoiceId.
+  ///
+  /// In en, this message translates to:
+  /// **'ID {voice}'**
+  String localBridgeTtsVoiceId(Object voice);
+
+  /// No description provided for @speechVoiceLanguageChinese.
+  ///
+  /// In en, this message translates to:
+  /// **'Chinese'**
+  String get speechVoiceLanguageChinese;
+
+  /// No description provided for @speechVoiceLanguageEnglish.
+  ///
+  /// In en, this message translates to:
+  /// **'English'**
+  String get speechVoiceLanguageEnglish;
+
+  /// No description provided for @speechVoiceLanguageChineseEnglish.
+  ///
+  /// In en, this message translates to:
+  /// **'Chinese + English'**
+  String get speechVoiceLanguageChineseEnglish;
+
+  /// No description provided for @speechVoiceLanguageJapanese.
+  ///
+  /// In en, this message translates to:
+  /// **'Japanese'**
+  String get speechVoiceLanguageJapanese;
+
+  /// No description provided for @speechVoiceLanguageSpanish.
+  ///
+  /// In en, this message translates to:
+  /// **'Spanish'**
+  String get speechVoiceLanguageSpanish;
+
+  /// No description provided for @speechVoiceLanguageFrench.
+  ///
+  /// In en, this message translates to:
+  /// **'French'**
+  String get speechVoiceLanguageFrench;
+
+  /// No description provided for @speechVoiceLanguageHindi.
+  ///
+  /// In en, this message translates to:
+  /// **'Hindi'**
+  String get speechVoiceLanguageHindi;
+
+  /// No description provided for @speechVoiceLanguageItalian.
+  ///
+  /// In en, this message translates to:
+  /// **'Italian'**
+  String get speechVoiceLanguageItalian;
+
+  /// No description provided for @speechVoiceLanguagePortugueseBr.
+  ///
+  /// In en, this message translates to:
+  /// **'Portuguese (BR)'**
+  String get speechVoiceLanguagePortugueseBr;
+
+  /// No description provided for @speechVoiceLanguageUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown language'**
+  String get speechVoiceLanguageUnknown;
+
+  /// No description provided for @speechVoiceAccentAmericanEnglish.
+  ///
+  /// In en, this message translates to:
+  /// **'American English'**
+  String get speechVoiceAccentAmericanEnglish;
+
+  /// No description provided for @speechVoiceAccentBritishEnglish.
+  ///
+  /// In en, this message translates to:
+  /// **'British English'**
+  String get speechVoiceAccentBritishEnglish;
+
+  /// No description provided for @speechVoiceAccentBrazilianPortuguese.
+  ///
+  /// In en, this message translates to:
+  /// **'Brazilian Portuguese'**
+  String get speechVoiceAccentBrazilianPortuguese;
+
+  /// No description provided for @speechVoiceGenderFemale.
+  ///
+  /// In en, this message translates to:
+  /// **'Female'**
+  String get speechVoiceGenderFemale;
+
+  /// No description provided for @speechVoiceGenderMale.
+  ///
+  /// In en, this message translates to:
+  /// **'Male'**
+  String get speechVoiceGenderMale;
+
+  /// No description provided for @whisperApiSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Whisper API'**
+  String get whisperApiSection;
+
+  /// No description provided for @bridgeLocalTtsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Uses the bridge-local /v1/audio/speech endpoint and the selected TTS model below.'**
+  String get bridgeLocalTtsHelp;
+
+  /// No description provided for @bridgeLocalAsrHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Uses the bridge-local /v1/audio/transcriptions endpoint for recorded voice input.'**
+  String get bridgeLocalAsrHelp;
+
+  /// No description provided for @whisperApiHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Requires a Whisper-compatible base URL and API key.'**
+  String get whisperApiHelp;
+
+  /// No description provided for @speechNotSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Not selected'**
+  String get speechNotSelected;
+
+  /// No description provided for @speechInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed'**
+  String get speechInstalled;
+
+  /// No description provided for @speechNotInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Not installed'**
+  String get speechNotInstalled;
+
+  /// No description provided for @speechDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get speechDownload;
+
+  /// No description provided for @speechDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading...'**
+  String get speechDownloading;
+
+  /// No description provided for @speechDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get speechDelete;
+
+  /// No description provided for @speechInstalledModels.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed models'**
+  String get speechInstalledModels;
+
+  /// No description provided for @speechNoInstalledModels.
+  ///
+  /// In en, this message translates to:
+  /// **'No installed models yet.'**
+  String get speechNoInstalledModels;
+
+  /// No description provided for @speechSelect.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get speechSelect;
+
+  /// No description provided for @speechChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get speechChange;
+
+  /// No description provided for @speechSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected'**
+  String get speechSelected;
+
+  /// No description provided for @speechModelKindAsr.
+  ///
+  /// In en, this message translates to:
+  /// **'ASR'**
+  String get speechModelKindAsr;
+
+  /// No description provided for @speechModelKindTts.
+  ///
+  /// In en, this message translates to:
+  /// **'TTS'**
+  String get speechModelKindTts;
+
+  /// No description provided for @speechModelKindVad.
+  ///
+  /// In en, this message translates to:
+  /// **'VAD'**
+  String get speechModelKindVad;
+
+  /// No description provided for @speechRuntimeStreaming.
+  ///
+  /// In en, this message translates to:
+  /// **'Streaming'**
+  String get speechRuntimeStreaming;
+
+  /// No description provided for @speechRuntimeOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline'**
+  String get speechRuntimeOffline;
+
+  /// No description provided for @speechProfileBatchAsrTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch ASR'**
+  String get speechProfileBatchAsrTitle;
+
+  /// No description provided for @speechProfileBatchAsrHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Used for recorded voice transcription. Pick this when you want accurate transcription after the user finishes speaking.'**
+  String get speechProfileBatchAsrHelp;
+
+  /// No description provided for @speechProfileBatchAsrAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Use for Batch ASR'**
+  String get speechProfileBatchAsrAction;
+
+  /// No description provided for @speechProfileRealtimeAsrTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Realtime ASR'**
+  String get speechProfileRealtimeAsrTitle;
+
+  /// No description provided for @speechProfileRealtimeAsrHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Used by call mode and realtime websocket transcription. Pick this when you need partial transcripts while the user is still speaking.'**
+  String get speechProfileRealtimeAsrHelp;
+
+  /// No description provided for @speechProfileRealtimeAsrAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Use for Realtime ASR'**
+  String get speechProfileRealtimeAsrAction;
+
+  /// No description provided for @speechProfileTtsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'TTS'**
+  String get speechProfileTtsTitle;
+
+  /// No description provided for @speechProfileTtsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Used for spoken reply playback from the local Bridge. Pick this when you want the assistant to speak through a local model.'**
+  String get speechProfileTtsHelp;
+
+  /// No description provided for @speechProfileTtsAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Use for TTS'**
+  String get speechProfileTtsAction;
+
+  /// No description provided for @speechProfileVadTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'VAD'**
+  String get speechProfileVadTitle;
+
+  /// No description provided for @speechProfileVadHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Used to detect when speech starts and ends in realtime mode. Pick this when you want faster turn-taking and cleaner cutoffs.'**
+  String get speechProfileVadHelp;
+
+  /// No description provided for @speechProfileVadAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Use for VAD'**
+  String get speechProfileVadAction;
+
+  /// No description provided for @speechProfileWakeWordTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Wake word'**
+  String get speechProfileWakeWordTitle;
+
+  /// No description provided for @speechProfileWakeWordHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Used by Omni Bridge Local to detect the wake word before accepting realtime call-mode speech.'**
+  String get speechProfileWakeWordHelp;
+
+  /// No description provided for @speechProfileWakeWordAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Use for Wake word'**
+  String get speechProfileWakeWordAction;
+
+  /// No description provided for @speechDownloadStatusQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued'**
+  String get speechDownloadStatusQueued;
+
+  /// No description provided for @speechDownloadStatusDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading'**
+  String get speechDownloadStatusDownloading;
+
+  /// No description provided for @speechDownloadStatusExtracting.
+  ///
+  /// In en, this message translates to:
+  /// **'Extracting'**
+  String get speechDownloadStatusExtracting;
+
+  /// No description provided for @speechDownloadStatusVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying'**
+  String get speechDownloadStatusVerifying;
+
+  /// No description provided for @speechDownloadStatusCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get speechDownloadStatusCompleted;
+
+  /// No description provided for @speechDownloadStatusFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get speechDownloadStatusFailed;
+
+  /// No description provided for @speechActiveDownloadsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{1 active download} other{{count} active downloads}}'**
+  String speechActiveDownloadsCount(int count);
+
+  /// No description provided for @speechDownloadProgressPercent.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% complete'**
+  String speechDownloadProgressPercent(int percent);
+
+  /// No description provided for @speechLocalModelsLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load local speech models: {error}'**
+  String speechLocalModelsLoadFailed(Object error);
+
+  /// No description provided for @speechModelDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed for {modelId}: {error}'**
+  String speechModelDownloadFailed(Object modelId, Object error);
+
+  /// No description provided for @speechProfileUpdateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to update {profile}: {error}'**
+  String speechProfileUpdateFailed(Object profile, Object error);
 
   /// No description provided for @appDownloadSection.
   ///

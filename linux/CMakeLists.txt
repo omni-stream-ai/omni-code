@@ -106,6 +106,18 @@ foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
     COMPONENT Runtime)
 endforeach(bundled_library)
 
+set(SHERPA_ONNX_BUNDLED_LIBRARIES
+  "${CMAKE_CURRENT_SOURCE_DIR}/libonnxruntime.so"
+  "${CMAKE_CURRENT_SOURCE_DIR}/libsherpa-onnx-cxx-api.so"
+  "${CMAKE_CURRENT_SOURCE_DIR}/libsherpa-onnx-c-api.so"
+)
+
+foreach(bundled_library ${SHERPA_ONNX_BUNDLED_LIBRARIES})
+  install(FILES "${bundled_library}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endforeach(bundled_library)
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/linux/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"

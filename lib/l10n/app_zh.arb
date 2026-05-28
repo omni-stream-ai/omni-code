@@ -26,6 +26,9 @@
   "bridgeCloudProxy": "Bridge / 云端中转",
   "whisperCompatible": "Whisper / OpenAI Compatible",
   "apiKey": "API Key",
+  "appId": "App ID",
+  "secretId": "Secret ID",
+  "secretKey": "Secret Key",
   "baseUrl": "Base URL",
   "aiApprovalSection": "AI 审批",
   "enableAiApproval": "启用 AI 辅助审批",
@@ -37,6 +40,8 @@
   "riskHigh": "High",
   "autoSpeakReplies": "自动播报 Agent 回复",
   "autoSpeakRepliesSubtitle": "AI 回复完成后自动开始播报",
+  "speechPlaybackPrompt": "为语音播报优化回复",
+  "speechPlaybackPromptSubtitle": "当回复会被朗读时，提醒 Agent 避免返回不适合朗读的内容；如果你明确要求，仍会返回。",
   "compressReplies": "压缩 AI 回复",
   "compressRepliesSubtitle": "开启后，新建会话会要求 AI 简短说明做了什么，尽量不超过 50 字",
   "notificationPreviewMaxChars": "通知最大字符数",
@@ -222,6 +227,78 @@
   "messageInputHint": "输入任务，例如：帮我检查最近一次构建失败原因",
   "stopVoice": "停止语音",
   "voiceInput": "语音输入",
+  "voiceChatTitle": "通话模式",
+  "callModeListening": "可以开始说了，我正在听",
+  "callModePreparingListening": "正在准备麦克风",
+  "callModeSpeaking": "正在语音回复",
+  "callModeWorking": "正在思考你的请求",
+  "callModeIdleSubtitle": "直接说就行，我会自动听、自动发、再把回复念给你。",
+  "callModePreparingListeningLabel": "正在准备监听",
+  "callModePreparingListeningDetail": "麦克风和语音识别正在启动，这时说话可能还不会被捕获。",
+  "callModeListeningReadyLabel": "正在监听",
+  "callModeListeningReadyDetail": "可以直接开始说，识别内容会实时显示在这里。",
+  "callModeWaitingWakeWordLabel": "等待唤醒词",
+  "callModeWaitingWakeWordDetail": "请把设置里的唤醒词放在这句话的开头或结尾，中间命中会被忽略。",
+  "callModeWakeWordDetectedLabel": "已检测到唤醒词",
+  "callModeWakeWordDetectedDetail": "在呢。下一句话会被识别并发送。",
+  "callModeWakeWordAck": "在呢",
+  "callModeCommandAccepted": "让我思考一下",
+  "callModeRejectedSpeakerTranscript": "{transcript}（非指定说话人）",
+  "@callModeRejectedSpeakerTranscript": {
+    "placeholders": {
+      "transcript": {
+        "type": "String"
+      }
+    }
+  },
+  "callModeRejectedWakeWordTranscript": "{transcript}（未匹配唤醒词）",
+  "@callModeRejectedWakeWordTranscript": {
+    "placeholders": {
+      "transcript": {
+        "type": "String"
+      }
+    }
+  },
+  "callModeSpeechDetectedLabel": "检测到你在说话",
+  "callModeSpeechDetectedDetail": "继续自然说下去，系统会持续补全这句内容。",
+  "callModeWaitingForPauseLabel": "等待你这句话结束",
+  "callModeWaitingForPauseDetail": "你停顿一会儿后，这句会自动发送，无需手动点按钮。",
+  "callModeOpenChatHistory": "查看对话记录",
+  "showCallModeSubtitles": "显示字幕",
+  "hideCallModeSubtitles": "隐藏字幕",
+  "startCallMode": "开启通话模式",
+  "stopCallMode": "停止通话模式",
+  "callModeUnavailable": "语音服务尚未初始化完成，暂时无法使用通话模式。",
+  "callModeRequiresStreamingAsr": "通话模式当前仅支持系统语音识别或 Omni Bridge Local。",
+  "callModeSection": "通话模式",
+  "callModeAllowInterruptionsLabel": "允许说话打断回复",
+  "callModeAllowInterruptionsHelp": "开启后，通话模式下如果你在回复播报过程中再次开口，会停止当前语音回复并接管这一轮。",
+  "callModeSpeechPauseLabel": "停顿判定时长",
+  "callModeSpeechPauseHelp": "你停止说话后，等待多久自动发送当前这句。",
+  "callModeSpeechPauseOption": "停顿 {seconds} 秒",
+  "@callModeSpeechPauseOption": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "callModeSpeechPauseBridgeOnlyHint": "这个停顿时长目前会精确作用在 Omni Bridge Local 的实时通话模式上。其他 ASR 提供方可能仍使用各自内置的停顿策略。",
+  "callModeWakeWordLabel": "需要唤醒词",
+  "callModeWakeWordHelp": "开启后，Omni Bridge Local 会先用本地关键词检测器识别唤醒词，再处理实时语音。不支持的短语会返回配置错误。",
+  "callModeWakeWordsLabel": "唤醒词",
+  "callModeWakeWordsHelp": "多个短语用逗号分隔。支持英文短语和数字声调拼音，例如 ou1 mi3，会自动转换为模型 token；不支持直接输入汉字。",
+  "callModeWakeWordsEmptyError": "请至少输入一个唤醒词。",
+  "callModeWakeWordsUnsupportedError": "本地唤醒词模型不支持“{wakeWord}”。请使用英文短语、数字声调拼音或模型 token 序列，例如“{example}”。",
+  "@callModeWakeWordsUnsupportedError": {
+    "placeholders": {
+      "wakeWord": {
+        "type": "String"
+      },
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "callModeWakeWordModelUnsupported": "当前语音模型不支持唤醒词，已自动关闭唤醒词功能。",
   "send": "发送",
   "imageAttachment": "图片附件",
   "previewImage": "预览",
@@ -381,15 +458,6 @@
   "phaseStarted": "已开始",
   "draftPending": "待同步",
   "draftFailed": "发送失败，点击重发",
-  "zhipuApiKeyRequired": "请先在设置中填写智谱 API Key",
-  "zhipuAsrRequestFailed": "智谱 ASR 请求失败 ({statusCode}): {body}",
-  "@zhipuAsrRequestFailed": {
-    "placeholders": {
-      "statusCode": {},
-      "body": {}
-    }
-  },
-  "zhipuAsrMissingText": "智谱 ASR 响应缺少 text",
   "whisperApiKeyRequired": "请先在设置中填写 Whisper/OpenAI API Key",
   "whisperAsrRequestFailed": "Whisper ASR 请求失败 ({statusCode}): {body}",
   "@whisperAsrRequestFailed": {
@@ -399,13 +467,6 @@
     }
   },
   "whisperAsrMissingText": "Whisper ASR 响应缺少 text",
-  "zhipuTtsRequestFailed": "智谱 TTS 请求失败 ({statusCode}): {body}",
-  "@zhipuTtsRequestFailed": {
-    "placeholders": {
-      "statusCode": {},
-      "body": {}
-    }
-  },
   "updateManifestUrlRequired": "请先填写更新清单 URL",
   "updateManifestUrlInvalid": "更新清单 URL 无效",
   "updateCheckHttpFailed": "更新检查失败：HTTP {statusCode}",
@@ -447,11 +508,144 @@
   "reinitializingVoiceInput": "正在重新初始化语音输入...",
   "voiceTranscriptionNoResult": "未识别到语音",
   "speechSystem": "系统",
+  "omniBridgeLocal": "Omni Bridge Local",
+  "refresh": "刷新",
+  "refreshing": "刷新中...",
+  "clear": "清除",
   "speechSystemPreferredHelp": "系统可用时默认使用。如需备份可切换到云服务商。",
   "systemTtsUnavailableOnLinux": "Linux 当前还不支持系统 TTS。请切换到云端服务商后再启用播报。",
   "systemAsrUnavailableOnLinux": "Linux 当前还不支持系统 ASR。请切换到云端服务商后再启用语音输入。",
   "systemAsrMacosPermissionHint": "macOS 的系统 ASR 需要麦克风和语音识别权限。",
   "systemSpeechUnavailable": "当前设备不支持系统语音。请到设置中切换服务商后再使用云端语音。",
+  "localBridgeSpeechSection": "本地 Bridge 语音",
+  "localBridgeModelsSection": "本地 Bridge 模型",
+  "localBridgeSpeechIntro": "通过本地 Bridge 在自己的机器上运行离线 ASR、TTS、VAD，并下载所需模型。",
+  "localBridgeModelsUnavailable": "本地 Bridge 模型状态尚未加载。",
+  "bridgeDetails": "Bridge 详情",
+  "localBridgeModelRoot": "模型目录",
+  "localBridgeDownloadTasksSection": "下载任务",
+  "localBridgeNoCompatibleModels": "当前这个类型还没有可用的兼容模型。",
+  "localBridgeTtsVoiceLabel": "TTS 音色",
+  "localBridgeTtsVoiceField": "音色",
+  "localBridgeTtsVoiceHelp": "会用于本地 Bridge 的普通播报、自动播报和通话模式语音回复。",
+  "localBridgeTtsStreamingLabel": "流式播报本地 Bridge TTS",
+  "localBridgeTtsStreamingHelp": "开启后，本地 Bridge 还在生成语音时就会开始播放。若你更希望先完整生成再播放，可以关闭它。",
+  "localBridgeTtsVoiceOption": "音色 {voice}",
+  "@localBridgeTtsVoiceOption": {
+    "placeholders": {
+      "voice": {}
+    }
+  },
+  "localBridgeTtsVoiceDefault": "音色 {voice}（默认）",
+  "@localBridgeTtsVoiceDefault": {
+    "placeholders": {
+      "voice": {}
+    }
+  },
+  "localBridgeTtsNamedVoiceDefault": "{voice}（默认）",
+  "@localBridgeTtsNamedVoiceDefault": {
+    "placeholders": {
+      "voice": {}
+    }
+  },
+  "localBridgeTtsVoiceId": "ID {voice}",
+  "@localBridgeTtsVoiceId": {
+    "placeholders": {
+      "voice": {}
+    }
+  },
+  "speechVoiceLanguageChinese": "中文",
+  "speechVoiceLanguageEnglish": "英文",
+  "speechVoiceLanguageChineseEnglish": "中文 + 英文",
+  "speechVoiceLanguageJapanese": "日文",
+  "speechVoiceLanguageSpanish": "西班牙文",
+  "speechVoiceLanguageFrench": "法文",
+  "speechVoiceLanguageHindi": "印地文",
+  "speechVoiceLanguageItalian": "意大利文",
+  "speechVoiceLanguagePortugueseBr": "巴西葡萄牙文",
+  "speechVoiceLanguageUnknown": "未知语言",
+  "speechVoiceAccentAmericanEnglish": "美式英文",
+  "speechVoiceAccentBritishEnglish": "英式英文",
+  "speechVoiceAccentBrazilianPortuguese": "巴西葡萄牙文",
+  "speechVoiceGenderFemale": "女声",
+  "speechVoiceGenderMale": "男声",
+  "whisperApiSection": "Whisper API",
+  "bridgeLocalTtsHelp": "通过 bridge-local 的 /v1/audio/speech 接口和下方选中的 TTS 模型进行本地播报。",
+  "bridgeLocalAsrHelp": "通过 bridge-local 的 /v1/audio/transcriptions 接口处理录音后的语音转写。",
+  "whisperApiHelp": "需要填写兼容 Whisper 的 Base URL 和 API Key。",
+  "speechNotSelected": "未选择",
+  "speechInstalled": "已安装",
+  "speechNotInstalled": "未安装",
+  "speechDownload": "下载",
+  "speechDownloading": "下载中...",
+  "speechDelete": "删除",
+  "speechInstalledModels": "已安装模型",
+  "speechNoInstalledModels": "还没有已安装模型。",
+  "speechSelect": "选择",
+  "speechChange": "更换",
+  "speechSelected": "已选中",
+  "speechModelKindAsr": "ASR",
+  "speechModelKindTts": "TTS",
+  "speechModelKindVad": "VAD",
+  "speechRuntimeStreaming": "流式",
+  "speechRuntimeOffline": "离线",
+  "speechProfileBatchAsrTitle": "批量 ASR",
+  "speechProfileBatchAsrHelp": "用于录音结束后的语音转写。适合更看重最终识别准确度，而不是边说边出字的场景。",
+  "speechProfileBatchAsrAction": "设为批量 ASR",
+  "speechProfileRealtimeAsrTitle": "实时 ASR",
+  "speechProfileRealtimeAsrHelp": "用于通话模式和 websocket 实时转写。适合说话过程中就需要持续返回中间结果的场景。",
+  "speechProfileRealtimeAsrAction": "设为实时 ASR",
+  "speechProfileTtsTitle": "TTS",
+  "speechProfileTtsHelp": "用于本地 Bridge 的语音播报回复。适合希望助手用本地模型直接念出回答的场景。",
+  "speechProfileTtsAction": "设为 TTS",
+  "speechProfileVadTitle": "VAD",
+  "speechProfileVadHelp": "用于实时模式下检测说话开始和结束。适合希望抢话更灵敏、断句更干净的场景。",
+  "speechProfileVadAction": "设为 VAD",
+  "speechProfileWakeWordTitle": "唤醒词",
+  "speechProfileWakeWordHelp": "用于 Omni Bridge Local 在接受实时通话语音前先检测唤醒词。",
+  "speechProfileWakeWordAction": "设为唤醒词",
+  "speechDownloadStatusQueued": "排队中",
+  "speechDownloadStatusDownloading": "下载中",
+  "speechDownloadStatusExtracting": "解压中",
+  "speechDownloadStatusVerifying": "校验中",
+  "speechDownloadStatusCompleted": "已完成",
+  "speechDownloadStatusFailed": "失败",
+  "speechActiveDownloadsCount": "{count, plural, =1{1 个下载任务进行中} other{{count} 个下载任务进行中}}",
+  "@speechActiveDownloadsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "speechDownloadProgressPercent": "已完成 {percent}%",
+  "@speechDownloadProgressPercent": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "speechLocalModelsLoadFailed": "加载本地语音模型失败：{error}",
+  "@speechLocalModelsLoadFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "speechModelDownloadFailed": "下载模型 {modelId} 失败：{error}",
+  "@speechModelDownloadFailed": {
+    "placeholders": {
+      "modelId": {},
+      "error": {}
+    }
+  },
+  "speechProfileUpdateFailed": "更新 {profile} 失败：{error}",
+  "@speechProfileUpdateFailed": {
+    "placeholders": {
+      "profile": {},
+      "error": {}
+    }
+  },
   "appDownloadSection": "应用下载",
   "appDownloadHelp": "从 GitHub 下载最新版本。",
   "openGithubReleases": "打开 GitHub Releases",

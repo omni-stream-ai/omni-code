@@ -1,22 +1,22 @@
 # Omni Code Designs
 
-![Omni Code Theme Board](./omni-code-theme-from-code.png)
+![Omni Code Theme Board](./Omni_Code_Theme_Board.png)
 
-![Omni Code App Screens](./omni-code-screens-from-code.png)
+![Omni Code Call Mode Wireframe](./call-mode-ui-wireframe.png)
 
-This directory stores the code-derived OpenPencil design sources for Omni Code.
+This directory stores the maintained OpenPencil design sources for Omni Code.
 
 ## Files
 
-- `omni-code-theme-from-code.pen`: OpenPencil theme board generated from the current Flutter theme and screen code.
-- `omni-code-screens-from-code.pen`: OpenPencil screen draft generated from the current Flutter screen structure.
-- `omni-code-theme-from-code.png`: exported preview image from `omni-code-theme-from-code.pen`.
-- `omni-code-screens-from-code.png`: exported preview image from `omni-code-screens-from-code.pen`.
-
-Legacy `.op` design files have been removed. `.pen` is the only maintained design format in this repo.
+- `theme.op`: shared tokens, preview states, and theme reference board.
+- `main.op`: main app design draft that consumes the shared theme tokens.
+- `call-page.op`: standalone voice call page concept based on the light, soft-glow mobile reference style.
+- `Omni_Code_Theme_Board.png`: preview export for the shared theme board.
+- `call-mode-ui-wireframe.png`: preview export for the main wireframe.
+- `call-mode-ui-wireframe.svg`: vector export for the main wireframe.
 
 ## Workflow
 
-1. Run `node scripts/generate_openpencil_design_from_code.mjs` to regenerate the code-derived `.pen` design drafts.
-2. Re-export the preview PNGs after meaningful visual changes.
-3. Treat the generated `.pen` files as the current design handoff for the Flutter app.
+1. Edit shared tokens in `designs/theme.op`.
+2. Run `node scripts/sync_op_theme.mjs` to sync the shared theme block into `designs/main.op`.
+3. Re-export the preview assets after meaningful visual changes.

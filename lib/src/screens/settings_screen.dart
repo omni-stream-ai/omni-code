@@ -95,12 +95,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadCurrentVersion() async {
-    var version = '0.3.0';
+    var version = '0.3.1';
     try {
       if (kIsWeb) {
         version = const String.fromEnvironment(
           'PACKAGE_VERSION',
-          defaultValue: '0.3.0',
+          defaultValue: '0.3.1',
         );
       } else {
         final info = await PackageInfo.fromPlatform();
@@ -109,7 +109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       }
     } catch (_) {
-      version = '0.3.0';
+      version = '0.3.1';
     }
     if (!mounted) {
       return;
@@ -737,7 +737,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             content: Text(
               result.isTargetedDownload
                   ? context.l10n.targetVersionNotFound(result.targetVersion)
-                  : context.l10n.alreadyLatestVersion(result.currentVersionName),
+                  : context.l10n
+                      .alreadyLatestVersion(result.currentVersionName),
             ),
           ),
         );

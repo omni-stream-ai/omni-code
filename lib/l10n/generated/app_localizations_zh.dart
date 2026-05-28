@@ -90,6 +90,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get apiKey => 'API Key';
 
   @override
+  String get appId => 'App ID';
+
+  @override
+  String get secretId => 'Secret ID';
+
+  @override
+  String get secretKey => 'Secret Key';
+
+  @override
   String get baseUrl => 'Base URL';
 
   @override
@@ -123,6 +132,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get autoSpeakRepliesSubtitle => 'AI 回复完成后自动开始播报';
+
+  @override
+  String get speechPlaybackPrompt => '为语音播报优化回复';
+
+  @override
+  String get speechPlaybackPromptSubtitle =>
+      '当回复会被朗读时，提醒 Agent 避免返回不适合朗读的内容；如果你明确要求，仍会返回。';
 
   @override
   String get compressReplies => '压缩 AI 回复';
@@ -422,6 +438,148 @@ class AppLocalizationsZh extends AppLocalizations {
   String get voiceInput => '语音输入';
 
   @override
+  String get voiceChatTitle => '通话模式';
+
+  @override
+  String get callModeListening => '可以开始说了，我正在听';
+
+  @override
+  String get callModePreparingListening => '正在准备麦克风';
+
+  @override
+  String get callModeSpeaking => '正在语音回复';
+
+  @override
+  String get callModeWorking => '正在思考你的请求';
+
+  @override
+  String get callModeIdleSubtitle => '直接说就行，我会自动听、自动发、再把回复念给你。';
+
+  @override
+  String get callModePreparingListeningLabel => '正在准备监听';
+
+  @override
+  String get callModePreparingListeningDetail => '麦克风和语音识别正在启动，这时说话可能还不会被捕获。';
+
+  @override
+  String get callModeListeningReadyLabel => '正在监听';
+
+  @override
+  String get callModeListeningReadyDetail => '可以直接开始说，识别内容会实时显示在这里。';
+
+  @override
+  String get callModeWaitingWakeWordLabel => '等待唤醒词';
+
+  @override
+  String get callModeWaitingWakeWordDetail => '请把设置里的唤醒词放在这句话的开头或结尾，中间命中会被忽略。';
+
+  @override
+  String get callModeWakeWordDetectedLabel => '已检测到唤醒词';
+
+  @override
+  String get callModeWakeWordDetectedDetail => '在呢。下一句话会被识别并发送。';
+
+  @override
+  String get callModeWakeWordAck => '在呢';
+
+  @override
+  String get callModeCommandAccepted => '让我思考一下';
+
+  @override
+  String callModeRejectedSpeakerTranscript(String transcript) {
+    return '$transcript（非指定说话人）';
+  }
+
+  @override
+  String callModeRejectedWakeWordTranscript(String transcript) {
+    return '$transcript（未匹配唤醒词）';
+  }
+
+  @override
+  String get callModeSpeechDetectedLabel => '检测到你在说话';
+
+  @override
+  String get callModeSpeechDetectedDetail => '继续自然说下去，系统会持续补全这句内容。';
+
+  @override
+  String get callModeWaitingForPauseLabel => '等待你这句话结束';
+
+  @override
+  String get callModeWaitingForPauseDetail => '你停顿一会儿后，这句会自动发送，无需手动点按钮。';
+
+  @override
+  String get callModeOpenChatHistory => '查看对话记录';
+
+  @override
+  String get showCallModeSubtitles => '显示字幕';
+
+  @override
+  String get hideCallModeSubtitles => '隐藏字幕';
+
+  @override
+  String get startCallMode => '开启通话模式';
+
+  @override
+  String get stopCallMode => '停止通话模式';
+
+  @override
+  String get callModeUnavailable => '语音服务尚未初始化完成，暂时无法使用通话模式。';
+
+  @override
+  String get callModeRequiresStreamingAsr =>
+      '通话模式当前仅支持系统语音识别或 Omni Bridge Local。';
+
+  @override
+  String get callModeSection => '通话模式';
+
+  @override
+  String get callModeAllowInterruptionsLabel => '允许说话打断回复';
+
+  @override
+  String get callModeAllowInterruptionsHelp =>
+      '开启后，通话模式下如果你在回复播报过程中再次开口，会停止当前语音回复并接管这一轮。';
+
+  @override
+  String get callModeSpeechPauseLabel => '停顿判定时长';
+
+  @override
+  String get callModeSpeechPauseHelp => '你停止说话后，等待多久自动发送当前这句。';
+
+  @override
+  String callModeSpeechPauseOption(Object seconds) {
+    return '停顿 $seconds 秒';
+  }
+
+  @override
+  String get callModeSpeechPauseBridgeOnlyHint =>
+      '这个停顿时长目前会精确作用在 Omni Bridge Local 的实时通话模式上。其他 ASR 提供方可能仍使用各自内置的停顿策略。';
+
+  @override
+  String get callModeWakeWordLabel => '需要唤醒词';
+
+  @override
+  String get callModeWakeWordHelp =>
+      '开启后，Omni Bridge Local 会先用本地关键词检测器识别唤醒词，再处理实时语音。不支持的短语会返回配置错误。';
+
+  @override
+  String get callModeWakeWordsLabel => '唤醒词';
+
+  @override
+  String get callModeWakeWordsHelp =>
+      '多个短语用逗号分隔。支持英文短语和数字声调拼音，例如 ou1 mi3，会自动转换为模型 token；不支持直接输入汉字。';
+
+  @override
+  String get callModeWakeWordsEmptyError => '请至少输入一个唤醒词。';
+
+  @override
+  String callModeWakeWordsUnsupportedError(String wakeWord, String example) {
+    return '本地唤醒词模型不支持“$wakeWord”。请使用英文短语、数字声调拼音或模型 token 序列，例如“$example”。';
+  }
+
+  @override
+  String get callModeWakeWordModelUnsupported => '当前语音模型不支持唤醒词，已自动关闭唤醒词功能。';
+
+  @override
   String get send => '发送';
 
   @override
@@ -704,17 +862,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get draftFailed => '发送失败，点击重发';
 
   @override
-  String get zhipuApiKeyRequired => '请先在设置中填写智谱 API Key';
-
-  @override
-  String zhipuAsrRequestFailed(Object statusCode, Object body) {
-    return '智谱 ASR 请求失败 ($statusCode): $body';
-  }
-
-  @override
-  String get zhipuAsrMissingText => '智谱 ASR 响应缺少 text';
-
-  @override
   String get whisperApiKeyRequired => '请先在设置中填写 Whisper/OpenAI API Key';
 
   @override
@@ -724,11 +871,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get whisperAsrMissingText => 'Whisper ASR 响应缺少 text';
-
-  @override
-  String zhipuTtsRequestFailed(Object statusCode, Object body) {
-    return '智谱 TTS 请求失败 ($statusCode): $body';
-  }
 
   @override
   String get updateManifestUrlRequired => '请先填写更新清单 URL';
@@ -821,6 +963,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speechSystem => '系统';
 
   @override
+  String get omniBridgeLocal => 'Omni Bridge Local';
+
+  @override
+  String get refresh => '刷新';
+
+  @override
+  String get refreshing => '刷新中...';
+
+  @override
+  String get clear => '清除';
+
+  @override
   String get speechSystemPreferredHelp => '系统可用时默认使用。如需备份可切换到云服务商。';
 
   @override
@@ -836,6 +990,272 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get systemSpeechUnavailable => '当前设备不支持系统语音。请到设置中切换服务商后再使用云端语音。';
+
+  @override
+  String get localBridgeSpeechSection => '本地 Bridge 语音';
+
+  @override
+  String get localBridgeModelsSection => '本地 Bridge 模型';
+
+  @override
+  String get localBridgeSpeechIntro =>
+      '通过本地 Bridge 在自己的机器上运行离线 ASR、TTS、VAD，并下载所需模型。';
+
+  @override
+  String get localBridgeModelsUnavailable => '本地 Bridge 模型状态尚未加载。';
+
+  @override
+  String get bridgeDetails => 'Bridge 详情';
+
+  @override
+  String get localBridgeModelRoot => '模型目录';
+
+  @override
+  String get localBridgeDownloadTasksSection => '下载任务';
+
+  @override
+  String get localBridgeNoCompatibleModels => '当前这个类型还没有可用的兼容模型。';
+
+  @override
+  String get localBridgeTtsVoiceLabel => 'TTS 音色';
+
+  @override
+  String get localBridgeTtsVoiceField => '音色';
+
+  @override
+  String get localBridgeTtsVoiceHelp => '会用于本地 Bridge 的普通播报、自动播报和通话模式语音回复。';
+
+  @override
+  String get localBridgeTtsStreamingLabel => '流式播报本地 Bridge TTS';
+
+  @override
+  String get localBridgeTtsStreamingHelp =>
+      '开启后，本地 Bridge 还在生成语音时就会开始播放。若你更希望先完整生成再播放，可以关闭它。';
+
+  @override
+  String localBridgeTtsVoiceOption(Object voice) {
+    return '音色 $voice';
+  }
+
+  @override
+  String localBridgeTtsVoiceDefault(Object voice) {
+    return '音色 $voice（默认）';
+  }
+
+  @override
+  String localBridgeTtsNamedVoiceDefault(Object voice) {
+    return '$voice（默认）';
+  }
+
+  @override
+  String localBridgeTtsVoiceId(Object voice) {
+    return 'ID $voice';
+  }
+
+  @override
+  String get speechVoiceLanguageChinese => '中文';
+
+  @override
+  String get speechVoiceLanguageEnglish => '英文';
+
+  @override
+  String get speechVoiceLanguageChineseEnglish => '中文 + 英文';
+
+  @override
+  String get speechVoiceLanguageJapanese => '日文';
+
+  @override
+  String get speechVoiceLanguageSpanish => '西班牙文';
+
+  @override
+  String get speechVoiceLanguageFrench => '法文';
+
+  @override
+  String get speechVoiceLanguageHindi => '印地文';
+
+  @override
+  String get speechVoiceLanguageItalian => '意大利文';
+
+  @override
+  String get speechVoiceLanguagePortugueseBr => '巴西葡萄牙文';
+
+  @override
+  String get speechVoiceLanguageUnknown => '未知语言';
+
+  @override
+  String get speechVoiceAccentAmericanEnglish => '美式英文';
+
+  @override
+  String get speechVoiceAccentBritishEnglish => '英式英文';
+
+  @override
+  String get speechVoiceAccentBrazilianPortuguese => '巴西葡萄牙文';
+
+  @override
+  String get speechVoiceGenderFemale => '女声';
+
+  @override
+  String get speechVoiceGenderMale => '男声';
+
+  @override
+  String get whisperApiSection => 'Whisper API';
+
+  @override
+  String get bridgeLocalTtsHelp =>
+      '通过 bridge-local 的 /v1/audio/speech 接口和下方选中的 TTS 模型进行本地播报。';
+
+  @override
+  String get bridgeLocalAsrHelp =>
+      '通过 bridge-local 的 /v1/audio/transcriptions 接口处理录音后的语音转写。';
+
+  @override
+  String get whisperApiHelp => '需要填写兼容 Whisper 的 Base URL 和 API Key。';
+
+  @override
+  String get speechNotSelected => '未选择';
+
+  @override
+  String get speechInstalled => '已安装';
+
+  @override
+  String get speechNotInstalled => '未安装';
+
+  @override
+  String get speechDownload => '下载';
+
+  @override
+  String get speechDownloading => '下载中...';
+
+  @override
+  String get speechDelete => '删除';
+
+  @override
+  String get speechInstalledModels => '已安装模型';
+
+  @override
+  String get speechNoInstalledModels => '还没有已安装模型。';
+
+  @override
+  String get speechSelect => '选择';
+
+  @override
+  String get speechChange => '更换';
+
+  @override
+  String get speechSelected => '已选中';
+
+  @override
+  String get speechModelKindAsr => 'ASR';
+
+  @override
+  String get speechModelKindTts => 'TTS';
+
+  @override
+  String get speechModelKindVad => 'VAD';
+
+  @override
+  String get speechRuntimeStreaming => '流式';
+
+  @override
+  String get speechRuntimeOffline => '离线';
+
+  @override
+  String get speechProfileBatchAsrTitle => '批量 ASR';
+
+  @override
+  String get speechProfileBatchAsrHelp =>
+      '用于录音结束后的语音转写。适合更看重最终识别准确度，而不是边说边出字的场景。';
+
+  @override
+  String get speechProfileBatchAsrAction => '设为批量 ASR';
+
+  @override
+  String get speechProfileRealtimeAsrTitle => '实时 ASR';
+
+  @override
+  String get speechProfileRealtimeAsrHelp =>
+      '用于通话模式和 websocket 实时转写。适合说话过程中就需要持续返回中间结果的场景。';
+
+  @override
+  String get speechProfileRealtimeAsrAction => '设为实时 ASR';
+
+  @override
+  String get speechProfileTtsTitle => 'TTS';
+
+  @override
+  String get speechProfileTtsHelp =>
+      '用于本地 Bridge 的语音播报回复。适合希望助手用本地模型直接念出回答的场景。';
+
+  @override
+  String get speechProfileTtsAction => '设为 TTS';
+
+  @override
+  String get speechProfileVadTitle => 'VAD';
+
+  @override
+  String get speechProfileVadHelp => '用于实时模式下检测说话开始和结束。适合希望抢话更灵敏、断句更干净的场景。';
+
+  @override
+  String get speechProfileVadAction => '设为 VAD';
+
+  @override
+  String get speechProfileWakeWordTitle => '唤醒词';
+
+  @override
+  String get speechProfileWakeWordHelp =>
+      '用于 Omni Bridge Local 在接受实时通话语音前先检测唤醒词。';
+
+  @override
+  String get speechProfileWakeWordAction => '设为唤醒词';
+
+  @override
+  String get speechDownloadStatusQueued => '排队中';
+
+  @override
+  String get speechDownloadStatusDownloading => '下载中';
+
+  @override
+  String get speechDownloadStatusExtracting => '解压中';
+
+  @override
+  String get speechDownloadStatusVerifying => '校验中';
+
+  @override
+  String get speechDownloadStatusCompleted => '已完成';
+
+  @override
+  String get speechDownloadStatusFailed => '失败';
+
+  @override
+  String speechActiveDownloadsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个下载任务进行中',
+      one: '1 个下载任务进行中',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speechDownloadProgressPercent(int percent) {
+    return '已完成 $percent%';
+  }
+
+  @override
+  String speechLocalModelsLoadFailed(Object error) {
+    return '加载本地语音模型失败：$error';
+  }
+
+  @override
+  String speechModelDownloadFailed(Object modelId, Object error) {
+    return '下载模型 $modelId 失败：$error';
+  }
+
+  @override
+  String speechProfileUpdateFailed(Object profile, Object error) {
+    return '更新 $profile 失败：$error';
+  }
 
   @override
   String get appDownloadSection => '应用下载';

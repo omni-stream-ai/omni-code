@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omni_code/src/bridge_client.dart';
+import 'package:omni_code/src/bridge_speech_models.dart';
 import 'package:omni_code/src/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -267,7 +268,8 @@ void main() {
       );
     });
 
-    test('force refresh replaces removed sessions instead of keeping stale cache',
+    test(
+        'force refresh replaces removed sessions instead of keeping stale cache',
         () async {
       var requestCount = 0;
       final client = BridgeClient(
@@ -464,11 +466,303 @@ void main() {
 
         expect(refreshed.map((item) => item.id).toList(), ['session-c']);
         expect(
-          client.peekProjectSessions('project-1')?.map((item) => item.id).toList(),
+          client
+              .peekProjectSessions('project-1')
+              ?.map((item) => item.id)
+              .toList(),
           ['session-c'],
         );
       },
     );
+  });
+
+  group('BridgeClient speech APIs', () {
+    test('getSpeechStatus parses bridge speech status payload', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.path, '/speech');
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'root_dir': '/tmp/bridge/speech',
+                'profiles': {
+                  'asr_batch': 'sensevoice-small-int8',
+                  'tts_default': 'vits-melo-tts-zh-en',
+                },
+                'voices': {
+                  'tts_by_model': {
+                    'vits-melo-tts-zh-en': '0',
+                  },
+                },
+                'models': [
+                  {
+                    'id': 'sensevoice-small-int8',
+                    'kind': 'asr',
+                    'display_name': 'SenseVoice Small',
+                    'description': 'Local batch ASR model',
+                    'languages': ['zh', 'en'],
+                    'runtime': 'offline',
+                    'backend': 'onnx',
+                    'capabilities': {
+                      'streaming': false,
+                      'realtime_asr': false,
+                      'batch_asr': true,
+                      'speech_synthesis': false,
+                      'vad': false,
+                      'endpointing': true,
+                      'punctuation': true,
+                      'inverse_text_normalization': true,
+                      'multilingual': true,
+                    },
+                    'features': ['punctuation'],
+                    'supports_profiles': ['asr_batch'],
+                    'recommended_profiles': ['asr_batch'],
+                    'download_url': 'https://example.com/model',
+                    'installed': true,
+                    'selected_by': ['asr_batch'],
+                    'voices': [],
+                  },
+                  {
+                    'id': 'vits-melo-tts-zh-en',
+                    'kind': 'tts',
+                    'display_name': 'VITS Melo TTS',
+                    'description': 'Local bilingual TTS model',
+                    'languages': ['zh', 'en'],
+                    'runtime': 'offline',
+                    'backend': 'onnx',
+                    'capabilities': {
+                      'streaming': false,
+                      'realtime_asr': false,
+                      'batch_asr': false,
+                      'speech_synthesis': true,
+                      'vad': false,
+                      'endpointing': false,
+                      'punctuation': false,
+                      'inverse_text_normalization': false,
+                      'multilingual': true,
+                    },
+                    'features': ['female-voice'],
+                    'supports_profiles': ['tts_default'],
+                    'recommended_profiles': ['tts_default'],
+                    'download_url': 'https://example.com/tts',
+                    'default_voice': '0',
+                    'installed': true,
+                    'selected_by': ['tts_default'],
+                    'voices': ['0'],
+                    'voice_details': [
+                      {
+                        'id': '0',
+                        'name': 'MeloTTS Chinese-English Female',
+                        'language': 'zh/en',
+                        'accent': 'Chinese + English',
+                        'gender': 'female',
+                      },
+                    ],
+                  },
+                ],
+                'downloads': [
+                  {
+                    'task_id': 'task-1',
+                    'model_id': 'silero-vad',
+                    'status': 'downloading',
+                    'progress_bytes': 50,
+                    'total_bytes': 100,
+                    'created_at': '2026-05-11T10:00:00.000',
+                    'updated_at': '2026-05-11T10:00:05.000',
+                  },
+                ],
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final status = await client.getSpeechStatus();
+
+      expect(status.rootDir, '/tmp/bridge/speech');
+      expect(status.profiles.asrBatch, 'sensevoice-small-int8');
+      expect(status.profiles.ttsDefault, 'vits-melo-tts-zh-en');
+      expect(status.voices.voiceForModel('vits-melo-tts-zh-en'), '0');
+      expect(status.models, hasLength(2));
+      expect(status.models.first.kind, SpeechModelKind.asr);
+      expect(status.models.first.capabilities.batchAsr, isTrue);
+      final ttsModel = status.models.last;
+      expect(ttsModel.kind, SpeechModelKind.tts);
+      expect(ttsModel.voiceDetails, hasLength(1));
+      expect(
+          ttsModel.voiceDetails.single.name, 'MeloTTS Chinese-English Female');
+      expect(ttsModel.voiceDetails.single.language, 'zh/en');
+      expect(ttsModel.voiceDetails.single.gender, 'female');
+      expect(status.activeDownloads, hasLength(1));
+      expect(
+        status.activeDownloads.single.status,
+        SpeechDownloadStatus.downloading,
+      );
+      expect(status.activeDownloads.single.progress, 0.5);
+    });
+
+    test('updateSpeechModelVoice stores a per-model TTS voice', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'PUT');
+          expect(request.url.path,
+              '/speech/models/kokoro-int8-multi-lang-v1_1/voice');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'tts_by_model': {
+                  'kokoro-int8-multi-lang-v1_1': 'af_heart',
+                },
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final voices = await client.updateSpeechModelVoice(
+        'kokoro-int8-multi-lang-v1_1',
+        voice: 'af_heart',
+      );
+
+      expect(body['voice'], 'af_heart');
+      expect(voices.voiceForModel('kokoro-int8-multi-lang-v1_1'), 'af_heart');
+    });
+
+    test('deleteSpeechModel sends delete request for model id', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'DELETE');
+          expect(
+              request.url.path, '/speech/models/kokoro-int8-multi-lang-v1_1');
+          return http.Response('', 204);
+        }),
+      );
+
+      await client.deleteSpeechModel('kokoro-int8-multi-lang-v1_1');
+    });
+
+    test('listSpeakers parses enrolled speaker records', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.path, '/speech/speakers');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'speaker-1',
+                  'name': 'Jun',
+                  'embedding_model_id': '3dspeaker-speech-eres2net-base',
+                  'embedding_count': 2,
+                  'created_at': '2026-05-18T10:00:00.000',
+                  'updated_at': '2026-05-18T10:05:00.000',
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final speakers = await client.listSpeakers();
+
+      expect(speakers, hasLength(1));
+      expect(speakers.single.id, 'speaker-1');
+      expect(speakers.single.name, 'Jun');
+      expect(speakers.single.embeddingCount, 2);
+    });
+
+    test('updateSpeakerFilter sends target speaker settings', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'PUT');
+          expect(request.url.path, '/speech/speaker-filter');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'enabled': true,
+                'speaker_id': 'speaker-1',
+                'threshold': 0.7,
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final settings = await client.updateSpeakerFilter(
+        const SpeakerFilterSettings(
+          enabled: true,
+          speakerId: 'speaker-1',
+          threshold: 0.7,
+        ),
+      );
+
+      expect(body['enabled'], isTrue);
+      expect(body['speaker_id'], 'speaker-1');
+      expect(body['threshold'], 0.7);
+      expect(settings.enabled, isTrue);
+      expect(settings.speakerId, 'speaker-1');
+      expect(settings.threshold, 0.7);
+    });
+
+    test('synthesizeSpeech sends the selected voice', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/v1/audio/speech');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response.bytes(
+            [1, 2, 3],
+            200,
+            headers: {'content-type': 'audio/wav'},
+          );
+        }),
+      );
+
+      await client.synthesizeSpeech(
+        'hello',
+        model: 'vits-melo-tts-zh-en',
+        voice: '2',
+      );
+
+      expect(body['model'], 'vits-melo-tts-zh-en');
+      expect(body['input'], 'hello');
+      expect(body['voice'], '2');
+      expect(body['response_format'], 'wav');
+    });
+
+    test('synthesizeSpeech sanitizes punctuation and emoji for local TTS',
+        () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response.bytes(
+            [1, 2, 3],
+            200,
+            headers: {'content-type': 'audio/wav'},
+          );
+        }),
+      );
+
+      await client.synthesizeSpeech('他说：“为什么❓”');
+
+      expect(body['input'], '他说："为什么"');
+      expect(body.containsKey('voice'), isFalse);
+    });
   });
 }
 

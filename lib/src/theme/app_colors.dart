@@ -221,6 +221,40 @@ class AppColors {
   static Color idleFor(Brightness brightness) =>
       brightness == Brightness.dark ? darkIdle : lightIdle;
 
+  static Color callModeHeaderSurfaceFor(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? darkPanelDeep.withValues(alpha: 0.76)
+          : Colors.white.withValues(alpha: 0.82);
+
+  static Color callModePanelTopFor(Brightness brightness) =>
+      brightness == Brightness.dark ? const Color(0xFF17202A) : Colors.white;
+
+  static Color callModePanelBottomFor(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? const Color(0xFF10171E)
+          : const Color(0xFFEEF3F7);
+
+  static Color callModeControlTopFor(Brightness brightness) =>
+      brightness == Brightness.dark ? const Color(0xFF171F28) : Colors.white;
+
+  static Color callModeControlBottomFor(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? const Color(0xFF111820)
+          : const Color(0xFFECF2F7);
+
+  static Color callModeLiveSurfaceFor(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? const Color(0xFF14241C)
+          : const Color(0xFFF0FAE7);
+
+  static Color callModeLiveBorderFor(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? const Color(0xFF3B6335)
+          : const Color(0xFF9ACF69);
+
+  static Color callModeLiveTextFor(Brightness brightness) =>
+      brightness == Brightness.dark ? darkPrimary : const Color(0xFF2B7A12);
+
   static Color skeletonBaseFor(Brightness brightness) => _blendWithSurface(
         textFor(brightness),
         surfaceFor(brightness),

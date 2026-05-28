@@ -11,8 +11,6 @@ to the bridge over HTTP and SSE so you can manage projects, open sessions, send
 messages, receive reply notifications, and handle approval prompts across
 mobile and desktop devices.
 
-![Omni Code App Screens Preview](./designs/omni-code-screens-from-code.png)
-
 ## Install
 
 **Homebrew (macOS):**
