@@ -13,7 +13,7 @@ mobile and desktop devices.
 
 ## Preview
 
-![Home dashboard](preview/01-home-dashboard.png)
+![Omni Code](preview/omni-code-showcase.png)
 
 ## Install
 
