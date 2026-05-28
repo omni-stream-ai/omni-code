@@ -13,9 +13,7 @@ mobile and desktop devices.
 
 ## Preview
 
-| Home | Project sessions | Projects |
-| --- | --- | --- |
-| ![Home dashboard](preview/01-home-dashboard.png) | ![Project sessions](preview/02-project-sessions.png) | ![Projects list](preview/03-projects-list.png) |
+![Home dashboard](preview/01-home-dashboard.png)
 
 ## Install
 
