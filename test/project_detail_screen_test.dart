@@ -10,6 +10,7 @@ import 'package:omni_code/src/models.dart';
 import 'package:omni_code/src/screens/project_detail_screen.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 import 'package:omni_code/src/settings/app_settings_store.dart';
+import 'package:omni_code/src/theme/app_theme.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -104,6 +105,8 @@ class _TestApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
       home: home,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [

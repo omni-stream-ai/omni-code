@@ -20,20 +20,44 @@ void main() {
     expect(settings.speechPlaybackPromptEnabled, isTrue);
   });
 
-  test('notificationMaxChars defaults to 160', () {
-    expect(AppSettings.defaults().notificationMaxChars, 160);
+  test('notificationMaxChars defaults to 150', () {
+    expect(AppSettings.defaults().notificationMaxChars, 150);
   });
 
-  test('missing notification_max_chars falls back to default', () {
+  test('missing notification_max_chars uses fixed default', () {
     final settings = AppSettings.fromJson(<String, dynamic>{});
-    expect(settings.notificationMaxChars, 160);
+    expect(settings.notificationMaxChars, 150);
   });
 
-  test('invalid notification_max_chars falls back to default', () {
+  test('legacy notification_max_chars is ignored', () {
     final settings = AppSettings.fromJson(<String, dynamic>{
-      'notification_max_chars': 0,
+      'notification_max_chars': 240,
     });
-    expect(settings.notificationMaxChars, 160);
+    expect(settings.notificationMaxChars, 150);
+  });
+
+  test('notificationMaxChars is not persisted as a configurable setting', () {
+    expect(
+      AppSettings.defaults().toJson().containsKey('notification_max_chars'),
+      isFalse,
+    );
+  });
+
+  test('compressAssistantReplyMaxChars defaults to 50', () {
+    expect(
+      AppSettings.defaults().compressAssistantReplyMaxChars,
+      defaultCompressAssistantReplyMaxChars,
+    );
+  });
+
+  test('invalid compress_assistant_reply_max_chars falls back to default', () {
+    final settings = AppSettings.fromJson(<String, dynamic>{
+      'compress_assistant_reply_max_chars': 0,
+    });
+    expect(
+      settings.compressAssistantReplyMaxChars,
+      defaultCompressAssistantReplyMaxChars,
+    );
   });
 
   test('bridge local speech providers round-trip through json', () {
@@ -43,6 +67,7 @@ void main() {
       bridgeLocalTtsVoice: '2',
       bridgeLocalTtsStreaming: true,
       speechPlaybackPromptEnabled: false,
+      compressAssistantReplyMaxChars: 80,
       callModeAllowInterruptions: false,
       callModeSpeechPauseMillis: 1800,
     );
@@ -54,6 +79,7 @@ void main() {
     expect(restored.bridgeLocalTtsVoice, '2');
     expect(restored.bridgeLocalTtsStreaming, isTrue);
     expect(restored.speechPlaybackPromptEnabled, isFalse);
+    expect(restored.compressAssistantReplyMaxChars, 80);
     expect(restored.callModeAllowInterruptions, isFalse);
     expect(restored.callModeSpeechPauseMillis, 1800);
   });

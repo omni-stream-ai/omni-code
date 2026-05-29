@@ -56,6 +56,31 @@ void main() {
       isTrue,
     );
   });
+
+  testWidgets('shows compressed reply max chars instead of notification chars',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(compressAssistantReplyMaxChars: 75),
+    );
+
+    await tester.pumpWidget(
+      const _TestApp(
+        home: SettingsScreen(),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Compressed reply max chars'), findsOneWidget);
+    expect(find.text('Notification max chars'), findsNothing);
+
+    final matchingFields = tester.widgetList<TextField>(find.byType(TextField));
+    expect(
+      matchingFields.any(
+        (field) => field.controller?.text == '75',
+      ),
+      isTrue,
+    );
+  });
 }
 
 class _TestApp extends StatelessWidget {
