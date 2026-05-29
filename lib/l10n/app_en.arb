@@ -43,8 +43,8 @@
   "speechPlaybackPrompt": "Optimize replies for speech playback",
   "speechPlaybackPromptSubtitle": "When a reply will be spoken aloud, ask the agent to avoid hard-to-read-aloud content unless you explicitly request it.",
   "compressReplies": "Compress AI replies",
-  "compressRepliesSubtitle": "When enabled, new sessions ask the AI to summarize what it did briefly, ideally within 50 characters",
-  "notificationPreviewMaxChars": "Notification max chars",
+  "compressRepliesSubtitle": "When enabled, new sessions ask the AI to summarize what it did briefly",
+  "compressReplyMaxChars": "Compressed reply max chars",
   "settingsSaved": "Settings saved",
   "settingsSaveFailed": "Failed to save settings: {error}",
   "@settingsSaveFailed": {
@@ -651,5 +651,6 @@
   "openGithubReleases": "Open GitHub Releases",
   "signOut": "Sign out",
   "signOutConfirmTitle": "Sign out and reauthorize?",
-  "signOutConfirmBody": "This clears the current device authorization and returns you to the welcome screen. You will need to reconnect Bridge and authorize this device again."
+  "signOutConfirmBody": "This clears the current device authorization and returns you to the welcome screen. You will need to reconnect Bridge and authorize this device again.",
+  "sessionFailedGeneric": "Session failed"
 }

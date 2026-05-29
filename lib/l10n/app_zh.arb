@@ -43,8 +43,8 @@
   "speechPlaybackPrompt": "为语音播报优化回复",
   "speechPlaybackPromptSubtitle": "当回复会被朗读时，提醒 Agent 避免返回不适合朗读的内容；如果你明确要求，仍会返回。",
   "compressReplies": "压缩 AI 回复",
-  "compressRepliesSubtitle": "开启后，新建会话会要求 AI 简短说明做了什么，尽量不超过 50 字",
-  "notificationPreviewMaxChars": "通知最大字符数",
+  "compressRepliesSubtitle": "开启后，新建会话会要求 AI 简短说明做了什么",
+  "compressReplyMaxChars": "压缩回复最大字数",
   "settingsSaved": "设置已保存",
   "settingsSaveFailed": "保存设置失败：{error}",
   "@settingsSaveFailed": {
@@ -651,5 +651,6 @@
   "openGithubReleases": "打开 GitHub Releases",
   "signOut": "退出",
   "signOutConfirmTitle": "退出并重新授权？",
-  "signOutConfirmBody": "退出后会清除当前设备授权并返回欢迎页。你需要重新连接 Bridge 并再次授权此设备。"
+  "signOutConfirmBody": "退出后会清除当前设备授权并返回欢迎页。你需要重新连接 Bridge 并再次授权此设备。",
+  "sessionFailedGeneric": "会话已失败"
 }

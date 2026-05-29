@@ -200,6 +200,7 @@ class SessionSummary {
     required this.unreadCount,
     this.lastMessagePreview,
     this.pendingApproval,
+    this.errorMessage,
   });
 
   final String id;
@@ -212,6 +213,7 @@ class SessionSummary {
   final int unreadCount;
   final String? lastMessagePreview;
   final ApprovalRequest? pendingApproval;
+  final String? errorMessage;
 
   SessionSummary copyWith({
     String? id,
@@ -225,6 +227,8 @@ class SessionSummary {
     String? lastMessagePreview,
     ApprovalRequest? pendingApproval,
     bool clearPendingApproval = false,
+    String? errorMessage,
+    bool clearErrorMessage = false,
   }) {
     return SessionSummary(
       id: id ?? this.id,
@@ -238,6 +242,8 @@ class SessionSummary {
       lastMessagePreview: lastMessagePreview ?? this.lastMessagePreview,
       pendingApproval:
           clearPendingApproval ? null : pendingApproval ?? this.pendingApproval,
+      errorMessage:
+          clearErrorMessage ? null : errorMessage ?? this.errorMessage,
     );
   }
 
@@ -252,6 +258,7 @@ class SessionSummary {
       updatedAt: DateTime.parse(json['updated_at'] as String),
       unreadCount: json['unread_count'] as int,
       lastMessagePreview: json['last_message_preview'] as String?,
+      errorMessage: json['error_message'] as String?,
       pendingApproval: json['pending_approval'] == null
           ? null
           : ApprovalRequest.fromJson(
