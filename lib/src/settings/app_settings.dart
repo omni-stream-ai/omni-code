@@ -7,7 +7,8 @@ import 'app_settings_store.dart';
 
 const _defaultUpdateManifestUrl =
     'https://github.com/omni-stream-ai/omni-code/releases/latest/download/update.json';
-const _defaultNotificationMaxChars = 160;
+const _defaultNotificationMaxChars = 150;
+const int defaultCompressAssistantReplyMaxChars = 50;
 const int defaultCallModeSpeechPauseMillis = 1200;
 const int minCallModeSpeechPauseMillis = 600;
 const int maxCallModeSpeechPauseMillis = 2400;
@@ -49,6 +50,7 @@ class AppSettings {
     required this.autoSpeakReplies,
     required this.speechPlaybackPromptEnabled,
     required this.compressAssistantReplies,
+    required this.compressAssistantReplyMaxChars,
     required this.callModeAllowInterruptions,
     required this.callModeSpeechPauseMillis,
     required this.callModeWakeWordEnabled,
@@ -78,6 +80,7 @@ class AppSettings {
   final bool autoSpeakReplies;
   final bool speechPlaybackPromptEnabled;
   final bool compressAssistantReplies;
+  final int compressAssistantReplyMaxChars;
   final bool callModeAllowInterruptions;
   final int callModeSpeechPauseMillis;
   final bool callModeWakeWordEnabled;
@@ -116,6 +119,7 @@ class AppSettings {
       autoSpeakReplies: false,
       speechPlaybackPromptEnabled: true,
       compressAssistantReplies: false,
+      compressAssistantReplyMaxChars: defaultCompressAssistantReplyMaxChars,
       callModeAllowInterruptions: true,
       callModeSpeechPauseMillis: defaultCallModeSpeechPauseMillis,
       callModeWakeWordEnabled: false,
@@ -143,10 +147,10 @@ class AppSettings {
     String? aiApprovalApiKey,
     String? aiApprovalModel,
     String? aiApprovalMaxRisk,
-    int? notificationMaxChars,
     bool? autoSpeakReplies,
     bool? speechPlaybackPromptEnabled,
     bool? compressAssistantReplies,
+    int? compressAssistantReplyMaxChars,
     bool? callModeAllowInterruptions,
     int? callModeSpeechPauseMillis,
     bool? callModeWakeWordEnabled,
@@ -175,12 +179,16 @@ class AppSettings {
       aiApprovalApiKey: aiApprovalApiKey ?? this.aiApprovalApiKey,
       aiApprovalModel: aiApprovalModel ?? this.aiApprovalModel,
       aiApprovalMaxRisk: aiApprovalMaxRisk ?? this.aiApprovalMaxRisk,
-      notificationMaxChars: notificationMaxChars ?? this.notificationMaxChars,
+      notificationMaxChars: this.notificationMaxChars,
       autoSpeakReplies: autoSpeakReplies ?? this.autoSpeakReplies,
       speechPlaybackPromptEnabled:
           speechPlaybackPromptEnabled ?? this.speechPlaybackPromptEnabled,
       compressAssistantReplies:
           compressAssistantReplies ?? this.compressAssistantReplies,
+      compressAssistantReplyMaxChars: _normalizePositiveInt(
+        compressAssistantReplyMaxChars ?? this.compressAssistantReplyMaxChars,
+        this.compressAssistantReplyMaxChars,
+      ),
       callModeAllowInterruptions:
           callModeAllowInterruptions ?? this.callModeAllowInterruptions,
       callModeSpeechPauseMillis: _normalizeCallModeSpeechPauseMillis(
@@ -215,10 +223,10 @@ class AppSettings {
       'ai_approval_api_key': aiApprovalApiKey,
       'ai_approval_model': aiApprovalModel,
       'ai_approval_max_risk': aiApprovalMaxRisk,
-      'notification_max_chars': notificationMaxChars,
       'auto_speak_replies': autoSpeakReplies,
       'speech_playback_prompt_enabled': speechPlaybackPromptEnabled,
       'compress_assistant_replies': compressAssistantReplies,
+      'compress_assistant_reply_max_chars': compressAssistantReplyMaxChars,
       'call_mode_allow_interruptions': callModeAllowInterruptions,
       'call_mode_speech_pause_millis': callModeSpeechPauseMillis,
       'call_mode_wake_word_enabled': callModeWakeWordEnabled,
@@ -277,14 +285,7 @@ class AppSettings {
         _readString(json, 'ai_approval_max_risk', defaults.aiApprovalMaxRisk),
         defaults.aiApprovalMaxRisk,
       ),
-      notificationMaxChars: _normalizeNotificationMaxChars(
-        _readInt(
-          json,
-          'notification_max_chars',
-          defaults.notificationMaxChars,
-        ),
-        defaults.notificationMaxChars,
-      ),
+      notificationMaxChars: defaults.notificationMaxChars,
       autoSpeakReplies:
           _readBool(json, 'auto_speak_replies', defaults.autoSpeakReplies),
       speechPlaybackPromptEnabled: _readBool(
@@ -296,6 +297,14 @@ class AppSettings {
         json,
         'compress_assistant_replies',
         defaults.compressAssistantReplies,
+      ),
+      compressAssistantReplyMaxChars: _normalizePositiveInt(
+        _readInt(
+          json,
+          'compress_assistant_reply_max_chars',
+          defaults.compressAssistantReplyMaxChars,
+        ),
+        defaults.compressAssistantReplyMaxChars,
       ),
       callModeAllowInterruptions: _readBool(
         json,
@@ -387,7 +396,7 @@ class AppSettings {
     };
   }
 
-  static int _normalizeNotificationMaxChars(int value, int fallback) {
+  static int _normalizePositiveInt(int value, int fallback) {
     return value > 0 ? value : fallback;
   }
 
@@ -541,7 +550,10 @@ class AppSettingsController extends ChangeNotifier {
         if (json['ai_approval_enabled'] == null) {
           shouldPersist = true;
         }
-        if (json['notification_max_chars'] == null) {
+        if (json.containsKey('notification_max_chars')) {
+          shouldPersist = true;
+        }
+        if (json['compress_assistant_reply_max_chars'] == null) {
           shouldPersist = true;
         }
         _settings = AppSettings.fromJson(json);
