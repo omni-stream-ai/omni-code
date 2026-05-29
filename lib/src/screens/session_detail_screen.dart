@@ -1524,8 +1524,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           onTap: () => unawaited(_showImagePreview(reference)),
           borderRadius: BorderRadius.circular(6),
           child: Container(
-            width: 40,
-            height: 40,
+            width: 60,
+            height: 60,
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               color: backgroundColor,
@@ -1553,9 +1553,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             return buildCard(
               const Center(
                 child: SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 1.5),
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
             );
