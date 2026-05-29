@@ -88,6 +88,7 @@ class AppTheme {
       useMaterial3: true,
       brightness: brightness,
       colorScheme: colorScheme,
+      splashFactory: InkRipple.splashFactory,
       scaffoldBackgroundColor: AppColors.boardFor(brightness),
       canvasColor: AppColors.screenFor(brightness),
       textTheme: textTheme,
@@ -168,7 +169,7 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: colorScheme.primary,
           foregroundColor: colorScheme.onPrimary,
-          minimumSize: const Size.fromHeight(42),
+          minimumSize: const Size(0, 42),
           textStyle: textTheme.labelLarge,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
@@ -179,7 +180,7 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           backgroundColor: panelDeep,
           foregroundColor: softText,
-          minimumSize: const Size.fromHeight(42),
+          minimumSize: const Size(0, 42),
           side: BorderSide(color: outlineStrong),
           textStyle: textTheme.labelLarge,
           shape: RoundedRectangleBorder(

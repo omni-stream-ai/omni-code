@@ -577,12 +577,13 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     final theme = Theme.of(context);
     final brightness = theme.brightness;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.panelAltFor(brightness),
+    return Material(
+      color: AppColors.panelAltFor(brightness),
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
-        border: Border.all(color: AppColors.outlineFor(brightness)),
+        side: BorderSide(color: AppColors.outlineFor(brightness)),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Theme(
         data: theme.copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
@@ -694,12 +695,13 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         return left.displayName.compareTo(right.displayName);
       });
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.panelAltFor(brightness),
+    return Material(
+      color: AppColors.panelAltFor(brightness),
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
-        border: Border.all(color: AppColors.outlineFor(brightness)),
+        side: BorderSide(color: AppColors.outlineFor(brightness)),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Theme(
         data: theme.copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
