@@ -95,12 +95,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadCurrentVersion() async {
-    var version = '0.3.1';
+    var version = '0.4.0';
     try {
       if (kIsWeb) {
         version = const String.fromEnvironment(
           'PACKAGE_VERSION',
-          defaultValue: '0.3.1',
+          defaultValue: '0.4.0',
         );
       } else {
         final info = await PackageInfo.fromPlatform();
@@ -109,7 +109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       }
     } catch (_) {
-      version = '0.3.1';
+      version = '0.4.0';
     }
     if (!mounted) {
       return;
