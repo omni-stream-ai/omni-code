@@ -32,8 +32,8 @@ class SpeechInputService {
     String? localeId,
   }) async {
     await _speech.listen(
-      localeId: localeId,
       listenOptions: SpeechListenOptions(
+        localeId: localeId,
         partialResults: true,
         listenMode: ListenMode.confirmation,
       ),
