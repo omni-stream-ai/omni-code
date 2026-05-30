@@ -1609,7 +1609,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_imageFileFutures.isEmpty) return;
     final activeKeys = <String>{};
     for (final message in _messages) {
-      for (final ref in message.imageReferences) {
+      for (final ref in extractMessageImageReferences(message.content)) {
         if (!ref.isRemoteUrl && !ref.isDataUri) {
           activeKeys.add(ref.cardKey);
         }

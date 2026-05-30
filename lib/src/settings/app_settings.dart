@@ -179,7 +179,7 @@ class AppSettings {
       aiApprovalApiKey: aiApprovalApiKey ?? this.aiApprovalApiKey,
       aiApprovalModel: aiApprovalModel ?? this.aiApprovalModel,
       aiApprovalMaxRisk: aiApprovalMaxRisk ?? this.aiApprovalMaxRisk,
-      notificationMaxChars: this.notificationMaxChars,
+      notificationMaxChars: notificationMaxChars,
       autoSpeakReplies: autoSpeakReplies ?? this.autoSpeakReplies,
       speechPlaybackPromptEnabled:
           speechPlaybackPromptEnabled ?? this.speechPlaybackPromptEnabled,
