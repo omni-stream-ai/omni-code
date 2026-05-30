@@ -99,7 +99,7 @@ void main() {
         outputDir.createSync(recursive: true);
       }
 
-      tester.view.physicalSize = const Size(1600, 1100);
+      tester.view.physicalSize = const Size(1600, 1980);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -115,8 +115,12 @@ void main() {
               _ShowcaseItem(
                 title: 'Session',
                 child: SessionDetailScreen(
-                  session: _previewSession.copyWith(status: SessionStatus.idle),
-                  client: _sessionClient(),
+                  session: _previewSession.copyWith(
+                    id: _imagePreviewSession.id,
+                    title: _imagePreviewSession.title,
+                    status: SessionStatus.idle,
+                  ),
+                  client: _imagePreviewSessionClient(),
                   enableSpeechServices: false,
                   audioRecordingService: _FakeAudioRecordingService(),
                   speechInputService: _FakeSpeechInputService(),
@@ -128,9 +132,9 @@ void main() {
                 title: 'Call',
                 child: const _CallPreviewScreen(),
               ),
-              const _ShowcaseItem(
+              _ShowcaseItem(
                 title: 'Settings',
-                child: SettingsScreen(),
+                child: const SettingsScreen(),
               ),
             ],
           ),
@@ -219,6 +223,11 @@ class _ShowcaseCanvas extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lightItems = items;
+    final darkItems = [
+      for (final item in items) item.copyWith(themeMode: ThemeMode.dark),
+    ];
+
     return Scaffold(
       backgroundColor: const Color(0xfff4f7fb),
       body: SizedBox.expand(
@@ -246,13 +255,15 @@ class _ShowcaseCanvas extends StatelessWidget {
                           color: const Color(0xff475569),
                         ),
                   ),
-                  const Spacer(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: items.map((item) {
-                      return _PhoneMockup(item: item);
-                    }).toList(),
+                  const SizedBox(height: 46),
+                  _ShowcaseSection(
+                    label: 'Light',
+                    items: lightItems,
+                  ),
+                  const SizedBox(height: 40),
+                  _ShowcaseSection(
+                    label: 'Dark',
+                    items: darkItems,
                   ),
                 ],
               ),
@@ -268,10 +279,66 @@ class _ShowcaseItem {
   const _ShowcaseItem({
     required this.title,
     required this.child,
+    this.themeMode = ThemeMode.light,
   });
 
   final String title;
   final Widget child;
+  final ThemeMode themeMode;
+
+  _ShowcaseItem copyWith({
+    String? title,
+    Widget? child,
+    ThemeMode? themeMode,
+  }) {
+    return _ShowcaseItem(
+      title: title ?? this.title,
+      child: child ?? this.child,
+      themeMode: themeMode ?? this.themeMode,
+    );
+  }
+}
+
+class _ShowcaseSection extends StatelessWidget {
+  const _ShowcaseSection({
+    required this.label,
+    required this.items,
+  });
+
+  final String label;
+  final List<_ShowcaseItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.74),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: const Color(0xFFD6E0F0),
+            ),
+          ),
+          child: Text(
+            '$label mode',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: const Color(0xFF334155),
+                  fontWeight: FontWeight.w900,
+                ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: items.map((item) => _PhoneMockup(item: item)).toList(),
+        ),
+      ],
+    );
+  }
 }
 
 class _PhoneMockup extends StatelessWidget {
@@ -286,6 +353,7 @@ class _PhoneMockup extends StatelessWidget {
     const screenWidth = 296.0;
     const screenHeight = 670.0;
     const statusBarHeight = 28.0;
+    final isDark = item.themeMode == ThemeMode.dark;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -356,7 +424,7 @@ class _PhoneMockup extends StatelessWidget {
                     children: [
                       Column(
                         children: [
-                          const _PhoneStatusBar(),
+                          _PhoneStatusBar(isDark: isDark),
                           Expanded(
                             child: MediaQuery(
                               data: const MediaQueryData(
@@ -372,10 +440,15 @@ class _PhoneMockup extends StatelessWidget {
                               child: FittedBox(
                                 fit: BoxFit.cover,
                                 alignment: Alignment.topCenter,
-                                child: SizedBox(
-                                  width: 390,
-                                  height: 844,
-                                  child: item.child,
+                                child: Theme(
+                                  data: isDark
+                                      ? AppTheme.darkTheme
+                                      : AppTheme.lightTheme,
+                                  child: SizedBox(
+                                    width: 390,
+                                    height: 844,
+                                    child: item.child,
+                                  ),
                                 ),
                               ),
                             ),
@@ -423,52 +496,62 @@ class _PhoneMockup extends StatelessWidget {
 }
 
 class _PhoneStatusBar extends StatelessWidget {
-  const _PhoneStatusBar();
+  const _PhoneStatusBar({required this.isDark});
+
+  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       height: 28,
       padding: const EdgeInsets.symmetric(horizontal: 18),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Color(0xfff8fafc),
-            Color(0xffeef2f7),
-          ],
+          colors: isDark
+              ? const [
+                  Color(0xff111827),
+                  Color(0xff0f172a),
+                ]
+              : const [
+                  Color(0xfff8fafc),
+                  Color(0xffeef2f7),
+                ],
         ),
       ),
       child: Row(
         children: [
-          const Text(
+          Text(
             '9:41',
             style: TextStyle(
-              color: Color(0xff111827),
+              color: isDark ? const Color(0xfff8fafc) : const Color(0xff111827),
               fontSize: 11,
               fontWeight: FontWeight.w900,
               height: 1,
             ),
           ),
           const Spacer(),
-          const Icon(
+          Icon(
             Icons.signal_cellular_4_bar_rounded,
             size: 12,
-            color: Color(0xff111827),
+            color: isDark ? const Color(0xfff8fafc) : const Color(0xff111827),
           ),
           const SizedBox(width: 4),
-          const Icon(
+          Icon(
             Icons.wifi_rounded,
             size: 13,
-            color: Color(0xff111827),
+            color: isDark ? const Color(0xfff8fafc) : const Color(0xff111827),
           ),
           const SizedBox(width: 5),
           Container(
             width: 18,
             height: 9,
             decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xff111827), width: 1.2),
+              border: Border.all(
+                color: isDark ? const Color(0xfff8fafc) : const Color(0xff111827),
+                width: 1.2,
+              ),
               borderRadius: BorderRadius.circular(3),
             ),
             child: Align(
@@ -477,7 +560,7 @@ class _PhoneStatusBar extends StatelessWidget {
                 width: 13,
                 margin: const EdgeInsets.all(1.4),
                 decoration: BoxDecoration(
-                  color: const Color(0xff111827),
+                  color: isDark ? const Color(0xfff8fafc) : const Color(0xff111827),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -488,7 +571,7 @@ class _PhoneStatusBar extends StatelessWidget {
             width: 2,
             height: 4,
             decoration: BoxDecoration(
-              color: const Color(0xff111827),
+              color: isDark ? const Color(0xfff8fafc) : const Color(0xff111827),
               borderRadius: BorderRadius.circular(1),
             ),
           ),
@@ -639,19 +722,27 @@ BridgeClient _dashboardClient() {
   );
 }
 
-BridgeClient _sessionClient() {
+BridgeClient _imagePreviewSessionClient() {
   return BridgeClient(
     httpClient: _FakeHttpClient((request) async {
       if (request.method == 'GET' &&
-          request.url.path == '/sessions/${_previewSession.id}/messages') {
-        return _jsonResponse(_messages);
+          request.url.path == '/sessions/${_imagePreviewSession.id}/messages') {
+        return _jsonResponse(_imagePreviewMessages);
       }
       if (request.method == 'GET' &&
-          request.url.path == '/sessions/${_previewSession.id}/events') {
+          request.url.path == '/sessions/${_imagePreviewSession.id}/events') {
         return http.Response(
           '',
           200,
           headers: {'content-type': 'text/event-stream'},
+        );
+      }
+      if (request.method == 'GET' && request.url.path == '/files') {
+        final path = request.url.queryParameters['path'];
+        return http.Response.bytes(
+          utf8.encode(_previewSvgForPath(path)),
+          200,
+          headers: {'content-type': 'image/svg+xml'},
         );
       }
       return http.Response('not found', 404);
@@ -708,6 +799,18 @@ final _previewSession = SessionSummary(
   lastMessagePreview: 'The call mode view is now stable.',
 );
 
+final _imagePreviewSession = SessionSummary(
+  id: 'session-image-preview',
+  projectId: _projects.first.id,
+  title: 'Review generated concept art',
+  agent: AgentKind.codex,
+  briefReplyMode: false,
+  status: SessionStatus.idle,
+  updatedAt: DateTime(2026, 5, 29, 9, 16),
+  unreadCount: 0,
+  lastMessagePreview: 'Saved 3 preview images for the concept pass.',
+);
+
 final _sessions = <SessionSummary>[
   _previewSession,
   SessionSummary(
@@ -734,33 +837,33 @@ final _sessions = <SessionSummary>[
   ),
 ];
 
-final _messages = <Map<String, Object?>>[
+final _imagePreviewMessages = <Map<String, Object?>>[
   _messageJson(
-    id: 'message-1',
+    id: 'preview-message-1',
+    sessionId: _imagePreviewSession.id,
     role: 'user',
-    content: 'Can you make the session preview feel more polished?',
-    createdAt: '2026-05-28T13:44:00.000Z',
+    content: 'Please refine the landing illustration and export a preview.',
+    createdAt: '2026-05-29T09:14:00.000Z',
   ),
   _messageJson(
-    id: 'message-2',
+    id: 'preview-message-2',
+    sessionId: _imagePreviewSession.id,
     role: 'assistant',
     content:
-        'I updated the layout, tightened the message spacing, and added focused tests for call mode.',
-    createdAt: '2026-05-28T13:44:04.000Z',
+        'Saved images at assets/result-sunrise.svg, assets/result-ocean.svg, and assets/result-poster.svg.\n\n'
+        '![Sunrise concept](assets/result-sunrise.svg) '
+        '![Ocean concept](assets/result-ocean.svg) '
+        '![Poster concept](assets/result-poster.svg)\n\n'
+        'The latest pass sharpens the wave shapes and lifts contrast around the title.',
+    createdAt: '2026-05-29T09:14:08.000Z',
   ),
   _messageJson(
-    id: 'message-3',
-    role: 'system',
-    content:
-        '[command:completed] flutter test test/session_detail_screen_test.dart',
-    createdAt: '2026-05-28T13:44:18.000Z',
-  ),
-  _messageJson(
-    id: 'message-4',
+    id: 'preview-message-3',
+    sessionId: _imagePreviewSession.id,
     role: 'assistant',
     content:
-        'The UI now keeps the conversation readable while voice mode is active.',
-    createdAt: '2026-05-28T13:44:22.000Z',
+        'You can tap the image card in this session to open the fullscreen preview.',
+    createdAt: '2026-05-29T09:14:12.000Z',
   ),
 ];
 
@@ -798,18 +901,91 @@ Map<String, Object?> _sessionJson(SessionSummary session) {
 
 Map<String, Object?> _messageJson({
   required String id,
+  String? sessionId,
   required String role,
   required String content,
   required String createdAt,
 }) {
   return {
     'id': id,
-    'session_id': _previewSession.id,
+    'session_id': sessionId ?? _previewSession.id,
     'role': role,
     'content': content,
     'created_at': createdAt,
   };
 }
+
+String _previewSvgForPath(String? path) {
+  return switch (path) {
+    'assets/result-sunrise.svg' => _previewImageSunriseSvg,
+    'assets/result-ocean.svg' => _previewImageOceanSvg,
+    'assets/result-poster.svg' => _previewImagePosterSvg,
+    _ => _previewImageSunriseSvg,
+  };
+}
+
+const String _previewImageSunriseSvg = '''
+<svg width="768" height="1024" viewBox="0 0 768 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="768" height="1024" rx="48" fill="url(#bg)"/>
+  <rect x="64" y="72" width="640" height="104" rx="28" fill="white" fill-opacity="0.7"/>
+  <circle cx="180" cy="256" r="72" fill="#FBBF24"/>
+  <path d="M0 772C132 716 228 656 324 640C420 624 506 654 580 618C654 582 704 508 768 452V976C598 1024 194 1024 0 976V772Z" fill="url(#sea)"/>
+  <path d="M112 612C192 512 272 474 352 496C416 514 454 570 502 600C550 630 604 666 670 656V844H88C88 760 98 688 112 612Z" fill="#1E293B"/>
+  <path d="M408 286C470 246 556 268 602 326C648 384 648 468 602 524C556 580 470 602 408 562C346 522 322 436 354 368C368 338 384 306 408 286Z" fill="#38BDF8"/>
+  <path d="M184 706C282 640 382 626 486 652C576 674 638 730 696 804V864H120V794C140 760 160 730 184 706Z" fill="#FFF7ED"/>
+  <defs>
+    <linearGradient id="bg" x1="96" y1="96" x2="660" y2="928" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E2E8F0"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="384" y1="620" x2="384" y2="976" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#0F172A"/>
+    </linearGradient>
+  </defs>
+</svg>
+''';
+
+const String _previewImageOceanSvg = '''
+<svg width="768" height="1024" viewBox="0 0 768 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="768" height="1024" rx="48" fill="url(#bg)"/>
+  <rect x="84" y="96" width="600" height="320" rx="40" fill="#0F172A"/>
+  <circle cx="584" cy="194" r="56" fill="#F8FAFC"/>
+  <path d="M80 566C162 522 250 512 334 542C420 574 494 632 580 648C646 660 702 650 768 620V976H0V666C28 626 52 594 80 566Z" fill="url(#sea)"/>
+  <path d="M84 670C180 618 284 610 382 644C480 678 574 746 684 786V864H92L84 670Z" fill="#E0F2FE"/>
+  <path d="M104 748C184 700 268 690 348 716C430 742 512 798 604 840H96L104 748Z" fill="#7DD3FC"/>
+  <defs>
+    <linearGradient id="bg" x1="112" y1="88" x2="648" y2="936" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E0F2FE"/>
+      <stop offset="1" stop-color="#BAE6FD"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="384" y1="542" x2="384" y2="976" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0EA5E9"/>
+      <stop offset="1" stop-color="#082F49"/>
+    </linearGradient>
+  </defs>
+</svg>
+''';
+
+const String _previewImagePosterSvg = '''
+<svg width="768" height="1024" viewBox="0 0 768 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="768" height="1024" rx="48" fill="#FFF7ED"/>
+  <rect x="92" y="92" width="584" height="840" rx="44" fill="#111827"/>
+  <rect x="140" y="140" width="488" height="240" rx="32" fill="url(#hero)"/>
+  <circle cx="520" cy="258" r="74" fill="#FDE68A"/>
+  <path d="M164 736C244 650 316 620 396 632C474 644 534 694 604 776V864H156L164 736Z" fill="#F8FAFC"/>
+  <rect x="140" y="430" width="308" height="36" rx="18" fill="#F8FAFC"/>
+  <rect x="140" y="490" width="430" height="24" rx="12" fill="#94A3B8"/>
+  <rect x="140" y="534" width="390" height="24" rx="12" fill="#94A3B8"/>
+  <rect x="140" y="612" width="176" height="56" rx="28" fill="#F97316"/>
+  <defs>
+    <linearGradient id="hero" x1="140" y1="140" x2="628" y2="380" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#1D4ED8"/>
+    </linearGradient>
+  </defs>
+</svg>
+''';
 
 class _FakeHttpClient extends http.BaseClient {
   _FakeHttpClient(this._handler);
