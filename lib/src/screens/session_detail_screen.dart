@@ -87,6 +87,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   late final AnimationController _callModeOrbController;
   Timer? _speechStatusAutoDismissTimer;
   Timer? _callModeSpeechHintTimer;
+  Timer? _refreshSessionSummaryDebounce;
+  bool _refreshSessionSummaryInFlight = false;
 
   String? _recordingPath;
   String _recognizedSpeech = '';
@@ -324,6 +326,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _eventsReconnectTimer?.cancel();
     _speechStatusAutoDismissTimer?.cancel();
     _callModeSpeechHintTimer?.cancel();
+    _refreshSessionSummaryDebounce?.cancel();
     _completeCallModeCommandAcceptedSpeech();
     unawaited(_audioRecordingService.cancel());
     unawaited(_speechInputService.cancel());
@@ -351,10 +354,22 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _client.syncSessionSummary(_session);
   }
 
-  Future<void> _refreshSessionSummaryFromBridge() async {
+  void _scheduleRefreshSessionSummary() {
     if (_creatingSession) {
       return;
     }
+    _refreshSessionSummaryDebounce?.cancel();
+    _refreshSessionSummaryDebounce = Timer(
+      const Duration(milliseconds: 500),
+      _refreshSessionSummaryFromBridge,
+    );
+  }
+
+  Future<void> _refreshSessionSummaryFromBridge() async {
+    if (_creatingSession || _refreshSessionSummaryInFlight) {
+      return;
+    }
+    _refreshSessionSummaryInFlight = true;
     try {
       final refreshedSession = await _client.getProjectSession(
         _session.projectId,
@@ -372,6 +387,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _syncSessionSummaryCache();
     } catch (_) {
       // Best effort: message delivery should not surface title refresh errors.
+    } finally {
+      _refreshSessionSummaryInFlight = false;
     }
   }
 
@@ -603,7 +620,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             !_isSpeaking &&
             !_callModeAwaitingPlaybackCompletion &&
             lastAssistantReply != null &&
-            lastAssistantReply.isNotEmpty) {
+            lastAssistantReply.isNotEmpty &&
+            lastAssistantReply != _callModeSpokenReplyText?.trim()) {
           unawaited(
             _speakMessageInternal(
               lastAssistantReply,
@@ -1587,6 +1605,19 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
+  void _pruneImageFileFutures() {
+    if (_imageFileFutures.isEmpty) return;
+    final activeKeys = <String>{};
+    for (final message in _messages) {
+      for (final ref in message.imageReferences) {
+        if (!ref.isRemoteUrl && !ref.isDataUri) {
+          activeKeys.add(ref.cardKey);
+        }
+      }
+    }
+    _imageFileFutures.removeWhere((key, _) => !activeKeys.contains(key));
+  }
+
   Future<BridgeFileResponse>? _imageFileFuture(
     MessageImageReference reference,
   ) {
@@ -2079,6 +2110,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _messages
           ..clear()
           ..addAll(messages);
+        _pruneImageFileFutures();
         _resetVisibleTurnWindow();
         _loadingMessages = false;
       });
@@ -2278,7 +2310,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         if (message.role == MessageRole.assistant) {
           _maybeAutoSpeakAssistantMessage(message.id);
           _maybeNotifyAssistantMessage(message.id);
-          unawaited(_refreshSessionSummaryFromBridge());
+          _scheduleRefreshSessionSummary();
         }
         if (shouldAutoScroll) {
           _animateToBottom();
@@ -3166,7 +3198,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         );
       });
       _syncSessionSummaryCache();
-      unawaited(_refreshSessionSummaryFromBridge());
+      _scheduleRefreshSessionSummary();
       return true;
     } catch (error) {
       if (!mounted) {
