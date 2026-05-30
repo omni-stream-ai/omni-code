@@ -472,6 +472,13 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       return;
     }
 
+    unawaited(
+      appSettingsController.save(
+        appSettingsController.settings
+            .copyWith(lastSelectedAgent: result.$2),
+      ),
+    );
+
     final initialTitle = result.$1?.trim();
     final placeholderSession = SessionSummary(
       id: 'local-draft-${DateTime.now().microsecondsSinceEpoch}',
@@ -869,7 +876,7 @@ class _CreateSessionDialog extends StatefulWidget {
 
 class _CreateSessionDialogState extends State<_CreateSessionDialog> {
   final _titleController = TextEditingController();
-  String _agent = AgentKind.codex.id;
+  String _agent = appSettingsController.settings.lastSelectedAgent;
 
   @override
   void dispose() {

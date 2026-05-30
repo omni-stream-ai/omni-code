@@ -55,6 +55,7 @@ class AppSettings {
     required this.callModeSpeechPauseMillis,
     required this.callModeWakeWordEnabled,
     required this.callModeWakeWords,
+    required this.lastSelectedAgent,
   });
 
   final String bridgeUrl;
@@ -85,6 +86,7 @@ class AppSettings {
   final int callModeSpeechPauseMillis;
   final bool callModeWakeWordEnabled;
   final String callModeWakeWords;
+  final String lastSelectedAgent;
 
   factory AppSettings.defaults() {
     const configuredUrl = String.fromEnvironment('ECHO_MATE_BRIDGE_URL');
@@ -124,6 +126,7 @@ class AppSettings {
       callModeSpeechPauseMillis: defaultCallModeSpeechPauseMillis,
       callModeWakeWordEnabled: false,
       callModeWakeWords: defaultCallModeWakeWords,
+      lastSelectedAgent: 'codex',
     );
   }
 
@@ -155,6 +158,7 @@ class AppSettings {
     int? callModeSpeechPauseMillis,
     bool? callModeWakeWordEnabled,
     String? callModeWakeWords,
+    String? lastSelectedAgent,
   }) {
     return AppSettings(
       bridgeUrl: bridgeUrl ?? this.bridgeUrl,
@@ -199,6 +203,7 @@ class AppSettings {
           callModeWakeWordEnabled ?? this.callModeWakeWordEnabled,
       callModeWakeWords: _normalizeCallModeWakeWords(
           callModeWakeWords ?? this.callModeWakeWords),
+      lastSelectedAgent: lastSelectedAgent ?? this.lastSelectedAgent,
     );
   }
 
@@ -231,6 +236,7 @@ class AppSettings {
       'call_mode_speech_pause_millis': callModeSpeechPauseMillis,
       'call_mode_wake_word_enabled': callModeWakeWordEnabled,
       'call_mode_wake_words': callModeWakeWords,
+      'last_selected_agent': lastSelectedAgent,
     };
   }
 
@@ -330,6 +336,11 @@ class AppSettings {
           'call_mode_wake_words',
           defaults.callModeWakeWords,
         ),
+      ),
+      lastSelectedAgent: _readString(
+        json,
+        'last_selected_agent',
+        defaults.lastSelectedAgent,
       ),
     );
   }
@@ -554,6 +565,9 @@ class AppSettingsController extends ChangeNotifier {
           shouldPersist = true;
         }
         if (json['compress_assistant_reply_max_chars'] == null) {
+          shouldPersist = true;
+        }
+        if (json['last_selected_agent'] == null) {
           shouldPersist = true;
         }
         _settings = AppSettings.fromJson(json);

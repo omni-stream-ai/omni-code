@@ -132,4 +132,21 @@ void main() {
     });
     expect(settings.updateTargetVersion, 'v0.2.1');
   });
+
+  test('lastSelectedAgent defaults to codex', () {
+    expect(AppSettings.defaults().lastSelectedAgent, 'codex');
+  });
+
+  test('missing last_selected_agent falls back to codex', () {
+    final settings = AppSettings.fromJson(<String, dynamic>{});
+    expect(settings.lastSelectedAgent, 'codex');
+  });
+
+  test('lastSelectedAgent round-trips through json', () {
+    final settings = AppSettings.defaults().copyWith(
+      lastSelectedAgent: 'claude_code',
+    );
+    final restored = AppSettings.fromJson(settings.toJson());
+    expect(restored.lastSelectedAgent, 'claude_code');
+  });
 }
