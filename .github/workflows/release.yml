@@ -301,10 +301,6 @@ jobs:
             label: macOS Apple Silicon
             asset_name: omni-code-macos-arm64
             archive_name: omni-code-macos-arm64.zip
-          - os: macos-13
-            label: macOS Intel
-            asset_name: omni-code-macos-x64
-            archive_name: omni-code-macos-x64.zip
     steps:
       - name: Checkout
         uses: actions/checkout@v4
