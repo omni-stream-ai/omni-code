@@ -297,7 +297,7 @@ jobs:
             label: Linux
             asset_name: omni-code-linux-x86_64
             archive_name: omni-code-linux-x86_64.tar.gz
-          - os: macos-14
+          - os: macos-15
             label: macOS Apple Silicon
             asset_name: omni-code-macos-arm64
             archive_name: omni-code-macos-arm64.zip
