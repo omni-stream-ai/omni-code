@@ -521,14 +521,23 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                                   : null,
                               child: OutlinedButton(
                                 onPressed: (isSessionBusy ||
+                                        _voiceInputStarting ||
                                         (!_speechReady && !_isListening))
                                     ? null
                                     : _toggleListening,
-                                child: Text(
-                                  _isListening
-                                      ? l10n.stopVoice
-                                      : l10n.voiceInput,
-                                ),
+                                child: _voiceInputStarting
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Text(
+                                        _isListening
+                                            ? l10n.stopVoice
+                                            : l10n.voiceInput,
+                                      ),
                               ),
                             ),
                           ),
