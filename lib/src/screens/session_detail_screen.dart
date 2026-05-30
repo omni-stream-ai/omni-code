@@ -79,6 +79,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   final Set<String> _autoSpokenAssistantMessageIds = <String>{};
   final Set<String> _notifiedAssistantMessageIds = <String>{};
   final Map<String, _LocalMessageDraft> _localMessageStates = {};
+  final Map<String, Future<BridgeFileResponse>> _imageFileFutures = {};
   late SessionSummary _session;
   final List<ChatMessage> _messages = [];
   StreamSubscription<Map<String, dynamic>>? _eventsSubscription;
@@ -86,6 +87,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   late final AnimationController _callModeOrbController;
   Timer? _speechStatusAutoDismissTimer;
   Timer? _callModeSpeechHintTimer;
+  Timer? _refreshSessionSummaryDebounce;
+  bool _refreshSessionSummaryInFlight = false;
 
   String? _recordingPath;
   String _recognizedSpeech = '';
@@ -323,6 +326,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _eventsReconnectTimer?.cancel();
     _speechStatusAutoDismissTimer?.cancel();
     _callModeSpeechHintTimer?.cancel();
+    _refreshSessionSummaryDebounce?.cancel();
     _completeCallModeCommandAcceptedSpeech();
     unawaited(_audioRecordingService.cancel());
     unawaited(_speechInputService.cancel());
@@ -348,6 +352,44 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   void _syncSessionSummaryCache() {
     _client.syncSessionSummary(_session);
+  }
+
+  void _scheduleRefreshSessionSummary() {
+    if (_creatingSession) {
+      return;
+    }
+    _refreshSessionSummaryDebounce?.cancel();
+    _refreshSessionSummaryDebounce = Timer(
+      const Duration(milliseconds: 500),
+      _refreshSessionSummaryFromBridge,
+    );
+  }
+
+  Future<void> _refreshSessionSummaryFromBridge() async {
+    if (_creatingSession || _refreshSessionSummaryInFlight) {
+      return;
+    }
+    _refreshSessionSummaryInFlight = true;
+    try {
+      final refreshedSession = await _client.getProjectSession(
+        _session.projectId,
+        _session.id,
+        forceRefresh: true,
+      );
+      if (!mounted || refreshedSession.id != _session.id) {
+        return;
+      }
+      setState(() {
+        _session = refreshedSession;
+        _pendingApproval = refreshedSession.pendingApproval;
+        _reconcileSubmittedApprovalState();
+      });
+      _syncSessionSummaryCache();
+    } catch (_) {
+      // Best effort: message delivery should not surface title refresh errors.
+    } finally {
+      _refreshSessionSummaryInFlight = false;
+    }
   }
 
   @override
@@ -393,7 +435,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       ),
       body: Column(
         children: [
-          if (_shouldShowErrorBanner) _buildErrorBanner(_speechError!.trim()),
+          if (_session.status == SessionStatus.failed)
+            _buildErrorBanner(
+              _session.errorMessage?.trim().isNotEmpty == true
+                  ? _session.errorMessage!
+                  : context.l10n.sessionFailedGeneric,
+              dismissable: false,
+            )
+          else if (_shouldShowErrorBanner)
+            _buildErrorBanner(_speechError!.trim()),
           if (_pendingApproval != null)
             _buildPendingApprovalCard(approvalCardMaxHeight),
           Expanded(
@@ -503,7 +553,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Widget _buildCallModeScaffold(BuildContext context) {
     final l10n = context.l10n;
     final showVoiceInputStarting = _showVoiceInputStartingAsPrimary;
-    final speechError = _speechError?.trim();
+    final failedError = _session.status == SessionStatus.failed
+        ? (_session.errorMessage?.trim().isNotEmpty == true
+            ? _session.errorMessage!.trim()
+            : l10n.sessionFailedGeneric)
+        : null;
+    final speechError = failedError ?? _speechError?.trim();
     final liveTranscript = _recognizedSpeech.trim().isNotEmpty
         ? _recognizedSpeech.trim()
         : _controller.text.trim();
@@ -540,7 +595,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       realtimeHintDetail: realtimeHint?.detail,
       bannerText:
           speechError == null || speechError.isEmpty ? null : speechError,
-      statusIsError: speechError != null && speechError.isNotEmpty,
+      statusIsError: (speechError != null && speechError.isNotEmpty) ||
+          _session.status == SessionStatus.failed,
       subtitlesVisible: _callModeSubtitlesVisible,
       subtitleToggleTooltip: _callModeSubtitlesVisible
           ? l10n.hideCallModeSubtitles
@@ -557,6 +613,21 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       onPrimaryPressed: () {
         if (_session.status == SessionStatus.running) {
           unawaited(_cancelReply());
+          return;
+        }
+        final lastAssistantReply = _lastAssistantReplyText()?.trim();
+        if (_callModeAllowInterruptions &&
+            !_isSpeaking &&
+            !_callModeAwaitingPlaybackCompletion &&
+            lastAssistantReply != null &&
+            lastAssistantReply.isNotEmpty &&
+            lastAssistantReply != _callModeSpokenReplyText?.trim()) {
+          unawaited(
+            _speakMessageInternal(
+              lastAssistantReply,
+              resumeCallModeOnComplete: true,
+            ),
+          );
           return;
         }
         unawaited(_toggleListening());
@@ -578,6 +649,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   String _callModeStatusLine(AppLocalizations l10n) {
+    if (_session.status == SessionStatus.failed &&
+        _session.errorMessage != null &&
+        _session.errorMessage!.trim().isNotEmpty) {
+      return _session.errorMessage!;
+    }
     if (_speechError != null && _speechError!.trim().isNotEmpty) {
       return _speechError!;
     }
@@ -908,10 +984,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
-  Widget _buildErrorBanner(String message) {
+  Widget _buildErrorBanner(String message, {bool dismissable = true}) {
     final brightness = Theme.of(context).brightness;
     return Container(
-      key: const ValueKey('session-error-banner'),
+      key: ValueKey(dismissable
+          ? 'session-error-banner'
+          : 'session-failed-banner'),
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(
         AppSpacing.block,
@@ -937,17 +1015,19 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               ),
             ),
           ),
-          const SizedBox(width: AppSpacing.compact),
-          IconButton(
-            tooltip: context.l10n.close,
-            onPressed: _dismissErrorBanner,
-            visualDensity: VisualDensity.compact,
-            icon: Icon(
-              Icons.close_rounded,
-              size: 18,
-              color: AppColors.mutedSoftFor(brightness),
+          if (dismissable) ...[
+            const SizedBox(width: AppSpacing.compact),
+            IconButton(
+              tooltip: context.l10n.close,
+              onPressed: _dismissErrorBanner,
+              visualDensity: VisualDensity.compact,
+              icon: Icon(
+                Icons.close_rounded,
+                size: 18,
+                color: AppColors.mutedSoftFor(brightness),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -1090,6 +1170,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 textColor: bubbleTextColor,
                 maxWidth: maxWidth,
                 imageReferences: imageReferences,
+                imageAlignment: Alignment.centerRight,
+                imageWrapAlignment: WrapAlignment.end,
                 imageCardBuilder: (reference) =>
                     _buildUserImageCard(reference, textColor: bubbleTextColor),
               ),
@@ -1252,6 +1334,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 textColor: AppColors.textFor(brightness),
                 maxWidth: maxWidth,
                 imageReferences: imageReferences,
+                imageAlignment: Alignment.centerLeft,
+                imageWrapAlignment: WrapAlignment.start,
                 imageCardBuilder: _buildAssistantImageCard,
               ),
               if (isSpeakingThisMessage) ...[
@@ -1282,6 +1366,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required Color textColor,
     required double maxWidth,
     required List<MessageImageReference> imageReferences,
+    required Alignment imageAlignment,
+    required WrapAlignment imageWrapAlignment,
     required Widget Function(MessageImageReference reference) imageCardBuilder,
   }) {
     final theme = Theme.of(context);
@@ -1339,6 +1425,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       ),
       blockSpacing: AppSpacing.compact,
       pPadding: const EdgeInsets.symmetric(vertical: 1),
+      horizontalRuleDecoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            width: 0.6,
+            color: textColor.withValues(alpha: 0.22),
+          ),
+        ),
+      ),
       codeblockPadding: const EdgeInsets.fromLTRB(
         AppSpacing.tileX,
         AppSpacing.tileY,
@@ -1375,11 +1469,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               _handleAssistantMarkdownLinkTap(href),
         ),
         if (imageReferences.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.stack),
-          ...imageReferences.map(
-            (reference) => Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.compact),
-              child: imageCardBuilder(reference),
+          const SizedBox(height: AppSpacing.compact),
+          Align(
+            alignment: imageAlignment,
+            child: Wrap(
+              spacing: AppSpacing.compact,
+              runSpacing: AppSpacing.compact,
+              alignment: imageWrapAlignment,
+              children: [
+                for (final reference in imageReferences)
+                  imageCardBuilder(reference),
+              ],
             ),
           ),
         ],
@@ -1404,152 +1504,181 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Widget _buildAssistantImageCard(MessageImageReference reference) {
     final brightness = Theme.of(context).brightness;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: ValueKey('assistant-image-card-${reference.cardKey}'),
-        onTap: () => unawaited(_showImagePreview(reference)),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-        child: Container(
-          width: double.infinity,
-          padding: AppSpacing.tilePadding,
-          decoration: BoxDecoration(
-            color: AppColors.surfaceFor(brightness),
-            borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-            border: Border.all(color: AppColors.outlineStrongFor(brightness)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: AppColors.tintSurfaceFor(
-                    brightness,
-                    AppColors.signalFor(brightness),
-                    base: AppColors.panelFor(brightness),
-                    darkAlpha: 0.18,
-                    lightAlpha: 0.12,
-                  ),
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-                ),
-                child: Icon(
-                  Icons.image_outlined,
-                  color: AppColors.signalFor(brightness),
-                ),
+    return _buildImageCard(
+      reference,
+      keyPrefix: 'assistant',
+      backgroundColor: AppColors.surfaceFor(brightness),
+      borderColor: AppColors.outlineStrongFor(brightness),
+      thumbnailBackgroundColor: AppColors.tintSurfaceFor(
+        brightness,
+        AppColors.signalFor(brightness),
+        base: AppColors.panelFor(brightness),
+        darkAlpha: 0.18,
+        lightAlpha: 0.12,
+      ),
+      titleColor: AppColors.textFor(brightness),
+      subtitleColor: AppColors.mutedSoftFor(brightness),
+      actionColor: AppColors.signalFor(brightness),
+    );
+  }
+
+  Widget _buildImageCard(
+    MessageImageReference reference, {
+    required String keyPrefix,
+    required Color backgroundColor,
+    required Color borderColor,
+    required Color thumbnailBackgroundColor,
+    required Color titleColor,
+    required Color subtitleColor,
+    required Color actionColor,
+  }) {
+    final fileFuture = _imageFileFuture(reference);
+
+    Widget buildCard(Widget thumbnail) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: ValueKey('$keyPrefix-image-card-${reference.cardKey}'),
+          onTap: () => unawaited(_showImagePreview(reference)),
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            width: 60,
+            height: 60,
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: borderColor),
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: thumbnailBackgroundColor,
+                borderRadius: BorderRadius.circular(4),
               ),
-              const SizedBox(width: AppSpacing.tileX),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.imageAttachment,
-                      style: TextStyle(
-                        color: AppColors.textFor(brightness),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.micro),
-                    Text(
-                      reference.displayPath,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.mutedSoftFor(brightness),
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AppSpacing.compact),
-              Text(
-                context.l10n.previewImage,
-                style: TextStyle(
-                  color: AppColors.signalFor(brightness),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
+              clipBehavior: Clip.antiAlias,
+              child: thumbnail,
+            ),
           ),
         ),
-      ),
-    );
+      );
+    }
+
+    if (fileFuture != null) {
+      return FutureBuilder<BridgeFileResponse>(
+        future: fileFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return buildCard(
+              const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            );
+          }
+          if (snapshot.hasError || !snapshot.hasData) {
+            return const SizedBox.shrink();
+          }
+          return buildCard(_buildImageThumbnail(reference, snapshot.data));
+        },
+      );
+    }
+
+    return buildCard(_buildImageThumbnail(reference, null));
   }
 
   Widget _buildUserImageCard(
     MessageImageReference reference, {
     required Color textColor,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: ValueKey('user-image-card-${reference.cardKey}'),
-        onTap: () => unawaited(_showImagePreview(reference)),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-        child: Container(
-          width: double.infinity,
-          padding: AppSpacing.tilePadding,
-          decoration: BoxDecoration(
-            color: textColor.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-            border: Border.all(
-              color: textColor.withValues(alpha: 0.26),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: textColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-                ),
-                child: Icon(
-                  Icons.image_outlined,
-                  color: textColor,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.tileX),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.imageAttachment,
-                      style: TextStyle(
-                        color: textColor,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.micro),
-                    Text(
-                      reference.displayPath,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: textColor.withValues(alpha: 0.86),
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AppSpacing.compact),
-              Text(
-                context.l10n.previewImage,
-                style: TextStyle(
-                  color: textColor,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return _buildImageCard(
+      reference,
+      keyPrefix: 'user',
+      backgroundColor: textColor.withValues(alpha: 0.10),
+      borderColor: textColor.withValues(alpha: 0.26),
+      thumbnailBackgroundColor: textColor.withValues(alpha: 0.12),
+      titleColor: textColor,
+      subtitleColor: textColor.withValues(alpha: 0.86),
+      actionColor: textColor,
     );
+  }
+
+  void _pruneImageFileFutures() {
+    if (_imageFileFutures.isEmpty) return;
+    final activeKeys = <String>{};
+    for (final message in _messages) {
+      for (final ref in message.imageReferences) {
+        if (!ref.isRemoteUrl && !ref.isDataUri) {
+          activeKeys.add(ref.cardKey);
+        }
+      }
+    }
+    _imageFileFutures.removeWhere((key, _) => !activeKeys.contains(key));
+  }
+
+  Future<BridgeFileResponse>? _imageFileFuture(
+    MessageImageReference reference,
+  ) {
+    if (reference.isRemoteUrl || reference.isDataUri) {
+      return null;
+    }
+
+    return _imageFileFutures.putIfAbsent(reference.cardKey, () {
+      return _client.readFile(
+        reference.path,
+        sessionId: reference.isAbsoluteLocalPath ? null : _session.id,
+      );
+    });
+  }
+
+  Widget _buildImageThumbnail(
+    MessageImageReference reference,
+    BridgeFileResponse? file,
+  ) {
+    if (reference.isDataUri) {
+      final bytes = reference.dataBytes;
+      if (bytes == null) {
+        return const SizedBox.shrink();
+      }
+      if (reference.isSvg) {
+        return SvgPicture.string(
+          utf8.decode(bytes, allowMalformed: true),
+          fit: BoxFit.cover,
+        );
+      }
+      return Image.memory(
+        bytes,
+        fit: BoxFit.cover,
+        errorBuilder: (context, _, __) => const SizedBox.shrink(),
+      );
+    }
+
+    if (reference.isRemoteUrl) {
+      return reference.isSvg
+          ? SvgPicture.network(reference.path, fit: BoxFit.cover)
+          : Image.network(
+              reference.path,
+              fit: BoxFit.cover,
+              errorBuilder: (context, _, __) => const SizedBox.shrink(),
+            );
+    }
+
+    if (file == null) {
+      return const SizedBox.shrink();
+    }
+
+    return reference.isSvg
+        ? SvgPicture.string(
+            String.fromCharCodes(file.bytes),
+            fit: BoxFit.cover,
+          )
+        : Image.memory(
+            file.bytes,
+            fit: BoxFit.cover,
+            errorBuilder: (context, _, __) => const SizedBox.shrink(),
+          );
   }
 
   Future<void> _showImagePreview(MessageImageReference reference) async {
@@ -1557,51 +1686,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
 
-    final brightness = Theme.of(context).brightness;
-    final bridgeFileFuture = reference.isRemoteUrl || reference.isDataUri
-        ? null
-        : _client.readFile(
-            reference.path,
-            sessionId: reference.isAbsoluteLocalPath ? null : _session.id,
-          );
-    var isFullscreen = false;
+    final bridgeFileFuture = _imageFileFuture(reference);
     var backdropMode = _ImagePreviewBackdropMode.dark;
 
     await showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          Widget wrapPreviewSurface(Widget child) {
-            return MouseRegion(
-              cursor: isFullscreen
-                  ? SystemMouseCursors.zoomOut
-                  : SystemMouseCursors.zoomIn,
-              child: GestureDetector(
-                key: const ValueKey('image-preview-surface'),
-                onTap: () => setDialogState(() {
-                  isFullscreen = !isFullscreen;
-                }),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOutCubic,
-                  width: double.infinity,
-                  height: 320,
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceDeepFor(brightness),
-                    borderRadius: BorderRadius.circular(
-                      AppSpacing.radiusCard,
-                    ),
-                    border: Border.all(
-                      color: AppColors.outlineStrongFor(brightness),
-                    ),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: child,
-                ),
-              ),
-            );
-          }
-
           Widget? buildDataUriImage() {
             final bytes = reference.dataBytes;
             if (!reference.isDataUri || bytes == null) {
@@ -1621,81 +1712,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               errorBuilder: (context, _, __) {
                 return _buildImagePreviewError(
                   context.l10n.imagePreviewLoadFailed,
-                );
-              },
-            );
-          }
-
-          Widget buildImage() {
-            final isSvg = reference.isSvg;
-            final dataUriChild = buildDataUriImage();
-            if (dataUriChild != null) {
-              return wrapPreviewSurface(
-                InteractiveViewer(child: dataUriChild),
-              );
-            }
-            if (reference.isRemoteUrl) {
-              final remoteChild = isSvg
-                  ? SvgPicture.network(
-                      reference.path,
-                      fit: BoxFit.contain,
-                      placeholderBuilder: (context) => const Center(
-                        child: SizedBox(
-                          width: 28,
-                          height: 28,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                    )
-                  : Image.network(
-                      reference.path,
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, _, __) {
-                        return _buildImagePreviewError(
-                          context.l10n.imagePreviewLoadFailed,
-                        );
-                      },
-                    );
-              return wrapPreviewSurface(
-                InteractiveViewer(child: remoteChild),
-              );
-            }
-
-            return FutureBuilder<BridgeFileResponse>(
-              future: bridgeFileFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const Center(
-                    child: SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  );
-                }
-                if (snapshot.hasError || !snapshot.hasData) {
-                  return _buildImagePreviewError(
-                    context.l10n.imagePreviewLoadFailed,
-                  );
-                }
-
-                final localChild = isSvg
-                    ? SvgPicture.string(
-                        String.fromCharCodes(snapshot.data!.bytes),
-                        fit: BoxFit.contain,
-                      )
-                    : Image.memory(
-                        snapshot.data!.bytes,
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, _, __) {
-                          return _buildImagePreviewError(
-                            context.l10n.imagePreviewLoadFailed,
-                          );
-                        },
-                      );
-
-                return wrapPreviewSurface(
-                  InteractiveViewer(child: localChild),
                 );
               },
             );
@@ -1886,131 +1902,101 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             );
           }
 
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              Center(
-                child: AlertDialog(
-                  key: const ValueKey('image-preview-dialog'),
-                  backgroundColor: AppColors.panelFor(brightness),
-                  title: Text(context.l10n.imagePreviewTitle),
-                  content: SizedBox(
-                    width: 420,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          reference.displayPath,
-                          style: TextStyle(
-                            color: AppColors.mutedSoftFor(brightness),
-                            height: 1.4,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.block),
-                        Flexible(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              maxHeight: 420,
-                              minHeight: 180,
-                            ),
-                            child: buildImage(),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: Text(context.l10n.close),
-                    ),
-                  ],
-                ),
-              ),
-              if (isFullscreen)
-                Positioned.fill(
-                  child: GestureDetector(
-                    key: const ValueKey('image-preview-fullscreen'),
-                    onTap: () => setDialogState(() {
-                      isFullscreen = false;
-                    }),
-                    child: ColoredBox(
-                      color: fullscreenBackdropColor(),
-                      child: SafeArea(
-                        child: Padding(
-                          padding: const EdgeInsets.all(AppSpacing.block),
-                          child: Stack(
+          return GestureDetector(
+            key: const ValueKey('image-preview-fullscreen'),
+            onTap: () => Navigator.of(context).pop(),
+            child: ColoredBox(
+              color: fullscreenBackdropColor(),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.block),
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Positioned(
-                                top: 0,
-                                right: 0,
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      buildBackdropChip(
-                                        _ImagePreviewBackdropMode.dark,
-                                        context.l10n.imagePreviewBgDark,
-                                      ),
-                                      const SizedBox(
-                                        width: AppSpacing.compact,
-                                      ),
-                                      buildBackdropChip(
-                                        _ImagePreviewBackdropMode.light,
-                                        context.l10n.imagePreviewBgLight,
-                                      ),
-                                      const SizedBox(
-                                        width: AppSpacing.compact,
-                                      ),
-                                      buildBackdropChip(
-                                        _ImagePreviewBackdropMode.checker,
-                                        context.l10n.imagePreviewBgChecker,
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                              buildBackdropChip(
+                                _ImagePreviewBackdropMode.dark,
+                                context.l10n.imagePreviewBgDark,
                               ),
-                              Positioned.fill(
-                                top: 52,
-                                child: MouseRegion(
-                                  cursor: SystemMouseCursors.zoomOut,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(
-                                      AppSpacing.block,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: stageSurfaceColor(),
-                                      borderRadius: BorderRadius.circular(
-                                        AppSpacing.radiusHero,
-                                      ),
-                                      border: Border.all(
-                                        color: stageBorderColor(),
-                                      ),
-                                      boxShadow: stageShadow(),
-                                    ),
-                                    clipBehavior: Clip.antiAlias,
-                                    child: Stack(
-                                      fit: StackFit.expand,
-                                      children: [
-                                        if (backdropMode ==
-                                            _ImagePreviewBackdropMode.checker)
-                                          buildCheckerboardBackground(),
-                                        buildFullscreenImage(),
-                                      ],
-                                    ),
-                                  ),
-                                ),
+                              const SizedBox(width: AppSpacing.compact),
+                              buildBackdropChip(
+                                _ImagePreviewBackdropMode.light,
+                                context.l10n.imagePreviewBgLight,
+                              ),
+                              const SizedBox(width: AppSpacing.compact),
+                              buildBackdropChip(
+                                _ImagePreviewBackdropMode.checker,
+                                context.l10n.imagePreviewBgChecker,
                               ),
                             ],
                           ),
                         ),
                       ),
-                    ),
+                      Positioned.fill(
+                        top: 52,
+                        child: Stack(
+                          children: [
+                            MouseRegion(
+                              cursor: SystemMouseCursors.zoomOut,
+                              child: Container(
+                                key: const ValueKey('image-preview-surface'),
+                                padding: const EdgeInsets.all(AppSpacing.block),
+                                decoration: BoxDecoration(
+                                  color: stageSurfaceColor(),
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.radiusHero,
+                                  ),
+                                  border: Border.all(
+                                    color: stageBorderColor(),
+                                  ),
+                                  boxShadow: stageShadow(),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    if (backdropMode ==
+                                        _ImagePreviewBackdropMode.checker)
+                                      buildCheckerboardBackground(),
+                                    buildFullscreenImage(),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Material(
+                                color: Colors.black54,
+                                shape: const CircleBorder(),
+                                child: InkWell(
+                                  customBorder: const CircleBorder(),
+                                  onTap: () => Navigator.of(context).pop(),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(6),
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 18,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-            ],
+              ),
+            ),
           );
         },
       ),
@@ -2097,7 +2083,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _reconcileSubmittedApprovalState();
         _creatingSession = false;
         _loadingMessages = true;
-        _speechError = null;
       });
       _subscribeToEvents();
       await _loadMessages();
@@ -2125,6 +2110,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _messages
           ..clear()
           ..addAll(messages);
+        _pruneImageFileFutures();
         _resetVisibleTurnWindow();
         _loadingMessages = false;
       });
@@ -2206,7 +2192,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
         _loadingMessages = false;
         _pendingApproval = refreshedSession?.pendingApproval;
-        _speechError = null;
         if (refreshedSession != null) {
           _session = refreshedSession;
         }
@@ -2251,10 +2236,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         break;
       case 'session_status':
         final status = parseSessionStatus(payload['status'] as String);
+        final statusError = status == SessionStatus.failed
+            ? (payload['error_message'] as String? ??
+                payload['error'] as String?)
+            : null;
         setState(() {
           _session = _session.copyWith(
             status: status,
             updatedAt: DateTime.now(),
+            errorMessage: statusError,
           );
           if (status != SessionStatus.awaitingApproval) {
             _pendingApproval = null;
@@ -2320,6 +2310,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         if (message.role == MessageRole.assistant) {
           _maybeAutoSpeakAssistantMessage(message.id);
           _maybeNotifyAssistantMessage(message.id);
+          _scheduleRefreshSessionSummary();
         }
         if (shouldAutoScroll) {
           _animateToBottom();
@@ -2356,9 +2347,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         }
         break;
       case 'agent_error':
+        final errorMessage = payload['message'] as String;
         setState(() {
-          _speechError = payload['message'] as String;
+          _speechError = errorMessage;
+          _session = _session.copyWith(
+            errorMessage: errorMessage,
+            updatedAt: DateTime.now(),
+          );
         });
+        _syncSessionSummaryCache();
         break;
       case 'approval_requested':
         final approval = ApprovalRequest.fromJson(
@@ -2407,7 +2404,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           _submittedApprovalRequestId = null;
           _submittingApproval = false;
           _submittingApprovalChoice = null;
-          _speechError = null;
         });
         _syncSessionSummaryCache();
         break;
@@ -2423,7 +2419,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     setState(() {
       _submittingApproval = true;
       _submittingApprovalChoice = choice;
-      _speechError = null;
     });
 
     try {
@@ -2443,7 +2438,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _submittingApproval = false;
         _submittingApprovalChoice = null;
         _submittedApprovalRequestId = approval.requestId;
-        _speechError = null;
       });
       _syncSessionSummaryCache();
     } catch (error) {
@@ -2502,7 +2496,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               if (_speechStatus == _systemSpeechUnavailableLabel()) {
                 _setSpeechStatus(null);
               }
-              _speechError = null;
             });
             return;
           }
@@ -2517,7 +2510,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           _systemAsrLocaleId = null;
           _speechReady = false;
           _setSpeechStatus(_systemSpeechUnavailableLabel());
-          _speechError = null;
         });
         return;
       }
@@ -2535,7 +2527,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _setSpeechStatus(
           ready ? null : context.l10n.microphonePermissionMissing,
         );
-        _speechError = null;
       });
     } catch (error) {
       if (!mounted) {
@@ -2623,7 +2614,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             : true;
         if (!_ttsReady && provider == TtsProvider.system) {
           _setSpeechStatus(_systemSpeechUnavailableLabel());
-          _speechError = null;
         }
       });
     } catch (error) {
@@ -2644,7 +2634,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       setState(() {
         _voiceInputStarting = true;
         _setSpeechStatus(context.l10n.reinitializingVoiceInput);
-        _speechError = null;
       });
       await _initializeSpeech();
       if (!_speechReady) {
@@ -2678,7 +2667,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     setState(() {
-      _speechError = null;
       _setSpeechStatus(context.l10n.callModePreparingListening);
       _voiceInputStarting = true;
       _clearRecognizedSpeechState();
@@ -2702,7 +2690,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               }
               if (isFinal) {
                 _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
-                _speechError = null;
               }
             });
             if (isFinal && _callModeEnabled) {
@@ -2865,7 +2852,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           TextPosition(offset: _controller.text.length),
         );
         _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
-        _speechError = null;
       });
     } catch (error) {
       await _cleanupRecordingFile(filePath);
@@ -2894,7 +2880,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (!_ttsReady) {
       setState(() {
         _setSpeechStatus(context.l10n.reinitializingTts);
-        _speechError = null;
       });
       await _initializeTts();
       if (!_ttsReady) {
@@ -2903,7 +2888,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     setState(() {
-      _speechError = null;
       _speakingMessageId = messageId;
       final trimmedContent = content.trim();
       _callModeCurrentTtsText = trimmedContent;
@@ -3051,6 +3035,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   KeyEventResult _handleMessageInputKeyEvent(FocusNode _, KeyEvent event) {
+    if (_isMobilePlatform) {
+      return KeyEventResult.ignored;
+    }
     final isEnterKey = event.logicalKey == LogicalKeyboardKey.enter ||
         event.logicalKey == LogicalKeyboardKey.numpadEnter;
     if (!isEnterKey || HardwareKeyboard.instance.isShiftPressed) {
@@ -3067,6 +3054,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     unawaited(_sendTextMessage());
     return KeyEventResult.handled;
+  }
+
+  bool get _isMobilePlatform {
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android || TargetPlatform.iOS => true,
+      TargetPlatform.fuchsia ||
+      TargetPlatform.linux ||
+      TargetPlatform.macOS ||
+      TargetPlatform.windows =>
+        false,
+    };
   }
 
   Future<void> _sendTextMessage() async {
@@ -3153,7 +3151,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _session.id,
         content,
         inputMode: inputMode,
-        systemPrompt: _speechPlaybackSystemPrompt(inputMode),
+        systemPrompt: _messageSystemPrompt(inputMode),
       );
       if (!mounted) {
         return false;
@@ -3200,6 +3198,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         );
       });
       _syncSessionSummaryCache();
+      _scheduleRefreshSessionSummary();
       return true;
     } catch (error) {
       if (!mounted) {
@@ -3216,6 +3215,27 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       });
       return false;
     }
+  }
+
+  String? _messageSystemPrompt(String inputMode) {
+    final prompts = <String>[];
+    if (_session.briefReplyMode &&
+        appSettingsController.settings.compressAssistantReplies) {
+      final maxChars =
+          appSettingsController.settings.compressAssistantReplyMaxChars;
+      prompts.add(
+        'Keep the assistant reply brief. Summarize what you did concisely, '
+        'ideally within $maxChars characters unless the user explicitly asks for '
+        'detail.',
+      );
+    }
+
+    final speechPrompt = _speechPlaybackSystemPrompt(inputMode);
+    if (speechPrompt != null) {
+      prompts.add(speechPrompt);
+    }
+
+    return prompts.isEmpty ? null : prompts.join('\n\n');
   }
 
   String? _speechPlaybackSystemPrompt(String inputMode) {
@@ -3253,7 +3273,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     setState(() {
       _cancellingReply = true;
-      _speechError = null;
     });
     try {
       await _client.cancelReply(_session.id);
@@ -3265,7 +3284,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _pendingApproval = null;
         _submittingApproval = false;
         _submittingApprovalChoice = null;
-        _speechError = null;
         _setSpeechStatus(context.l10n.replyStopped);
         _session = _session.copyWith(
           status: SessionStatus.idle,
@@ -3283,7 +3301,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
       setState(() {
         _cancellingReply = false;
-        _speechError = null;
       });
       unawaited(_restoreSessionAfterResume());
     }
@@ -3304,7 +3321,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _callModeSubmittingVoiceUtterance = false;
       _completeCallModeCommandAcceptedSpeech();
       _callModeSpeechHintState = null;
-      _speechError = null;
     });
     await _maybeResumeCallModeListening();
   }
@@ -3671,7 +3687,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         );
       }
       _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
-      _speechError = null;
     });
 
     if (!autoSend) {
@@ -3696,7 +3711,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       setState(() {
         _voiceInputStarting = true;
         _setSpeechStatus(context.l10n.reinitializingVoiceInput);
-        _speechError = null;
       });
       await _initializeSpeech();
       if (!_speechReady) {
@@ -3710,7 +3724,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     setState(() {
-      _speechError = null;
       _setSpeechStatus(context.l10n.callModePreparingListening);
       _voiceInputStarting = true;
       _clearRecognizedSpeechState();
@@ -3788,7 +3801,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             }
             if (utterance.isFinal) {
               _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
-              _speechError = null;
             }
           });
           if (utterance.isFinal && _callModeEnabled && accepted && !ttsEcho) {
@@ -3922,7 +3934,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           _controller.clear();
         }
         _setSpeechStatus(context.l10n.voiceInputInProgress);
-        _speechError = null;
       });
       return;
     }
@@ -3941,7 +3952,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         );
       }
       _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
-      _speechError = null;
     });
     final pauseBridgeListeningForAck =
         _streamingAsrActive && _usesBridgeRealtimeSpeechForCallMode();

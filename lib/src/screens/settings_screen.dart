@@ -35,7 +35,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _aiApprovalBaseUrlController = TextEditingController();
   final _aiApprovalApiKeyController = TextEditingController();
   final _aiApprovalModelController = TextEditingController();
-  final _notificationMaxCharsController = TextEditingController();
+  final _compressAssistantReplyMaxCharsController = TextEditingController();
 
   late bool _aiApprovalEnabled;
   late String _aiApprovalMaxRisk;
@@ -65,7 +65,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _aiApprovalBaseUrlController.dispose();
     _aiApprovalApiKeyController.dispose();
     _aiApprovalModelController.dispose();
-    _notificationMaxCharsController.dispose();
+    _compressAssistantReplyMaxCharsController.dispose();
     super.dispose();
   }
 
@@ -80,8 +80,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _aiApprovalModelController.text = settings.aiApprovalModel;
     _aiApprovalEnabled = settings.aiApprovalEnabled;
     _aiApprovalMaxRisk = settings.aiApprovalMaxRisk;
-    _notificationMaxCharsController.text =
-        settings.notificationMaxChars.toString();
+    _compressAssistantReplyMaxCharsController.text =
+        settings.compressAssistantReplyMaxChars.toString();
     _themeMode = settings.themeMode;
     _autoSpeakReplies = settings.autoSpeakReplies;
     _compressAssistantReplies = settings.compressAssistantReplies;
@@ -306,15 +306,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               contentPadding: EdgeInsets.zero,
                             ),
                             TextField(
-                              controller: _notificationMaxCharsController,
+                              controller:
+                                  _compressAssistantReplyMaxCharsController,
                               keyboardType: TextInputType.number,
                               inputFormatters: [
                                 FilteringTextInputFormatter.digitsOnly,
                               ],
                               style: formValueTextStyle,
                               decoration: InputDecoration(
-                                labelText: l10n.notificationPreviewMaxChars,
-                                hintText: '160',
+                                labelText: l10n.compressReplyMaxChars,
+                                hintText: '50',
                               ),
                             ),
                           ],
@@ -650,12 +651,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         aiApprovalApiKey: _aiApprovalApiKeyController.text.trim(),
         aiApprovalModel: _aiApprovalModelController.text.trim(),
         aiApprovalMaxRisk: _aiApprovalMaxRisk,
-        notificationMaxChars: _parseNotificationMaxCharsInput(
-          _notificationMaxCharsController.text,
-          appSettingsController.settings.notificationMaxChars,
-        ),
         autoSpeakReplies: _autoSpeakReplies,
         compressAssistantReplies: _compressAssistantReplies,
+        compressAssistantReplyMaxChars: _parsePositiveIntInput(
+          _compressAssistantReplyMaxCharsController.text,
+          appSettingsController.settings.compressAssistantReplyMaxChars,
+        ),
       );
       await appSettingsController.save(next);
       await bridgeClient.updateBridgeSettings(next);
@@ -705,7 +706,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  int _parseNotificationMaxCharsInput(String raw, int fallback) {
+  int _parsePositiveIntInput(String raw, int fallback) {
     final value = int.tryParse(raw.trim());
     if (value == null || value <= 0) {
       return fallback;

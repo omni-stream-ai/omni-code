@@ -77,9 +77,14 @@ class SessionCallModeView extends StatelessWidget {
                     : AppSpacing.screenX;
                 final maxContentWidth =
                     constraints.maxWidth >= 760 ? 620.0 : 520.0;
+                final maxAnimationSize = constraints.maxHeight < 640
+                    ? 32.0
+                    : compactHeight
+                        ? 252.0
+                        : 342.0;
                 final animationSize = math.min(
                   constraints.maxWidth - (horizontalPadding * 2),
-                  compactHeight ? 252.0 : 342.0,
+                  maxAnimationSize,
                 );
 
                 return SingleChildScrollView(
@@ -550,6 +555,14 @@ class _SubtitlePanel extends StatelessWidget {
                 ),
                 blockSpacing: AppSpacing.compact,
                 pPadding: const EdgeInsets.symmetric(vertical: 1),
+                horizontalRuleDecoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      width: 0.6,
+                      color: palette.text.withValues(alpha: 0.22),
+                    ),
+                  ),
+                ),
               ),
             )
           else

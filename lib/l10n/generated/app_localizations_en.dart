@@ -146,10 +146,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get compressRepliesSubtitle =>
-      'When enabled, new sessions ask the AI to summarize what it did briefly, ideally within 50 characters';
+      'When enabled, new sessions ask the AI to summarize what it did briefly';
 
   @override
-  String get notificationPreviewMaxChars => 'Notification max chars';
+  String get compressReplyMaxChars => 'Compressed reply max chars';
 
   @override
   String get settingsSaved => 'Settings saved';
@@ -1323,4 +1323,7 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get signOutConfirmBody =>
       'This clears the current device authorization and returns you to the welcome screen. You will need to reconnect Bridge and authorize this device again.';
+
+  @override
+  String get sessionFailedGeneric => 'Session failed';
 }

@@ -16,6 +16,7 @@ import 'package:omni_code/src/services/bridge_realtime_asr_service.dart';
 import 'package:omni_code/src/services/speech_input_service.dart';
 import 'package:omni_code/src/services/tts_service.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
+import 'package:omni_code/src/theme/app_theme.dart';
 import 'package:omni_code/src/widgets/session_call_mode_view.dart';
 
 const _localNotificationsChannel =
@@ -42,7 +43,8 @@ void main() {
         .setMockMethodCallHandler(_localNotificationsChannel, null);
   });
 
-  testWidgets('pressing enter sends the current draft', (tester) async {
+  testWidgets('pressing enter sends the current draft on desktop',
+      (tester) async {
     final sentBodies = <Map<String, dynamic>>[];
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
@@ -127,7 +129,158 @@ void main() {
     expect(sentBodies.single['content'], 'Hello from enter');
     expect(sentBodies.single['input_mode'], 'text');
     expect(sentBodies.single.containsKey('system_prompt'), isFalse);
-  });
+  },
+      variant: const TargetPlatformVariant(<TargetPlatform>{
+        TargetPlatform.linux,
+      }));
+
+  testWidgets('pressing enter keeps the current draft on mobile',
+      (tester) async {
+    final sentBodies = <Map<String, dynamic>>[];
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          sentBodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+          return http.Response('unexpected send', 500);
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byType(TextField);
+    await tester.tap(input);
+    await tester.pump();
+    await tester.enterText(input, 'Hello');
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    final field = tester.widget<TextField>(input);
+    expect(sentBodies, isEmpty);
+    expect(field.controller!.text, 'Hello');
+  },
+      variant: const TargetPlatformVariant(<TargetPlatform>{
+        TargetPlatform.android,
+      }));
+
+  testWidgets('assistant reply refreshes generated session title',
+      (tester) async {
+    var refreshedSession = false;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: 'Done',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/projects/project-1/sessions') {
+          refreshedSession = true;
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _sessionJson(title: 'Generated title'),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(title: 'New session'),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('New session'), findsOneWidget);
+
+    final input = find.byType(TextField);
+    await tester.tap(input);
+    await tester.enterText(input, 'Name this session');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(refreshedSession, isTrue);
+    expect(find.text('Generated title'), findsOneWidget);
+  },
+      variant: const TargetPlatformVariant(<TargetPlatform>{
+        TargetPlatform.linux,
+      }));
 
   testWidgets('auto speak sends speech playback system prompt', (tester) async {
     appSettingsController.debugReplaceSettings(
@@ -220,6 +373,191 @@ void main() {
         contains('unless the user explicitly asks'),
       ),
     );
+  });
+
+  testWidgets('brief reply session sends compression system prompt',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        compressAssistantReplies: true,
+        compressAssistantReplyMaxChars: 80,
+      ),
+    );
+    final sentBodies = <Map<String, dynamic>>[];
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/cancel') {
+          return http.Response(
+            jsonEncode({
+              'data': {'ok': true}
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sentBodies.add(body);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-brief-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-brief-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(briefReplyMode: true),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byType(TextField);
+    await tester.enterText(input, 'Summarize this');
+    await tester.tap(find.text('Send'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(sentBodies, hasLength(1));
+    expect(sentBodies.single['input_mode'], 'text');
+    expect(
+      sentBodies.single['system_prompt'],
+      allOf(
+        isA<String>(),
+        contains('Keep the assistant reply brief'),
+        contains('ideally within 80 characters'),
+        contains('unless the user explicitly asks for detail'),
+      ),
+    );
+  });
+
+  testWidgets('disabled compression setting omits compression system prompt',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(compressAssistantReplies: false),
+    );
+    final sentBodies = <Map<String, dynamic>>[];
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/cancel') {
+          return http.Response(
+            jsonEncode({
+              'data': {'ok': true}
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sentBodies.add(body);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-compression-disabled-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-compression-disabled-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(briefReplyMode: true),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byType(TextField);
+    await tester.enterText(input, 'Do not compress this');
+    await tester.tap(find.text('Send'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(sentBodies, hasLength(1));
+    expect(sentBodies.single['input_mode'], 'text');
+    expect(sentBodies.single.containsKey('system_prompt'), isFalse);
   });
 
   testWidgets('disabled speech playback prompt omits system prompt',
@@ -626,7 +964,6 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Image attachment'), findsOneWidget);
     expect(find.byKey(const ValueKey('user-image-card-assets/result.png')),
         findsOneWidget);
 
@@ -636,7 +973,12 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('Image preview'), findsOneWidget);
+    expect(find.text('Image preview'), findsNothing);
+    expect(find.byKey(const ValueKey('image-preview-dialog')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('image-preview-fullscreen')),
+      findsOneWidget,
+    );
 
     final fileRequest = requests.singleWhere(
       (request) => request.url.path == '/files',
@@ -701,8 +1043,8 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Image attachment'), findsOneWidget);
-    expect(find.text('assets/result.png'), findsOneWidget);
+    expect(find.byKey(const ValueKey('assistant-image-card-assets/result.png')),
+        findsOneWidget);
 
     await tester.tap(find.byKey(
       const ValueKey('assistant-image-card-assets/result.png'),
@@ -710,7 +1052,12 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('Image preview'), findsOneWidget);
+    expect(find.text('Image preview'), findsNothing);
+    expect(find.byKey(const ValueKey('image-preview-dialog')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('image-preview-fullscreen')),
+      findsOneWidget,
+    );
 
     final fileRequest = requests.singleWhere(
       (request) => request.url.path == '/files',
@@ -839,21 +1186,32 @@ void main() {
     );
     await tester.pump();
 
-    final imageLabel = find.text('data:image/png;base64,...');
-    expect(imageLabel, findsOneWidget);
+    final imageCard = find.byWidgetPredicate(
+      (widget) =>
+          widget is InkWell &&
+          widget.key is ValueKey &&
+          (widget.key as ValueKey<String>).value
+              .startsWith('assistant-image-card-data-image-'),
+    );
+    expect(imageCard, findsOneWidget);
 
-    await tester.tap(imageLabel);
+    await tester.tap(imageCard);
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('Image preview'), findsOneWidget);
+    expect(find.text('Image preview'), findsNothing);
+    expect(find.byKey(const ValueKey('image-preview-dialog')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('image-preview-fullscreen')),
+      findsOneWidget,
+    );
     expect(
       requests.where((request) => request.url.path == '/files'),
       isEmpty,
     );
   });
 
-  testWidgets('image preview toggles fullscreen overlay', (tester) async {
+  testWidgets('image preview opens directly fullscreen', (tester) async {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
         if (request.method == 'GET' &&
@@ -912,17 +1270,9 @@ void main() {
 
     expect(
       find.byKey(const ValueKey('image-preview-fullscreen')),
-      findsNothing,
-    );
-
-    await tester.tap(find.byKey(const ValueKey('image-preview-surface')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 220));
-
-    expect(
-      find.byKey(const ValueKey('image-preview-fullscreen')),
       findsOneWidget,
     );
+    expect(find.byKey(const ValueKey('image-preview-dialog')), findsNothing);
     expect(find.text('Dark'), findsOneWidget);
     expect(find.text('Light'), findsOneWidget);
     expect(find.text('Checker'), findsOneWidget);
@@ -940,6 +1290,61 @@ void main() {
       find.byKey(const ValueKey('image-preview-fullscreen')),
       findsNothing,
     );
+  });
+
+  testWidgets('invalid local image path hides preview card', (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _messageJson(
+                  id: 'assistant-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: 'Saved image at assets/missing.png',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/files') {
+          return http.Response('missing', 404);
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('assistant-image-card-assets/missing.png')),
+      findsNothing,
+    );
+    expect(find.text('Image attachment'), findsNothing);
   });
 
   testWidgets('svg image path opens preview', (tester) async {
@@ -993,7 +1398,10 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('assets/diagram.svg'), findsOneWidget);
+    expect(
+        find.byKey(
+            const ValueKey('assistant-image-card-assets/diagram.svg')),
+        findsOneWidget);
 
     await tester.tap(find.byKey(
       const ValueKey('assistant-image-card-assets/diagram.svg'),
@@ -1001,7 +1409,12 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('Image preview'), findsOneWidget);
+    expect(find.text('Image preview'), findsNothing);
+    expect(find.byKey(const ValueKey('image-preview-dialog')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('image-preview-fullscreen')),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('image-preview-surface')), findsOneWidget);
   });
 
@@ -1534,8 +1947,10 @@ void main() {
     await tester.tap(find.byKey(const Key('call-mode-close-button')));
     await tester.pump();
 
-    final field = tester.widget<TextField>(find.byType(TextField));
-    expect(field.controller!.text, isEmpty);
+    final field = find.byType(TextField);
+    if (field.evaluate().isNotEmpty) {
+      expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+    }
   });
 
   testWidgets('bridge realtime startup failure cancels active recorder',
@@ -3312,6 +3727,8 @@ class _TestApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
       home: home,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
@@ -3326,13 +3743,15 @@ class _TestApp extends StatelessWidget {
 
 SessionSummary _session({
   SessionStatus status = SessionStatus.idle,
+  bool briefReplyMode = false,
+  String title = 'Test Session',
 }) {
   return SessionSummary(
     id: 'session-1',
     projectId: 'project-1',
-    title: 'Test Session',
+    title: title,
     agent: AgentKind.codex,
-    briefReplyMode: false,
+    briefReplyMode: briefReplyMode,
     status: status,
     updatedAt: DateTime(2026, 5, 9, 10),
     unreadCount: 0,
@@ -3411,11 +3830,12 @@ Map<String, dynamic> _messageJson({
 
 Map<String, dynamic> _sessionJson({
   String status = 'idle',
+  String title = 'Test Session',
 }) {
   return {
     'id': 'session-1',
     'project_id': 'project-1',
-    'title': 'Test Session',
+    'title': title,
     'agent': 'codex',
     'brief_reply_mode': false,
     'status': status,

@@ -144,10 +144,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get compressReplies => '压缩 AI 回复';
 
   @override
-  String get compressRepliesSubtitle => '开启后，新建会话会要求 AI 简短说明做了什么，尽量不超过 50 字';
+  String get compressRepliesSubtitle => '开启后，新建会话会要求 AI 简短说明做了什么';
 
   @override
-  String get notificationPreviewMaxChars => '通知最大字符数';
+  String get compressReplyMaxChars => '压缩回复最大字数';
 
   @override
   String get settingsSaved => '设置已保存';
@@ -1275,4 +1275,7 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get signOutConfirmBody =>
       '退出后会清除当前设备授权并返回欢迎页。你需要重新连接 Bridge 并再次授权此设备。';
+
+  @override
+  String get sessionFailedGeneric => '会话已失败';
 }

@@ -359,14 +359,14 @@ abstract class AppLocalizations {
   /// No description provided for @compressRepliesSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'When enabled, new sessions ask the AI to summarize what it did briefly, ideally within 50 characters'**
+  /// **'When enabled, new sessions ask the AI to summarize what it did briefly'**
   String get compressRepliesSubtitle;
 
-  /// No description provided for @notificationPreviewMaxChars.
+  /// No description provided for @compressReplyMaxChars.
   ///
   /// In en, this message translates to:
-  /// **'Notification max chars'**
-  String get notificationPreviewMaxChars;
+  /// **'Compressed reply max chars'**
+  String get compressReplyMaxChars;
 
   /// No description provided for @settingsSaved.
   ///
@@ -2365,6 +2365,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This clears the current device authorization and returns you to the welcome screen. You will need to reconnect Bridge and authorize this device again.'**
   String get signOutConfirmBody;
+
+  /// No description provided for @sessionFailedGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'Session failed'**
+  String get sessionFailedGeneric;
 }
 
 class _AppLocalizationsDelegate
