@@ -101,6 +101,18 @@ class BridgeRealtimeAsrService {
   bool _running = false;
   bool _connected = false;
 
+  /// Cached websocket path from a previous successful descriptor fetch.
+  /// Allows skipping the HTTP readiness check on subsequent starts.
+  static String? _cachedWebsocketPath;
+
+  static const _defaultWebsocketPath = '/speech/realtime/ws';
+
+  /// Clears the cached websocket path, e.g. when the bridge server address
+  /// changes. The next [start] will perform a full readiness check.
+  static void clearCache() {
+    _cachedWebsocketPath = null;
+  }
+
   bool get isRunning => _running;
 
   Future<void> start({
@@ -121,6 +133,40 @@ class BridgeRealtimeAsrService {
     _startCompleter = Completer<void>();
 
     try {
+      // Fast path: if we have a cached websocket path from a previous
+      // successful start, try connecting directly without the HTTP
+      // readiness check. On failure, fall through to the full flow.
+      if (_cachedWebsocketPath != null) {
+        debugPrint(
+          '[bridge-realtime-asr] fast path: connecting with cached path '
+          '$_cachedWebsocketPath',
+        );
+        try {
+          await _connectWebSocket(
+            _cachedWebsocketPath!,
+            audioStream: audioStream,
+            onUtterance: onUtterance,
+            onSpeechStarted: onSpeechStarted,
+            onWakeWordDetected: onWakeWordDetected,
+            onError: onError,
+            config: config,
+          );
+          return;
+        } catch (error) {
+          debugPrint(
+            '[bridge-realtime-asr] fast path failed ($error), '
+            'falling back to full check',
+          );
+          _cachedWebsocketPath = null;
+          // Reset state for the fallback attempt.
+          await _cleanupSocket();
+          _startCompleter = Completer<void>();
+          _connected = false;
+          _awaitingConfiguredSession = config != null;
+        }
+      }
+
+      // Full flow: HTTP readiness check + WebSocket connect.
       final descriptor = await _client.getSpeechRealtimeDescriptor();
       final sessionDefaults =
           descriptor['session_defaults'] as Map<String, dynamic>? ??
@@ -141,71 +187,107 @@ class BridgeRealtimeAsrService {
       }
 
       final websocketPath =
-          descriptor['websocket_path'] as String? ?? '/speech/realtime/ws';
-      final socket = await _connector(
-        _webSocketUri(websocketPath),
-        headers: _headers(),
-      );
+          descriptor['websocket_path'] as String? ?? _defaultWebsocketPath;
+      _cachedWebsocketPath = websocketPath;
 
-      _socket = socket;
-      _socketSubscription = socket.messages.listen(
-        (message) {
-          if (message is! String) {
-            return;
-          }
-          _handleSocketMessage(
-            message,
-            onUtterance: onUtterance,
-            onSpeechStarted: onSpeechStarted,
-            onWakeWordDetected: onWakeWordDetected,
-            onError: onError,
-          );
-        },
-        onError: (Object error, StackTrace stackTrace) {
-          debugPrint('[bridge-realtime-asr] websocket error: $error');
-          if (!_startCompleterCompleted) {
-            _startCompleter?.completeError(error, stackTrace);
-          }
-          onError?.call('$error');
-        },
-        onDone: () {
-          debugPrint('[bridge-realtime-asr] websocket closed');
-          _running = false;
-          _connected = false;
-        },
-        cancelOnError: true,
+      await _connectWebSocket(
+        websocketPath,
+        audioStream: audioStream,
+        onUtterance: onUtterance,
+        onSpeechStarted: onSpeechStarted,
+        onWakeWordDetected: onWakeWordDetected,
+        onError: onError,
+        config: config,
       );
-
-      _audioSubscription = audioStream.listen(
-        (bytes) {
-          if (!_running || !_connected) {
-            return;
-          }
-          _socket?.add(bytes);
-        },
-        onError: (Object error, StackTrace stackTrace) async {
-          debugPrint('[bridge-realtime-asr] audio stream error: $error');
-          onError?.call('$error');
-          await cancel();
-        },
-        onDone: () async {
-          await finish();
-        },
-        cancelOnError: true,
-      );
-
-      if (config != null) {
-        final update = jsonEncode(config.toSessionUpdateJson());
-        debugPrint('[bridge-realtime-asr] sending session.update $update');
-        _socket?.add(update);
-      }
-      await _startCompleter!.future.timeout(const Duration(seconds: 6));
     } catch (_) {
       _running = false;
       _connected = false;
       _awaitingConfiguredSession = false;
+      await _cleanupSocket();
       rethrow;
     }
+  }
+
+  /// Establishes a WebSocket connection, sets up listeners, sends config,
+  /// and waits for the session to become ready.
+  Future<void> _connectWebSocket(
+    String websocketPath, {
+    required Stream<Uint8List> audioStream,
+    required void Function(BridgeRealtimeAsrUtterance utterance) onUtterance,
+    void Function()? onSpeechStarted,
+    void Function(String keyword)? onWakeWordDetected,
+    void Function(String error)? onError,
+    BridgeRealtimeAsrConfig? config,
+  }) async {
+    final socket = await _connector(
+      _webSocketUri(websocketPath),
+      headers: _headers(),
+    );
+
+    _socket = socket;
+    _socketSubscription = socket.messages.listen(
+      (message) {
+        if (message is! String) {
+          return;
+        }
+        _handleSocketMessage(
+          message,
+          onUtterance: onUtterance,
+          onSpeechStarted: onSpeechStarted,
+          onWakeWordDetected: onWakeWordDetected,
+          onError: onError,
+        );
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint('[bridge-realtime-asr] websocket error: $error');
+        if (!_startCompleterCompleted) {
+          _startCompleter?.completeError(error, stackTrace);
+        }
+        onError?.call('$error');
+      },
+      onDone: () {
+        debugPrint('[bridge-realtime-asr] websocket closed');
+        _running = false;
+        _connected = false;
+      },
+      cancelOnError: true,
+    );
+
+    _audioSubscription = audioStream.listen(
+      (bytes) {
+        if (!_running || !_connected) {
+          return;
+        }
+        _socket?.add(bytes);
+      },
+      onError: (Object error, StackTrace stackTrace) async {
+        debugPrint('[bridge-realtime-asr] audio stream error: $error');
+        onError?.call('$error');
+        await cancel();
+      },
+      onDone: () async {
+        await finish();
+      },
+      cancelOnError: true,
+    );
+
+    if (config != null) {
+      final update = jsonEncode(config.toSessionUpdateJson());
+      debugPrint('[bridge-realtime-asr] sending session.update $update');
+      _socket?.add(update);
+    }
+    await _startCompleter!.future.timeout(const Duration(seconds: 6));
+  }
+
+  /// Tears down the current socket and audio subscriptions without
+  /// modifying the running/connected flags.
+  Future<void> _cleanupSocket() async {
+    await _audioSubscription?.cancel();
+    _audioSubscription = null;
+    await _socketSubscription?.cancel();
+    _socketSubscription = null;
+    await _socket?.close();
+    _socket = null;
   }
 
   Future<void> finish() async {
@@ -221,12 +303,7 @@ class BridgeRealtimeAsrService {
     _running = false;
     _connected = false;
     _awaitingConfiguredSession = false;
-    await _audioSubscription?.cancel();
-    _audioSubscription = null;
-    await _socketSubscription?.cancel();
-    _socketSubscription = null;
-    await _socket?.close();
-    _socket = null;
+    await _cleanupSocket();
   }
 
   void _handleSocketMessage(
