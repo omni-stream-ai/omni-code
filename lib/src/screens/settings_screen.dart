@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -818,7 +819,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             FilledButton(
               onPressed: () async {
                 Navigator.of(context).pop();
-                await _downloadAndInstallUpdate(update);
+                if (Platform.isAndroid) {
+                  await _downloadAndInstallUpdate(update);
+                } else {
+                  await launchUrl(
+                    Uri.parse(update.releasesPageUrl),
+                    mode: LaunchMode.externalApplication,
+                  );
+                }
               },
               child: Text(context.l10n.updateNow),
             ),

@@ -244,6 +244,9 @@ class AppUpdateInfo {
   final String releaseNotes;
   final bool force;
 
+  String get releasesPageUrl =>
+      'https://github.com/omni-stream-ai/omni-code/releases/tag/v$versionName';
+
   static const List<String> _androidAbiPriority = [
     'arm64-v8a',
     'armeabi-v7a',
