@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
+
 
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -936,7 +936,6 @@ class _MemoryAppSettingsStore implements AppSettingsStore {
 
 class _FakeFlutterLocalNotificationsPlatform
     extends FlutterLocalNotificationsPlatform {
-  @override
   Future<bool?> initialize(
     InitializationSettings initializationSettings, {
     DidReceiveNotificationResponseCallback? onDidReceiveNotificationResponse,
