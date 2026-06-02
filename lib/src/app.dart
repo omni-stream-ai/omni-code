@@ -11,6 +11,7 @@ import 'models.dart';
 import 'screens/project_detail_screen.dart';
 import 'screens/session_detail_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/model_provider_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/speech_settings_screen.dart';
 import 'services/notification_service.dart';
@@ -110,6 +111,9 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
     }
     if (settings.name == SpeechSettingsScreen.routeName) {
       return _pageRoute(settings, const SpeechSettingsScreen());
+    }
+    if (settings.name == ModelProviderScreen.routeName) {
+      return _pageRoute(settings, const ModelProviderScreen());
     }
 
     final match = AppRoutes.parse(settings.name);

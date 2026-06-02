@@ -496,7 +496,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     final l10n = context.l10n;
-    final sessionResult = await showDialog<(String?, String)>(
+    final sessionResult = await showDialog<(String?, String, String?)>(
       context: context,
       builder: (context) => const _CreateSessionDialog(),
     );
@@ -523,12 +523,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       status: SessionStatus.idle,
       updatedAt: DateTime.now(),
       unreadCount: 0,
+      providerId: sessionResult.$3,
     );
     final sessionFuture = _client.createSession(
       projectId: project.id,
       title: sessionResult.$1,
       agent: sessionResult.$2,
       briefReplyMode: appSettingsController.settings.compressAssistantReplies,
+      providerId: sessionResult.$3,
     );
 
     await Navigator.of(context).push(
@@ -2345,6 +2347,37 @@ class _CreateSessionDialog extends StatefulWidget {
 class _CreateSessionDialogState extends State<_CreateSessionDialog> {
   final _titleController = TextEditingController();
   String _agent = appSettingsController.settings.lastSelectedAgent;
+  String? _providerId;
+  List<ModelProviderConfig> _allProviders = const [];
+  bool _loadingProviders = true;
+
+  List<ModelProviderConfig> get _providers {
+    final agent = parseAgentKind(_agent);
+    final compatible = agent.compatibleFormats;
+    return _allProviders.where((p) => compatible.contains(p.format)).toList();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProviders();
+  }
+
+  Future<void> _loadProviders() async {
+    try {
+      final providers = await bridgeClient.getModelProviders();
+      if (!mounted) return;
+      setState(() {
+        _allProviders = providers;
+        _loadingProviders = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadingProviders = false;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -2384,10 +2417,49 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
               }
               setState(() {
                 _agent = value;
+                // Reset provider if it's no longer compatible with the new agent.
+                if (_providerId != null) {
+                  final compatible =
+                      parseAgentKind(value).compatibleFormats;
+                  final stillValid = _allProviders.any(
+                    (p) =>
+                        p.id == _providerId &&
+                        compatible.contains(p.format),
+                  );
+                  if (!stillValid) {
+                    _providerId = null;
+                  }
+                }
               });
             },
             decoration: InputDecoration(labelText: context.l10n.agentLabel),
           ),
+          if (!_loadingProviders && _providers.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.stack),
+            DropdownButtonFormField<String?>(
+              initialValue: _providerId,
+              items: [
+                DropdownMenuItem(
+                  value: null,
+                  child: Text(context.l10n.providerAuto),
+                ),
+                ..._providers.map(
+                  (p) => DropdownMenuItem(
+                    value: p.id,
+                    child: Text(p.name),
+                  ),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _providerId = value;
+                });
+              },
+              decoration: InputDecoration(
+                labelText: context.l10n.providerSessionLabel,
+              ),
+            ),
+          ],
         ],
       ),
       actions: [
@@ -2398,7 +2470,11 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
         FilledButton(
           onPressed: () {
             final title = _titleController.text.trim();
-            Navigator.of(context).pop((title.isEmpty ? null : title, _agent));
+            Navigator.of(context).pop((
+              title.isEmpty ? null : title,
+              _agent,
+              _providerId,
+            ));
           },
           child: Text(context.l10n.create),
         ),

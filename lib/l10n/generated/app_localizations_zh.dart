@@ -1278,4 +1278,82 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sessionFailedGeneric => '会话已失败';
+
+  @override
+  String get modelProvidersSection => '模型供应商';
+
+  @override
+  String get modelProvidersHelp => '配置代理使用的模型供应商';
+
+  @override
+  String get addProvider => '添加供应商';
+
+  @override
+  String get editProvider => '编辑供应商';
+
+  @override
+  String get deleteProvider => '删除供应商';
+
+  @override
+  String get providerName => '名称';
+
+  @override
+  String get providerNameHint => '例如 My OpenAI';
+
+  @override
+  String get providerBaseUrl => '基础 URL';
+
+  @override
+  String get providerBaseUrlHint => '例如 https://api.openai.com/v1';
+
+  @override
+  String get providerApiKey => 'API 密钥';
+
+  @override
+  String get providerModel => '模型（可选）';
+
+  @override
+  String get providerModelHint => '留空使用默认值';
+
+  @override
+  String get providerFormat => 'API 格式';
+
+  @override
+  String get providerEnabled => '启用';
+
+  @override
+  String get providerPriority => '优先级';
+
+  @override
+  String get providerPriorityHelp => '数字越小优先级越高';
+
+  @override
+  String get providerAuto => '自动（默认）';
+
+  @override
+  String get providerOverride => '供应商覆盖';
+
+  @override
+  String get noProvidersYet => '尚未配置供应商';
+
+  @override
+  String get noProvidersHelp => '添加供应商以使用自定义 LLM 端点';
+
+  @override
+  String get providerSaved => '供应商已保存';
+
+  @override
+  String get providerDeleted => '供应商已删除';
+
+  @override
+  String get providerSessionLabel => '供应商';
+
+  @override
+  String get providerOverrideFailed => '供应商选择保存失败';
+
+  @override
+  String get confirm => '确认';
+
+  @override
+  String get fieldRequired => '此项为必填';
 }

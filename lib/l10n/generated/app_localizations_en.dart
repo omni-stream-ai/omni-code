@@ -1326,4 +1326,82 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sessionFailedGeneric => 'Session failed';
+
+  @override
+  String get modelProvidersSection => 'MODEL PROVIDERS';
+
+  @override
+  String get modelProvidersHelp => 'Configure LLM providers for agents';
+
+  @override
+  String get addProvider => 'Add Provider';
+
+  @override
+  String get editProvider => 'Edit Provider';
+
+  @override
+  String get deleteProvider => 'Delete Provider';
+
+  @override
+  String get providerName => 'Name';
+
+  @override
+  String get providerNameHint => 'e.g. My OpenAI';
+
+  @override
+  String get providerBaseUrl => 'Base URL';
+
+  @override
+  String get providerBaseUrlHint => 'e.g. https://api.openai.com/v1';
+
+  @override
+  String get providerApiKey => 'API Key';
+
+  @override
+  String get providerModel => 'Model (optional)';
+
+  @override
+  String get providerModelHint => 'Leave empty for default';
+
+  @override
+  String get providerFormat => 'API Format';
+
+  @override
+  String get providerEnabled => 'Enabled';
+
+  @override
+  String get providerPriority => 'Priority';
+
+  @override
+  String get providerPriorityHelp => 'Lower number = higher priority';
+
+  @override
+  String get providerAuto => 'Auto (default)';
+
+  @override
+  String get providerOverride => 'Provider Override';
+
+  @override
+  String get noProvidersYet => 'No providers configured';
+
+  @override
+  String get noProvidersHelp => 'Add a provider to use custom LLM endpoints';
+
+  @override
+  String get providerSaved => 'Provider saved';
+
+  @override
+  String get providerDeleted => 'Provider deleted';
+
+  @override
+  String get providerSessionLabel => 'Provider';
+
+  @override
+  String get providerOverrideFailed => 'Failed to save provider selection';
+
+  @override
+  String get confirm => 'Confirm';
+
+  @override
+  String get fieldRequired => 'This field is required';
 }

@@ -1,3 +1,97 @@
+enum ApiFormat {
+  openaiCompatible('open-ai-compatible', 'OpenAI Compatible',
+      ['openai', 'openai-compatible']),
+  anthropicMessages('anthropic-messages', 'Anthropic',
+      ['anthropic', 'anthropic-messages']),
+  codex('codex', 'Codex', ['codex']);
+
+  const ApiFormat(this.id, this.label, [this.aliases = const []]);
+
+  final String id;
+  final String label;
+  final List<String> aliases;
+
+  static ApiFormat parse(String value) {
+    for (final format in ApiFormat.values) {
+      if (format.id == value || format.aliases.contains(value)) {
+        return format;
+      }
+    }
+    return ApiFormat.openaiCompatible;
+  }
+}
+
+class ModelProviderConfig {
+  const ModelProviderConfig({
+    required this.id,
+    required this.name,
+    required this.baseUrl,
+    this.apiKey = '',
+    this.model,
+    this.format = ApiFormat.openaiCompatible,
+    this.enabled = true,
+    this.priority = 0,
+  });
+
+  final String id;
+  final String name;
+  final String baseUrl;
+  final String apiKey;
+  final String? model;
+  final ApiFormat format;
+  final bool enabled;
+  final int priority;
+
+  ModelProviderConfig copyWith({
+    String? id,
+    String? name,
+    String? baseUrl,
+    String? apiKey,
+    String? model,
+    bool clearModel = false,
+    ApiFormat? format,
+    bool? enabled,
+    int? priority,
+  }) {
+    return ModelProviderConfig(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      baseUrl: baseUrl ?? this.baseUrl,
+      apiKey: apiKey ?? this.apiKey,
+      model: clearModel ? null : (model ?? this.model),
+      format: format ?? this.format,
+      enabled: enabled ?? this.enabled,
+      priority: priority ?? this.priority,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'base_url': baseUrl,
+      if (apiKey.isNotEmpty) 'api_key': apiKey,
+      if (model != null) 'model': model,
+      'format': format.id,
+      'enabled': enabled,
+      'priority': priority,
+    };
+  }
+
+  factory ModelProviderConfig.fromJson(Map<String, dynamic> json) {
+    return ModelProviderConfig(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      baseUrl: json['base_url'] as String? ?? '',
+      apiKey: json['api_key'] as String? ?? '',
+      model: json['model'] as String?,
+      format: ApiFormat.parse(json['format'] as String? ?? 'openai-compatible'),
+      enabled: json['enabled'] as bool? ?? true,
+      priority: json['priority'] as int? ?? 0,
+    );
+  }
+}
+
 enum AgentKind {
   codex('codex', 'Codex', ['codex']),
   claudecode('claude_code', 'Claude Code', ['claude_code', 'claudecode']),
@@ -14,6 +108,24 @@ enum AgentKind {
 
   bool matches(String value) {
     return value == id || aliases.contains(value);
+  }
+
+  /// API formats compatible with this agent, matching the server-side resolution logic.
+  List<ApiFormat> get compatibleFormats {
+    switch (this) {
+      case AgentKind.claudecode:
+        return const [ApiFormat.anthropicMessages];
+      case AgentKind.codex:
+        return const [ApiFormat.codex];
+      case AgentKind.opencode:
+        return const [
+          ApiFormat.openaiCompatible,
+          ApiFormat.anthropicMessages,
+          ApiFormat.codex,
+        ];
+      case AgentKind.custom:
+        return const [ApiFormat.openaiCompatible];
+    }
   }
 
   static List<AgentKind> get selectableValues =>
@@ -201,6 +313,7 @@ class SessionSummary {
     this.lastMessagePreview,
     this.pendingApproval,
     this.errorMessage,
+    this.providerId,
   });
 
   final String id;
@@ -214,6 +327,7 @@ class SessionSummary {
   final String? lastMessagePreview;
   final ApprovalRequest? pendingApproval;
   final String? errorMessage;
+  final String? providerId;
 
   SessionSummary copyWith({
     String? id,
@@ -229,6 +343,8 @@ class SessionSummary {
     bool clearPendingApproval = false,
     String? errorMessage,
     bool clearErrorMessage = false,
+    String? providerId,
+    bool clearProviderId = false,
   }) {
     return SessionSummary(
       id: id ?? this.id,
@@ -244,6 +360,8 @@ class SessionSummary {
           clearPendingApproval ? null : pendingApproval ?? this.pendingApproval,
       errorMessage:
           clearErrorMessage ? null : errorMessage ?? this.errorMessage,
+      providerId:
+          clearProviderId ? null : providerId ?? this.providerId,
     );
   }
 
@@ -259,6 +377,7 @@ class SessionSummary {
       unreadCount: json['unread_count'] as int,
       lastMessagePreview: json['last_message_preview'] as String?,
       errorMessage: json['error_message'] as String?,
+      providerId: json['provider_id'] as String?,
       pendingApproval: json['pending_approval'] == null
           ? null
           : ApprovalRequest.fromJson(
