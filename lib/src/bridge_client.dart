@@ -27,14 +27,31 @@ class BridgeClient {
     final contentType = response.headers['content-type'] ?? '';
     if (!contentType.contains('application/json') &&
         response.statusCode >= 400) {
-      throw Exception(
-        'Bridge error (${response.statusCode}): ${response.body}',
-      );
+      throw Exception(_extractErrorMessage(response));
     }
     if (response.statusCode >= 400) {
-      throw Exception(
-        'Bridge error (${response.statusCode}): ${response.body}',
-      );
+      throw Exception(_extractErrorMessage(response));
+    }
+  }
+
+  /// Extracts the error message from a JSON error response body.
+  /// Falls back to the raw body if parsing fails.
+  static String _extractErrorMessage(http.Response response) {
+    return _extractErrorMessageFromBody(response.body);
+  }
+
+  /// Extracts the error message from a raw JSON body string.
+  static String _extractErrorMessageFromBody(String rawBody) {
+    try {
+      final body = jsonDecode(rawBody) as Map<String, dynamic>;
+      final error = body['error'];
+      if (error is String) return error;
+      if (error is Map<String, dynamic>) {
+        return (error['message'] as String?) ?? rawBody;
+      }
+      return (body['message'] as String?) ?? rawBody;
+    } catch (_) {
+      return rawBody;
     }
   }
 
@@ -115,9 +132,7 @@ class BridgeClient {
     debugPrint(
         '[auth] registerClient response (${response.statusCode}): ${response.body}');
     if (response.statusCode >= 400) {
-      throw Exception(
-        'Register client failed (${response.statusCode}): ${response.body}',
-      );
+      throw Exception(_extractErrorMessage(response));
     }
     try {
       final payload = jsonDecode(response.body) as Map<String, dynamic>;
@@ -136,9 +151,7 @@ class BridgeClient {
     debugPrint(
         '[auth] Poll response (${response.statusCode}): ${response.body}');
     if (response.statusCode >= 400) {
-      throw Exception(
-        'Check auth status failed (${response.statusCode}): ${response.body}',
-      );
+      throw Exception(_extractErrorMessage(response));
     }
     try {
       final payload = jsonDecode(response.body) as Map<String, dynamic>;
@@ -313,8 +326,7 @@ class BridgeClient {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
-        'file request failed (${response.statusCode}): '
-        '${utf8.decode(bytes, allowMalformed: true)}',
+        _extractErrorMessageFromBody(utf8.decode(bytes, allowMalformed: true)),
       );
     }
 
@@ -382,6 +394,7 @@ class BridgeClient {
     String content, {
     String inputMode = 'text',
     String? systemPrompt,
+    String? providerId,
   }) async {
     final body = <String, dynamic>{
       'content': content,
@@ -390,6 +403,9 @@ class BridgeClient {
     final trimmedSystemPrompt = systemPrompt?.trim();
     if (trimmedSystemPrompt != null && trimmedSystemPrompt.isNotEmpty) {
       body['system_prompt'] = trimmedSystemPrompt;
+    }
+    if (providerId != null && providerId.isNotEmpty) {
+      body['provider_id'] = providerId;
     }
 
     final response = await _httpClient.post(
@@ -402,9 +418,7 @@ class BridgeClient {
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'send message failed (${response.statusCode}): ${response.body}',
-      );
+      throw Exception(_extractErrorMessage(response));
     }
 
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
@@ -417,6 +431,25 @@ class BridgeClient {
     );
   }
 
+  Future<void> updateSessionProvider(
+    String sessionId,
+    String? providerId,
+  ) async {
+    final response = await _httpClient.patch(
+      Uri.parse('$baseUrl/sessions/$sessionId'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'provider_id': providerId,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+  }
+
   Future<void> cancelReply(String sessionId) async {
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/sessions/$sessionId/cancel'),
@@ -424,9 +457,7 @@ class BridgeClient {
     );
 
     if (response.statusCode != 204) {
-      throw Exception(
-        'cancel request failed (${response.statusCode}): ${response.body}',
-      );
+      throw Exception(_extractErrorMessage(response));
     }
   }
 
@@ -445,35 +476,55 @@ class BridgeClient {
     );
 
     if (response.statusCode != 204) {
-      throw Exception(
-        'approval request failed (${response.statusCode}): ${response.body}',
-      );
+      throw Exception(_extractErrorMessage(response));
     }
   }
 
-  Future<void> updateBridgeSettings(AppSettings settings) async {
+  Future<void> updateBridgeSettings(
+    AppSettings settings, {
+    List<ModelProviderConfig>? modelProviders,
+  }) async {
+    final body = <String, dynamic>{
+      'ai_approval': {
+        'enabled': settings.aiApprovalEnabled,
+        'base_url': settings.aiApprovalBaseUrl.trim(),
+        'api_key': settings.aiApprovalApiKey.trim(),
+        'model': settings.aiApprovalModel.trim(),
+        'max_risk': settings.aiApprovalMaxRisk.trim(),
+      },
+    };
+    if (modelProviders != null) {
+      body['model_providers'] =
+          modelProviders.map((p) => p.toJson()).toList();
+    }
     final response = await _httpClient.put(
       Uri.parse('$baseUrl/settings'),
       headers: {
         ..._defaultHeaders,
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({
-        'ai_approval': {
-          'enabled': settings.aiApprovalEnabled,
-          'base_url': settings.aiApprovalBaseUrl.trim(),
-          'api_key': settings.aiApprovalApiKey.trim(),
-          'model': settings.aiApprovalModel.trim(),
-          'max_risk': settings.aiApprovalMaxRisk.trim(),
-        },
-      }),
+      body: jsonEncode(body),
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'update settings failed (${response.statusCode}): ${response.body}',
-      );
+      throw Exception(_extractErrorMessage(response));
     }
+  }
+
+  Future<List<ModelProviderConfig>> getModelProviders() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/settings'),
+      headers: _defaultHeaders,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = payload['data'] as Map<String, dynamic>? ?? payload;
+    final providers = data['model_providers'] as List<dynamic>? ?? [];
+    return providers
+        .map((p) => ModelProviderConfig.fromJson(p as Map<String, dynamic>))
+        .toList();
   }
 
   Future<SessionSummary> createSession({
@@ -481,20 +532,25 @@ class BridgeClient {
     String? title,
     String agent = 'codex',
     bool? briefReplyMode,
+    String? providerId,
   }) async {
+    final body = <String, dynamic>{
+      'project_id': projectId,
+      'title': title,
+      'agent': agent,
+      'brief_reply_mode': briefReplyMode ??
+          appSettingsController.settings.compressAssistantReplies,
+    };
+    if (providerId != null && providerId.isNotEmpty) {
+      body['provider_id'] = providerId;
+    }
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/sessions'),
       headers: {
         ..._defaultHeaders,
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({
-        'project_id': projectId,
-        'title': title,
-        'agent': agent,
-        'brief_reply_mode': briefReplyMode ??
-            appSettingsController.settings.compressAssistantReplies,
-      }),
+      body: jsonEncode(body),
     );
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
     final session =
@@ -547,9 +603,7 @@ class BridgeClient {
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'register push device failed (${response.statusCode}): ${response.body}',
-      );
+      throw Exception(_extractErrorMessage(response));
     }
   }
 
@@ -617,10 +671,7 @@ class BridgeClient {
       throw ClientUnauthorizedException(response.body);
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'Delete speech model failed (${response.statusCode}): '
-        '${response.body}',
-      );
+      throw Exception(_extractErrorMessage(response));
     }
   }
 
@@ -719,8 +770,7 @@ class BridgeClient {
     final response = await _httpClient.send(request);
     final body = await response.stream.bytesToString();
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-          'Speaker enrollment failed (${response.statusCode}): $body');
+      throw Exception(_extractErrorMessageFromBody(body));
     }
     return SpeakerEnrollmentResult.fromJson(_decodeApiData(body));
   }
@@ -734,9 +784,7 @@ class BridgeClient {
       throw ClientUnauthorizedException(response.body);
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'Delete speaker failed (${response.statusCode}): ${response.body}',
-      );
+      throw Exception(_extractErrorMessage(response));
     }
   }
 
@@ -820,7 +868,7 @@ class BridgeClient {
     final body = await response.stream.bytesToString();
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('ASR request failed (${response.statusCode}): $body');
+      throw Exception(_extractErrorMessageFromBody(body));
     }
 
     final payload = jsonDecode(body) as Map<String, dynamic>;
@@ -860,9 +908,7 @@ class BridgeClient {
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'TTS request failed (${response.statusCode}): ${response.body}',
-      );
+      throw Exception(_extractErrorMessage(response));
     }
 
     final contentType = response.headers['content-type'] ?? 'audio/wav';
@@ -1292,7 +1338,12 @@ class SendMessageResult {
 }
 
 class ClientUnauthorizedException implements Exception {
-  const ClientUnauthorizedException(this.message);
+  factory ClientUnauthorizedException(String rawBody) {
+    return ClientUnauthorizedException._(
+      BridgeClient._extractErrorMessageFromBody(rawBody),
+    );
+  }
+  const ClientUnauthorizedException._(this.message);
   final String message;
 
   @override

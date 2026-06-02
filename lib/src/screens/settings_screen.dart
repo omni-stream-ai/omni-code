@@ -16,6 +16,7 @@ import '../theme/app_spacing.dart';
 import '../widgets/app_back_header.dart';
 import '../widgets/app_card.dart';
 import '../widgets/copyable_message.dart';
+import 'model_provider_screen.dart';
 import 'speech_settings_screen.dart';
 import '../../l10n/generated/app_localizations.dart';
 
@@ -265,6 +266,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ],
                         ),
                         const SizedBox(height: AppSpacing.fieldGap),
+                        _buildModelProvidersSection(context, l10n),
+                        const SizedBox(height: AppSpacing.fieldGap),
                         _buildSectionCard(
                           context,
                           title: 'REPLY BEHAVIOR',
@@ -460,6 +463,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
               ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.compact),
+          Icon(
+            Icons.chevron_right_rounded,
+            color: theme.iconTheme.color,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModelProvidersSection(
+    BuildContext context,
+    AppLocalizations l10n,
+  ) {
+    final theme = Theme.of(context);
+
+    return AppCard(
+      onTap: () async {
+        await Navigator.of(context).pushNamed(ModelProviderScreen.routeName);
+        if (!mounted) {
+          return;
+        }
+        setState(() {});
+      },
+      padding: AppSpacing.cardPadding,
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: AppColors.panelDeepFor(theme.brightness),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+            ),
+            child: Icon(
+              Icons.dns_rounded,
+              size: 18,
+              color: AppColors.accentBlueFor(theme.brightness),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.stack),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.modelProvidersSection.toUpperCase(),
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  l10n.modelProvidersHelp,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.textTheme.bodySmall?.color
+                        ?.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(width: AppSpacing.compact),

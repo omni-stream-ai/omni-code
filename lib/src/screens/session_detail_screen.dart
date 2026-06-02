@@ -135,6 +135,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _cancellingReply = false;
   int _visibleTurnCount = 0;
   String? _dismissedErrorBannerMessage;
+  String? _overrideProviderId;
+  List<ModelProviderConfig> _providers = const [];
 
   BridgeClient get _client => widget.client ?? bridgeClient;
 
@@ -303,6 +305,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _bridgeRealtimeAsrService = widget.bridgeRealtimeAsrService ??
         BridgeRealtimeAsrService(client: _client);
     _session = widget.session;
+    _overrideProviderId = _session.providerId;
     _pendingApproval = _session.pendingApproval;
     _creatingSession = widget.sessionInitializer != null;
     if (widget.enableSpeechServices) {
@@ -316,6 +319,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _loadMessages();
       _subscribeToEvents();
     }
+    _loadProviders();
   }
 
   @override
@@ -352,6 +356,20 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   void _syncSessionSummaryCache() {
     _client.syncSessionSummary(_session);
+  }
+
+  Future<void> _loadProviders() async {
+    try {
+      final providers = await _client.getModelProviders();
+      if (!mounted) return;
+      final compatible = _session.agent.compatibleFormats;
+      setState(() {
+        _providers =
+            providers.where((p) => compatible.contains(p.format)).toList();
+      });
+    } catch (_) {
+      // Silently ignore — provider selector just won't show
+    }
   }
 
   void _scheduleRefreshSessionSummary() {
@@ -428,6 +446,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           ),
         ),
         actions: [
+          _buildProviderSelector(),
           _buildCallModeAction(
             unavailableMessage: callModeUnavailableMessage,
           ),
@@ -437,9 +456,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         children: [
           if (_session.status == SessionStatus.failed)
             _buildErrorBanner(
-              _session.errorMessage?.trim().isNotEmpty == true
-                  ? _session.errorMessage!
-                  : context.l10n.sessionFailedGeneric,
+              _resolveSessionErrorText(context.l10n),
               dismissable: false,
             )
           else if (_shouldShowErrorBanner)
@@ -563,9 +580,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final l10n = context.l10n;
     final showVoiceInputStarting = _showVoiceInputStartingAsPrimary;
     final failedError = _session.status == SessionStatus.failed
-        ? (_session.errorMessage?.trim().isNotEmpty == true
-            ? _session.errorMessage!.trim()
-            : l10n.sessionFailedGeneric)
+        ? _resolveSessionErrorText(l10n)
         : null;
     final speechError = failedError ?? _speechError?.trim();
     final liveTranscript = _recognizedSpeech.trim().isNotEmpty
@@ -658,10 +673,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   String _callModeStatusLine(AppLocalizations l10n) {
-    if (_session.status == SessionStatus.failed &&
-        _session.errorMessage != null &&
-        _session.errorMessage!.trim().isNotEmpty) {
-      return _session.errorMessage!;
+    if (_session.status == SessionStatus.failed) {
+      final errorText = _resolveSessionErrorText(l10n);
+      if (errorText != l10n.sessionFailedGeneric) {
+        return errorText;
+      }
     }
     if (_speechError != null && _speechError!.trim().isNotEmpty) {
       return _speechError!;
@@ -779,6 +795,117 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       showDuration: const Duration(seconds: 2),
       exitDuration: const Duration(milliseconds: 100),
       child: child,
+    );
+  }
+
+  Widget _buildProviderSelector() {
+    if (_providers.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final l10n = context.l10n;
+    final currentName = _overrideProviderId == null
+        ? l10n.providerAuto
+        : _providers
+            .where((p) => p.id == _overrideProviderId)
+            .firstOrNull
+            ?.name ?? l10n.providerAuto;
+
+    return PopupMenuButton<String?>(
+      tooltip: l10n.providerOverride,
+      onSelected: (value) {
+        final previous = _overrideProviderId;
+        setState(() {
+          _overrideProviderId = value;
+        });
+        unawaited(
+          _client.updateSessionProvider(_session.id, value).catchError((e) {
+            debugPrint('[provider] updateSessionProvider failed: $e');
+            if (!mounted) return;
+            setState(() {
+              _overrideProviderId = previous;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(context.l10n.providerOverrideFailed),
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }),
+        );
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: null,
+          child: Row(
+            children: [
+              if (_overrideProviderId == null)
+                Icon(
+                  Icons.check_rounded,
+                  size: 18,
+                  color: theme.colorScheme.tertiary,
+                )
+              else
+                const SizedBox(width: 18),
+              const SizedBox(width: 8),
+              Text(l10n.providerAuto),
+            ],
+          ),
+        ),
+        ..._providers.map(
+          (p) => PopupMenuItem(
+            value: p.id,
+            child: Row(
+              children: [
+                if (_overrideProviderId == p.id)
+                  Icon(
+                    Icons.check_rounded,
+                    size: 18,
+                    color: theme.colorScheme.tertiary,
+                  )
+                else
+                  const SizedBox(width: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text(p.name)),
+              ],
+            ),
+          ),
+        ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.dns_outlined,
+              size: 20,
+              color: _overrideProviderId != null
+                  ? theme.colorScheme.tertiary
+                  : theme.iconTheme.color,
+            ),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                currentName,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: _overrideProviderId != null
+                      ? theme.colorScheme.tertiary
+                      : theme.textTheme.labelSmall?.color,
+                  fontWeight: _overrideProviderId != null
+                      ? FontWeight.w600
+                      : FontWeight.w400,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 18,
+              color: theme.iconTheme.color,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -991,6 +1118,22 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ),
       ),
     );
+  }
+
+  /// Resolves the error text to display when a session has failed.
+  /// Prefers [SessionSummary.errorMessage], falls back to
+  /// [SessionSummary.lastMessagePreview] (which the server sets to the error
+  /// message on failure), and finally to the generic localized string.
+  String _resolveSessionErrorText(AppLocalizations l10n) {
+    final errorMessage = _session.errorMessage;
+    if (errorMessage != null && errorMessage.trim().isNotEmpty) {
+      return errorMessage.trim();
+    }
+    final preview = _session.lastMessagePreview;
+    if (preview != null && preview.trim().isNotEmpty) {
+      return preview.trim();
+    }
+    return l10n.sessionFailedGeneric;
   }
 
   Widget _buildErrorBanner(String message, {bool dismissable = true}) {
@@ -3161,6 +3304,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         content,
         inputMode: inputMode,
         systemPrompt: _messageSystemPrompt(inputMode),
+        providerId: _overrideProviderId,
       );
       if (!mounted) {
         return false;

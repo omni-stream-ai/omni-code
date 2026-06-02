@@ -2371,6 +2371,162 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Session failed'**
   String get sessionFailedGeneric;
+
+  /// No description provided for @modelProvidersSection.
+  ///
+  /// In en, this message translates to:
+  /// **'MODEL PROVIDERS'**
+  String get modelProvidersSection;
+
+  /// No description provided for @modelProvidersHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure LLM providers for agents'**
+  String get modelProvidersHelp;
+
+  /// No description provided for @addProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Provider'**
+  String get addProvider;
+
+  /// No description provided for @editProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Provider'**
+  String get editProvider;
+
+  /// No description provided for @deleteProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Provider'**
+  String get deleteProvider;
+
+  /// No description provided for @providerName.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get providerName;
+
+  /// No description provided for @providerNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. My OpenAI'**
+  String get providerNameHint;
+
+  /// No description provided for @providerBaseUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Base URL'**
+  String get providerBaseUrl;
+
+  /// No description provided for @providerBaseUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. https://api.openai.com/v1'**
+  String get providerBaseUrlHint;
+
+  /// No description provided for @providerApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'API Key'**
+  String get providerApiKey;
+
+  /// No description provided for @providerModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Model (optional)'**
+  String get providerModel;
+
+  /// No description provided for @providerModelHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty for default'**
+  String get providerModelHint;
+
+  /// No description provided for @providerFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'API Format'**
+  String get providerFormat;
+
+  /// No description provided for @providerEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
+  String get providerEnabled;
+
+  /// No description provided for @providerPriority.
+  ///
+  /// In en, this message translates to:
+  /// **'Priority'**
+  String get providerPriority;
+
+  /// No description provided for @providerPriorityHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Lower number = higher priority'**
+  String get providerPriorityHelp;
+
+  /// No description provided for @providerAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto (default)'**
+  String get providerAuto;
+
+  /// No description provided for @providerOverride.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider Override'**
+  String get providerOverride;
+
+  /// No description provided for @noProvidersYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No providers configured'**
+  String get noProvidersYet;
+
+  /// No description provided for @noProvidersHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a provider to use custom LLM endpoints'**
+  String get noProvidersHelp;
+
+  /// No description provided for @providerSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider saved'**
+  String get providerSaved;
+
+  /// No description provided for @providerDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider deleted'**
+  String get providerDeleted;
+
+  /// No description provided for @providerSessionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider'**
+  String get providerSessionLabel;
+
+  /// No description provided for @providerOverrideFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to save provider selection'**
+  String get providerOverrideFailed;
+
+  /// No description provided for @confirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get confirm;
+
+  /// No description provided for @fieldRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'This field is required'**
+  String get fieldRequired;
 }
 
 class _AppLocalizationsDelegate
