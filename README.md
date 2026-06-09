@@ -44,8 +44,7 @@ Connects to [omni-code-bridge](https://github.com/omni-stream-ai/omni-code-bridg
 **Homebrew (macOS):**
 
 ```bash
-brew tap omni-stream-ai/homebrew-omni-code
-brew install --cask omni-code
+brew install omni-stream-ai/omni-code/omni-code
 ```
 
 **Arch Linux (AUR):**
