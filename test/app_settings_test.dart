@@ -149,4 +149,21 @@ void main() {
     final restored = AppSettings.fromJson(settings.toJson());
     expect(restored.lastSelectedAgent, 'claude_code');
   });
+
+  test('voiceComposerMode defaults to false', () {
+    expect(AppSettings.defaults().voiceComposerMode, isFalse);
+  });
+
+  test('missing voice_composer_mode falls back to false', () {
+    final settings = AppSettings.fromJson(<String, dynamic>{});
+    expect(settings.voiceComposerMode, isFalse);
+  });
+
+  test('voiceComposerMode round-trips through json', () {
+    final settings = AppSettings.defaults().copyWith(
+      voiceComposerMode: true,
+    );
+    final restored = AppSettings.fromJson(settings.toJson());
+    expect(restored.voiceComposerMode, isTrue);
+  });
 }

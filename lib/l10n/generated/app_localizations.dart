@@ -872,6 +872,48 @@ abstract class AppLocalizations {
   /// **'Voice input'**
   String get voiceInput;
 
+  /// No description provided for @keyboardInput.
+  ///
+  /// In en, this message translates to:
+  /// **'Keyboard input'**
+  String get keyboardInput;
+
+  /// No description provided for @voiceHoldToTalk.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold to talk'**
+  String get voiceHoldToTalk;
+
+  /// No description provided for @voiceHoldRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening...'**
+  String get voiceHoldRecording;
+
+  /// No description provided for @voiceHoldSlideUpHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Slide up for text or cancel'**
+  String get voiceHoldSlideUpHint;
+
+  /// No description provided for @voiceHoldReleaseHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Release left for text, right to cancel'**
+  String get voiceHoldReleaseHint;
+
+  /// No description provided for @voiceHoldReleaseToText.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get voiceHoldReleaseToText;
+
+  /// No description provided for @voiceHoldReleaseCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get voiceHoldReleaseCancel;
+
   /// No description provided for @voiceChatTitle.
   ///
   /// In en, this message translates to:

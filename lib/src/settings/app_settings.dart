@@ -56,6 +56,7 @@ class AppSettings {
     required this.callModeWakeWordEnabled,
     required this.callModeWakeWords,
     required this.lastSelectedAgent,
+    required this.voiceComposerMode,
   });
 
   final String bridgeUrl;
@@ -87,6 +88,7 @@ class AppSettings {
   final bool callModeWakeWordEnabled;
   final String callModeWakeWords;
   final String lastSelectedAgent;
+  final bool voiceComposerMode;
 
   factory AppSettings.defaults() {
     const configuredUrl = String.fromEnvironment('ECHO_MATE_BRIDGE_URL');
@@ -127,6 +129,7 @@ class AppSettings {
       callModeWakeWordEnabled: false,
       callModeWakeWords: defaultCallModeWakeWords,
       lastSelectedAgent: 'codex',
+      voiceComposerMode: false,
     );
   }
 
@@ -159,6 +162,7 @@ class AppSettings {
     bool? callModeWakeWordEnabled,
     String? callModeWakeWords,
     String? lastSelectedAgent,
+    bool? voiceComposerMode,
   }) {
     return AppSettings(
       bridgeUrl: bridgeUrl ?? this.bridgeUrl,
@@ -204,6 +208,7 @@ class AppSettings {
       callModeWakeWords: _normalizeCallModeWakeWords(
           callModeWakeWords ?? this.callModeWakeWords),
       lastSelectedAgent: lastSelectedAgent ?? this.lastSelectedAgent,
+      voiceComposerMode: voiceComposerMode ?? this.voiceComposerMode,
     );
   }
 
@@ -237,6 +242,7 @@ class AppSettings {
       'call_mode_wake_word_enabled': callModeWakeWordEnabled,
       'call_mode_wake_words': callModeWakeWords,
       'last_selected_agent': lastSelectedAgent,
+      'voice_composer_mode': voiceComposerMode,
     };
   }
 
@@ -341,6 +347,11 @@ class AppSettings {
         json,
         'last_selected_agent',
         defaults.lastSelectedAgent,
+      ),
+      voiceComposerMode: _readBool(
+        json,
+        'voice_composer_mode',
+        defaults.voiceComposerMode,
       ),
     );
   }
@@ -568,6 +579,9 @@ class AppSettingsController extends ChangeNotifier {
           shouldPersist = true;
         }
         if (json['last_selected_agent'] == null) {
+          shouldPersist = true;
+        }
+        if (json['voice_composer_mode'] == null) {
           shouldPersist = true;
         }
         _settings = AppSettings.fromJson(json);

@@ -17,6 +17,7 @@ import 'package:omni_code/src/services/bridge_realtime_asr_service.dart';
 import 'package:omni_code/src/services/speech_input_service.dart';
 import 'package:omni_code/src/services/tts_service.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
+import 'package:omni_code/src/settings/app_settings_store.dart';
 import 'package:omni_code/src/theme/app_theme.dart';
 import 'package:omni_code/src/widgets/session_call_mode_view.dart';
 import 'package:speech_to_text/speech_to_text.dart';
@@ -31,6 +32,7 @@ _FakeAndroidFlutterLocalNotificationsPlugin _fakeNotifications() {
 
 void main() {
   setUp(() {
+    appSettingsController.debugReplaceStore(_MemoryAppSettingsStore());
     appSettingsController.debugReplaceSettings(AppSettings.defaults());
     FlutterLocalNotificationsPlatform.instance =
         _FakeAndroidFlutterLocalNotificationsPlugin();
@@ -1263,11 +1265,12 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byKey(const ValueKey('user-image-card-assets/result.png')),
+    expect(
+        find.byKey(const ValueKey('user-image-card-user-1-assets/result.png')),
         findsOneWidget);
 
     await tester.tap(find.byKey(
-      const ValueKey('user-image-card-assets/result.png'),
+      const ValueKey('user-image-card-user-1-assets/result.png'),
     ));
     await tester.pump();
     await tester.pump();
@@ -1342,11 +1345,13 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byKey(const ValueKey('assistant-image-card-assets/result.png')),
+    expect(
+        find.byKey(const ValueKey(
+            'assistant-image-card-assistant-1-assets/result.png')),
         findsOneWidget);
 
     await tester.tap(find.byKey(
-      const ValueKey('assistant-image-card-assets/result.png'),
+      const ValueKey('assistant-image-card-assistant-1-assets/result.png'),
     ));
     await tester.pump();
     await tester.pump();
@@ -1365,6 +1370,174 @@ void main() {
       'path': 'assets/result.png',
       'session_id': 'session-1',
     });
+  });
+
+  testWidgets('same image path in separate assistant messages reloads file',
+      (tester) async {
+    final requests = <http.Request>[];
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _messageJson(
+                  id: 'assistant-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: 'First image at assets/result.png',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+                _messageJson(
+                  id: 'assistant-2',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: 'Updated image at assets/result.png',
+                  createdAt: '2026-05-09T10:00:02.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/files') {
+          return http.Response.bytes(
+            _tinyPngBytes,
+            200,
+            headers: {'content-type': 'image/png'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.byKey(
+        const ValueKey('assistant-image-card-assistant-1-assets/result.png'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey('assistant-image-card-assistant-2-assets/result.png'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      requests.where((request) => request.url.path == '/files'),
+      hasLength(2),
+    );
+  });
+
+  testWidgets(
+      'same remote image url in separate assistant messages is distinct',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _messageJson(
+                  id: 'assistant-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: 'First image at https://example.com/result.png',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+                _messageJson(
+                  id: 'assistant-2',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: 'Updated image at https://example.com/result.png',
+                  createdAt: '2026-05-09T10:00:02.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.byKey(
+        const ValueKey(
+          'assistant-image-card-assistant-1-https://example.com/result.png',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey(
+          'assistant-image-card-assistant-2-https://example.com/result.png',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey(
+          'remote-image-thumbnail-assistant-1-https://example.com/result.png',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey(
+          'remote-image-thumbnail-assistant-2-https://example.com/result.png',
+        ),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('absolute image path preview does not send session scope',
@@ -1422,7 +1595,7 @@ void main() {
     await tester.pump();
 
     await tester.tap(find.byKey(
-      const ValueKey('assistant-image-card-/tmp/result.png'),
+      const ValueKey('assistant-image-card-assistant-1-/tmp/result.png'),
     ));
     await tester.pump();
     await tester.pump();
@@ -1491,7 +1664,7 @@ void main() {
           widget.key is ValueKey &&
           (widget.key as ValueKey<String>)
               .value
-              .startsWith('assistant-image-card-data-image-'),
+              .startsWith('assistant-image-card-assistant-1-data-image-'),
     );
     expect(imageCard, findsOneWidget);
 
@@ -1508,6 +1681,66 @@ void main() {
     expect(
       requests.where((request) => request.url.path == '/files'),
       isEmpty,
+    );
+  });
+
+  testWidgets('markdown image renders only the preview card', (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _messageJson(
+                  id: 'assistant-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: 'Preview:\n\n![result](assets/result.png)',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/files') {
+          return http.Response.bytes(
+            _tinyPngBytes,
+            200,
+            headers: {'content-type': 'image/png'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(Image), findsOneWidget);
+    expect(
+      find.byKey(
+          const ValueKey('assistant-image-card-assistant-1-assets/result.png')),
+      findsOneWidget,
     );
   });
 
@@ -1563,7 +1796,7 @@ void main() {
     await tester.pump();
 
     await tester.tap(find.byKey(
-      const ValueKey('assistant-image-card-assets/result.png'),
+      const ValueKey('assistant-image-card-assistant-1-assets/result.png'),
     ));
     await tester.pump();
     await tester.pump();
@@ -1590,6 +1823,79 @@ void main() {
       find.byKey(const ValueKey('image-preview-fullscreen')),
       findsNothing,
     );
+  });
+
+  testWidgets('image preview can navigate images in the same message',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _messageJson(
+                  id: 'assistant-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: 'Saved images at assets/one.png and assets/two.png',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/files') {
+          return http.Response.bytes(
+            _tinyPngBytes,
+            200,
+            headers: {'content-type': 'image/png'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.byKey(
+      const ValueKey('assistant-image-card-assistant-1-assets/one.png'),
+    ));
+    await tester.pump();
+    await tester.pump();
+
+    final previousButton = find.byKey(const ValueKey('image-preview-previous'));
+    final nextButton = find.byKey(const ValueKey('image-preview-next'));
+    expect(previousButton, findsOneWidget);
+    expect(nextButton, findsOneWidget);
+    expect(tester.widget<IconButton>(previousButton).onPressed, isNull);
+    expect(tester.widget<IconButton>(nextButton).onPressed, isNotNull);
+
+    await tester.tap(nextButton);
+    await tester.pump();
+
+    expect(tester.widget<IconButton>(previousButton).onPressed, isNotNull);
+    expect(tester.widget<IconButton>(nextButton).onPressed, isNull);
   });
 
   testWidgets('invalid local image path hides preview card', (tester) async {
@@ -1641,7 +1947,8 @@ void main() {
     await tester.pump();
 
     expect(
-      find.byKey(const ValueKey('assistant-image-card-assets/missing.png')),
+      find.byKey(const ValueKey(
+          'assistant-image-card-assistant-1-assets/missing.png')),
       findsNothing,
     );
     expect(find.text('Image attachment'), findsNothing);
@@ -1699,11 +2006,12 @@ void main() {
     await tester.pump();
 
     expect(
-        find.byKey(const ValueKey('assistant-image-card-assets/diagram.svg')),
+        find.byKey(const ValueKey(
+            'assistant-image-card-assistant-1-assets/diagram.svg')),
         findsOneWidget);
 
     await tester.tap(find.byKey(
-      const ValueKey('assistant-image-card-assets/diagram.svg'),
+      const ValueKey('assistant-image-card-assistant-1-assets/diagram.svg'),
     ));
     await tester.pump();
     await tester.pump();
@@ -3528,6 +3836,305 @@ void main() {
     expect(field.controller!.selection.baseOffset, 19);
   });
 
+  testWidgets('hold voice sends transcript when released in place',
+      (tester) async {
+    final sentBodies = <Map<String, dynamic>>[];
+    final speechService = _FakeSpeechInputService(initializeResult: true);
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sentBodies.add(body);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          speechInputService: speechService,
+          ttsService: _FakeTtsService(systemAvailable: true),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
+    await tester.pump();
+    final holdButton = find.byKey(const Key('session-hold-to-talk-button'));
+    final gesture = await tester.startGesture(tester.getCenter(holdButton));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(speechService.startListeningCalls, 1);
+    speechService.emitResult('spoken words', isFinal: true);
+    await gesture.up();
+    await tester.pump();
+    await tester.pump();
+
+    expect(sentBodies, hasLength(1));
+    expect(sentBodies.single['content'], 'spoken words');
+    expect(sentBodies.single['input_mode'], 'voice');
+    expect(speechService.stopListeningCalls, 1);
+  });
+
+  testWidgets('hold voice waits for microphone warmup then records',
+      (tester) async {
+    final initializeCompleter = Completer<bool>();
+    final speechService = _FakeSpeechInputService(
+      initializeResult: true,
+      initializeCompleter: initializeCompleter,
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          speechInputService: speechService,
+          ttsService: _FakeTtsService(systemAvailable: true),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(speechService.initializeCalls, 1);
+    expect(speechService.startListeningCalls, 0);
+
+    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
+    await tester.pump();
+    final holdButton = find.byKey(const Key('session-hold-to-talk-button'));
+    final gesture = await tester.startGesture(tester.getCenter(holdButton));
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(find.text('Preparing microphone'), findsOneWidget);
+    expect(speechService.startListeningCalls, 0);
+
+    initializeCompleter.complete(true);
+    await tester.pump();
+
+    expect(speechService.initializeCalls, 1);
+    expect(speechService.startListeningCalls, 1);
+
+    await gesture.up();
+    await tester.pump();
+  });
+
+  testWidgets('warmed hold voice does not show microphone loading',
+      (tester) async {
+    final speechService = _FakeSpeechInputService(initializeResult: true);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          speechInputService: speechService,
+          ttsService: _FakeTtsService(systemAvailable: true),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(speechService.initializeCalls, 1);
+
+    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
+    await tester.pump();
+    final holdButton = find.byKey(const Key('session-hold-to-talk-button'));
+    final gesture = await tester.startGesture(tester.getCenter(holdButton));
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(speechService.startListeningCalls, 1);
+    expect(find.text('Preparing microphone'), findsNothing);
+    expect(find.text('Listening...'), findsOneWidget);
+
+    await gesture.up();
+    await tester.pump();
+  });
+
+  testWidgets('voice composer mode persists after toggle', (tester) async {
+    final speechService = _FakeSpeechInputService(initializeResult: true);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          speechInputService: speechService,
+          ttsService: _FakeTtsService(systemAvailable: true),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(appSettingsController.settings.voiceComposerMode, isFalse);
+
+    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(appSettingsController.settings.voiceComposerMode, isTrue);
+    expect(
+      find.byKey(const Key('session-hold-to-talk-button')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(appSettingsController.settings.voiceComposerMode, isFalse);
+    expect(find.byKey(const Key('session-message-input')), findsOneWidget);
+  });
+
+  testWidgets('saved voice composer mode is restored and prewarmed on entry',
+      (tester) async {
+    final initializeCompleter = Completer<bool>();
+    final speechService = _FakeSpeechInputService(
+      initializeResult: true,
+      initializeCompleter: initializeCompleter,
+    );
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(voiceComposerMode: true),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          speechInputService: speechService,
+          ttsService: _FakeTtsService(systemAvailable: true),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('session-hold-to-talk-button')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('session-message-input')), findsNothing);
+    expect(speechService.initializeCalls, 1);
+    expect(speechService.startListeningCalls, 0);
+
+    initializeCompleter.complete(true);
+    await tester.pump();
+  });
+
+  testWidgets('hold voice slide up left inserts transcript without sending',
+      (tester) async {
+    final sentBodies = <Map<String, dynamic>>[];
+    final speechService = _FakeSpeechInputService(initializeResult: true);
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          sentBodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+          return http.Response(
+            jsonEncode({'data': {}}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          speechInputService: speechService,
+          ttsService: _FakeTtsService(systemAvailable: true),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
+    await tester.pump();
+    final holdButton = find.byKey(const Key('session-hold-to-talk-button'));
+    final start = tester.getCenter(holdButton);
+    final gesture = await tester.startGesture(start);
+    await tester.pump(const Duration(milliseconds: 600));
+    speechService.emitResult('draft words', isFinal: true);
+    await gesture.moveTo(Offset(start.dx - 90, start.dy - 96));
+    await tester.pump();
+
+    expect(find.text('Release left for text, right to cancel'), findsOneWidget);
+    expect(
+        find.byKey(const Key('session-voice-release-insert')), findsOneWidget);
+
+    await gesture.up();
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
+    await tester.pump();
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.controller!.text, 'draft words');
+    expect(sentBodies, isEmpty);
+    expect(speechService.stopListeningCalls, 1);
+  });
+
   testWidgets('voice input action is reachable from keyboard tab order',
       (tester) async {
     final speechService = _FakeSpeechInputService(initializeResult: true);
@@ -4549,11 +5156,15 @@ class _ShownNotification {
 class _FakeSpeechInputService extends SpeechInputService {
   _FakeSpeechInputService({
     required this.initializeResult,
+    this.initializeCompleter,
   });
 
   final bool initializeResult;
+  final Completer<bool>? initializeCompleter;
   int initializeCalls = 0;
   int startListeningCalls = 0;
+  int stopListeningCalls = 0;
+  int cancelCalls = 0;
   void Function(String words, bool isFinal)? _onResult;
 
   @override
@@ -4562,6 +5173,10 @@ class _FakeSpeechInputService extends SpeechInputService {
     void Function(String error, bool permanent)? onError,
   }) async {
     initializeCalls += 1;
+    final completer = initializeCompleter;
+    if (completer != null) {
+      return completer.future;
+    }
     return initializeResult;
   }
 
@@ -4579,8 +5194,30 @@ class _FakeSpeechInputService extends SpeechInputService {
     _onResult = onResult;
   }
 
+  @override
+  Future<void> stopListening() async {
+    stopListeningCalls += 1;
+  }
+
+  @override
+  Future<void> cancel() async {
+    cancelCalls += 1;
+  }
+
   void emitResult(String words, {required bool isFinal}) {
     _onResult?.call(words, isFinal);
+  }
+}
+
+class _MemoryAppSettingsStore implements AppSettingsStore {
+  String? value;
+
+  @override
+  Future<String?> read() async => value;
+
+  @override
+  Future<void> write(String value) async {
+    this.value = value;
   }
 }
 

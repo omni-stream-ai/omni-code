@@ -438,6 +438,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get voiceInput => '语音输入';
 
   @override
+  String get keyboardInput => '键盘输入';
+
+  @override
+  String get voiceHoldToTalk => '按住说话';
+
+  @override
+  String get voiceHoldRecording => '正在聆听...';
+
+  @override
+  String get voiceHoldSlideUpHint => '上滑可转文字或取消';
+
+  @override
+  String get voiceHoldReleaseHint => '左侧松手转文字，右侧松手取消';
+
+  @override
+  String get voiceHoldReleaseToText => '转文字';
+
+  @override
+  String get voiceHoldReleaseCancel => '取消';
+
+  @override
   String get voiceChatTitle => '通话模式';
 
   @override

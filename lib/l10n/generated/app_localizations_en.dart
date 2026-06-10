@@ -451,6 +451,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get voiceInput => 'Voice input';
 
   @override
+  String get keyboardInput => 'Keyboard input';
+
+  @override
+  String get voiceHoldToTalk => 'Hold to talk';
+
+  @override
+  String get voiceHoldRecording => 'Listening...';
+
+  @override
+  String get voiceHoldSlideUpHint => 'Slide up for text or cancel';
+
+  @override
+  String get voiceHoldReleaseHint => 'Release left for text, right to cancel';
+
+  @override
+  String get voiceHoldReleaseToText => 'Text';
+
+  @override
+  String get voiceHoldReleaseCancel => 'Cancel';
+
+  @override
   String get voiceChatTitle => 'Voice chat';
 
   @override

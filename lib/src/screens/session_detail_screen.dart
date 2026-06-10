@@ -79,6 +79,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   final _stopReplyFocusNode = FocusNode(
     debugLabel: 'session-stop-reply-focus',
   );
+  final _holdToTalkButtonKey = GlobalKey();
   final _approvalPrimaryFocusNode = FocusNode(
     debugLabel: 'session-approval-primary-focus',
   );
@@ -115,6 +116,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _ttsReady = false;
   bool _isListening = false;
   bool _voiceInputStarting = false;
+  Future<void>? _speechInitializationFuture;
   bool _isSpeaking = false;
   String? _speakingMessageId;
   bool _callModeEnabled = false;
@@ -131,6 +133,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Future<void>? _callModeInterruptFuture;
   bool _callModeSubmittingVoiceUtterance = false;
   bool _callModeSendingVoiceUtterance = false;
+  late bool _voiceComposerMode;
+  bool _voiceHoldActive = false;
+  bool _voiceHoldLifted = false;
+  Offset? _voiceHoldGlobalPosition;
+  Future<void>? _voiceHoldStartFuture;
   Completer<void>? _callModeCommandAcceptedSpeechCompleter;
   _CallModeSpeechHintState? _callModeSpeechHintState;
   final Map<String, int> _unreadToolCounts = <String, int>{};
@@ -409,12 +416,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _bridgeRealtimeAsrService = widget.bridgeRealtimeAsrService ??
         BridgeRealtimeAsrService(client: _client);
     _session = widget.session;
+    _voiceComposerMode = appSettingsController.settings.voiceComposerMode;
     _overrideProviderId = _session.providerId;
     _pendingApproval = _session.pendingApproval;
     _creatingSession = widget.sessionInitializer != null;
     if (widget.enableSpeechServices) {
       _initializeSpeech();
       _initializeTts();
+      if (_voiceComposerMode) {
+        unawaited(_ensureSpeechInitialized());
+      }
     }
     if (_creatingSession) {
       _loadingMessages = false;
@@ -711,11 +722,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required Color outlineStrong,
   }) {
     final brightness = Theme.of(context).brightness;
-    final voiceDisabled = isSessionBusy ||
+    final voiceButtonDisabled = isSessionBusy ||
         _voiceInputStarting ||
         (!_speechReady && !_isListening);
+    final holdToTalkDisabled =
+        isSessionBusy || (_voiceInputStarting && !_voiceHoldActive);
     final voiceLabel =
         _isListening ? context.l10n.stopVoice : context.l10n.voiceInput;
+    final modeButtonLabel = _voiceComposerMode
+        ? context.l10n.keyboardInput
+        : context.l10n.voiceInput;
     final inputBorderColor =
         _isListening ? AppColors.primaryFor(brightness) : outlineStrong;
     final activeVoiceIconColor = brightness == Brightness.dark
@@ -728,7 +744,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       child: _ComposerVoiceButton(
         key: const Key('session-voice-input-button'),
         label: voiceLabel,
-        disabled: voiceDisabled,
+        disabled: voiceButtonDisabled,
         isListening: _isListening,
         isStarting: _voiceInputStarting,
         animation: _callModeOrbController,
@@ -744,83 +760,290 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         onPressed: _toggleListening,
       ),
     );
+    final modeButton = _withUnavailableTooltip(
+      message: !_voiceComposerMode && showVoiceInputUnavailableTooltip
+          ? systemSpeechUnavailableMessage
+          : null,
+      child: IconButton(
+        key: const Key('session-voice-mode-toggle'),
+        tooltip: modeButtonLabel,
+        onPressed: isSessionBusy ? null : _toggleVoiceComposerMode,
+        style: IconButton.styleFrom(
+          backgroundColor: deepSurface,
+          foregroundColor: AppColors.textSoftFor(brightness),
+          disabledForegroundColor: AppColors.mutedFor(brightness),
+          side: BorderSide(color: outlineStrong),
+          minimumSize: const Size.square(44),
+          fixedSize: const Size.square(44),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+          ),
+        ),
+        icon: Icon(
+          _voiceComposerMode ? Icons.keyboard_alt_outlined : Icons.graphic_eq,
+          size: 20,
+        ),
+      ),
+    );
 
     return Row(
       key: const Key('session-message-composer'),
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
+        modeButton,
+        const SizedBox(width: AppSpacing.compact),
         Expanded(
-          child: Focus(
-            onKeyEvent: _handleMessageInputKeyEvent,
-            child: TextField(
-              key: const Key('session-message-input'),
-              controller: _controller,
-              focusNode: _messageInputFocusNode,
-              enabled: !isSessionBusy,
-              maxLines: 4,
-              minLines: 1,
-              textInputAction:
-                  _isMobilePlatform ? TextInputAction.newline : null,
-              decoration: InputDecoration(
-                hintText: _isListening
-                    ? context.l10n.voiceInputInProgress
-                    : context.l10n.messageInputHint,
-                filled: true,
-                fillColor: deepSurface,
-                suffixIcon: Padding(
-                  padding: const EdgeInsetsDirectional.only(
-                    start: AppSpacing.micro,
-                    end: AppSpacing.compact,
+          child: _voiceComposerMode
+              ? _buildHoldToTalkControl(
+                  disabled: holdToTalkDisabled,
+                  deepSurface: deepSurface,
+                  outlineStrong: outlineStrong,
+                )
+              : Focus(
+                  onKeyEvent: _handleMessageInputKeyEvent,
+                  child: TextField(
+                    key: const Key('session-message-input'),
+                    controller: _controller,
+                    focusNode: _messageInputFocusNode,
+                    enabled: !isSessionBusy,
+                    maxLines: 4,
+                    minLines: 1,
+                    textInputAction:
+                        _isMobilePlatform ? TextInputAction.newline : null,
+                    decoration: InputDecoration(
+                      hintText: _isListening
+                          ? context.l10n.voiceInputInProgress
+                          : context.l10n.messageInputHint,
+                      filled: true,
+                      fillColor: deepSurface,
+                      suffixIcon: Padding(
+                        padding: const EdgeInsetsDirectional.only(
+                          start: AppSpacing.micro,
+                          end: AppSpacing.compact,
+                        ),
+                        child: voiceButton,
+                      ),
+                      suffixIconConstraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 44,
+                      ),
+                      contentPadding: const EdgeInsetsDirectional.only(
+                        start: AppSpacing.card,
+                        end: AppSpacing.compact,
+                        top: AppSpacing.stack,
+                        bottom: AppSpacing.stack,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppSpacing.radiusPanel),
+                        borderSide: BorderSide(color: inputBorderColor),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppSpacing.radiusPanel),
+                        borderSide: BorderSide(color: inputBorderColor),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppSpacing.radiusPanel),
+                        borderSide: BorderSide(
+                          color: AppColors.primaryFor(brightness),
+                        ),
+                      ),
+                    ),
                   ),
-                  child: voiceButton,
                 ),
-                suffixIconConstraints: const BoxConstraints(
-                  minWidth: 48,
-                  minHeight: 44,
-                ),
-                contentPadding: const EdgeInsetsDirectional.only(
-                  start: AppSpacing.card,
-                  end: AppSpacing.compact,
-                  top: AppSpacing.stack,
-                  bottom: AppSpacing.stack,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-                  borderSide: BorderSide(color: inputBorderColor),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-                  borderSide: BorderSide(color: inputBorderColor),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-                  borderSide: BorderSide(
-                    color: AppColors.primaryFor(brightness),
-                  ),
-                ),
+        ),
+        if (!_voiceComposerMode) ...[
+          const SizedBox(width: AppSpacing.compact),
+          IconButton(
+            key: const Key('session-send-button'),
+            tooltip: context.l10n.send,
+            onPressed: isSessionBusy ? null : _sendTextMessage,
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.primaryFor(brightness),
+              foregroundColor: AppColors.onPrimaryFor(brightness),
+              disabledBackgroundColor: deepSurface,
+              disabledForegroundColor: AppColors.mutedFor(brightness),
+              side: BorderSide(color: AppColors.primaryFor(brightness)),
+              minimumSize: const Size.square(44),
+              fixedSize: const Size.square(44),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
               ),
             ),
+            icon: const Icon(Icons.send_rounded, size: 20),
           ),
-        ),
-        const SizedBox(width: AppSpacing.compact),
-        IconButton(
-          key: const Key('session-send-button'),
-          tooltip: context.l10n.send,
-          onPressed: isSessionBusy ? null : _sendTextMessage,
-          style: IconButton.styleFrom(
-            backgroundColor: AppColors.primaryFor(brightness),
-            foregroundColor: AppColors.onPrimaryFor(brightness),
-            disabledBackgroundColor: deepSurface,
-            disabledForegroundColor: AppColors.mutedFor(brightness),
-            side: BorderSide(color: AppColors.primaryFor(brightness)),
-            minimumSize: const Size.square(44),
-            fixedSize: const Size.square(44),
-            shape: RoundedRectangleBorder(
+        ],
+      ],
+    );
+  }
+
+  void _toggleVoiceComposerMode() {
+    if (_voiceHoldActive) {
+      unawaited(_finishHoldToTalk(null, cancelled: true));
+    }
+    final enablingVoiceMode = !_voiceComposerMode;
+    setState(() {
+      _voiceComposerMode = enablingVoiceMode;
+      _voiceHoldActive = false;
+      _voiceHoldLifted = false;
+      _voiceHoldGlobalPosition = null;
+    });
+    if (enablingVoiceMode && widget.enableSpeechServices && !_speechReady) {
+      unawaited(_ensureSpeechInitialized());
+    }
+    unawaited(_persistVoiceComposerMode(enablingVoiceMode));
+  }
+
+  Future<void> _persistVoiceComposerMode(bool enabled) async {
+    try {
+      await appSettingsController.save(
+        appSettingsController.settings.copyWith(voiceComposerMode: enabled),
+      );
+    } catch (error) {
+      debugPrint('[session] failed to persist voice composer mode: $error');
+    }
+  }
+
+  Widget _buildHoldToTalkControl({
+    required bool disabled,
+    required Color deepSurface,
+    required Color outlineStrong,
+  }) {
+    final brightness = Theme.of(context).brightness;
+    final action = _voiceHoldReleaseAction();
+    final isInsertTarget = _voiceHoldActive &&
+        _voiceHoldLifted &&
+        action == _VoiceHoldAction.insert;
+    final isCancelTarget = _voiceHoldActive &&
+        _voiceHoldLifted &&
+        action == _VoiceHoldAction.cancel;
+    final surfaceColor = _voiceHoldActive
+        ? AppColors.primaryFor(brightness).withValues(
+            alpha: brightness == Brightness.dark ? 0.22 : 0.14,
+          )
+        : deepSurface;
+    final borderColor =
+        _voiceHoldActive ? AppColors.primaryFor(brightness) : outlineStrong;
+    final showHoldWarmup =
+        _voiceHoldActive && _voiceInputStarting && !_speechReady;
+    final label = showHoldWarmup
+        ? context.l10n.callModePreparingListening
+        : _voiceHoldActive
+            ? _voiceHoldLifted
+                ? context.l10n.voiceHoldReleaseHint
+                : context.l10n.voiceHoldRecording
+            : context.l10n.voiceHoldToTalk;
+
+    return Column(
+      key: const Key('session-voice-hold-composer'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_voiceHoldActive && _voiceHoldLifted) ...[
+          Row(
+            children: [
+              Expanded(
+                child: _VoiceReleaseTarget(
+                  key: const Key('session-voice-release-insert'),
+                  label: context.l10n.voiceHoldReleaseToText,
+                  icon: Icons.edit_note_rounded,
+                  selected: isInsertTarget,
+                  selectedColor: AppColors.primaryFor(brightness),
+                  backgroundColor: deepSurface,
+                  borderColor: outlineStrong,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.compact),
+              Expanded(
+                child: _VoiceReleaseTarget(
+                  key: const Key('session-voice-release-cancel'),
+                  label: context.l10n.voiceHoldReleaseCancel,
+                  icon: Icons.close_rounded,
+                  selected: isCancelTarget,
+                  selectedColor: AppColors.errorTextFor(brightness),
+                  backgroundColor: deepSurface,
+                  borderColor: outlineStrong,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.compact),
+        ],
+        GestureDetector(
+          key: _holdToTalkButtonKey,
+          behavior: HitTestBehavior.opaque,
+          onLongPressStart: disabled
+              ? null
+              : (details) => _startHoldToTalk(details.globalPosition),
+          onLongPressMoveUpdate: disabled
+              ? null
+              : (details) => _updateHoldToTalk(details.globalPosition),
+          onLongPressEnd: disabled
+              ? null
+              : (details) => _finishHoldToTalk(details.globalPosition),
+          onLongPressCancel: disabled
+              ? null
+              : () => unawaited(_finishHoldToTalk(null, cancelled: true)),
+          child: AnimatedContainer(
+            key: const Key('session-hold-to-talk-button'),
+            duration: const Duration(milliseconds: 120),
+            height: 44,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color:
+                  disabled ? deepSurface.withValues(alpha: 0.62) : surfaceColor,
               borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+              border: Border.all(color: borderColor),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (showHoldWarmup)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  Icon(
+                    _voiceHoldActive
+                        ? Icons.graphic_eq_rounded
+                        : Icons.mic_none_rounded,
+                    size: 20,
+                    color: disabled
+                        ? AppColors.mutedFor(brightness)
+                        : AppColors.textFor(brightness),
+                  ),
+                const SizedBox(width: AppSpacing.compact),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: disabled
+                              ? AppColors.mutedFor(brightness)
+                              : AppColors.textFor(brightness),
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ),
+              ],
             ),
           ),
-          icon: const Icon(Icons.send_rounded, size: 20),
         ),
+        if (_voiceHoldActive && !_voiceHoldLifted) ...[
+          const SizedBox(height: AppSpacing.micro),
+          Text(
+            context.l10n.voiceHoldSlideUpHint,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.mutedSoftFor(brightness),
+                ),
+          ),
+        ],
       ],
     );
   }
@@ -1571,8 +1794,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 imageReferences: imageReferences,
                 imageAlignment: Alignment.centerRight,
                 imageWrapAlignment: WrapAlignment.end,
-                imageCardBuilder: (reference) =>
-                    _buildUserImageCard(reference, textColor: bubbleTextColor),
+                imageCardBuilder: (reference, index) => _buildUserImageCard(
+                  reference,
+                  messageId: message.id,
+                  imageReferences: imageReferences,
+                  imageIndex: index,
+                  textColor: bubbleTextColor,
+                ),
               ),
               if (localState != null) ...[
                 const SizedBox(height: AppSpacing.compact),
@@ -1729,7 +1957,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 imageReferences: imageReferences,
                 imageAlignment: Alignment.centerLeft,
                 imageWrapAlignment: WrapAlignment.start,
-                imageCardBuilder: _buildAssistantImageCard,
+                imageCardBuilder: (reference, index) =>
+                    _buildAssistantImageCard(
+                  reference,
+                  messageId: message.id,
+                  imageReferences: imageReferences,
+                  imageIndex: index,
+                ),
               ),
               if (isSpeakingThisMessage) ...[
                 const SizedBox(height: AppSpacing.tileY),
@@ -1761,7 +1995,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required List<MessageImageReference> imageReferences,
     required Alignment imageAlignment,
     required WrapAlignment imageWrapAlignment,
-    required Widget Function(MessageImageReference reference) imageCardBuilder,
+    required Widget Function(MessageImageReference reference, int index)
+        imageCardBuilder,
   }) {
     final theme = Theme.of(context);
     final brightness = theme.brightness;
@@ -1846,6 +2081,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             softLineBreak: true,
             styleSheet: styleSheet,
             syntaxHighlighter: _AssistantCodeSyntaxHighlighter(theme),
+            sizedImageBuilder: (_) => const SizedBox.shrink(),
             onTapLink: (text, href, title) =>
                 _handleAssistantMarkdownLinkTap(href),
           ),
@@ -1859,8 +2095,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               runSpacing: AppSpacing.compact,
               alignment: imageWrapAlignment,
               children: [
-                for (final reference in imageReferences)
-                  imageCardBuilder(reference),
+                for (var index = 0; index < imageReferences.length; index += 1)
+                  imageCardBuilder(imageReferences[index], index),
               ],
             ),
           ),
@@ -1884,10 +2120,18 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     unawaited(launchUrl(uri));
   }
 
-  Widget _buildAssistantImageCard(MessageImageReference reference) {
+  Widget _buildAssistantImageCard(
+    MessageImageReference reference, {
+    required String messageId,
+    required List<MessageImageReference> imageReferences,
+    required int imageIndex,
+  }) {
     final brightness = Theme.of(context).brightness;
     return _buildImageCard(
       reference,
+      messageId: messageId,
+      imageReferences: imageReferences,
+      imageIndex: imageIndex,
       keyPrefix: 'assistant',
       backgroundColor: AppColors.surfaceFor(brightness),
       borderColor: AppColors.outlineStrongFor(brightness),
@@ -1906,6 +2150,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Widget _buildImageCard(
     MessageImageReference reference, {
+    required String messageId,
+    required List<MessageImageReference> imageReferences,
+    required int imageIndex,
     required String keyPrefix,
     required Color backgroundColor,
     required Color borderColor,
@@ -1914,14 +2161,23 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required Color subtitleColor,
     required Color actionColor,
   }) {
-    final fileFuture = _imageFileFuture(reference);
+    final cacheKey = _imageFileCacheKey(messageId, reference);
+    final fileFuture = _imageFileFuture(reference, cacheKey: cacheKey);
 
     Widget buildCard(Widget thumbnail) {
       return Material(
         color: Colors.transparent,
         child: InkWell(
-          key: ValueKey('$keyPrefix-image-card-${reference.cardKey}'),
-          onTap: () => unawaited(_showImagePreview(reference)),
+          key: ValueKey('$keyPrefix-image-card-$cacheKey'),
+          onTap: () => unawaited(
+            _showImagePreview(
+              reference,
+              messageId: messageId,
+              initialIndex: imageIndex,
+              imageReferences: imageReferences,
+              cacheKey: cacheKey,
+            ),
+          ),
           borderRadius: BorderRadius.circular(6),
           child: Container(
             width: 60,
@@ -1963,20 +2219,38 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           if (snapshot.hasError || !snapshot.hasData) {
             return const SizedBox.shrink();
           }
-          return buildCard(_buildImageThumbnail(reference, snapshot.data));
+          return buildCard(
+            _buildImageThumbnail(
+              reference,
+              snapshot.data,
+              cacheKey: cacheKey,
+            ),
+          );
         },
       );
     }
 
-    return buildCard(_buildImageThumbnail(reference, null));
+    return buildCard(
+      _buildImageThumbnail(
+        reference,
+        null,
+        cacheKey: cacheKey,
+      ),
+    );
   }
 
   Widget _buildUserImageCard(
     MessageImageReference reference, {
+    required String messageId,
+    required List<MessageImageReference> imageReferences,
+    required int imageIndex,
     required Color textColor,
   }) {
     return _buildImageCard(
       reference,
+      messageId: messageId,
+      imageReferences: imageReferences,
+      imageIndex: imageIndex,
       keyPrefix: 'user',
       backgroundColor: textColor.withValues(alpha: 0.10),
       borderColor: textColor.withValues(alpha: 0.26),
@@ -1993,7 +2267,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     for (final message in _messages) {
       for (final ref in extractMessageImageReferences(message.content)) {
         if (!ref.isRemoteUrl && !ref.isDataUri) {
-          activeKeys.add(ref.cardKey);
+          activeKeys.add(_imageFileCacheKey(message.id, ref));
         }
       }
     }
@@ -2001,13 +2275,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Future<BridgeFileResponse>? _imageFileFuture(
-    MessageImageReference reference,
-  ) {
+    MessageImageReference reference, {
+    required String cacheKey,
+  }) {
     if (reference.isRemoteUrl || reference.isDataUri) {
       return null;
     }
 
-    return _imageFileFutures.putIfAbsent(reference.cardKey, () {
+    return _imageFileFutures.putIfAbsent(cacheKey, () {
       return _client.readFile(
         reference.path,
         sessionId: reference.isAbsoluteLocalPath ? null : _session.id,
@@ -2015,10 +2290,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     });
   }
 
+  String _imageFileCacheKey(String messageId, MessageImageReference reference) {
+    return '$messageId-${reference.cardKey}';
+  }
+
   Widget _buildImageThumbnail(
     MessageImageReference reference,
-    BridgeFileResponse? file,
-  ) {
+    BridgeFileResponse? file, {
+    required String cacheKey,
+  }) {
     if (reference.isDataUri) {
       final bytes = reference.dataBytes;
       if (bytes == null) {
@@ -2038,10 +2318,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     if (reference.isRemoteUrl) {
+      _evictRemoteImageCache(reference);
       return reference.isSvg
-          ? SvgPicture.network(reference.path, fit: BoxFit.cover)
+          ? SvgPicture.network(
+              reference.path,
+              key: ValueKey('remote-svg-thumbnail-$cacheKey'),
+              fit: BoxFit.cover,
+            )
           : Image.network(
               reference.path,
+              key: ValueKey('remote-image-thumbnail-$cacheKey'),
               fit: BoxFit.cover,
               errorBuilder: (context, _, __) => const SizedBox.shrink(),
             );
@@ -2060,25 +2346,50 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           );
   }
 
-  Future<void> _showImagePreview(MessageImageReference reference) async {
+  void _evictRemoteImageCache(MessageImageReference reference) {
+    if (!reference.isRemoteUrl || reference.isSvg) {
+      return;
+    }
+    NetworkImage(reference.path).evict();
+  }
+
+  Future<void> _showImagePreview(
+    MessageImageReference reference, {
+    String? messageId,
+    int initialIndex = 0,
+    List<MessageImageReference>? imageReferences,
+    String? cacheKey,
+  }) async {
     if (!mounted) {
       return;
     }
 
-    final bridgeFileFuture = _imageFileFuture(reference);
+    final galleryReferences =
+        imageReferences ?? <MessageImageReference>[reference];
+    var currentIndex =
+        initialIndex.clamp(0, galleryReferences.length - 1).toInt();
     var backdropMode = _ImagePreviewBackdropMode.dark;
 
     await showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final currentReference = galleryReferences[currentIndex];
+          final currentCacheKey = messageId == null
+              ? cacheKey ?? currentReference.cardKey
+              : _imageFileCacheKey(messageId, currentReference);
+          final bridgeFileFuture = _imageFileFuture(
+            currentReference,
+            cacheKey: currentCacheKey,
+          );
+
           Widget? buildDataUriImage() {
-            final bytes = reference.dataBytes;
-            if (!reference.isDataUri || bytes == null) {
+            final bytes = currentReference.dataBytes;
+            if (!currentReference.isDataUri || bytes == null) {
               return null;
             }
 
-            if (reference.isSvg) {
+            if (currentReference.isSvg) {
               return SvgPicture.string(
                 utf8.decode(bytes, allowMalformed: true),
                 fit: BoxFit.contain,
@@ -2097,19 +2408,21 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           }
 
           Widget buildFullscreenImage() {
-            final isSvg = reference.isSvg;
+            final isSvg = currentReference.isSvg;
             final dataUriChild = buildDataUriImage();
             if (dataUriChild != null) {
               return InteractiveViewer(
                 child: SizedBox.expand(child: dataUriChild),
               );
             }
-            if (reference.isRemoteUrl) {
+            if (currentReference.isRemoteUrl) {
+              _evictRemoteImageCache(currentReference);
               return InteractiveViewer(
                 child: SizedBox.expand(
                   child: isSvg
                       ? SvgPicture.network(
-                          reference.path,
+                          currentReference.path,
+                          key: ValueKey('remote-svg-preview-$currentCacheKey'),
                           fit: BoxFit.contain,
                           placeholderBuilder: (context) => const Center(
                             child: SizedBox(
@@ -2120,7 +2433,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                           ),
                         )
                       : Image.network(
-                          reference.path,
+                          currentReference.path,
+                          key: ValueKey(
+                            'remote-image-preview-$currentCacheKey',
+                          ),
                           fit: BoxFit.contain,
                           errorBuilder: (context, _, __) {
                             return _buildImagePreviewError(
@@ -2168,6 +2484,66 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   ),
                 );
               },
+            );
+          }
+
+          Widget buildGalleryButton({
+            required bool enabled,
+            required IconData icon,
+            required String key,
+            required VoidCallback onPressed,
+          }) {
+            if (galleryReferences.length <= 1) {
+              return const SizedBox.shrink();
+            }
+            return Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+              child: IconButton(
+                key: ValueKey(key),
+                onPressed: enabled ? onPressed : null,
+                style: ButtonStyle(
+                  fixedSize: const WidgetStatePropertyAll(Size(34, 54)),
+                  minimumSize: const WidgetStatePropertyAll(Size(34, 54)),
+                  padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+                  shape: WidgetStatePropertyAll(
+                    RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppSpacing.radiusPill),
+                    ),
+                  ),
+                  backgroundColor: WidgetStateProperty.resolveWith((states) {
+                    if (!enabled || states.contains(WidgetState.disabled)) {
+                      return Colors.transparent;
+                    }
+                    if (states.contains(WidgetState.pressed)) {
+                      return Colors.white.withValues(alpha: 0.18);
+                    }
+                    if (states.contains(WidgetState.hovered) ||
+                        states.contains(WidgetState.focused)) {
+                      return Colors.white.withValues(alpha: 0.12);
+                    }
+                    return Colors.transparent;
+                  }),
+                  foregroundColor: WidgetStatePropertyAll(
+                    Colors.white.withValues(alpha: enabled ? 0.82 : 0.24),
+                  ),
+                  overlayColor: WidgetStatePropertyAll(
+                    Colors.white.withValues(alpha: enabled ? 0.08 : 0),
+                  ),
+                  side: WidgetStatePropertyAll(
+                    BorderSide(
+                      color: Colors.white.withValues(alpha: enabled ? 0.18 : 0),
+                    ),
+                  ),
+                ),
+                icon: Icon(
+                  icon,
+                  size: 30,
+                ),
+                tooltip:
+                    key.endsWith('previous') ? 'Previous image' : 'Next image',
+              ),
             );
           }
 
@@ -2342,6 +2718,37 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                                         _ImagePreviewBackdropMode.checker)
                                       buildCheckerboardBackground(),
                                     buildFullscreenImage(),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding:
+                                            const EdgeInsets.only(left: 10),
+                                        child: buildGalleryButton(
+                                          key: 'image-preview-previous',
+                                          enabled: currentIndex > 0,
+                                          icon: Icons.chevron_left_rounded,
+                                          onPressed: () => setDialogState(() {
+                                            currentIndex -= 1;
+                                          }),
+                                        ),
+                                      ),
+                                    ),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: Padding(
+                                        padding:
+                                            const EdgeInsets.only(right: 10),
+                                        child: buildGalleryButton(
+                                          key: 'image-preview-next',
+                                          enabled: currentIndex <
+                                              galleryReferences.length - 1,
+                                          icon: Icons.chevron_right_rounded,
+                                          onPressed: () => setDialogState(() {
+                                            currentIndex += 1;
+                                          }),
+                                        ),
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -2834,6 +3241,30 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Future<void> _initializeSpeech() async {
+    final existingInitialization = _speechInitializationFuture;
+    if (existingInitialization != null) {
+      return existingInitialization;
+    }
+
+    final initialization = _initializeSpeechInternal();
+    _speechInitializationFuture = initialization;
+    try {
+      await initialization;
+    } finally {
+      if (identical(_speechInitializationFuture, initialization)) {
+        _speechInitializationFuture = null;
+      }
+    }
+  }
+
+  Future<void> _ensureSpeechInitialized() async {
+    if (_speechReady) {
+      return;
+    }
+    await _initializeSpeech();
+  }
+
+  Future<void> _initializeSpeechInternal() async {
     try {
       final useSystemSpeech =
           appSettingsController.settings.asrProvider == AsrProvider.system;
@@ -3010,22 +3441,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Future<void> _toggleListening() async {
     final useSystemSpeech = _useSystemSpeech();
     final useBridgeStreaming = _usesBridgeRealtimeSpeechForCallMode();
-    if (!_speechReady) {
-      setState(() {
-        _voiceInputStarting = true;
-        _setSpeechStatus(context.l10n.reinitializingVoiceInput);
-      });
-      await _initializeSpeech();
-      if (!_speechReady) {
-        if (mounted) {
-          setState(() {
-            _voiceInputStarting = false;
-          });
-        }
-        return;
-      }
-    }
-
     if (_isListening) {
       if (useSystemSpeech) {
         await _stopSystemListening();
@@ -3037,13 +3452,36 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
 
-    if (_voiceInputStarting) {
-      return;
+    await _startListening(insertFinalSystemTranscript: true);
+  }
+
+  Future<bool> _startListening(
+      {required bool insertFinalSystemTranscript}) async {
+    final useSystemSpeech = _useSystemSpeech();
+    final useBridgeStreaming = _usesBridgeRealtimeSpeechForCallMode();
+    if (!_speechReady) {
+      setState(() {
+        _voiceInputStarting = true;
+        _setSpeechStatus(context.l10n.reinitializingVoiceInput);
+      });
+      await _ensureSpeechInitialized();
+      if (!_speechReady) {
+        if (mounted) {
+          setState(() {
+            _voiceInputStarting = false;
+          });
+        }
+        return false;
+      }
+    }
+
+    if (_isListening) {
+      return false;
     }
 
     if (useBridgeStreaming) {
       await _startBridgeRealtimeAsr();
-      return;
+      return _streamingAsrActive || _isListening;
     }
 
     setState(() {
@@ -3062,7 +3500,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             }
             setState(() {
               _recognizedSpeech = words;
-              if (!_callModeEnabled && isFinal) {
+              if (!_callModeEnabled && isFinal && insertFinalSystemTranscript) {
                 _insertVoiceTranscriptAtSelection(words);
               }
               if (isFinal) {
@@ -3080,23 +3518,173 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _recordingPath = await _audioRecordingService.start();
       }
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() {
         _voiceInputStarting = false;
         _setSpeechStatus(context.l10n.voiceInputInProgress);
         _isListening = true;
       });
+      return true;
     } catch (error) {
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() {
         _voiceInputStarting = false;
         _isListening = false;
         _speechError = context.l10n.startVoiceInputFailed('$error');
       });
+      return false;
     }
+  }
+
+  void _startHoldToTalk(Offset globalPosition) {
+    if (_voiceHoldActive || _isListening || _voiceInputStarting) {
+      return;
+    }
+    setState(() {
+      _voiceHoldActive = true;
+      _voiceHoldLifted = false;
+      _voiceHoldGlobalPosition = globalPosition;
+    });
+    _voiceHoldStartFuture = _startListening(insertFinalSystemTranscript: false);
+  }
+
+  void _updateHoldToTalk(Offset globalPosition) {
+    if (!_voiceHoldActive) {
+      return;
+    }
+    final lifted = _voiceHoldIsLifted(globalPosition);
+    setState(() {
+      _voiceHoldGlobalPosition = globalPosition;
+      _voiceHoldLifted = lifted;
+    });
+  }
+
+  Future<void> _finishHoldToTalk(
+    Offset? globalPosition, {
+    bool cancelled = false,
+  }) async {
+    if (!_voiceHoldActive) {
+      return;
+    }
+    if (globalPosition != null) {
+      _updateHoldToTalk(globalPosition);
+    }
+    final action =
+        cancelled ? _VoiceHoldAction.cancel : _voiceHoldReleaseAction();
+    setState(() {
+      _voiceHoldActive = false;
+      _voiceHoldLifted = false;
+      _voiceHoldGlobalPosition = null;
+    });
+
+    await _voiceHoldStartFuture;
+    _voiceHoldStartFuture = null;
+
+    if (action == _VoiceHoldAction.cancel) {
+      await _cancelHoldToTalkRecording();
+      return;
+    }
+
+    String? transcript;
+    if (_useSystemSpeech()) {
+      transcript = await _stopSystemListeningForTranscript();
+    } else if (_usesBridgeRealtimeSpeechForCallMode()) {
+      await _stopBridgeRealtimeAsr();
+      transcript = _recognizedSpeech.trim();
+      _clearRecognizedSpeechState();
+    } else {
+      transcript = await _stopRecordingAndTranscribe(insertTranscript: false);
+    }
+
+    final text = transcript?.trim();
+    if (text == null || text.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _speechError = context.l10n.voiceTranscriptionNoResult;
+        });
+      }
+      return;
+    }
+
+    if (action == _VoiceHoldAction.insert) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _insertVoiceTranscriptAtSelection(text);
+        _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
+      });
+      return;
+    }
+
+    await _submitLocalMessage(text, inputMode: 'voice');
+  }
+
+  bool _voiceHoldIsLifted(Offset globalPosition) {
+    final buttonTop = _holdToTalkButtonTop();
+    if (buttonTop == null) {
+      return false;
+    }
+    return globalPosition.dy < buttonTop - 24;
+  }
+
+  double? _holdToTalkButtonTop() {
+    final context = _holdToTalkButtonKey.currentContext;
+    final renderObject = context?.findRenderObject();
+    if (renderObject is! RenderBox) {
+      return null;
+    }
+    return renderObject.localToGlobal(Offset.zero).dy;
+  }
+
+  _VoiceHoldAction _voiceHoldReleaseAction() {
+    final position = _voiceHoldGlobalPosition;
+    if (!_voiceHoldLifted || position == null) {
+      return _VoiceHoldAction.send;
+    }
+    final context = _holdToTalkButtonKey.currentContext;
+    final renderObject = context?.findRenderObject();
+    if (renderObject is! RenderBox) {
+      return _VoiceHoldAction.insert;
+    }
+    final centerX = renderObject.localToGlobal(Offset.zero).dx +
+        renderObject.size.width / 2;
+    return position.dx < centerX
+        ? _VoiceHoldAction.insert
+        : _VoiceHoldAction.cancel;
+  }
+
+  Future<void> _cancelHoldToTalkRecording() async {
+    try {
+      if (_useSystemSpeech()) {
+        await _speechInputService.cancel();
+      } else if (_usesBridgeRealtimeSpeechForCallMode()) {
+        await _stopBridgeRealtimeAsr();
+      } else {
+        await _audioRecordingService.cancel();
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _speechError = context.l10n.stopVoiceInputFailed('$error');
+      });
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _isListening = false;
+      _voiceInputStarting = false;
+      _recordingPath = null;
+      _clearRecognizedSpeechState();
+      _setSpeechStatus(null);
+    });
   }
 
   Future<void> _stopSystemListening() async {
@@ -3118,6 +3706,34 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _recognizedSpeech,
       autoSend: _callModeEnabled,
     );
+  }
+
+  Future<String?> _stopSystemListeningForTranscript() async {
+    _clearCallModeSpeechHint();
+    try {
+      await _speechInputService.stopListening();
+    } catch (error) {
+      if (!mounted) {
+        return null;
+      }
+      setState(() {
+        _isListening = false;
+        _voiceInputStarting = false;
+        _speechError = context.l10n.stopVoiceInputFailed('$error');
+      });
+      return null;
+    }
+    final transcript = _recognizedSpeech.trim();
+    _clearRecognizedSpeechState();
+    if (!mounted) {
+      return null;
+    }
+    setState(() {
+      _isListening = false;
+      _voiceInputStarting = false;
+      _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
+    });
+    return transcript;
   }
 
   Future<String?> _resolveSystemAsrLocaleId() async {
@@ -3182,27 +3798,29 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return false;
   }
 
-  Future<void> _stopRecordingAndTranscribe() async {
+  Future<String?> _stopRecordingAndTranscribe({
+    bool insertTranscript = true,
+  }) async {
     String? path;
     try {
       path = await _audioRecordingService.stop();
     } catch (error) {
       if (!mounted) {
-        return;
+        return null;
       }
       setState(() {
         _isListening = false;
         _voiceInputStarting = false;
         _speechError = context.l10n.stopVoiceInputFailed('$error');
       });
-      return;
+      return null;
     }
 
     final filePath = path ?? _recordingPath;
     _recordingPath = null;
 
     if (!mounted) {
-      return;
+      return null;
     }
     setState(() {
       _isListening = false;
@@ -3214,27 +3832,31 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       setState(() {
         _speechError = context.l10n.recordingFileMissing;
       });
-      return;
+      return null;
     }
 
     try {
       final text = await cloudSpeechService.transcribeAudio(File(filePath));
       await _cleanupRecordingFile(filePath);
       if (!mounted) {
-        return;
+        return null;
       }
       setState(() {
-        _insertVoiceTranscriptAtSelection(text);
+        if (insertTranscript) {
+          _insertVoiceTranscriptAtSelection(text);
+        }
         _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
       });
+      return text.trim();
     } catch (error) {
       await _cleanupRecordingFile(filePath);
       if (!mounted) {
-        return;
+        return null;
       }
       setState(() {
         _speechError = context.l10n.voiceTranscriptionFailed('$error');
       });
+      return null;
     }
   }
 
@@ -5093,6 +5715,70 @@ class _MessageBubbleSkeleton extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+enum _VoiceHoldAction { send, insert, cancel }
+
+class _VoiceReleaseTarget extends StatelessWidget {
+  const _VoiceReleaseTarget({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.selectedColor,
+    required this.backgroundColor,
+    required this.borderColor,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final Color selectedColor;
+  final Color backgroundColor;
+  final Color borderColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final color = selected ? selectedColor : AppColors.mutedSoftFor(brightness);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.compact),
+      decoration: BoxDecoration(
+        color: selected
+            ? AppColors.tintSurfaceFor(
+                brightness,
+                selectedColor,
+                base: backgroundColor,
+                darkAlpha: 0.24,
+                lightAlpha: 0.14,
+              )
+            : backgroundColor,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+        border: Border.all(color: selected ? selectedColor : borderColor),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: AppSpacing.micro),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
