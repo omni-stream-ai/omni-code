@@ -65,12 +65,23 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   static const double _assistantMessageBubbleWidthFactor = 0.82;
   static const double _bridgeRealtimeEndpointRule2Ratio = 0.7;
   static const double _callModeSpeechHintDelayRatio = 0.55;
+  static const double _composerMaxWidth = 760;
   static const Duration _callModeTtsEchoGracePeriod = Duration(seconds: 6);
-  static const Duration _callModeCommandAcceptedSpeechTimeout =
-      Duration(seconds: 4);
+  static const Duration _callModeCommandAcceptedSpeechTimeout = Duration(
+    seconds: 4,
+  );
   static const int _initialVisibleTurnCount = 10;
   static const int _historyTurnBatchSize = 10;
   final _controller = TextEditingController();
+  final _messageInputFocusNode = FocusNode(
+    debugLabel: 'session-message-input-focus',
+  );
+  final _stopReplyFocusNode = FocusNode(
+    debugLabel: 'session-stop-reply-focus',
+  );
+  final _approvalPrimaryFocusNode = FocusNode(
+    debugLabel: 'session-approval-primary-focus',
+  );
   final _scrollController = ScrollController();
   late final AudioRecordingService _audioRecordingService;
   late final SpeechInputService _speechInputService;
@@ -89,6 +100,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Timer? _callModeSpeechHintTimer;
   Timer? _refreshSessionSummaryDebounce;
   bool _refreshSessionSummaryInFlight = false;
+  bool _returnFocusToComposerAfterReply = false;
 
   String? _recordingPath;
   String _recognizedSpeech = '';
@@ -283,10 +295,102 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return composing.isValid && !composing.isCollapsed;
   }
 
+  void _insertVoiceTranscriptAtSelection(String transcript) {
+    final trimmedTranscript = transcript.trim();
+    if (trimmedTranscript.isEmpty) {
+      return;
+    }
+
+    final value = _controller.value;
+    final text = value.text;
+    final selection = value.selection;
+    final start = selection.isValid
+        ? math.min(selection.baseOffset, selection.extentOffset)
+        : text.length;
+    final end = selection.isValid
+        ? math.max(selection.baseOffset, selection.extentOffset)
+        : text.length;
+    final replaceStart = math.max(0, math.min(start, text.length));
+    final replaceEnd = math.max(replaceStart, math.min(end, text.length));
+    final before = text.substring(0, replaceStart);
+    final after = text.substring(replaceEnd);
+    final endsWithWhitespace = RegExp(r'\s$');
+    final startsWithWhitespace = RegExp(r'^\s');
+    final needsLeadingSpace = before.isNotEmpty &&
+        !endsWithWhitespace.hasMatch(before) &&
+        !startsWithWhitespace.hasMatch(trimmedTranscript);
+    final needsTrailingSpace = after.isNotEmpty &&
+        !startsWithWhitespace.hasMatch(after) &&
+        !endsWithWhitespace.hasMatch(trimmedTranscript);
+    final insertedText = '${needsLeadingSpace ? ' ' : ''}'
+        '$trimmedTranscript'
+        '${needsTrailingSpace ? ' ' : ''}';
+    final updatedText = '$before$insertedText$after';
+    final caretOffset = before.length + insertedText.length;
+
+    _controller.value = TextEditingValue(
+      text: updatedText,
+      selection: TextSelection.collapsed(offset: caretOffset),
+    );
+  }
+
   void _clearTransientTtsStatus() {
     if (_speechStatus == _reinitializingTtsLabel() ||
         _speechStatus == context.l10n.requestingTts) {
       _setSpeechStatus(null);
+    }
+  }
+
+  void _requestComposerFocusAfterFrame({required bool consumeReturnRequest}) {
+    if (consumeReturnRequest && !_returnFocusToComposerAfterReply) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _callModeEnabled ||
+          _creatingSession ||
+          _loadingMessages ||
+          _session.status != SessionStatus.idle ||
+          _pendingApproval != null) {
+        return;
+      }
+      if (consumeReturnRequest) {
+        _returnFocusToComposerAfterReply = false;
+      }
+      _messageInputFocusNode.requestFocus();
+    });
+  }
+
+  void _requestStopReplyFocusAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _callModeEnabled ||
+          _session.status != SessionStatus.running ||
+          _cancellingReply) {
+        return;
+      }
+      _stopReplyFocusNode.requestFocus();
+    });
+  }
+
+  void _requestApprovalFocusAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _callModeEnabled ||
+          _pendingApproval == null ||
+          _isAwaitingSubmittedApprovalResolution ||
+          _submittingApproval) {
+        return;
+      }
+      _approvalPrimaryFocusNode.requestFocus();
+    });
+  }
+
+  void _syncComposerFocusForSessionStatus(SessionStatus status) {
+    if (status == SessionStatus.running) {
+      _requestStopReplyFocusAfterFrame();
+    } else if (status == SessionStatus.idle) {
+      _requestComposerFocusAfterFrame(consumeReturnRequest: true);
     }
   }
 
@@ -337,6 +441,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     unawaited(_bridgeRealtimeAsrService.cancel());
     _ttsService.stop();
     _controller.dispose();
+    _messageInputFocusNode.dispose();
+    _stopReplyFocusNode.dispose();
+    _approvalPrimaryFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -415,9 +522,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_callModeEnabled) {
       return _buildCallModeScaffold(context);
     }
-    final l10n = context.l10n;
     final theme = Theme.of(context);
-    final brightness = theme.brightness;
     final isSessionBusy = _session.status == SessionStatus.running;
     final hasActiveTurn = _session.status == SessionStatus.running ||
         _session.status == SessionStatus.awaitingApproval ||
@@ -447,9 +552,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ),
         actions: [
           _buildProviderSelector(),
-          _buildCallModeAction(
-            unavailableMessage: callModeUnavailableMessage,
-          ),
+          _buildCallModeAction(unavailableMessage: callModeUnavailableMessage),
         ],
       ),
       body: Column(
@@ -487,92 +590,238 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     ),
                   ),
           ),
-          Container(
-            padding: AppSpacing.blockPadding,
-            decoration: BoxDecoration(
-              border: Border(
-                top: BorderSide(color: AppColors.outlineFor(brightness)),
-              ),
-            ),
-            child: hasActiveTurn
-                ? Column(
-                    children: [
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: canCancelReply ? _cancelReply : null,
-                          child: _cancellingReply
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(l10n.stopReply),
-                        ),
-                      ),
-                    ],
-                  )
-                : Column(
-                    children: [
-                      Focus(
-                        onKeyEvent: _handleMessageInputKeyEvent,
-                        child: TextField(
-                          controller: _controller,
-                          enabled: !isSessionBusy,
-                          maxLines: 4,
-                          minLines: 3,
-                          decoration: InputDecoration(
-                            hintText: l10n.messageInputHint,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.stack),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _withUnavailableTooltip(
-                              message: showVoiceInputUnavailableTooltip
-                                  ? systemSpeechUnavailableMessage
-                                  : null,
-                              child: OutlinedButton(
-                                onPressed: (isSessionBusy ||
-                                        _voiceInputStarting ||
-                                        (!_speechReady && !_isListening))
-                                    ? null
-                                    : _toggleListening,
-                                child: _voiceInputStarting
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : Text(
-                                        _isListening
-                                            ? l10n.stopVoice
-                                            : l10n.voiceInput,
-                                      ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.tileY),
-                          Expanded(
-                            child: FilledButton(
-                              onPressed:
-                                  isSessionBusy ? null : _sendTextMessage,
-                              child: Text(l10n.send),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+          _buildMessageComposer(
+            canCancelReply: canCancelReply,
+            hasActiveTurn: hasActiveTurn,
+            isSessionBusy: isSessionBusy,
+            showVoiceInputUnavailableTooltip: showVoiceInputUnavailableTooltip,
+            systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMessageComposer({
+    required bool canCancelReply,
+    required bool hasActiveTurn,
+    required bool isSessionBusy,
+    required bool showVoiceInputUnavailableTooltip,
+    required String? systemSpeechUnavailableMessage,
+  }) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final surface = AppColors.panelFor(brightness);
+    final deepSurface = AppColors.panelDeepFor(brightness);
+    final outline = AppColors.outlineFor(brightness);
+    final outlineStrong = AppColors.outlineStrongFor(brightness);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.block,
+        AppSpacing.stack,
+        AppSpacing.block,
+        AppSpacing.block,
+      ),
+      decoration: BoxDecoration(
+        color: surface,
+        border: Border(top: BorderSide(color: outline)),
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: _composerMaxWidth),
+          child: hasActiveTurn
+              ? _buildActiveTurnComposer(
+                  canCancelReply: canCancelReply,
+                  deepSurface: deepSurface,
+                  outlineStrong: outlineStrong,
+                )
+              : _buildIdleComposer(
+                  isSessionBusy: isSessionBusy,
+                  showVoiceInputUnavailableTooltip:
+                      showVoiceInputUnavailableTooltip,
+                  systemSpeechUnavailableMessage:
+                      systemSpeechUnavailableMessage,
+                  deepSurface: deepSurface,
+                  outlineStrong: outlineStrong,
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActiveTurnComposer({
+    required bool canCancelReply,
+    required Color deepSurface,
+    required Color outlineStrong,
+  }) {
+    final brightness = Theme.of(context).brightness;
+    return Container(
+      key: const Key('session-active-composer'),
+      padding: const EdgeInsets.all(AppSpacing.compact),
+      decoration: BoxDecoration(
+        color: deepSurface,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+        border: Border.all(color: outlineStrong),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              context.l10n.sessionStillRunning,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.mutedSoftFor(brightness),
+                  ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.compact),
+          OutlinedButton.icon(
+            key: const Key('session-stop-reply-button'),
+            focusNode: _stopReplyFocusNode,
+            onPressed: canCancelReply ? _cancelReply : null,
+            icon: _cancellingReply
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.stop_rounded, size: 18),
+            label: Text(context.l10n.stopReply),
+            style: OutlinedButton.styleFrom(
+              backgroundColor: AppColors.warningSurfaceFor(brightness),
+              foregroundColor: AppColors.warningTextFor(brightness),
+              side: BorderSide(color: AppColors.warningBorderFor(brightness)),
+              minimumSize: const Size(0, 40),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.tileX),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIdleComposer({
+    required bool isSessionBusy,
+    required bool showVoiceInputUnavailableTooltip,
+    required String? systemSpeechUnavailableMessage,
+    required Color deepSurface,
+    required Color outlineStrong,
+  }) {
+    final brightness = Theme.of(context).brightness;
+    final voiceDisabled = isSessionBusy ||
+        _voiceInputStarting ||
+        (!_speechReady && !_isListening);
+    final voiceLabel =
+        _isListening ? context.l10n.stopVoice : context.l10n.voiceInput;
+    final inputBorderColor =
+        _isListening ? AppColors.primaryFor(brightness) : outlineStrong;
+    final activeVoiceIconColor = brightness == Brightness.dark
+        ? AppColors.onPrimaryFor(brightness)
+        : AppColors.textFor(brightness);
+    final voiceButton = _withUnavailableTooltip(
+      message: showVoiceInputUnavailableTooltip
+          ? systemSpeechUnavailableMessage
+          : null,
+      child: _ComposerVoiceButton(
+        key: const Key('session-voice-input-button'),
+        label: voiceLabel,
+        disabled: voiceDisabled,
+        isListening: _isListening,
+        isStarting: _voiceInputStarting,
+        animation: _callModeOrbController,
+        activeBackgroundColor: AppColors.primaryFor(brightness).withValues(
+          alpha: brightness == Brightness.dark ? 1 : 0.82,
+        ),
+        activeIconColor: activeVoiceIconColor,
+        idleIconColor: AppColors.textSoftFor(brightness),
+        disabledIconColor: AppColors.mutedFor(brightness),
+        focusColor: AppColors.primaryFor(brightness).withValues(
+          alpha: brightness == Brightness.dark ? 0.16 : 0.22,
+        ),
+        onPressed: _toggleListening,
+      ),
+    );
+
+    return Row(
+      key: const Key('session-message-composer'),
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Focus(
+            onKeyEvent: _handleMessageInputKeyEvent,
+            child: TextField(
+              key: const Key('session-message-input'),
+              controller: _controller,
+              focusNode: _messageInputFocusNode,
+              enabled: !isSessionBusy,
+              maxLines: 4,
+              minLines: 1,
+              textInputAction:
+                  _isMobilePlatform ? TextInputAction.newline : null,
+              decoration: InputDecoration(
+                hintText: _isListening
+                    ? context.l10n.voiceInputInProgress
+                    : context.l10n.messageInputHint,
+                filled: true,
+                fillColor: deepSurface,
+                suffixIcon: Padding(
+                  padding: const EdgeInsetsDirectional.only(
+                    start: AppSpacing.micro,
+                    end: AppSpacing.compact,
+                  ),
+                  child: voiceButton,
+                ),
+                suffixIconConstraints: const BoxConstraints(
+                  minWidth: 48,
+                  minHeight: 44,
+                ),
+                contentPadding: const EdgeInsetsDirectional.only(
+                  start: AppSpacing.card,
+                  end: AppSpacing.compact,
+                  top: AppSpacing.stack,
+                  bottom: AppSpacing.stack,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+                  borderSide: BorderSide(color: inputBorderColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+                  borderSide: BorderSide(color: inputBorderColor),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+                  borderSide: BorderSide(
+                    color: AppColors.primaryFor(brightness),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.compact),
+        IconButton(
+          key: const Key('session-send-button'),
+          tooltip: context.l10n.send,
+          onPressed: isSessionBusy ? null : _sendTextMessage,
+          style: IconButton.styleFrom(
+            backgroundColor: AppColors.primaryFor(brightness),
+            foregroundColor: AppColors.onPrimaryFor(brightness),
+            disabledBackgroundColor: deepSurface,
+            disabledForegroundColor: AppColors.mutedFor(brightness),
+            side: BorderSide(color: AppColors.primaryFor(brightness)),
+            minimumSize: const Size.square(44),
+            fixedSize: const Size.square(44),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+            ),
+          ),
+          icon: const Icon(Icons.send_rounded, size: 20),
+        ),
+      ],
     );
   }
 
@@ -805,9 +1054,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final currentName = _overrideProviderId == null
         ? l10n.providerAuto
         : _providers
-            .where((p) => p.id == _overrideProviderId)
-            .firstOrNull
-            ?.name ?? l10n.providerAuto;
+                .where((p) => p.id == _overrideProviderId)
+                .firstOrNull
+                ?.name ??
+            l10n.providerAuto;
 
     return PopupMenuButton<String?>(
       tooltip: l10n.providerOverride,
@@ -909,9 +1159,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
-  Widget _buildCallModeAction({
-    required String? unavailableMessage,
-  }) {
+  Widget _buildCallModeAction({required String? unavailableMessage}) {
     final brightness = Theme.of(context).brightness;
     final onPressed = _callModeEnabled
         ? () => unawaited(_disableCallMode())
@@ -935,9 +1183,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               ? IconButton.styleFrom(
                   backgroundColor: AppColors.primaryFor(brightness),
                   foregroundColor: AppColors.onPrimaryFor(brightness),
-                  side: BorderSide(
-                    color: AppColors.primaryFor(brightness),
-                  ),
+                  side: BorderSide(color: AppColors.primaryFor(brightness)),
                 )
               : null,
           icon: Icon(
@@ -987,6 +1233,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     child: Row(
                       children: [
                         FilledButton(
+                          key: const Key('session-approval-accept-button'),
+                          focusNode: _approvalPrimaryFocusNode,
                           onPressed: approval.resolvable && !isSubmitting
                               ? () => _submitApproval('accept')
                               : null,
@@ -1035,16 +1283,19 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             final actionHeight = actions == null ? 0.0 : 48.0;
             final reservedHeight =
                 22.0 + AppSpacing.compact + AppSpacing.stack + actionHeight;
-            final detailsMaxHeight =
-                math.max(0.0, constraints.maxHeight - reservedHeight);
+            final detailsMaxHeight = math.max(
+              0.0,
+              constraints.maxHeight - reservedHeight,
+            );
 
             return Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  context.l10n
-                      .agentAwaitingPermission(_agentLabel(_session.agent)),
+                  context.l10n.agentAwaitingPermission(
+                    _agentLabel(_session.agent),
+                  ),
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: AppColors.warningTextFor(brightness),
                   ),
@@ -1059,8 +1310,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                       children: [
                         Text(
                           summary,
-                          style:
-                              theme.textTheme.bodyMedium?.copyWith(height: 1.4),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            height: 1.4,
+                          ),
                         ),
                         if (isAwaitingResolution) ...[
                           const SizedBox(height: AppSpacing.compact),
@@ -1139,9 +1391,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Widget _buildErrorBanner(String message, {bool dismissable = true}) {
     final brightness = Theme.of(context).brightness;
     return Container(
-      key: ValueKey(dismissable
-          ? 'session-error-banner'
-          : 'session-failed-banner'),
+      key: ValueKey(
+        dismissable ? 'session-error-banner' : 'session-failed-banner',
+      ),
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(
         AppSpacing.block,
@@ -1200,10 +1452,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         SizedBox(
           width: 16,
           height: 16,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: spinnerColor,
-          ),
+          child: CircularProgressIndicator(strokeWidth: 2, color: spinnerColor),
         ),
         const SizedBox(width: AppSpacing.compact),
         Text(context.l10n.processing),
@@ -1218,8 +1467,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final messageBubbleMaxWidth =
-            _messageBubbleMaxWidthFor(constraints.maxWidth);
+        final messageBubbleMaxWidth = _messageBubbleMaxWidthFor(
+          constraints.maxWidth,
+        );
         return Container(
           margin: const EdgeInsets.only(bottom: AppSpacing.screenBottom),
           child: Column(
@@ -1292,10 +1542,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
-  Widget _buildUserMessage(
-    ChatMessage message, {
-    required double maxWidth,
-  }) {
+  Widget _buildUserMessage(ChatMessage message, {required double maxWidth}) {
     final localState = _localMessageStates[message.id];
     final canRetry = localState?.state == _LocalMessageState.failed;
     final brightness = Theme.of(context).brightness;
@@ -1395,18 +1642,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               decoration: BoxDecoration(
                 color: backgroundColor,
                 borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
-                border: Border.all(
-                  color: borderColor,
-                ),
+                border: Border.all(color: borderColor),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.build_outlined,
-                    size: 12,
-                    color: labelColor,
-                  ),
+                  Icon(Icons.build_outlined, size: 12, color: labelColor),
                   const SizedBox(width: AppSpacing.micro),
                   Text(
                     context.l10n.toolActivity,
@@ -1533,10 +1774,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       letterSpacing: 0.1,
     );
     final styleSheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
-      p: theme.textTheme.bodyLarge?.copyWith(
-        height: 1.45,
-        color: textColor,
-      ),
+      p: theme.textTheme.bodyLarge?.copyWith(height: 1.45, color: textColor),
       a: theme.textTheme.bodyLarge?.copyWith(
         height: 1.45,
         color: textColor,
@@ -1566,23 +1804,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       ),
       blockquoteDecoration: BoxDecoration(
         border: Border(
-          left: BorderSide(
-            color: textColor.withValues(alpha: 0.28),
-            width: 3,
-          ),
+          left: BorderSide(color: textColor.withValues(alpha: 0.28), width: 3),
         ),
       ),
-      blockquotePadding: const EdgeInsets.only(
-        left: AppSpacing.compact,
-      ),
+      blockquotePadding: const EdgeInsets.only(left: AppSpacing.compact),
       blockSpacing: AppSpacing.compact,
       pPadding: const EdgeInsets.symmetric(vertical: 1),
       horizontalRuleDecoration: BoxDecoration(
         border: Border(
-          top: BorderSide(
-            width: 0.6,
-            color: textColor.withValues(alpha: 0.22),
-          ),
+          top: BorderSide(width: 0.6, color: textColor.withValues(alpha: 0.22)),
         ),
       ),
       codeblockPadding: const EdgeInsets.fromLTRB(
@@ -1600,25 +1830,25 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           lightAlpha: 0.08,
         ),
         borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-        border: Border.all(
-          color: textColor.withValues(alpha: 0.22),
-        ),
+        border: Border.all(color: textColor.withValues(alpha: 0.22)),
       ),
     );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        MarkdownBody(
-          data: content,
-          fitContent: true,
-          selectable: true,
-          shrinkWrap: true,
-          softLineBreak: true,
-          styleSheet: styleSheet,
-          syntaxHighlighter: _AssistantCodeSyntaxHighlighter(theme),
-          onTapLink: (text, href, title) =>
-              _handleAssistantMarkdownLinkTap(href),
+        SelectionArea(
+          child: MarkdownBody(
+            data: content,
+            fitContent: true,
+            selectable: false,
+            shrinkWrap: true,
+            softLineBreak: true,
+            styleSheet: styleSheet,
+            syntaxHighlighter: _AssistantCodeSyntaxHighlighter(theme),
+            onTapLink: (text, href, title) =>
+                _handleAssistantMarkdownLinkTap(href),
+          ),
         ),
         if (imageReferences.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.compact),
@@ -1822,10 +2052,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     return reference.isSvg
-        ? SvgPicture.string(
-            String.fromCharCodes(file.bytes),
-            fit: BoxFit.cover,
-          )
+        ? SvgPicture.string(String.fromCharCodes(file.bytes), fit: BoxFit.cover)
         : Image.memory(
             file.bytes,
             fit: BoxFit.cover,
@@ -2104,9 +2331,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                                   borderRadius: BorderRadius.circular(
                                     AppSpacing.radiusHero,
                                   ),
-                                  border: Border.all(
-                                    color: stageBorderColor(),
-                                  ),
+                                  border: Border.all(color: stageBorderColor()),
                                   boxShadow: stageShadow(),
                                 ),
                                 clipBehavior: Clip.antiAlias,
@@ -2332,10 +2557,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       final refreshedSession = sessions
           .where((session) => session.id == _session.id)
           .cast<SessionSummary?>()
-          .firstWhere(
-            (_) => true,
-            orElse: () => null,
-          );
+          .firstWhere((_) => true, orElse: () => null);
 
       setState(() {
         _messages
@@ -2403,6 +2625,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           }
           _reconcileSubmittedApprovalState();
         });
+        _syncComposerFocusForSessionStatus(status);
         _syncSessionSummaryCache();
         final latestAssistantMessage = _messages
             .where((item) => item.role == MessageRole.assistant)
@@ -2410,8 +2633,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             .lastWhere((_) => true, orElse: () => null);
         var startedPlayback = false;
         if (latestAssistantMessage != null) {
-          startedPlayback =
-              _maybeAutoSpeakAssistantMessage(latestAssistantMessage.id);
+          startedPlayback = _maybeAutoSpeakAssistantMessage(
+            latestAssistantMessage.id,
+          );
           _maybeNotifyAssistantMessage(latestAssistantMessage.id);
         }
         if (_callModeEnabled &&
@@ -2429,8 +2653,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           if (message.role == MessageRole.system) {
             final turnId = _activeTurnId;
             if (turnId != null) {
-              _unreadToolCounts.update(turnId, (value) => value + 1,
-                  ifAbsent: () => 1);
+              _unreadToolCounts.update(
+                turnId,
+                (value) => value + 1,
+                ifAbsent: () => 1,
+              );
             }
           }
           final index = _messages.indexWhere((item) => item.id == message.id);
@@ -2511,7 +2738,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         break;
       case 'approval_requested':
         final approval = ApprovalRequest.fromJson(
-            payload['request'] as Map<String, dynamic>);
+          payload['request'] as Map<String, dynamic>,
+        );
         debugPrint(
           '[approval] requested session=${_session.id} request=${approval.requestId} '
           'kind=${approval.kind} resolvable=${approval.resolvable}',
@@ -2526,6 +2754,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           _reconcileSubmittedApprovalState();
         });
         _syncSessionSummaryCache();
+        _requestApprovalFocusAfterFrame();
         if (!_appInForeground) {
           unawaited(
             notificationService.showApprovalRequestNotification(
@@ -2558,6 +2787,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           _submittingApprovalChoice = null;
         });
         _syncSessionSummaryCache();
+        _requestStopReplyFocusAfterFrame();
         break;
     }
   }
@@ -2584,9 +2814,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
       setState(() {
         _pendingApproval = approval;
-        _session = _session.copyWith(
-          updatedAt: DateTime.now(),
-        );
+        _session = _session.copyWith(updatedAt: DateTime.now());
         _submittingApproval = false;
         _submittingApprovalChoice = null;
         _submittedApprovalRequestId = approval.requestId;
@@ -2834,11 +3062,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             }
             setState(() {
               _recognizedSpeech = words;
-              if (!_callModeEnabled) {
-                _controller.text = words;
-                _controller.selection = TextSelection.fromPosition(
-                  TextPosition(offset: _controller.text.length),
-                );
+              if (!_callModeEnabled && isFinal) {
+                _insertVoiceTranscriptAtSelection(words);
               }
               if (isFinal) {
                 _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
@@ -2999,10 +3224,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         return;
       }
       setState(() {
-        _controller.text = text;
-        _controller.selection = TextSelection.fromPosition(
-          TextPosition(offset: _controller.text.length),
-        );
+        _insertVoiceTranscriptAtSelection(text);
         _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
       });
     } catch (error) {
@@ -3044,8 +3266,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       final trimmedContent = content.trim();
       _callModeCurrentTtsText = trimmedContent;
       _callModeRecentTtsText = trimmedContent;
-      _callModeRecentTtsExpiresAt =
-          DateTime.now().add(_callModeTtsEchoGracePeriod);
+      _callModeRecentTtsExpiresAt = DateTime.now().add(
+        _callModeTtsEchoGracePeriod,
+      );
       _callModeSpokenReplyText =
           resumeCallModeOnComplete ? trimmedContent : _callModeSpokenReplyText;
       _callModeAwaitingPlaybackCompletion = resumeCallModeOnComplete;
@@ -3084,8 +3307,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return false;
     }
     final message = _messages
-        .where((item) =>
-            item.id == messageId && item.role == MessageRole.assistant)
+        .where(
+          (item) => item.id == messageId && item.role == MessageRole.assistant,
+        )
         .cast<ChatMessage?>()
         .firstWhere((_) => true, orElse: () => null);
     if (message == null) {
@@ -3114,8 +3338,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     final message = _messages
-        .where((item) =>
-            item.id == messageId && item.role == MessageRole.assistant)
+        .where(
+          (item) => item.id == messageId && item.role == MessageRole.assistant,
+        )
         .cast<ChatMessage?>()
         .firstWhere((_) => true, orElse: () => null);
     if (message == null) {
@@ -3332,8 +3557,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           }
         }
 
-        final replyIndex =
-            _messages.indexWhere((item) => item.id == result.reply.id);
+        final replyIndex = _messages.indexWhere(
+          (item) => item.id == result.reply.id,
+        );
         if (replyIndex >= 0) {
           _messages[replyIndex] = result.reply;
         } else {
@@ -3350,7 +3576,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           previousTotalTurns: previousTurnCountAfterLocalInsert,
         );
       });
+      _returnFocusToComposerAfterReply = true;
       _syncSessionSummaryCache();
+      _requestStopReplyFocusAfterFrame();
       _scheduleRefreshSessionSummary();
       return true;
     } catch (error) {
@@ -3681,18 +3909,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       240,
       (pauseMillis * _callModeSpeechHintDelayRatio).round(),
     );
-    _callModeSpeechHintTimer = Timer(
-      Duration(milliseconds: delayMillis),
-      () {
-        if (!mounted ||
-            !_callModeEnabled ||
-            !_streamingAsrActive ||
-            _recognizedSpeech.trim().isEmpty) {
-          return;
-        }
-        _setCallModeSpeechHintState(_CallModeSpeechHintState.waitingForPause);
-      },
-    );
+    _callModeSpeechHintTimer = Timer(Duration(milliseconds: delayMillis), () {
+      if (!mounted ||
+          !_callModeEnabled ||
+          !_streamingAsrActive ||
+          _recognizedSpeech.trim().isEmpty) {
+        return;
+      }
+      _setCallModeSpeechHintState(_CallModeSpeechHintState.waitingForPause);
+    });
   }
 
   bool _isCallModeTtsEcho(String transcript) {
@@ -3834,10 +4059,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _isListening = false;
       _voiceInputStarting = false;
       if (!autoSend) {
-        _controller.text = trimmedTranscript;
-        _controller.selection = TextSelection.fromPosition(
-          TextPosition(offset: _controller.text.length),
-        );
+        _insertVoiceTranscriptAtSelection(trimmedTranscript);
       }
       _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
     });
@@ -3845,8 +4067,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (!autoSend) {
       return true;
     }
-    final submitted =
-        await _submitLocalMessage(trimmedTranscript, inputMode: 'voice');
+    final submitted = await _submitLocalMessage(
+      trimmedTranscript,
+      inputMode: 'voice',
+    );
     if (submitted && _callModeEnabled && _callModeAllowInterruptions) {
       unawaited(_maybeResumeCallModeListening());
     }
@@ -3905,10 +4129,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           }
           final rawTranscript = utterance.text;
           final transcriptText = rawTranscript;
-          final isMeaningfulTranscript =
-              _isMeaningfulVoiceTranscript(transcriptText);
-          final isSubstantialTranscript =
-              _isSubstantialVoiceTranscript(transcriptText);
+          final isMeaningfulTranscript = _isMeaningfulVoiceTranscript(
+            transcriptText,
+          );
+          final isSubstantialTranscript = _isSubstantialVoiceTranscript(
+            transcriptText,
+          );
           final accepted = utterance.speakerAccepted;
           final ttsEcho = accepted && _isCallModeTtsEcho(transcriptText);
           final pendingVerification = utterance.pendingVerification;
@@ -3946,11 +4172,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             _recognizedSpeechRejectedSpeaker = rejectedSpeaker;
             _recognizedSpeechRejectedWakeWord = false;
             _recognizedSpeechRejectedOther = rejectedOther;
-            if (!_callModeEnabled) {
-              _controller.text = transcriptText;
-              _controller.selection = TextSelection.fromPosition(
-                TextPosition(offset: _controller.text.length),
-              );
+            if (!_callModeEnabled && utterance.isFinal) {
+              _insertVoiceTranscriptAtSelection(transcriptText);
             }
             if (utterance.isFinal) {
               _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
@@ -3963,10 +4186,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             );
             final shouldWaitForInterrupt = _callModeInterruptFuture != null;
             _callModeSubmittingVoiceUtterance = true;
-            unawaited(_handleBridgeRealtimeFinalUtterance(
-              transcriptText,
-              waitForInterrupt: shouldWaitForInterrupt,
-            ));
+            unawaited(
+              _handleBridgeRealtimeFinalUtterance(
+                transcriptText,
+                waitForInterrupt: shouldWaitForInterrupt,
+              ),
+            );
           }
         },
         onError: (error) {
@@ -4083,9 +4308,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       setState(() {
         _clearRecognizedSpeechState();
         _resetBridgeRealtimeUtteranceGateState();
-        if (!_callModeEnabled) {
-          _controller.clear();
-        }
         _setSpeechStatus(context.l10n.voiceInputInProgress);
       });
       return;
@@ -4099,10 +4321,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _callModeSubmittingVoiceUtterance = true;
       _callModeSendingVoiceUtterance = false;
       if (!_callModeEnabled) {
-        _controller.text = trimmedTranscript;
-        _controller.selection = TextSelection.fromPosition(
-          TextPosition(offset: _controller.text.length),
-        );
+        _insertVoiceTranscriptAtSelection(trimmedTranscript);
       }
       _setSpeechStatus(context.l10n.voiceTranscriptionComplete);
     });
@@ -4147,8 +4366,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     var submitted = false;
     try {
-      submitted =
-          await _submitLocalMessage(trimmedTranscript, inputMode: 'voice');
+      submitted = await _submitLocalMessage(
+        trimmedTranscript,
+        inputMode: 'voice',
+      );
       debugPrint(
         '[call-mode] bridge final submit completed submitted=$submitted text=$trimmedTranscript',
       );
@@ -4183,7 +4404,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   List<_ConversationTurn> _buildConversationTurns(
-      Iterable<ChatMessage> messages) {
+    Iterable<ChatMessage> messages,
+  ) {
     final turns = <_ConversationTurn>[];
     _ConversationTurn? currentTurn;
     for (final message in messages) {
@@ -4227,9 +4449,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _visibleTurnCount = math.min(_allTurns.length, _initialVisibleTurnCount);
   }
 
-  void _syncVisibleTurnWindow({
-    required int previousTotalTurns,
-  }) {
+  void _syncVisibleTurnWindow({required int previousTotalTurns}) {
     final totalTurns = _allTurns.length;
     if (totalTurns == 0) {
       _visibleTurnCount = 0;
@@ -4338,10 +4558,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 ),
               ),
             ),
-            separatorBuilder: (_, __) => Divider(
-              height: 16,
-              color: AppColors.outlineFor(brightness),
-            ),
+            separatorBuilder: (_, __) =>
+                Divider(height: 16, color: AppColors.outlineFor(brightness)),
           ),
         ),
         actions: [
@@ -4427,10 +4645,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           ),
         ),
         const SizedBox(height: AppSpacing.compact),
-        SelectableText(
-          rawContent,
-          style: const TextStyle(height: 1.5),
-        ),
+        SelectableText(rawContent, style: const TextStyle(height: 1.5)),
       ],
     );
   }
@@ -4452,9 +4667,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               ),
             ),
           ),
-          Expanded(
-            child: Text(value, style: const TextStyle(height: 1.5)),
-          ),
+          Expanded(child: Text(value, style: const TextStyle(height: 1.5))),
         ],
       ),
     );
@@ -4535,8 +4748,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     if (tag.startsWith('command:')) {
       final phase = tag.split(':').skip(1).join(':');
-      final exitMatch =
-          RegExp(r'^(.*)\s+\(exit\s+(-?\d+)\)$').firstMatch(remainder);
+      final exitMatch = RegExp(
+        r'^(.*)\s+\(exit\s+(-?\d+)\)$',
+      ).firstMatch(remainder);
       return _ParsedToolMessage(
         kindLabel: context.l10n.toolKindCommand,
         phaseLabel: _phaseLabel(phase),
@@ -4577,8 +4791,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     if (tag.startsWith('todo')) {
       final phase = tag.contains(':') ? tag.split(':').skip(1).join(':') : null;
-      final countMatch =
-          RegExp(r'^(.*)\((\d+)\s+items\)$').firstMatch(remainder);
+      final countMatch = RegExp(
+        r'^(.*)\((\d+)\s+items\)$',
+      ).firstMatch(remainder);
       final body = countMatch?.group(1)?.trim() ?? remainder;
       final items = body
           .split('|')
@@ -4599,8 +4814,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     if (tag == 'plan') {
-      final countMatch =
-          RegExp(r'^(.*)\((\d+)\s+steps\)$').firstMatch(remainder);
+      final countMatch = RegExp(
+        r'^(.*)\((\d+)\s+steps\)$',
+      ).firstMatch(remainder);
       final body = countMatch?.group(1)?.trim() ?? remainder;
       final steps = body
           .split('|')
@@ -4777,16 +4993,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
 enum _ImagePreviewBackdropMode { dark, light, checker }
 
-enum _CallModeSpeechHintState {
-  speaking,
-  waitingForPause,
-}
+enum _CallModeSpeechHintState { speaking, waitingForPause }
 
 class _CallModeRealtimeHint {
-  const _CallModeRealtimeHint({
-    required this.label,
-    required this.detail,
-  });
+  const _CallModeRealtimeHint({required this.label, required this.detail});
 
   final String label;
   final String detail;
@@ -4888,6 +5098,190 @@ class _MessageBubbleSkeleton extends StatelessWidget {
   }
 }
 
+class _ComposerVoiceButton extends StatefulWidget {
+  const _ComposerVoiceButton({
+    super.key,
+    required this.label,
+    required this.disabled,
+    required this.isListening,
+    required this.isStarting,
+    required this.animation,
+    required this.activeBackgroundColor,
+    required this.activeIconColor,
+    required this.idleIconColor,
+    required this.disabledIconColor,
+    required this.focusColor,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool disabled;
+  final bool isListening;
+  final bool isStarting;
+  final Animation<double> animation;
+  final Color activeBackgroundColor;
+  final Color activeIconColor;
+  final Color idleIconColor;
+  final Color disabledIconColor;
+  final Color focusColor;
+  final VoidCallback onPressed;
+
+  @override
+  State<_ComposerVoiceButton> createState() => _ComposerVoiceButtonState();
+}
+
+class _ComposerVoiceButtonState extends State<_ComposerVoiceButton> {
+  bool _focused = false;
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final showFocusState = !widget.disabled && (_focused || _hovered);
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (intent) {
+              if (!widget.disabled) {
+                widget.onPressed();
+              }
+              return null;
+            },
+          ),
+        },
+        child: FocusableActionDetector(
+          enabled: !widget.disabled,
+          mouseCursor: widget.disabled
+              ? SystemMouseCursors.basic
+              : SystemMouseCursors.click,
+          onShowFocusHighlight: (focused) {
+            setState(() {
+              _focused = focused;
+            });
+          },
+          onShowHoverHighlight: (hovered) {
+            setState(() {
+              _hovered = hovered;
+            });
+          },
+          child: Semantics(
+            button: true,
+            enabled: !widget.disabled,
+            label: widget.label,
+            onTap: widget.disabled ? null : widget.onPressed,
+            child: SizedBox.square(
+              dimension: 36,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.disabled ? null : widget.onPressed,
+                child: Center(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: widget.isListening
+                          ? widget.activeBackgroundColor
+                          : showFocusState
+                              ? widget.focusColor
+                              : Colors.transparent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: SizedBox.square(
+                      dimension: 30,
+                      child: Center(
+                        child: widget.isStarting
+                            ? const SizedBox(
+                                width: 17,
+                                height: 17,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : widget.isListening
+                                ? _ListeningWaveIcon(
+                                    animation: widget.animation,
+                                    color: widget.activeIconColor,
+                                  )
+                                : Icon(
+                                    Icons.mic_none_rounded,
+                                    size: 21,
+                                    color: widget.disabled
+                                        ? widget.disabledIconColor
+                                        : widget.idleIconColor,
+                                  ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ListeningWaveIcon extends StatelessWidget {
+  const _ListeningWaveIcon({
+    required this.animation,
+    required this.color,
+  });
+
+  final Animation<double> animation;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        final phase = animation.value * math.pi * 2;
+        return SizedBox(
+          width: 18,
+          height: 18,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              for (var index = 0; index < 3; index++) ...[
+                _ListeningWaveBar(
+                  color: color,
+                  height: 6 + 10 * ((math.sin(phase + index * 1.35) + 1) / 2),
+                ),
+                if (index < 2) const SizedBox(width: 2),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ListeningWaveBar extends StatelessWidget {
+  const _ListeningWaveBar({
+    required this.color,
+    required this.height,
+  });
+
+  final Color color;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 3,
+      height: height,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+      ),
+    );
+  }
+}
+
 class _AssistantCodeSyntaxHighlighter extends SyntaxHighlighter {
   _AssistantCodeSyntaxHighlighter(this.theme);
 
@@ -4971,10 +5365,7 @@ class _AssistantCodeSyntaxHighlighter extends SyntaxHighlighter {
 enum _LocalMessageState { pending, failed }
 
 class _LocalMessageDraft {
-  const _LocalMessageDraft({
-    required this.state,
-    required this.inputMode,
-  });
+  const _LocalMessageDraft({required this.state, required this.inputMode});
 
   final _LocalMessageState state;
   final String inputMode;

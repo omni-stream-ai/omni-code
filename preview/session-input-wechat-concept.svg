@@ -1,0 +1,95 @@
+<svg width="1440" height="1200" viewBox="0 0 1440 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadowSoft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="28" flood-color="#02070A" flood-opacity="0.38"/>
+    </filter>
+    <filter id="shadowTight" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#02070A" flood-opacity="0.24"/>
+    </filter>
+    <linearGradient id="screenShade" x1="144" y1="58" x2="1304" y2="1136" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#151B22"/>
+      <stop offset="0.46" stop-color="#101820"/>
+      <stop offset="1" stop-color="#0E1319"/>
+    </linearGradient>
+    <linearGradient id="greenButton" x1="1002" y1="1004" x2="1162" y2="1082" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C8FF55"/>
+      <stop offset="1" stop-color="#A3FF12"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1440" height="1200" fill="#17181D"/>
+
+  <g filter="url(#shadowSoft)">
+    <rect x="176" y="56" width="1088" height="1088" rx="36" fill="url(#screenShade)" stroke="#27313C" stroke-width="1.5"/>
+  </g>
+
+  <rect x="176" y="56" width="1088" height="96" rx="36" fill="#151B22"/>
+  <rect x="176" y="130" width="1088" height="1" fill="#27313C"/>
+  <circle cx="226" cy="104" r="18" fill="#0F151B" stroke="#31404D" stroke-width="1.5"/>
+  <path d="M231 94L221 104L231 114" stroke="#D7DEE5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="260" y="111" fill="#E7EDF2" font-family="JetBrains Mono, ui-monospace, monospace" font-size="24" font-weight="800">Optimize session UI</text>
+  <rect x="1056" y="82" width="74" height="40" rx="12" fill="#0F151B" stroke="#31404D"/>
+  <path d="M1083 98c7-8 20-3 20 8s-13 16-20 8" stroke="#D7DEE5" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M1083 98v16" stroke="#D7DEE5" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="1176" cy="102" r="20" fill="#0F151B" stroke="#31404D"/>
+  <path d="M1176 92v20M1166 102h20" stroke="#D7DEE5" stroke-width="2.3" stroke-linecap="round"/>
+
+  <text x="224" y="214" fill="#7F92A3" font-family="JetBrains Mono, ui-monospace, monospace" font-size="15" font-weight="700">TODAY 18:42</text>
+
+  <g filter="url(#shadowTight)">
+    <rect x="224" y="252" width="618" height="132" rx="18" fill="#0F151B" stroke="#27313C"/>
+    <text x="252" y="298" fill="#E7EDF2" font-family="JetBrains Mono, ui-monospace, monospace" font-size="18" font-weight="700">我会把会话页底部输入区改得更像微信：</text>
+    <text x="252" y="332" fill="#9AA9B8" font-family="JetBrains Mono, ui-monospace, monospace" font-size="16">图标按钮靠边，输入框居中，发送按钮只在有内容时</text>
+    <text x="252" y="360" fill="#9AA9B8" font-family="JetBrains Mono, ui-monospace, monospace" font-size="16">高亮，整体更轻、更贴近聊天场景。</text>
+  </g>
+
+  <g filter="url(#shadowTight)">
+    <rect x="674" y="424" width="440" height="88" rx="18" fill="#66C8FF"/>
+    <text x="704" y="471" fill="#FFFFFF" font-family="JetBrains Mono, ui-monospace, monospace" font-size="18" font-weight="700">下面的输入框和按钮可以参考微信吗？</text>
+  </g>
+
+  <g>
+    <rect x="224" y="552" width="210" height="34" rx="17" fill="#0F151B" stroke="#31404D"/>
+    <path d="M247 569h18M256 560v18" stroke="#6EC7FF" stroke-width="2" stroke-linecap="round"/>
+    <text x="280" y="574" fill="#9AA9B8" font-family="JetBrains Mono, ui-monospace, monospace" font-size="14" font-weight="700">3 tool activities</text>
+  </g>
+
+  <g filter="url(#shadowTight)">
+    <rect x="224" y="628" width="700" height="172" rx="18" fill="#0F151B" stroke="#27313C"/>
+    <text x="252" y="676" fill="#E7EDF2" font-family="JetBrains Mono, ui-monospace, monospace" font-size="18" font-weight="700">建议这样做：</text>
+    <text x="252" y="714" fill="#9AA9B8" font-family="JetBrains Mono, ui-monospace, monospace" font-size="16">1. 底部变成贴边工具栏，而不是表单区。</text>
+    <text x="252" y="746" fill="#9AA9B8" font-family="JetBrains Mono, ui-monospace, monospace" font-size="16">2. 语音、附件、发送用图标，降低视觉噪音。</text>
+    <text x="252" y="778" fill="#9AA9B8" font-family="JetBrains Mono, ui-monospace, monospace" font-size="16">3. 输入框支持 1-4 行自增高，保持轻量。</text>
+  </g>
+
+  <rect x="176" y="902" width="1088" height="1" fill="#27313C"/>
+  <rect x="176" y="903" width="1088" height="141" fill="#151B22"/>
+  <rect x="176" y="1044" width="1088" height="100" rx="36" fill="#0E1319"/>
+
+  <g transform="translate(224 936)">
+    <circle cx="31" cy="36" r="24" fill="#0F151B" stroke="#31404D" stroke-width="1.5"/>
+    <path d="M31 22c-5.5 0-9 4-9 9v9c0 5 3.5 9 9 9s9-4 9-9v-9c0-5-3.5-9-9-9z" stroke="#D7DEE5" stroke-width="2.4"/>
+    <path d="M17 40c0 8 5.5 14 14 14s14-6 14-14M31 54v10M24 64h16" stroke="#D7DEE5" stroke-width="2.4" stroke-linecap="round"/>
+
+    <rect x="72" y="10" width="702" height="96" rx="20" fill="#0F151B" stroke="#31404D" stroke-width="1.5"/>
+    <text x="98" y="48" fill="#E7EDF2" font-family="JetBrains Mono, ui-monospace, monospace" font-size="18" font-weight="600">参考微信，但保留 Omni Code 的深色质感。</text>
+    <text x="98" y="78" fill="#7F92A3" font-family="JetBrains Mono, ui-monospace, monospace" font-size="14">Enter 发送 · Shift+Enter 换行</text>
+
+    <circle cx="824" cy="36" r="24" fill="#0F151B" stroke="#31404D" stroke-width="1.5"/>
+    <path d="M824 24v24M812 36h24" stroke="#D7DEE5" stroke-width="2.5" stroke-linecap="round"/>
+
+    <rect x="864" y="10" width="146" height="72" rx="20" fill="url(#greenButton)"/>
+    <path d="M913 46l44-23-14 48-11-20-19-5z" fill="#09110A"/>
+    <text x="968" y="53" fill="#09110A" font-family="JetBrains Mono, ui-monospace, monospace" font-size="18" font-weight="900" text-anchor="middle">发送</text>
+  </g>
+
+  <g transform="translate(224 1068)" opacity="0.98">
+    <rect x="0" y="0" width="1010" height="54" rx="18" fill="#0F151B" stroke="#31404D"/>
+    <text x="24" y="35" fill="#9AA9B8" font-family="JetBrains Mono, ui-monospace, monospace" font-size="14" font-weight="700">回复生成中时：输入区收起为一条状态栏</text>
+    <rect x="760" y="8" width="220" height="38" rx="14" fill="#291C12" stroke="#A05A1B"/>
+    <rect x="782" y="19" width="16" height="16" rx="3" fill="#FFD9A8"/>
+    <text x="812" y="33" fill="#FFD9A8" font-family="JetBrains Mono, ui-monospace, monospace" font-size="14" font-weight="800">停止回复</text>
+  </g>
+
+  <text x="224" y="1174" fill="#536170" font-family="JetBrains Mono, ui-monospace, monospace" font-size="13">Concept PNG for session input redesign · WeChat-inspired bottom composer · dark theme retained</text>
+</svg>

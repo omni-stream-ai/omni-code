@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -18,6 +19,7 @@ import 'package:omni_code/src/services/tts_service.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 import 'package:omni_code/src/theme/app_theme.dart';
 import 'package:omni_code/src/widgets/session_call_mode_view.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 const _localNotificationsChannel =
     MethodChannel('dexterous.com/flutter/local_notifications');
@@ -133,6 +135,303 @@ void main() {
       variant: const TargetPlatformVariant(<TargetPlatform>{
         TargetPlatform.linux,
       }));
+
+  testWidgets('composer focus moves to stop after send', (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: 'Focus flow',
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.enterText(
+      find.byKey(const Key('session-message-input')),
+      'Focus flow',
+    );
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'session-stop-reply-focus',
+    );
+  });
+
+  testWidgets('composer focus returns to input when reply finishes',
+      (tester) async {
+    final events = StreamController<List<int>>();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({'data': []}),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          if (request.method == 'POST' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'user_message': _messageJson(
+                    id: 'server-user-1',
+                    sessionId: 'session-1',
+                    role: 'user',
+                    content: 'Focus flow',
+                    createdAt: '2026-05-09T10:00:00.000',
+                  ),
+                  'reply': _messageJson(
+                    id: 'server-reply-1',
+                    sessionId: 'session-1',
+                    role: 'assistant',
+                    content: '',
+                    createdAt: '2026-05-09T10:00:01.000',
+                  ),
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.enterText(
+      find.byKey(const Key('session-message-input')),
+      'Focus flow',
+    );
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'session-stop-reply-focus',
+    );
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'session_status',
+            'payload': {'status': 'idle'},
+          }
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'session-message-input-focus',
+    );
+
+    await events.close();
+  });
+
+  testWidgets('approval focus moves to primary action then back to stop',
+      (tester) async {
+    var approvalSubmitCalls = 0;
+    final approval = _approvalRequest(
+      requestId: 'approval-1',
+      command: 'run tests',
+    );
+    final events = StreamController<List<int>>();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({'data': []}),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          if (request.method == 'POST' &&
+              request.url.path ==
+                  '/sessions/session-1/approvals/${approval.requestId}') {
+            approvalSubmitCalls += 1;
+            return http.Response(
+              jsonEncode({
+                'data': {'ok': true}
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    void sendApprovalEvent(Map<String, dynamic> event) {
+      events.add(utf8.encode(_eventStreamBody([event])));
+    }
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    sendApprovalEvent({
+      'type': 'approval_requested',
+      'payload': {
+        'request': {
+          'request_id': approval.requestId,
+          'kind': approval.kind,
+          'command': approval.command,
+          'reason': approval.reason,
+          'allow_accept_for_session': approval.allowAcceptForSession,
+          'allow_cancel': approval.allowCancel,
+          'resolvable': approval.resolvable,
+        },
+      },
+    });
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'session-approval-primary-focus',
+    );
+
+    await tester.tap(find.byKey(const Key('session-approval-accept-button')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(approvalSubmitCalls, 1);
+
+    sendApprovalEvent({
+      'type': 'approval_resolved',
+      'payload': {
+        'request_id': approval.requestId,
+        'choice': 'accept',
+      },
+    });
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'session-stop-reply-focus',
+    );
+
+    await events.close();
+  });
+
+  testWidgets('voice input action is embedded at the end of the message field',
+      (tester) async {
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages([
+            _messageJson(
+              id: 'assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'Reply ready',
+              createdAt: '2026-05-09T10:00:01.000',
+            ),
+          ]),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    final suffixIcon = field.decoration?.suffixIcon;
+
+    expect(suffixIcon, isNotNull);
+    expect(
+      find.descendant(
+        of: find.byWidget(suffixIcon!),
+        matching: find.byKey(const Key('session-voice-input-button')),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('session-send-button')), findsOneWidget);
+  });
 
   testWidgets('pressing enter keeps the current draft on mobile',
       (tester) async {
@@ -273,7 +572,7 @@ void main() {
     await tester.enterText(input, 'Name this session');
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 600));
 
     expect(refreshedSession, isTrue);
     expect(find.text('Generated title'), findsOneWidget);
@@ -359,7 +658,7 @@ void main() {
 
     final input = find.byType(TextField);
     await tester.enterText(input, 'Read this back');
-    await tester.tap(find.text('Send'));
+    await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -456,7 +755,7 @@ void main() {
 
     final input = find.byType(TextField);
     await tester.enterText(input, 'Summarize this');
-    await tester.tap(find.text('Send'));
+    await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -551,7 +850,7 @@ void main() {
 
     final input = find.byType(TextField);
     await tester.enterText(input, 'Do not compress this');
-    await tester.tap(find.text('Send'));
+    await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -631,7 +930,7 @@ void main() {
 
     final input = find.byType(TextField);
     await tester.enterText(input, 'Read this back');
-    await tester.tap(find.text('Send'));
+    await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -1190,7 +1489,8 @@ void main() {
       (widget) =>
           widget is InkWell &&
           widget.key is ValueKey &&
-          (widget.key as ValueKey<String>).value
+          (widget.key as ValueKey<String>)
+              .value
               .startsWith('assistant-image-card-data-image-'),
     );
     expect(imageCard, findsOneWidget);
@@ -1399,8 +1699,7 @@ void main() {
     await tester.pump();
 
     expect(
-        find.byKey(
-            const ValueKey('assistant-image-card-assets/diagram.svg')),
+        find.byKey(const ValueKey('assistant-image-card-assets/diagram.svg')),
         findsOneWidget);
 
     await tester.tap(find.byKey(
@@ -1455,6 +1754,38 @@ void main() {
     } finally {
       semantics.dispose();
     }
+  });
+
+  testWidgets('markdown message body uses one selection area per message',
+      (tester) async {
+    final client = _clientForMessages([
+      _messageJson(
+        id: 'assistant-multiline',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'First paragraph\n\nSecond paragraph',
+        createdAt: '2026-05-09T10:00:01.000',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final markdown = find.byType(MarkdownBody);
+    expect(markdown, findsOneWidget);
+    expect(
+      find.ancestor(of: markdown, matching: find.byType(SelectionArea)),
+      findsOneWidget,
+    );
+    expect(tester.widget<MarkdownBody>(markdown).selectable, isFalse);
   });
 
   testWidgets('assistant reply bubble expands on wider layouts',
@@ -1570,13 +1901,11 @@ void main() {
     );
     await tester.pump();
 
-    final voiceButton = tester.widget<OutlinedButton>(
-        find.widgetWithText(OutlinedButton, 'Voice input'));
     final callModeButton = tester.widget<IconButton>(
       find.byKey(const Key('session-call-mode-button')),
     );
 
-    expect(voiceButton.onPressed, isNull);
+    expect(find.byKey(const Key('session-voice-input-button')), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Play'), findsNothing);
     expect(find.widgetWithText(OutlinedButton, 'Stop playback'), findsNothing);
     expect(callModeButton.onPressed, isNull);
@@ -1626,7 +1955,7 @@ void main() {
     expect(find.text(message), findsNothing);
 
     final voiceButtonFinder =
-        find.widgetWithText(OutlinedButton, 'Voice input');
+        find.byKey(const Key('session-voice-input-button'));
     await tester.tap(voiceButtonFinder);
     await tester.pump();
 
@@ -1996,8 +2325,7 @@ void main() {
     expect(bridgeRealtimeService.startCalls, 1);
     expect(bridgeRealtimeService.cancelCalls, greaterThanOrEqualTo(1));
     expect(audioService.cancelCalls, greaterThanOrEqualTo(1));
-    expect(find.widgetWithText(OutlinedButton, 'Voice input'), findsOneWidget);
-    expect(find.widgetWithText(OutlinedButton, 'Stop voice'), findsNothing);
+    expect(find.byKey(const Key('session-voice-input-button')), findsOneWidget);
   });
 
   testWidgets(
@@ -2164,8 +2492,7 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('call-mode-screen')), findsNothing);
-    expect(find.widgetWithText(OutlinedButton, 'Voice input'), findsOneWidget);
-    expect(find.widgetWithText(OutlinedButton, 'Stop voice'), findsNothing);
+    expect(find.byKey(const Key('session-voice-input-button')), findsOneWidget);
     expect(bridgeRealtimeService.cancelCalls, 1);
   });
 
@@ -2303,8 +2630,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const Key('call-mode-primary-button')), findsOneWidget);
-    expect(find.widgetWithText(OutlinedButton, 'Voice input'), findsNothing);
-    expect(find.widgetWithText(FilledButton, 'Send'), findsNothing);
+    expect(find.byKey(const Key('session-voice-input-button')), findsNothing);
+    expect(find.byKey(const Key('session-send-button')), findsNothing);
 
     tester
         .widget<InkWell>(
@@ -3111,8 +3438,7 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('call-mode-screen')), findsNothing);
-    expect(find.widgetWithText(OutlinedButton, 'Voice input'), findsOneWidget);
-    expect(find.widgetWithText(OutlinedButton, 'Stop voice'), findsNothing);
+    expect(find.byKey(const Key('session-voice-input-button')), findsOneWidget);
 
     startStreamCompleter.complete();
     await tester.pump();
@@ -3156,14 +3482,114 @@ void main() {
     );
     await tester.pump();
 
-    final voiceButton = tester.widget<OutlinedButton>(
-        find.widgetWithText(OutlinedButton, 'Voice input'));
-
-    expect(voiceButton.onPressed, isNotNull);
+    expect(find.byKey(const Key('session-voice-input-button')), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Play'), findsNothing);
     expect(find.widgetWithText(OutlinedButton, 'Stop playback'), findsNothing);
     expect(audioService.hasPermissionCalls, 1);
     expect(speechService.initializeCalls, 0);
+  });
+
+  testWidgets('voice transcription inserts at cursor without replacing draft',
+      (tester) async {
+    final speechService = _FakeSpeechInputService(initializeResult: true);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages([
+            _messageJson(
+              id: 'assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'Reply ready',
+              createdAt: '2026-05-09T10:00:01.000',
+            ),
+          ]),
+          speechInputService: speechService,
+          ttsService: _FakeTtsService(systemAvailable: true),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byType(TextField);
+    await tester.enterText(input, 'before after');
+    final field = tester.widget<TextField>(input);
+    field.controller!.selection = const TextSelection.collapsed(offset: 6);
+
+    await tester.tap(find.byKey(const Key('session-voice-input-button')));
+    await tester.pump();
+    expect(speechService.startListeningCalls, 1);
+    speechService.emitResult('spoken words', isFinal: true);
+    await tester.pump();
+
+    expect(field.controller!.text, 'before spoken words after');
+    expect(field.controller!.selection.baseOffset, 19);
+  });
+
+  testWidgets('voice input action is reachable from keyboard tab order',
+      (tester) async {
+    final speechService = _FakeSpeechInputService(initializeResult: true);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages([
+            _messageJson(
+              id: 'assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'Reply ready',
+              createdAt: '2026-05-09T10:00:01.000',
+            ),
+          ]),
+          speechInputService: speechService,
+          ttsService: _FakeTtsService(systemAvailable: true),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    var focusedVoiceInput = false;
+    for (var i = 0; i < 10; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      final focusedContext = FocusManager.instance.primaryFocus?.context;
+      if (focusedContext != null &&
+          find
+              .descendant(
+                of: find.byKey(const Key('session-voice-input-button')),
+                matching: find.byWidget(focusedContext.widget),
+              )
+              .evaluate()
+              .isNotEmpty) {
+        focusedVoiceInput = true;
+        break;
+      }
+    }
+
+    expect(focusedVoiceInput, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+
+    expect(speechService.startListeningCalls, 1);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    final nextFocusedContext = FocusManager.instance.primaryFocus?.context;
+    final stillFocusedVoiceInput = nextFocusedContext != null &&
+        find
+            .descendant(
+              of: find.byKey(const Key('session-voice-input-button')),
+              matching: find.byWidget(nextFocusedContext.widget),
+            )
+            .evaluate()
+            .isNotEmpty;
+
+    expect(stillFocusedVoiceInput, isFalse);
   });
 
   testWidgets('assistant replies do not show manual playback buttons',
@@ -3605,7 +4031,7 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Stop reply'));
+    await tester.tap(find.byKey(const Key('session-stop-reply-button')));
     await tester.pump();
     await tester.pump();
 
@@ -3892,6 +4318,44 @@ class _FakeHttpClient extends http.BaseClient {
   }
 }
 
+class _StreamingEventHttpClient extends http.BaseClient {
+  _StreamingEventHttpClient({
+    required this.events,
+    required this.handler,
+  });
+
+  final Stream<List<int>> events;
+  final Future<http.Response> Function(http.Request request) handler;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (request.method == 'GET' &&
+        request.url.path == '/sessions/session-1/events') {
+      return http.StreamedResponse(
+        events,
+        200,
+        headers: {'content-type': 'text/event-stream'},
+        request: request,
+      );
+    }
+
+    final nextRequest = http.Request(request.method, request.url)
+      ..headers.addAll(request.headers);
+    if (request is http.Request) {
+      nextRequest.body = request.body;
+      nextRequest.encoding = request.encoding;
+    }
+    final response = await handler(nextRequest);
+    return http.StreamedResponse(
+      Stream.value(response.bodyBytes),
+      response.statusCode,
+      headers: response.headers,
+      reasonPhrase: response.reasonPhrase,
+      request: request,
+    );
+  }
+}
+
 class _FakeAudioRecordingService extends AudioRecordingService {
   _FakeAudioRecordingService({
     required this.hasPermissionResult,
@@ -4089,6 +4553,8 @@ class _FakeSpeechInputService extends SpeechInputService {
 
   final bool initializeResult;
   int initializeCalls = 0;
+  int startListeningCalls = 0;
+  void Function(String words, bool isFinal)? _onResult;
 
   @override
   Future<bool> initialize({
@@ -4097,6 +4563,24 @@ class _FakeSpeechInputService extends SpeechInputService {
   }) async {
     initializeCalls += 1;
     return initializeResult;
+  }
+
+  @override
+  Future<List<LocaleName>> availableLocales() async {
+    return const <LocaleName>[];
+  }
+
+  @override
+  Future<void> startListening({
+    required void Function(String words, bool isFinal) onResult,
+    String? localeId,
+  }) async {
+    startListeningCalls += 1;
+    _onResult = onResult;
+  }
+
+  void emitResult(String words, {required bool isFinal}) {
+    _onResult?.call(words, isFinal);
   }
 }
 
