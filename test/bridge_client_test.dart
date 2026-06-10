@@ -452,6 +452,92 @@ void main() {
   });
 
   group('BridgeClient listSessions', () {
+    test('parses git status summaries from session payloads', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.url.path, '/sessions');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'session-1',
+                  'project_id': 'project-1',
+                  'title': 'Session 1',
+                  'agent': 'codex',
+                  'brief_reply_mode': false,
+                  'status': 'idle',
+                  'updated_at': '2026-05-05T09:00:00.000',
+                  'unread_count': 0,
+                  'last_message_preview': null,
+                  'pending_approval': null,
+                  'git_status': {
+                    'branch': 'feature/git-status',
+                    'short_sha': 'abc1234',
+                    'is_dirty': true,
+                    'ahead': 2,
+                    'behind': 1,
+                    'staged': 3,
+                    'unstaged': 4,
+                    'untracked': 5,
+                  },
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final sessions = await client.listSessions();
+      final gitStatus = sessions.single.gitStatus;
+
+      expect(gitStatus, isNotNull);
+      expect(gitStatus!.branch, 'feature/git-status');
+      expect(
+        gitStatus.label,
+        'feature/git-status · dirty · ahead 2 · behind 1 · '
+        '3 staged · 4 changed · 5 untracked',
+      );
+    });
+
+    test('parses git branch from session payloads', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.url.path, '/sessions');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'session-1',
+                  'project_id': 'project-1',
+                  'title': 'Session 1',
+                  'agent': 'codex',
+                  'brief_reply_mode': false,
+                  'status': 'idle',
+                  'updated_at': '2026-05-05T09:00:00.000',
+                  'unread_count': 0,
+                  'last_message_preview': null,
+                  'pending_approval': null,
+                  'git_branch': 'feat/optimize-session-ui',
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final sessions = await client.listSessions();
+      final gitStatus = sessions.single.gitStatus;
+
+      expect(gitStatus, isNotNull);
+      expect(gitStatus!.branch, 'feat/optimize-session-ui');
+      expect(gitStatus.statusKnown, isFalse);
+      expect(gitStatus.label, 'feat/optimize-session-ui');
+    });
+
     test('sorts sessions by updatedAt descending and seeds cache', () async {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
