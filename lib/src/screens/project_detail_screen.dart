@@ -13,6 +13,7 @@ import '../theme/app_theme.dart';
 import '../widgets/app_back_header.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_skeleton.dart';
+import '../widgets/create_session_dialog.dart';
 import '../widgets/copyable_message.dart';
 import 'session_detail_screen.dart';
 
@@ -131,6 +132,66 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     return _loadSessions(forceRefresh: true);
   }
 
+  Widget _buildGitInfoRow(
+    String branch,
+    ProjectGitStatus? status,
+    Brightness brightness,
+  ) {
+    final l10n = context.l10n;
+    final statusColor = status == ProjectGitStatus.dirty
+        ? AppColors.warningFor(brightness)
+        : AppColors.successFor(brightness);
+    final statusLabel = status == ProjectGitStatus.dirty
+        ? l10n.gitDirty
+        : l10n.gitClean;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.source_outlined,
+          size: 12,
+          color: AppColors.mutedSoftFor(brightness),
+        ),
+        const SizedBox(width: AppSpacing.micro),
+        Flexible(
+          child: Text(
+            branch,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontFamily: AppTheme.bodyFontFamily,
+                  fontFamilyFallback: AppTheme.monoFontFamilyFallback,
+                  color: AppColors.mutedSoftFor(brightness),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ),
+        if (status != null) ...[
+          const SizedBox(width: AppSpacing.compact),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.micro,
+              vertical: 1,
+            ),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+            ),
+            child: Text(
+              statusLabel,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                color: statusColor,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   String _formatSessionUpdatedAt(DateTime value) {
     final local = value.toLocal();
     String pad(int number) => number.toString().padLeft(2, '0');
@@ -198,6 +259,15 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                                         color: AppColors.mutedFor(brightness),
                                       ),
                                     ),
+                                    if (_project.gitBranch != null) ...[
+                                      const SizedBox(
+                                          height: AppSpacing.compact),
+                                      _buildGitInfoRow(
+                                        _project.gitBranch!,
+                                        _project.gitStatus,
+                                        brightness,
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -464,17 +534,27 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   Future<void> _createSession() async {
     final l10n = context.l10n;
     final navigator = Navigator.of(context);
-    final result = await showDialog<(String?, String)>(
+    final result = await showDialog<CreateSessionDialogResult>(
       context: context,
-      builder: (context) => const _CreateSessionDialog(),
+      builder: (context) => CreateSessionDialog(
+        client: _client,
+        initialProviderId: appSettingsController
+            .settings.lastSelectedProviderByProject[_project.id],
+      ),
     );
     if (result == null) {
       return;
     }
 
+    final savedProviderSelections = Map<String, String?>.from(
+      appSettingsController.settings.lastSelectedProviderByProject,
+    )..[_project.id] = result.$3;
     unawaited(
       appSettingsController.save(
-        appSettingsController.settings.copyWith(lastSelectedAgent: result.$2),
+        appSettingsController.settings.copyWith(
+          lastSelectedAgent: result.$2,
+          lastSelectedProviderByProject: savedProviderSelections,
+        ),
       ),
     );
 
@@ -490,12 +570,14 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       status: SessionStatus.idle,
       updatedAt: DateTime.now(),
       unreadCount: 0,
+      providerId: result.$3,
     );
     final sessionFuture = _client.createSession(
       projectId: _project.id,
       title: result.$1,
       agent: result.$2,
       briefReplyMode: appSettingsController.settings.compressAssistantReplies,
+      providerId: result.$3,
     );
 
     await navigator.push(
@@ -548,9 +630,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       return sessions;
     }
     return sessions.where((session) {
-      final haystack = '${session.title} ${session.lastMessagePreview ?? ''} '
-              '${session.gitStatus?.label ?? ''} ${session.agent.label}'
-          .toLowerCase();
+      final haystack =
+          '${session.title} ${session.lastMessagePreview ?? ''} ${session.agent.label}'
+              .toLowerCase();
       return haystack.contains(query);
     }).toList(growable: false);
   }
@@ -638,31 +720,6 @@ class _SessionSummaryCard extends StatelessWidget {
                     color: AppColors.mutedFor(theme.brightness),
                   ),
                 ),
-                if (session.gitStatus != null) ...[
-                  const SizedBox(height: AppSpacing.textTight),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.account_tree_outlined,
-                        size: 12,
-                        color: AppColors.mutedFor(theme.brightness),
-                      ),
-                      const SizedBox(width: AppSpacing.micro),
-                      Expanded(
-                        child: Text(
-                          session.gitStatus!.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: textTheme.labelSmall?.copyWith(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.mutedFor(theme.brightness),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
                 if (session.lastMessagePreview?.trim().isNotEmpty == true) ...[
                   const SizedBox(height: AppSpacing.textTight),
                   Text(
@@ -887,78 +944,6 @@ class _SearchClearButtonState extends State<_SearchClearButton> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _CreateSessionDialog extends StatefulWidget {
-  const _CreateSessionDialog();
-
-  @override
-  State<_CreateSessionDialog> createState() => _CreateSessionDialogState();
-}
-
-class _CreateSessionDialogState extends State<_CreateSessionDialog> {
-  final _titleController = TextEditingController();
-  String _agent = appSettingsController.settings.lastSelectedAgent;
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    return AlertDialog(
-      backgroundColor: AppColors.panelFor(brightness),
-      title: Text(context.l10n.newSession),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _titleController,
-            decoration: InputDecoration(
-              labelText: context.l10n.sessionTitleOptional,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.stack),
-          DropdownButtonFormField<String>(
-            initialValue: _agent,
-            items: AgentKind.selectableValues
-                .map(
-                  (agent) => DropdownMenuItem(
-                    value: agent.id,
-                    child: Text(agent.label),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) {
-              if (value == null) {
-                return;
-              }
-              setState(() {
-                _agent = value;
-              });
-            },
-            decoration: InputDecoration(labelText: context.l10n.agentLabel),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(context.l10n.cancel),
-        ),
-        FilledButton(
-          onPressed: () {
-            final title = _titleController.text.trim();
-            Navigator.of(context).pop((title.isEmpty ? null : title, _agent));
-          },
-          child: Text(context.l10n.create),
-        ),
-      ],
     );
   }
 }

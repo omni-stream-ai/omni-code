@@ -21,6 +21,11 @@ enum ApiFormat {
   }
 }
 
+const autoProviderId = 'AUTO';
+
+bool isAutoProviderId(String? providerId) =>
+    providerId != null && providerId.toUpperCase() == autoProviderId;
+
 class ModelProviderConfig {
   const ModelProviderConfig({
     required this.id,

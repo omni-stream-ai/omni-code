@@ -1318,16 +1318,20 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Widget _buildProviderSelector() {
-    if (_providers.isEmpty) return const SizedBox.shrink();
+    if (_providers.isEmpty && !isAutoProviderId(_overrideProviderId)) {
+      return const SizedBox.shrink();
+    }
     final theme = Theme.of(context);
     final l10n = context.l10n;
     final currentName = _overrideProviderId == null
-        ? l10n.providerAuto
-        : _providers
-                .where((p) => p.id == _overrideProviderId)
-                .firstOrNull
-                ?.name ??
-            l10n.providerAuto;
+        ? l10n.providerDefault
+        : isAutoProviderId(_overrideProviderId)
+            ? l10n.providerAuto
+            : _providers
+                    .where((p) => p.id == _overrideProviderId)
+                    .firstOrNull
+                    ?.name ??
+                l10n.providerDefault;
 
     return PopupMenuButton<String?>(
       tooltip: l10n.providerOverride,
@@ -1353,23 +1357,24 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         );
       },
       itemBuilder: (context) => [
-        PopupMenuItem(
-          value: null,
-          child: Row(
-            children: [
-              if (_overrideProviderId == null)
-                Icon(
-                  Icons.check_rounded,
-                  size: 18,
-                  color: theme.colorScheme.tertiary,
-                )
-              else
-                const SizedBox(width: 18),
-              const SizedBox(width: 8),
-              Text(l10n.providerAuto),
-            ],
+        if (_providers.isNotEmpty)
+          PopupMenuItem(
+            value: autoProviderId,
+            child: Row(
+              children: [
+                if (isAutoProviderId(_overrideProviderId))
+                  Icon(
+                    Icons.check_rounded,
+                    size: 18,
+                    color: theme.colorScheme.tertiary,
+                  )
+                else
+                  const SizedBox(width: 18),
+                const SizedBox(width: 8),
+                Text(l10n.providerAuto),
+              ],
+            ),
           ),
-        ),
         ..._providers.map(
           (p) => PopupMenuItem(
             value: p.id,
@@ -1387,6 +1392,23 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 Expanded(child: Text(p.name)),
               ],
             ),
+          ),
+        ),
+        PopupMenuItem(
+          value: null,
+          child: Row(
+            children: [
+              if (_overrideProviderId == null)
+                Icon(
+                  Icons.check_rounded,
+                  size: 18,
+                  color: theme.colorScheme.tertiary,
+                )
+              else
+                const SizedBox(width: 18),
+              const SizedBox(width: 8),
+              Text(l10n.providerDefault),
+            ],
           ),
         ),
       ],

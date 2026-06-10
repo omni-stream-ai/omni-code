@@ -150,6 +150,29 @@ void main() {
     expect(restored.lastSelectedAgent, 'claude_code');
   });
 
+  test('lastSelectedProviderByProject round-trips through json', () {
+    final settings = AppSettings.defaults().copyWith(
+      lastSelectedProviderByProject: const {
+        'project-1': 'AUTO',
+        'project-2': 'provider-2',
+        'project-3': null,
+      },
+    );
+    final restored = AppSettings.fromJson(settings.toJson());
+    expect(restored.lastSelectedProviderByProject, {
+      'project-1': 'AUTO',
+      'project-2': 'provider-2',
+      'project-3': null,
+    });
+  });
+
+  test('null last_selected_provider_by_project falls back to empty map', () {
+    final settings = AppSettings.fromJson(<String, dynamic>{
+      'last_selected_provider_by_project': null,
+    });
+    expect(settings.lastSelectedProviderByProject, isEmpty);
+  });
+
   test('voiceComposerMode defaults to false', () {
     expect(AppSettings.defaults().voiceComposerMode, isFalse);
   });

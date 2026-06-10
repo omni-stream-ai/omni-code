@@ -2513,8 +2513,14 @@ abstract class AppLocalizations {
   /// No description provided for @providerAuto.
   ///
   /// In en, this message translates to:
-  /// **'Auto (default)'**
+  /// **'Auto'**
   String get providerAuto;
+
+  /// No description provided for @providerDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get providerDefault;
 
   /// No description provided for @providerOverride.
   ///

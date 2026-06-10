@@ -47,18 +47,11 @@ void main() {
         .setMockMethodCallHandler(_localNotificationsChannel, null);
   });
 
-  testWidgets('shows git status in the session detail header', (tester) async {
+  testWidgets('shows session title in the session detail header', (tester) async {
     await tester.pumpWidget(
       _TestApp(
         home: SessionDetailScreen(
-          session: _session(
-            gitStatus: const GitStatusSummary(
-              branch: 'feature/git-status',
-              isDirty: true,
-              ahead: 1,
-              unstaged: 2,
-            ),
-          ),
+          session: _session(),
           client: _clientForMessages(const []),
           enableSpeechServices: false,
         ),
@@ -67,10 +60,6 @@ void main() {
     await tester.pump();
 
     expect(find.text('Test Session'), findsOneWidget);
-    expect(
-      find.text('feature/git-status · dirty · ahead 1 · 2 changed'),
-      findsOneWidget,
-    );
   });
 
   testWidgets('pressing enter sends the current draft on desktop',
@@ -566,13 +555,14 @@ void main() {
           );
         }
         if (request.method == 'GET' &&
-            request.url.path == '/projects/project-1/sessions') {
+            request.url.path == '/sessions/session-1') {
           refreshedSession = true;
           return http.Response(
             jsonEncode({
-              'data': [
-                _sessionJson(title: 'Generated title'),
-              ],
+              'data': {
+                'session': _sessionJson(title: 'Generated title'),
+                'git_status': null,
+              },
             }),
             200,
             headers: {'content-type': 'application/json'},
@@ -4804,7 +4794,6 @@ SessionSummary _session({
   SessionStatus status = SessionStatus.idle,
   bool briefReplyMode = false,
   String title = 'Test Session',
-  GitStatusSummary? gitStatus,
 }) {
   return SessionSummary(
     id: 'session-1',
@@ -4817,7 +4806,6 @@ SessionSummary _session({
     unreadCount: 0,
     lastMessagePreview: null,
     pendingApproval: null,
-    gitStatus: gitStatus,
   );
 }
 

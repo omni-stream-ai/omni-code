@@ -1349,7 +1349,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providerPriorityHelp => '数字越小优先级越高';
 
   @override
-  String get providerAuto => '自动（默认）';
+  String get providerAuto => '自动';
+
+  @override
+  String get providerDefault => '默认';
 
   @override
   String get providerOverride => '供应商覆盖';

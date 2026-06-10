@@ -1397,7 +1397,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get providerPriorityHelp => 'Lower number = higher priority';
 
   @override
-  String get providerAuto => 'Auto (default)';
+  String get providerAuto => 'Auto';
+
+  @override
+  String get providerDefault => 'Default';
 
   @override
   String get providerOverride => 'Provider Override';
