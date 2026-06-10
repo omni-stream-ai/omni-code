@@ -1377,4 +1377,49 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fieldRequired => '此项为必填';
+
+  @override
+  String get gitClean => '干净';
+
+  @override
+  String get gitDirty => '有改动';
+
+  @override
+  String get gitStaged => '已暂存';
+
+  @override
+  String get gitChanged => '已修改';
+
+  @override
+  String get gitUntracked => '未跟踪';
+
+  @override
+  String gitAhead(int count) {
+    return '领先 $count 个提交';
+  }
+
+  @override
+  String gitBehind(int count) {
+    return '落后 $count 个提交';
+  }
+
+  @override
+  String gitChangedCount(int count) {
+    return '$count 项变更';
+  }
+
+  @override
+  String gitStagedCount(int count) {
+    return '$count 个暂存';
+  }
+
+  @override
+  String gitUnstagedCount(int count) {
+    return '$count 个修改';
+  }
+
+  @override
+  String gitUntrackedCount(int count) {
+    return '$count 个未跟踪';
+  }
 }

@@ -2569,6 +2569,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This field is required'**
   String get fieldRequired;
+
+  /// No description provided for @gitClean.
+  ///
+  /// In en, this message translates to:
+  /// **'clean'**
+  String get gitClean;
+
+  /// No description provided for @gitDirty.
+  ///
+  /// In en, this message translates to:
+  /// **'dirty'**
+  String get gitDirty;
+
+  /// No description provided for @gitStaged.
+  ///
+  /// In en, this message translates to:
+  /// **'staged'**
+  String get gitStaged;
+
+  /// No description provided for @gitChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'changed'**
+  String get gitChanged;
+
+  /// No description provided for @gitUntracked.
+  ///
+  /// In en, this message translates to:
+  /// **'untracked'**
+  String get gitUntracked;
+
+  /// No description provided for @gitAhead.
+  ///
+  /// In en, this message translates to:
+  /// **'ahead {count}'**
+  String gitAhead(int count);
+
+  /// No description provided for @gitBehind.
+  ///
+  /// In en, this message translates to:
+  /// **'behind {count}'**
+  String gitBehind(int count);
+
+  /// No description provided for @gitChangedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} changed'**
+  String gitChangedCount(int count);
+
+  /// No description provided for @gitStagedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} staged'**
+  String gitStagedCount(int count);
+
+  /// No description provided for @gitUnstagedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} modified'**
+  String gitUnstagedCount(int count);
+
+  /// No description provided for @gitUntrackedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} untracked'**
+  String gitUntrackedCount(int count);
 }
 
 class _AppLocalizationsDelegate

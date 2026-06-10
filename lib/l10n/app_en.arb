@@ -685,5 +685,46 @@
   "providerSessionLabel": "Provider",
   "providerOverrideFailed": "Failed to save provider selection",
   "confirm": "Confirm",
-  "fieldRequired": "This field is required"
+  "fieldRequired": "This field is required",
+  "gitClean": "clean",
+  "gitDirty": "dirty",
+  "gitStaged": "staged",
+  "gitChanged": "changed",
+  "gitUntracked": "untracked",
+  "gitAhead": "ahead {count}",
+  "@gitAhead": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitBehind": "behind {count}",
+  "@gitBehind": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitChangedCount": "{count} changed",
+  "@gitChangedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitStagedCount": "{count} staged",
+  "@gitStagedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitUnstagedCount": "{count} modified",
+  "@gitUnstagedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitUntrackedCount": "{count} untracked",
+  "@gitUntrackedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  }
 }

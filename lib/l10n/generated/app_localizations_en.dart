@@ -1425,4 +1425,49 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fieldRequired => 'This field is required';
+
+  @override
+  String get gitClean => 'clean';
+
+  @override
+  String get gitDirty => 'dirty';
+
+  @override
+  String get gitStaged => 'staged';
+
+  @override
+  String get gitChanged => 'changed';
+
+  @override
+  String get gitUntracked => 'untracked';
+
+  @override
+  String gitAhead(int count) {
+    return 'ahead $count';
+  }
+
+  @override
+  String gitBehind(int count) {
+    return 'behind $count';
+  }
+
+  @override
+  String gitChangedCount(int count) {
+    return '$count changed';
+  }
+
+  @override
+  String gitStagedCount(int count) {
+    return '$count staged';
+  }
+
+  @override
+  String gitUnstagedCount(int count) {
+    return '$count modified';
+  }
+
+  @override
+  String gitUntrackedCount(int count) {
+    return '$count untracked';
+  }
 }

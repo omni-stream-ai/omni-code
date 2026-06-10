@@ -156,8 +156,39 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   String? _dismissedErrorBannerMessage;
   String? _overrideProviderId;
   List<ModelProviderConfig> _providers = const [];
+  GitStatusDetail? _gitStatus;
 
   BridgeClient get _client => widget.client ?? bridgeClient;
+
+  String? get _gitStatusLabel {
+    final status = _gitStatus;
+    if (status == null) {
+      return null;
+    }
+    final l10n = context.l10n;
+    final parts = <String>[];
+    final branch = _client.peekProject(_session.projectId)?.gitBranch;
+    if (branch != null && branch.isNotEmpty) {
+      parts.add(branch);
+    }
+    final aheadCount = status.ahead;
+    if (aheadCount != null && aheadCount > 0) {
+      parts.add(l10n.gitAhead(aheadCount));
+    }
+    final behindCount = status.behind;
+    if (behindCount != null && behindCount > 0) {
+      parts.add(l10n.gitBehind(behindCount));
+    }
+    final changedCount = status.changedCount;
+    if (changedCount != null && changedCount > 0) {
+      parts.add(l10n.gitChangedCount(changedCount));
+    } else if (status.dirty) {
+      parts.add(l10n.gitDirty);
+    } else {
+      parts.add(l10n.gitClean);
+    }
+    return parts.join(' · ');
+  }
 
   String _systemSpeechUnavailableLabel() =>
       context.l10n.systemSpeechUnavailable;
@@ -433,6 +464,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     } else {
       _loadMessages();
       _subscribeToEvents();
+      unawaited(_loadSessionDetail());
     }
     _loadProviders();
   }
@@ -507,17 +539,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     _refreshSessionSummaryInFlight = true;
     try {
-      final refreshedSession = await _client.getProjectSession(
-        _session.projectId,
-        _session.id,
-        forceRefresh: true,
-      );
-      if (!mounted || refreshedSession.id != _session.id) {
+      final detail = await _client.getSession(_session.id);
+      if (!mounted || detail.session.id != _session.id) {
         return;
       }
       setState(() {
-        _session = refreshedSession;
-        _pendingApproval = refreshedSession.pendingApproval;
+        _session = detail.session;
+        _pendingApproval = detail.session.pendingApproval;
+        _gitStatus = detail.gitStatus;
         _reconcileSubmittedApprovalState();
       });
       _syncSessionSummaryCache();
@@ -525,6 +554,23 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       // Best effort: message delivery should not surface title refresh errors.
     } finally {
       _refreshSessionSummaryInFlight = false;
+    }
+  }
+
+  Future<void> _loadSessionDetail() async {
+    if (_creatingSession) {
+      return;
+    }
+    try {
+      final detail = await _client.getSession(_session.id);
+      if (!mounted || detail.session.id != _session.id) {
+        return;
+      }
+      setState(() {
+        _gitStatus = detail.gitStatus;
+      });
+    } catch (_) {
+      // Best effort — git info is supplementary.
     }
   }
 
@@ -556,6 +602,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         titleSpacing: AppSpacing.compact,
         title: AppBackHeader(
           title: _session.title,
+          subtitle: _gitStatusLabel,
           titleStyle: theme.textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.w800,
             height: 1.1,
@@ -2870,6 +2917,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       });
       _subscribeToEvents();
       await _loadMessages();
+      unawaited(_loadSessionDetail());
     } catch (error) {
       if (!mounted) {
         return;
@@ -2984,6 +3032,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       if (_callModeEnabled) {
         unawaited(_maybeResumeCallModeListening());
       }
+      unawaited(_loadSessionDetail());
     } catch (error) {
       if (!mounted) {
         return;

@@ -474,8 +474,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
     unawaited(
       appSettingsController.save(
-        appSettingsController.settings
-            .copyWith(lastSelectedAgent: result.$2),
+        appSettingsController.settings.copyWith(lastSelectedAgent: result.$2),
       ),
     );
 
@@ -549,9 +548,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       return sessions;
     }
     return sessions.where((session) {
-      final haystack =
-          '${session.title} ${session.lastMessagePreview ?? ''} ${session.agent.label}'
-              .toLowerCase();
+      final haystack = '${session.title} ${session.lastMessagePreview ?? ''} '
+              '${session.gitStatus?.label ?? ''} ${session.agent.label}'
+          .toLowerCase();
       return haystack.contains(query);
     }).toList(growable: false);
   }
@@ -639,6 +638,31 @@ class _SessionSummaryCard extends StatelessWidget {
                     color: AppColors.mutedFor(theme.brightness),
                   ),
                 ),
+                if (session.gitStatus != null) ...[
+                  const SizedBox(height: AppSpacing.textTight),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.account_tree_outlined,
+                        size: 12,
+                        color: AppColors.mutedFor(theme.brightness),
+                      ),
+                      const SizedBox(width: AppSpacing.micro),
+                      Expanded(
+                        child: Text(
+                          session.gitStatus!.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.labelSmall?.copyWith(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.mutedFor(theme.brightness),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 if (session.lastMessagePreview?.trim().isNotEmpty == true) ...[
                   const SizedBox(height: AppSpacing.textTight),
                   Text(

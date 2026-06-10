@@ -685,5 +685,46 @@
   "providerSessionLabel": "供应商",
   "providerOverrideFailed": "供应商选择保存失败",
   "confirm": "确认",
-  "fieldRequired": "此项为必填"
+  "fieldRequired": "此项为必填",
+  "gitClean": "干净",
+  "gitDirty": "有改动",
+  "gitStaged": "已暂存",
+  "gitChanged": "已修改",
+  "gitUntracked": "未跟踪",
+  "gitAhead": "领先 {count} 个提交",
+  "@gitAhead": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitBehind": "落后 {count} 个提交",
+  "@gitBehind": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitChangedCount": "{count} 项变更",
+  "@gitChangedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitStagedCount": "{count} 个暂存",
+  "@gitStagedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitUnstagedCount": "{count} 个修改",
+  "@gitUnstagedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitUntrackedCount": "{count} 个未跟踪",
+  "@gitUntrackedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  }
 }
