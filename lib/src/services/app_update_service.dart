@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
@@ -71,14 +72,19 @@ class AppUpdateService {
         deviceInfo: _deviceInfo,
       );
       final update = parsedUpdate.resolveAgainst(uri);
+      final hasUpdate = isTargetedDownload
+          ? true
+          : _isNewerVersionAvailable(
+              currentVersionName: packageInfo.version,
+              currentVersionCode: currentBuildNumber,
+              candidate: update,
+            );
       return AppUpdateCheckResult(
         currentVersionName: packageInfo.version,
         currentVersionCode: currentBuildNumber,
         targetVersion: normalizedTargetVersion,
         isTargetedDownload: isTargetedDownload,
-        update: isTargetedDownload
-            ? update
-            : (update.versionCode > currentBuildNumber ? update : null),
+        update: hasUpdate ? update : null,
       );
     } on AppUpdateException {
       rethrow;
@@ -206,6 +212,69 @@ class AppUpdateService {
         segments[2] == 'releases' &&
         segments[3] == 'download' &&
         segments[5] == 'update.json';
+  }
+
+  @visibleForTesting
+  static bool isNewerVersionAvailableForTest({
+    required String currentVersionName,
+    required int currentVersionCode,
+    required AppUpdateInfo candidate,
+  }) {
+    return _isNewerVersionAvailable(
+      currentVersionName: currentVersionName,
+      currentVersionCode: currentVersionCode,
+      candidate: candidate,
+    );
+  }
+
+  static bool _isNewerVersionAvailable({
+    required String currentVersionName,
+    required int currentVersionCode,
+    required AppUpdateInfo candidate,
+  }) {
+    if (candidate.versionCode > currentVersionCode) {
+      return true;
+    }
+    if (candidate.versionCode < currentVersionCode) {
+      return false;
+    }
+
+    return _compareVersionNames(
+          candidate.versionName,
+          currentVersionName,
+        ) >
+        0;
+  }
+
+  static int _compareVersionNames(String left, String right) {
+    final leftParts = _parseVersionNameParts(left);
+    final rightParts = _parseVersionNameParts(right);
+    final length =
+        leftParts.length > rightParts.length ? leftParts.length : rightParts.length;
+
+    for (var index = 0; index < length; index++) {
+      final leftPart = index < leftParts.length ? leftParts[index] : 0;
+      final rightPart = index < rightParts.length ? rightParts[index] : 0;
+      if (leftPart != rightPart) {
+        return leftPart.compareTo(rightPart);
+      }
+    }
+
+    return 0;
+  }
+
+  static List<int> _parseVersionNameParts(String versionName) {
+    final normalized = versionName.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return const [0];
+    }
+
+    return normalized
+        .replaceFirst(RegExp(r'^v'), '')
+        .split(RegExp(r'[^0-9]+'))
+        .where((part) => part.isNotEmpty)
+        .map((part) => int.tryParse(part) ?? 0)
+        .toList(growable: false);
   }
 }
 
