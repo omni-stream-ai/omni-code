@@ -227,6 +227,13 @@
   "messageInputHint": "输入任务，例如：帮我检查最近一次构建失败原因",
   "stopVoice": "停止语音",
   "voiceInput": "语音输入",
+  "keyboardInput": "键盘输入",
+  "voiceHoldToTalk": "按住说话",
+  "voiceHoldRecording": "正在聆听...",
+  "voiceHoldSlideUpHint": "上滑可转文字或取消",
+  "voiceHoldReleaseHint": "左侧松手转文字，右侧松手取消",
+  "voiceHoldReleaseToText": "转文字",
+  "voiceHoldReleaseCancel": "取消",
   "voiceChatTitle": "通话模式",
   "callModeListening": "可以开始说了，我正在听",
   "callModePreparingListening": "正在准备麦克风",
@@ -669,7 +676,8 @@
   "providerEnabled": "启用",
   "providerPriority": "优先级",
   "providerPriorityHelp": "数字越小优先级越高",
-  "providerAuto": "自动（默认）",
+  "providerAuto": "自动",
+  "providerDefault": "默认",
   "providerOverride": "供应商覆盖",
   "noProvidersYet": "尚未配置供应商",
   "noProvidersHelp": "添加供应商以使用自定义 LLM 端点",
@@ -678,5 +686,46 @@
   "providerSessionLabel": "供应商",
   "providerOverrideFailed": "供应商选择保存失败",
   "confirm": "确认",
-  "fieldRequired": "此项为必填"
+  "fieldRequired": "此项为必填",
+  "gitClean": "干净",
+  "gitDirty": "有改动",
+  "gitStaged": "已暂存",
+  "gitChanged": "已修改",
+  "gitUntracked": "未跟踪",
+  "gitAhead": "领先 {count} 个提交",
+  "@gitAhead": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitBehind": "落后 {count} 个提交",
+  "@gitBehind": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitChangedCount": "{count} 项变更",
+  "@gitChangedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitStagedCount": "{count} 个暂存",
+  "@gitStagedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitUnstagedCount": "{count} 个修改",
+  "@gitUnstagedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitUntrackedCount": "{count} 个未跟踪",
+  "@gitUntrackedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  }
 }

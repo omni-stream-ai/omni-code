@@ -35,7 +35,7 @@ void main() {
     },
   );
 
-  testWidgets('shows saved target update version in settings screen',
+  testWidgets('does not restore target update version from saved settings',
       (tester) async {
     appSettingsController.debugReplaceSettings(
       AppSettings.defaults().copyWith(updateTargetVersion: '0.2.1'),
@@ -53,7 +53,7 @@ void main() {
       matchingFields.any(
         (field) => field.controller?.text == '0.2.1',
       ),
-      isTrue,
+      isFalse,
     );
   });
 

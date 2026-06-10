@@ -438,6 +438,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get voiceInput => '语音输入';
 
   @override
+  String get keyboardInput => '键盘输入';
+
+  @override
+  String get voiceHoldToTalk => '按住说话';
+
+  @override
+  String get voiceHoldRecording => '正在聆听...';
+
+  @override
+  String get voiceHoldSlideUpHint => '上滑可转文字或取消';
+
+  @override
+  String get voiceHoldReleaseHint => '左侧松手转文字，右侧松手取消';
+
+  @override
+  String get voiceHoldReleaseToText => '转文字';
+
+  @override
+  String get voiceHoldReleaseCancel => '取消';
+
+  @override
   String get voiceChatTitle => '通话模式';
 
   @override
@@ -1328,7 +1349,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providerPriorityHelp => '数字越小优先级越高';
 
   @override
-  String get providerAuto => '自动（默认）';
+  String get providerAuto => '自动';
+
+  @override
+  String get providerDefault => '默认';
 
   @override
   String get providerOverride => '供应商覆盖';
@@ -1356,4 +1380,49 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fieldRequired => '此项为必填';
+
+  @override
+  String get gitClean => '干净';
+
+  @override
+  String get gitDirty => '有改动';
+
+  @override
+  String get gitStaged => '已暂存';
+
+  @override
+  String get gitChanged => '已修改';
+
+  @override
+  String get gitUntracked => '未跟踪';
+
+  @override
+  String gitAhead(int count) {
+    return '领先 $count 个提交';
+  }
+
+  @override
+  String gitBehind(int count) {
+    return '落后 $count 个提交';
+  }
+
+  @override
+  String gitChangedCount(int count) {
+    return '$count 项变更';
+  }
+
+  @override
+  String gitStagedCount(int count) {
+    return '$count 个暂存';
+  }
+
+  @override
+  String gitUnstagedCount(int count) {
+    return '$count 个修改';
+  }
+
+  @override
+  String gitUntrackedCount(int count) {
+    return '$count 个未跟踪';
+  }
 }

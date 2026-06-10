@@ -151,7 +151,86 @@ void main() {
       expect(body['project_id'], 'project-1');
       expect(body['title'], 'Test');
       expect(body['agent'], AgentKind.claudecode.id);
+      expect(body.containsKey('provider_id'), isFalse);
       expect(session.agent, AgentKind.claudecode);
+    });
+
+    test('includes provider id when specified', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/sessions');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'id': 'session-2',
+                'project_id': 'project-1',
+                'title': 'Provider Session',
+                'agent': 'codex',
+                'brief_reply_mode': false,
+                'status': 'idle',
+                'updated_at': '2026-05-05T11:00:00.000',
+                'unread_count': 0,
+                'last_message_preview': null,
+                'pending_approval': null,
+                'provider_id': 'openai',
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final session = await client.createSession(
+        projectId: 'project-1',
+        title: 'Provider Session',
+        providerId: 'openai',
+      );
+
+      expect(body['provider_id'], 'openai');
+      expect(session.providerId, 'openai');
+    });
+
+    test('includes AUTO provider id for provider auto mode', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/sessions');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'id': 'session-3',
+                'project_id': 'project-1',
+                'title': 'Auto Provider Session',
+                'agent': 'codex',
+                'brief_reply_mode': false,
+                'status': 'idle',
+                'updated_at': '2026-05-05T11:00:00.000',
+                'unread_count': 0,
+                'last_message_preview': null,
+                'pending_approval': null,
+                'provider_id': 'AUTO',
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final session = await client.createSession(
+        projectId: 'project-1',
+        title: 'Auto Provider Session',
+        providerId: autoProviderId,
+      );
+
+      expect(body['provider_id'], 'AUTO');
+      expect(session.providerId, 'AUTO');
     });
   });
 
