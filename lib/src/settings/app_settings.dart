@@ -212,8 +212,7 @@ class AppSettings {
       callModeWakeWords: _normalizeCallModeWakeWords(
           callModeWakeWords ?? this.callModeWakeWords),
       lastSelectedAgent: lastSelectedAgent ?? this.lastSelectedAgent,
-      lastSelectedProviderByProject:
-          Map<String, String?>.unmodifiable(
+      lastSelectedProviderByProject: Map<String, String?>.unmodifiable(
         lastSelectedProviderByProject ?? this.lastSelectedProviderByProject,
       ),
       voiceComposerMode: voiceComposerMode ?? this.voiceComposerMode,

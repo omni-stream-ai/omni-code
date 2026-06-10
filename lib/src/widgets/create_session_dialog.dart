@@ -104,13 +104,16 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
       return;
     }
     final selectableAgents = _agentOptions.where((agent) => agent.selectable);
-    final candidates = selectableAgents.isNotEmpty ? selectableAgents : _agentOptions;
+    final candidates =
+        selectableAgents.isNotEmpty ? selectableAgents : _agentOptions;
     final exists = candidates.any((agent) => agent.id == _agent);
     if (!exists) {
-      _agent = candidates.firstWhere(
-        (agent) => agent.defaultSelected,
-        orElse: () => candidates.first,
-      ).id;
+      _agent = candidates
+          .firstWhere(
+            (agent) => agent.defaultSelected,
+            orElse: () => candidates.first,
+          )
+          .id;
     }
   }
 
@@ -227,10 +230,9 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
           ),
           const SizedBox(height: AppSpacing.stack),
           DropdownButtonFormField<String>(
-            initialValue:
-                _agentOptions.any((agent) => agent.id == _agent)
-                    ? _agent
-                    : null,
+            initialValue: _agentOptions.any((agent) => agent.id == _agent)
+                ? _agent
+                : null,
             items: _agentOptions
                 .where((agent) => agent.selectable)
                 .map(
@@ -281,7 +283,9 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
                       Text(
                         context.l10n.agentNotInstalledStatus,
                         key: const Key('agent-install-status-label'),
-                        style: Theme.of(context).textTheme.bodyMedium
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
                             ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                     if (!_selectedAgentInstalled &&

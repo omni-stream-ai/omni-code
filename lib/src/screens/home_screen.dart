@@ -705,7 +705,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             child: _RecentSessionCard(
               title: session.title,
               preview: session.lastMessagePreview,
-              gitStatus: session.gitStatus,
               metadata: _sessionMetadataLabel(session),
               accentColor: _statusColor(session.status, brightness),
               onTap: () => _openSession(session),
@@ -2026,7 +2025,6 @@ class _RecentSessionCard extends StatelessWidget {
   const _RecentSessionCard({
     required this.title,
     required this.preview,
-    required this.gitStatus,
     required this.metadata,
     required this.accentColor,
     required this.onTap,
@@ -2034,7 +2032,6 @@ class _RecentSessionCard extends StatelessWidget {
 
   final String title;
   final String? preview;
-  final GitStatusSummary? gitStatus;
   final String metadata;
   final Color accentColor;
   final VoidCallback onTap;
@@ -2084,32 +2081,6 @@ class _RecentSessionCard extends StatelessWidget {
                           color: AppColors.mutedFor(brightness),
                           height: 1.4,
                         ),
-                  ),
-                ],
-                if (gitStatus != null) ...[
-                  const SizedBox(height: AppSpacing.textStack),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.account_tree_outlined,
-                        size: 12,
-                        color: AppColors.mutedSoftFor(brightness),
-                      ),
-                      const SizedBox(width: AppSpacing.micro),
-                      Expanded(
-                        child: Text(
-                          gitStatus!.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppColors.mutedSoftFor(brightness),
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                        ),
-                      ),
-                    ],
                   ),
                 ],
                 const SizedBox(height: AppSpacing.textStack),
