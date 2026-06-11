@@ -3108,6 +3108,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     var currentIndex =
         initialIndex.clamp(0, galleryReferences.length - 1).toInt();
     var backdropMode = _ImagePreviewBackdropMode.dark;
+    final previewSessionToken = DateTime.now().microsecondsSinceEpoch.toString();
 
     await showDialog<void>(
       context: context,
@@ -3136,7 +3137,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             }
 
             return Image.memory(
-              bytes,
+              currentReference.isAnimatedImage
+                  ? Uint8List.fromList(bytes)
+                  : bytes,
+              key: currentReference.isAnimatedImage
+                  ? ValueKey(
+                      'animated-data-preview-$currentCacheKey-$previewSessionToken',
+                    )
+                  : null,
               fit: BoxFit.contain,
               errorBuilder: (context, _, __) {
                 return _buildImagePreviewError(
@@ -3196,7 +3204,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                           ),
                         )
                       : Image.network(
-                          currentReference.path,
+                          currentReference.isAnimatedImage
+                              ? _previewAnimatedRemoteUrl(
+                                  currentReference.path,
+                                  previewSessionToken,
+                                )
+                              : currentReference.path,
                           key: ValueKey(
                             'remote-image-preview-$currentCacheKey',
                           ),
@@ -3237,7 +3250,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                             fit: BoxFit.contain,
                           )
                         : Image.memory(
-                            snapshot.data!.bytes,
+                            currentReference.isAnimatedImage
+                                ? Uint8List.fromList(snapshot.data!.bytes)
+                                : snapshot.data!.bytes,
+                            key: currentReference.isAnimatedImage
+                                ? ValueKey(
+                                    'animated-local-preview-$currentCacheKey-$previewSessionToken',
+                                  )
+                                : null,
                             fit: BoxFit.contain,
                             errorBuilder: (context, _, __) {
                               return _buildImagePreviewError(
@@ -3603,6 +3623,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   String _safePreviewFileKey(String value) {
     return value.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
+  }
+
+  String _previewAnimatedRemoteUrl(String path, String token) {
+    final uri = Uri.parse(path);
+    return uri.replace(
+      fragment: 'preview-restart-$token',
+    ).toString();
   }
 
   Future<void> _openVideoExternally(

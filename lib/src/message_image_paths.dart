@@ -41,6 +41,11 @@ class MessageImageReference {
 
   bool get isImage => !isVideo;
 
+  bool get isAnimatedImage => isDataUri
+      ? mimeType != null &&
+          (mimeType!.eq('image/gif') || mimeType!.eq('image/webp'))
+      : path.toLowerCase().endsWith('.gif') || path.toLowerCase().endsWith('.webp');
+
   static MessageImageReference? tryParse(String raw) {
     var value = raw.trim();
     if (value.isEmpty) {
