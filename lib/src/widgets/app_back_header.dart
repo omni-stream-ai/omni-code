@@ -7,16 +7,20 @@ class AppBackHeader extends StatelessWidget {
   const AppBackHeader({
     super.key,
     required this.title,
+    this.subtitle,
     this.onTap,
     this.titleStyle,
+    this.subtitleStyle,
     this.tooltip,
     this.maxTitleLines = 1,
     this.titleOverflow = TextOverflow.ellipsis,
   });
 
   final String title;
+  final String? subtitle;
   final VoidCallback? onTap;
   final TextStyle? titleStyle;
+  final TextStyle? subtitleStyle;
   final String? tooltip;
   final int maxTitleLines;
   final TextOverflow titleOverflow;
@@ -59,6 +63,29 @@ class AppBackHeader extends StatelessWidget {
                   overflow: titleOverflow,
                   softWrap: false,
                 );
+                final subtitleText = subtitle?.trim();
+                final contentWidget =
+                    subtitleText == null || subtitleText.isEmpty
+                        ? titleWidget
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              titleWidget,
+                              const SizedBox(height: 2),
+                              Text(
+                                subtitleText,
+                                style: subtitleStyle ??
+                                    theme.textTheme.labelSmall?.copyWith(
+                                      color: AppColors.mutedFor(brightness),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                softWrap: false,
+                              ),
+                            ],
+                          );
 
                 return Row(
                   mainAxisSize:
@@ -75,9 +102,9 @@ class AppBackHeader extends StatelessWidget {
                     ),
                     const SizedBox(width: AppSpacing.compact),
                     if (hasBoundedWidth)
-                      Flexible(child: titleWidget)
+                      Flexible(child: contentWidget)
                     else
-                      titleWidget,
+                      contentWidget,
                   ],
                 );
               },

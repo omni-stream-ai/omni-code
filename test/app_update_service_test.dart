@@ -60,4 +60,60 @@ void main() {
       expect(AppUpdateService.normalizeTargetVersion('  '), isEmpty);
     });
   });
+
+  group('AppUpdateService.isNewerVersionAvailable', () {
+    test('prefers a higher version code', () {
+      expect(
+        AppUpdateService.isNewerVersionAvailableForTest(
+          currentVersionName: '0.5.0',
+          currentVersionCode: 8,
+          candidate: const AppUpdateInfo(
+            versionName: '0.5.0',
+            versionCode: 9,
+            apkUrl: 'https://example.com/app.apk',
+            apkUrls: {},
+            releaseNotes: '',
+            force: false,
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    test('falls back to version name when version codes are equal', () {
+      expect(
+        AppUpdateService.isNewerVersionAvailableForTest(
+          currentVersionName: '0.5.0',
+          currentVersionCode: 8,
+          candidate: const AppUpdateInfo(
+            versionName: '0.5.1',
+            versionCode: 8,
+            apkUrl: 'https://example.com/app.apk',
+            apkUrls: {},
+            releaseNotes: '',
+            force: false,
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    test('does not report update when candidate version is older', () {
+      expect(
+        AppUpdateService.isNewerVersionAvailableForTest(
+          currentVersionName: '0.5.0',
+          currentVersionCode: 8,
+          candidate: const AppUpdateInfo(
+            versionName: '0.4.9',
+            versionCode: 8,
+            apkUrl: 'https://example.com/app.apk',
+            apkUrls: {},
+            releaseNotes: '',
+            force: false,
+          ),
+        ),
+        isFalse,
+      );
+    });
+  });
 }

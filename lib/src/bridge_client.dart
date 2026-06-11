@@ -259,6 +259,24 @@ class BridgeClient {
     return mergedProjects;
   }
 
+  /// Fetches the full session detail (including optional git_status)
+  /// from `GET /sessions/{id}`.
+  Future<SessionDetail> getSession(String sessionId) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/sessions/$sessionId'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final detail = SessionDetail.fromJson(payload);
+    // Keep the session summary cache in sync.
+    _upsertSession(detail.session);
+    return detail;
+  }
+
   Future<ProjectSummary> getProject(
     String projectId, {
     bool forceRefresh = false,
@@ -1073,6 +1091,8 @@ class BridgeClient {
             project.lastSessionPreview,
             existing.lastSessionPreview,
           ),
+          gitBranch: project.gitBranch ?? existing.gitBranch,
+          gitStatus: project.gitStatus ?? existing.gitStatus,
         );
       }
     }

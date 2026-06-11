@@ -56,6 +56,8 @@ class AppSettings {
     required this.callModeWakeWordEnabled,
     required this.callModeWakeWords,
     required this.lastSelectedAgent,
+    required this.lastSelectedProviderByProject,
+    required this.voiceComposerMode,
   });
 
   final String bridgeUrl;
@@ -87,6 +89,8 @@ class AppSettings {
   final bool callModeWakeWordEnabled;
   final String callModeWakeWords;
   final String lastSelectedAgent;
+  final Map<String, String?> lastSelectedProviderByProject;
+  final bool voiceComposerMode;
 
   factory AppSettings.defaults() {
     const configuredUrl = String.fromEnvironment('ECHO_MATE_BRIDGE_URL');
@@ -127,6 +131,8 @@ class AppSettings {
       callModeWakeWordEnabled: false,
       callModeWakeWords: defaultCallModeWakeWords,
       lastSelectedAgent: 'codex',
+      lastSelectedProviderByProject: const {},
+      voiceComposerMode: false,
     );
   }
 
@@ -159,6 +165,8 @@ class AppSettings {
     bool? callModeWakeWordEnabled,
     String? callModeWakeWords,
     String? lastSelectedAgent,
+    Map<String, String?>? lastSelectedProviderByProject,
+    bool? voiceComposerMode,
   }) {
     return AppSettings(
       bridgeUrl: bridgeUrl ?? this.bridgeUrl,
@@ -204,6 +212,11 @@ class AppSettings {
       callModeWakeWords: _normalizeCallModeWakeWords(
           callModeWakeWords ?? this.callModeWakeWords),
       lastSelectedAgent: lastSelectedAgent ?? this.lastSelectedAgent,
+      lastSelectedProviderByProject:
+          Map<String, String?>.unmodifiable(
+        lastSelectedProviderByProject ?? this.lastSelectedProviderByProject,
+      ),
+      voiceComposerMode: voiceComposerMode ?? this.voiceComposerMode,
     );
   }
 
@@ -237,6 +250,8 @@ class AppSettings {
       'call_mode_wake_word_enabled': callModeWakeWordEnabled,
       'call_mode_wake_words': callModeWakeWords,
       'last_selected_agent': lastSelectedAgent,
+      'last_selected_provider_by_project': lastSelectedProviderByProject,
+      'voice_composer_mode': voiceComposerMode,
     };
   }
 
@@ -342,6 +357,17 @@ class AppSettings {
         'last_selected_agent',
         defaults.lastSelectedAgent,
       ),
+      lastSelectedProviderByProject: Map<String, String?>.unmodifiable(
+        _readNullableStringMap(
+          json,
+          'last_selected_provider_by_project',
+        ),
+      ),
+      voiceComposerMode: _readBool(
+        json,
+        'voice_composer_mode',
+        defaults.voiceComposerMode,
+      ),
     );
   }
 
@@ -357,6 +383,25 @@ class AppSettings {
   static String? _readNullableString(Map<String, dynamic> json, String key) {
     final value = json[key];
     return value is String ? value : null;
+  }
+
+  static Map<String, String?> _readNullableStringMap(
+    Map<String, dynamic> json,
+    String key,
+  ) {
+    final value = json[key];
+    if (value is! Map) {
+      return const {};
+    }
+    return {
+      for (final entry in value.entries)
+        if (entry.key is String)
+          entry.key as String: switch (entry.value) {
+            null => null,
+            String stringValue => stringValue,
+            _ => entry.value.toString(),
+          },
+    };
   }
 
   static int _readInt(
@@ -568,6 +613,9 @@ class AppSettingsController extends ChangeNotifier {
           shouldPersist = true;
         }
         if (json['last_selected_agent'] == null) {
+          shouldPersist = true;
+        }
+        if (json['voice_composer_mode'] == null) {
           shouldPersist = true;
         }
         _settings = AppSettings.fromJson(json);

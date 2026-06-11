@@ -872,6 +872,48 @@ abstract class AppLocalizations {
   /// **'Voice input'**
   String get voiceInput;
 
+  /// No description provided for @keyboardInput.
+  ///
+  /// In en, this message translates to:
+  /// **'Keyboard input'**
+  String get keyboardInput;
+
+  /// No description provided for @voiceHoldToTalk.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold to talk'**
+  String get voiceHoldToTalk;
+
+  /// No description provided for @voiceHoldRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening...'**
+  String get voiceHoldRecording;
+
+  /// No description provided for @voiceHoldSlideUpHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Slide up for text or cancel'**
+  String get voiceHoldSlideUpHint;
+
+  /// No description provided for @voiceHoldReleaseHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Release left for text, right to cancel'**
+  String get voiceHoldReleaseHint;
+
+  /// No description provided for @voiceHoldReleaseToText.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get voiceHoldReleaseToText;
+
+  /// No description provided for @voiceHoldReleaseCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get voiceHoldReleaseCancel;
+
   /// No description provided for @voiceChatTitle.
   ///
   /// In en, this message translates to:
@@ -2471,8 +2513,14 @@ abstract class AppLocalizations {
   /// No description provided for @providerAuto.
   ///
   /// In en, this message translates to:
-  /// **'Auto (default)'**
+  /// **'Auto'**
   String get providerAuto;
+
+  /// No description provided for @providerDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get providerDefault;
 
   /// No description provided for @providerOverride.
   ///
@@ -2527,6 +2575,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This field is required'**
   String get fieldRequired;
+
+  /// No description provided for @gitClean.
+  ///
+  /// In en, this message translates to:
+  /// **'clean'**
+  String get gitClean;
+
+  /// No description provided for @gitDirty.
+  ///
+  /// In en, this message translates to:
+  /// **'dirty'**
+  String get gitDirty;
+
+  /// No description provided for @gitStaged.
+  ///
+  /// In en, this message translates to:
+  /// **'staged'**
+  String get gitStaged;
+
+  /// No description provided for @gitChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'changed'**
+  String get gitChanged;
+
+  /// No description provided for @gitUntracked.
+  ///
+  /// In en, this message translates to:
+  /// **'untracked'**
+  String get gitUntracked;
+
+  /// No description provided for @gitAhead.
+  ///
+  /// In en, this message translates to:
+  /// **'ahead {count}'**
+  String gitAhead(int count);
+
+  /// No description provided for @gitBehind.
+  ///
+  /// In en, this message translates to:
+  /// **'behind {count}'**
+  String gitBehind(int count);
+
+  /// No description provided for @gitChangedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} changed'**
+  String gitChangedCount(int count);
+
+  /// No description provided for @gitStagedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} staged'**
+  String gitStagedCount(int count);
+
+  /// No description provided for @gitUnstagedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} modified'**
+  String gitUnstagedCount(int count);
+
+  /// No description provided for @gitUntrackedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} untracked'**
+  String gitUntrackedCount(int count);
 }
 
 class _AppLocalizationsDelegate

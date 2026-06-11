@@ -11,6 +11,7 @@ import 'package:omni_code/src/screens/project_detail_screen.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 import 'package:omni_code/src/settings/app_settings_store.dart';
 import 'package:omni_code/src/theme/app_theme.dart';
+import 'package:omni_code/src/widgets/create_session_dialog.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -95,6 +96,211 @@ void main() {
     expect(find.text('Refreshed Session 1'), findsOneWidget);
     expect(find.text(l10n.loadMoreSessionsLabel), findsNothing);
   });
+
+  testWidgets('create session dialog includes provider selection',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/settings') {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'model_providers': [
+                  {
+                    'id': 'codex-provider',
+                    'name': 'Codex Provider',
+                    'base_url': 'https://example.com/v1',
+                    'format': 'codex',
+                    'enabled': true,
+                    'priority': 0,
+                  },
+                ],
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () {
+                  showDialog<CreateSessionDialogResult>(
+                    context: context,
+                    builder: (_) => CreateSessionDialog(client: client),
+                  );
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.of(tester.element(find.byType(AlertDialog)))!;
+    expect(find.text(l10n.providerSessionLabel), findsOneWidget);
+    expect(find.text(l10n.providerAuto), findsOneWidget);
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.providerAuto).last, findsOneWidget);
+    expect(find.text(l10n.providerDefault).last, findsOneWidget);
+    await tester.tap(find.text('Codex Provider').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).first, 'New Session');
+    await tester.tap(find.text(l10n.create));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+  });
+
+  testWidgets('create session dialog defaults to last selected provider for project',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        lastSelectedProviderByProject: const {
+          'project-1': 'provider-2',
+        },
+      ),
+    );
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/settings') {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'model_providers': [
+                  {
+                    'id': 'provider-1',
+                    'name': 'Provider One',
+                    'base_url': 'https://example.com/v1',
+                    'format': 'codex',
+                    'enabled': true,
+                    'priority': 0,
+                  },
+                  {
+                    'id': 'provider-2',
+                    'name': 'Provider Two',
+                    'base_url': 'https://example.com/v2',
+                    'format': 'codex',
+                    'enabled': true,
+                    'priority': 1,
+                  },
+                ],
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () {
+                  showDialog<CreateSessionDialogResult>(
+                    context: context,
+                    builder: (_) => CreateSessionDialog(
+                      client: client,
+                      initialProviderId: appSettingsController
+                          .settings.lastSelectedProviderByProject['project-1'],
+                    ),
+                  );
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Provider Two'), findsOneWidget);
+  });
+
+  testWidgets('create session dialog defaults to auto when project has no saved provider',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/settings') {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'model_providers': [
+                  {
+                    'id': 'provider-1',
+                    'name': 'Provider One',
+                    'base_url': 'https://example.com/v1',
+                    'format': 'codex',
+                    'enabled': true,
+                    'priority': 0,
+                  },
+                ],
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () {
+                  showDialog<CreateSessionDialogResult>(
+                    context: context,
+                    builder: (_) => CreateSessionDialog(
+                      client: client,
+                      initialProviderId: appSettingsController
+                          .settings.lastSelectedProviderByProject['project-1'],
+                    ),
+                  );
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.of(tester.element(find.byType(AlertDialog)))!;
+    expect(find.text(l10n.providerAuto), findsOneWidget);
+  });
+
 }
 
 class _TestApp extends StatelessWidget {

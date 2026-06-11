@@ -451,6 +451,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get voiceInput => 'Voice input';
 
   @override
+  String get keyboardInput => 'Keyboard input';
+
+  @override
+  String get voiceHoldToTalk => 'Hold to talk';
+
+  @override
+  String get voiceHoldRecording => 'Listening...';
+
+  @override
+  String get voiceHoldSlideUpHint => 'Slide up for text or cancel';
+
+  @override
+  String get voiceHoldReleaseHint => 'Release left for text, right to cancel';
+
+  @override
+  String get voiceHoldReleaseToText => 'Text';
+
+  @override
+  String get voiceHoldReleaseCancel => 'Cancel';
+
+  @override
   String get voiceChatTitle => 'Voice chat';
 
   @override
@@ -1376,7 +1397,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get providerPriorityHelp => 'Lower number = higher priority';
 
   @override
-  String get providerAuto => 'Auto (default)';
+  String get providerAuto => 'Auto';
+
+  @override
+  String get providerDefault => 'Default';
 
   @override
   String get providerOverride => 'Provider Override';
@@ -1404,4 +1428,49 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fieldRequired => 'This field is required';
+
+  @override
+  String get gitClean => 'clean';
+
+  @override
+  String get gitDirty => 'dirty';
+
+  @override
+  String get gitStaged => 'staged';
+
+  @override
+  String get gitChanged => 'changed';
+
+  @override
+  String get gitUntracked => 'untracked';
+
+  @override
+  String gitAhead(int count) {
+    return 'ahead $count';
+  }
+
+  @override
+  String gitBehind(int count) {
+    return 'behind $count';
+  }
+
+  @override
+  String gitChangedCount(int count) {
+    return '$count changed';
+  }
+
+  @override
+  String gitStagedCount(int count) {
+    return '$count staged';
+  }
+
+  @override
+  String gitUnstagedCount(int count) {
+    return '$count modified';
+  }
+
+  @override
+  String gitUntrackedCount(int count) {
+    return '$count untracked';
+  }
 }

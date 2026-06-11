@@ -76,7 +76,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _clientIdController.text = settings.clientId;
     _appLanguage = settings.appLanguage;
     _updateManifestUrlController.text = settings.updateManifestUrl;
-    _updateTargetVersionController.text = settings.updateTargetVersion;
     _aiApprovalBaseUrlController.text = settings.aiApprovalBaseUrl;
     _aiApprovalApiKeyController.text = settings.aiApprovalApiKey;
     _aiApprovalModelController.text = settings.aiApprovalModel;
@@ -712,7 +711,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         appLanguage: _appLanguage,
         themeMode: _themeMode,
         updateManifestUrl: _updateManifestUrlController.text.trim(),
-        updateTargetVersion: _normalizedUpdateTargetVersion(),
         aiApprovalEnabled: _aiApprovalEnabled,
         aiApprovalBaseUrl: _aiApprovalBaseUrlController.text.trim(),
         aiApprovalApiKey: _aiApprovalApiKeyController.text.trim(),
@@ -789,7 +787,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await appSettingsController.save(
         appSettingsController.settings.copyWith(
           updateManifestUrl: _updateManifestUrlController.text.trim(),
-          updateTargetVersion: _normalizedUpdateTargetVersion(),
         ),
       );
       final result = await appUpdateService.checkForUpdate(

@@ -15,6 +15,7 @@ import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_back_header.dart';
 import '../widgets/app_card.dart';
+import '../widgets/create_session_dialog.dart';
 import '../widgets/app_skeleton.dart';
 import '../widgets/copyable_message.dart';
 import 'project_detail_screen.dart';
@@ -496,18 +497,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     final l10n = context.l10n;
-    final sessionResult = await showDialog<(String?, String, String?)>(
+    final sessionResult = await showDialog<CreateSessionDialogResult>(
       context: context,
-      builder: (context) => const _CreateSessionDialog(),
+      builder: (context) => CreateSessionDialog(
+        client: _client,
+        initialProviderId: appSettingsController
+            .settings.lastSelectedProviderByProject[project.id],
+      ),
     );
     if (sessionResult == null || !mounted) {
       return;
     }
 
+    final savedProviderSelections = Map<String, String?>.from(
+      appSettingsController.settings.lastSelectedProviderByProject,
+    )..[project.id] = sessionResult.$3;
     unawaited(
       appSettingsController.save(
-        appSettingsController.settings
-            .copyWith(lastSelectedAgent: sessionResult.$2),
+        appSettingsController.settings.copyWith(
+          lastSelectedAgent: sessionResult.$2,
+          lastSelectedProviderByProject: savedProviderSelections,
+        ),
       ),
     );
 
@@ -1165,6 +1175,51 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     await _reloadProjects();
   }
 
+  Widget _buildProjectGitBadge(
+    BuildContext context,
+    String branch,
+    ProjectGitStatus? status,
+    Brightness brightness,
+  ) {
+    final statusColor = status == ProjectGitStatus.dirty
+        ? AppColors.warningFor(brightness)
+        : AppColors.successFor(brightness);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.source_outlined,
+          size: 10,
+          color: AppColors.mutedSoftFor(brightness),
+        ),
+        const SizedBox(width: 3),
+        Flexible(
+          child: Text(
+            branch,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.mutedSoftFor(brightness),
+                ),
+          ),
+        ),
+        if (status != null) ...[
+          const SizedBox(width: 4),
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: statusColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
@@ -1308,6 +1363,16 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                                                 brightness),
                                           ),
                                     ),
+                                    if (project.gitBranch != null) ...[
+                                      const SizedBox(
+                                          height: AppSpacing.textTight),
+                                      _buildProjectGitBadge(
+                                        context,
+                                        project.gitBranch!,
+                                        project.gitStatus,
+                                        brightness,
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -2331,152 +2396,6 @@ class _SelectProjectDialog extends StatelessWidget {
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: Text(context.l10n.cancel),
-        ),
-      ],
-    );
-  }
-}
-
-class _CreateSessionDialog extends StatefulWidget {
-  const _CreateSessionDialog();
-
-  @override
-  State<_CreateSessionDialog> createState() => _CreateSessionDialogState();
-}
-
-class _CreateSessionDialogState extends State<_CreateSessionDialog> {
-  final _titleController = TextEditingController();
-  String _agent = appSettingsController.settings.lastSelectedAgent;
-  String? _providerId;
-  List<ModelProviderConfig> _allProviders = const [];
-  bool _loadingProviders = true;
-
-  List<ModelProviderConfig> get _providers {
-    final agent = parseAgentKind(_agent);
-    final compatible = agent.compatibleFormats;
-    return _allProviders.where((p) => compatible.contains(p.format)).toList();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadProviders();
-  }
-
-  Future<void> _loadProviders() async {
-    try {
-      final providers = await bridgeClient.getModelProviders();
-      if (!mounted) return;
-      setState(() {
-        _allProviders = providers;
-        _loadingProviders = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _loadingProviders = false;
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    return AlertDialog(
-      backgroundColor: AppColors.panelFor(brightness),
-      title: Text(context.l10n.newSession),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _titleController,
-            decoration: InputDecoration(
-              labelText: context.l10n.sessionTitleOptional,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.stack),
-          DropdownButtonFormField<String>(
-            initialValue: _agent,
-            items: AgentKind.selectableValues
-                .map(
-                  (agent) => DropdownMenuItem(
-                    value: agent.id,
-                    child: Text(agent.label),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) {
-              if (value == null) {
-                return;
-              }
-              setState(() {
-                _agent = value;
-                // Reset provider if it's no longer compatible with the new agent.
-                if (_providerId != null) {
-                  final compatible =
-                      parseAgentKind(value).compatibleFormats;
-                  final stillValid = _allProviders.any(
-                    (p) =>
-                        p.id == _providerId &&
-                        compatible.contains(p.format),
-                  );
-                  if (!stillValid) {
-                    _providerId = null;
-                  }
-                }
-              });
-            },
-            decoration: InputDecoration(labelText: context.l10n.agentLabel),
-          ),
-          if (!_loadingProviders && _providers.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.stack),
-            DropdownButtonFormField<String?>(
-              initialValue: _providerId,
-              items: [
-                DropdownMenuItem(
-                  value: null,
-                  child: Text(context.l10n.providerAuto),
-                ),
-                ..._providers.map(
-                  (p) => DropdownMenuItem(
-                    value: p.id,
-                    child: Text(p.name),
-                  ),
-                ),
-              ],
-              onChanged: (value) {
-                setState(() {
-                  _providerId = value;
-                });
-              },
-              decoration: InputDecoration(
-                labelText: context.l10n.providerSessionLabel,
-              ),
-            ),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(context.l10n.cancel),
-        ),
-        FilledButton(
-          onPressed: () {
-            final title = _titleController.text.trim();
-            Navigator.of(context).pop((
-              title.isEmpty ? null : title,
-              _agent,
-              _providerId,
-            ));
-          },
-          child: Text(context.l10n.create),
         ),
       ],
     );

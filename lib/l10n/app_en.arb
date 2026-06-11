@@ -227,6 +227,13 @@
   "messageInputHint": "Enter a task, for example: Help me inspect why the latest build failed",
   "stopVoice": "Stop voice",
   "voiceInput": "Voice input",
+  "keyboardInput": "Keyboard input",
+  "voiceHoldToTalk": "Hold to talk",
+  "voiceHoldRecording": "Listening...",
+  "voiceHoldSlideUpHint": "Slide up for text or cancel",
+  "voiceHoldReleaseHint": "Release left for text, right to cancel",
+  "voiceHoldReleaseToText": "Text",
+  "voiceHoldReleaseCancel": "Cancel",
   "voiceChatTitle": "Voice chat",
   "callModeListening": "Go ahead, I'm listening",
   "callModePreparingListening": "Preparing microphone",
@@ -669,7 +676,8 @@
   "providerEnabled": "Enabled",
   "providerPriority": "Priority",
   "providerPriorityHelp": "Lower number = higher priority",
-  "providerAuto": "Auto (default)",
+  "providerAuto": "Auto",
+  "providerDefault": "Default",
   "providerOverride": "Provider Override",
   "noProvidersYet": "No providers configured",
   "noProvidersHelp": "Add a provider to use custom LLM endpoints",
@@ -678,5 +686,46 @@
   "providerSessionLabel": "Provider",
   "providerOverrideFailed": "Failed to save provider selection",
   "confirm": "Confirm",
-  "fieldRequired": "This field is required"
+  "fieldRequired": "This field is required",
+  "gitClean": "clean",
+  "gitDirty": "dirty",
+  "gitStaged": "staged",
+  "gitChanged": "changed",
+  "gitUntracked": "untracked",
+  "gitAhead": "ahead {count}",
+  "@gitAhead": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitBehind": "behind {count}",
+  "@gitBehind": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitChangedCount": "{count} changed",
+  "@gitChangedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitStagedCount": "{count} staged",
+  "@gitStagedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitUnstagedCount": "{count} modified",
+  "@gitUnstagedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "gitUntrackedCount": "{count} untracked",
+  "@gitUntrackedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  }
 }
