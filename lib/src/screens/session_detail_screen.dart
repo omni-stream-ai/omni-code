@@ -3173,12 +3173,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             final dataUriChild = buildDataUriImage();
             if (dataUriChild != null) {
               return InteractiveViewer(
+                maxScale: 40,
                 child: SizedBox.expand(child: dataUriChild),
               );
             }
             if (currentReference.isRemoteUrl) {
               _evictRemoteImageCache(currentReference);
               return InteractiveViewer(
+                maxScale: 40,
                 child: SizedBox.expand(
                   child: isSvg
                       ? SvgPicture.network(
@@ -3227,6 +3229,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   );
                 }
                 return InteractiveViewer(
+                  maxScale: 40,
                   child: SizedBox.expand(
                     child: isSvg
                         ? SvgPicture.string(
