@@ -1334,7 +1334,7 @@ class BridgeClient {
     final normalizedPath =
         uri != null && uri.hasScheme ? uri.path : trimmed.split('?').first;
     return RegExp(
-      r'\.(png|jpe?g|gif|webp|bmp|svg)$',
+      r'\.(png|jpe?g|gif|webp|bmp|svg|mp4)$',
       caseSensitive: false,
     ).hasMatch(normalizedPath);
   }
@@ -1358,6 +1358,9 @@ class BridgeClient {
     }
     if (normalized.endsWith('.svg')) {
       return 'image/svg+xml';
+    }
+    if (normalized.endsWith('.mp4')) {
+      return 'video/mp4';
     }
     return 'application/octet-stream';
   }

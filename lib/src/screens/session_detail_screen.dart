@@ -8,7 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
 
 import '../app_routes.dart';
 import '../bridge_client.dart';
@@ -95,6 +97,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   final Set<String> _notifiedAssistantMessageIds = <String>{};
   final Map<String, _LocalMessageDraft> _localMessageStates = {};
   final Map<String, Future<BridgeFileResponse>> _imageFileFutures = {};
+  final Map<String, Future<File>> _videoFileFutures = {};
   late SessionSummary _session;
   final List<ChatMessage> _messages = [];
   StreamSubscription<Map<String, dynamic>>? _eventsSubscription;
@@ -488,6 +491,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   @override
   void dispose() {
+    for (final future in _videoFileFutures.values) {
+      unawaited(future.then((file) {
+        if (file.existsSync()) {
+          unawaited(file.delete());
+        }
+      }));
+    }
     _callModeOrbController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _eventsSubscription?.cancel();
@@ -1088,8 +1098,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         return;
       }
       setState(() {
+        _session = detail.session;
+        _pendingApproval = detail.session.pendingApproval;
         _gitStatus = detail.gitStatus;
+        _reconcileSubmittedApprovalState();
       });
+      _syncSessionSummaryCache();
     } catch (_) {
       // Best effort — git info is supplementary.
     }
@@ -2833,7 +2847,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             return const SizedBox.shrink();
           }
           return buildCard(
-            _buildImageThumbnail(
+            _buildMediaThumbnail(
               reference,
               snapshot.data,
               cacheKey: cacheKey,
@@ -2844,7 +2858,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     return buildCard(
-      _buildImageThumbnail(
+      _buildMediaThumbnail(
         reference,
         null,
         cacheKey: cacheKey,
@@ -2885,6 +2899,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
     }
     _imageFileFutures.removeWhere((key, _) => !activeKeys.contains(key));
+    _videoFileFutures.removeWhere((key, _) => !activeKeys.contains(key));
   }
 
   Future<BridgeFileResponse>? _imageFileFuture(
@@ -2907,11 +2922,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return '$messageId-${reference.cardKey}';
   }
 
-  Widget _buildImageThumbnail(
+  Widget _buildMediaThumbnail(
     MessageImageReference reference,
     BridgeFileResponse? file, {
     required String cacheKey,
   }) {
+    if (reference.isVideo) {
+      return _buildVideoThumbnail(reference, cacheKey: cacheKey);
+    }
+
     if (reference.isDataUri) {
       final bytes = reference.dataBytes;
       if (bytes == null) {
@@ -2959,6 +2978,99 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           );
   }
 
+  Widget _buildVideoThumbnail(
+    MessageImageReference reference, {
+    required String cacheKey,
+  }) {
+    if (_supportsInlineVideoThumbnails) {
+      return _VideoThumbnail(
+        key: ValueKey('video-thumbnail-$cacheKey'),
+        reference: reference,
+        cacheKey: cacheKey,
+        resolveLocalVideoFile: _resolveLocalVideoFile,
+        fileFuture: reference.isRemoteUrl
+            ? null
+            : _imageFileFuture(reference, cacheKey: cacheKey),
+        fallback: _buildVideoThumbnailFallback(cacheKey: cacheKey),
+      );
+    }
+
+    return _buildVideoThumbnailFallback(cacheKey: cacheKey);
+  }
+
+  bool get _supportsInlineVideoThumbnails {
+    if (kIsWeb) {
+      return false;
+    }
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+  }
+
+  Widget _buildVideoThumbnailFallback({
+    required String cacheKey,
+  }) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF161A22),
+                const Color(0xFF2A3140),
+              ],
+            ),
+          ),
+          child: const SizedBox.expand(),
+        ),
+        const Positioned(
+          left: 6,
+          top: 6,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Color(0xA6000000),
+              borderRadius: BorderRadius.all(Radius.circular(999)),
+            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              child: Text(
+                'MP4',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ),
+          ),
+        ),
+        Align(
+          child: Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.42),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.22),
+              ),
+            ),
+            child: Icon(
+              Icons.play_arrow_rounded,
+              key: ValueKey('video-thumbnail-icon-$cacheKey'),
+              size: 20,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   void _evictRemoteImageCache(MessageImageReference reference) {
     if (!reference.isRemoteUrl || reference.isSvg) {
       return;
@@ -2975,6 +3087,20 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }) async {
     if (!mounted) {
       return;
+    }
+
+    if (reference.isVideo && !kIsWeb) {
+      final isDesktopExternal =
+          defaultTargetPlatform == TargetPlatform.linux ||
+          defaultTargetPlatform == TargetPlatform.windows;
+      if (isDesktopExternal) {
+        await _openVideoExternally(
+          reference,
+          messageId: messageId,
+          cacheKey: cacheKey,
+        );
+        return;
+      }
     }
 
     final galleryReferences =
@@ -3021,6 +3147,28 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           }
 
           Widget buildFullscreenImage() {
+            if (currentReference.isVideo) {
+              return _SessionVideoPreview(
+                key: ValueKey('video-preview-$currentCacheKey'),
+                reference: currentReference,
+                messageId: messageId,
+                cacheKey: currentCacheKey,
+                sessionId: _session.id,
+                bridgeFileFuture: bridgeFileFuture,
+                resolveLocalVideoFile: _resolveLocalVideoFile,
+                initialMuted: appSettingsController.settings.videoPreviewMuted,
+                onMutedChanged: (muted) {
+                  unawaited(
+                    appSettingsController.save(
+                      appSettingsController.settings.copyWith(
+                        videoPreviewMuted: muted,
+                      ),
+                    ),
+                  );
+                },
+              );
+            }
+
             final isSvg = currentReference.isSvg;
             final dataUriChild = buildDataUriImage();
             if (dataUriChild != null) {
@@ -3421,6 +3569,61 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ),
       ),
     );
+  }
+
+  Future<File> _resolveLocalVideoFile(
+    MessageImageReference reference, {
+    required String cacheKey,
+    Future<BridgeFileResponse>? bridgeFileFuture,
+  }) {
+    if (reference.isAbsoluteLocalPath) {
+      return Future<File>.value(File(reference.path));
+    }
+
+    return _videoFileFutures.putIfAbsent(cacheKey, () async {
+      final fileResponse =
+          bridgeFileFuture ??
+          _imageFileFuture(reference, cacheKey: cacheKey);
+      if (fileResponse == null) {
+        throw StateError('Missing local video file bytes.');
+      }
+      final bytes = (await fileResponse).bytes;
+      final tempDir = await getTemporaryDirectory();
+      final extension = reference.path.split('.').last.toLowerCase();
+      final safeKey = _safePreviewFileKey(cacheKey);
+      final file =
+          File('${tempDir.path}/omni_code_preview_$safeKey.$extension');
+      await file.writeAsBytes(bytes, flush: true);
+      return file;
+    });
+  }
+
+  String _safePreviewFileKey(String value) {
+    return value.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
+  }
+
+  Future<void> _openVideoExternally(
+    MessageImageReference reference, {
+    String? messageId,
+    String? cacheKey,
+  }) async {
+    final uri = reference.isRemoteUrl
+        ? Uri.parse(reference.path)
+        : Uri.file(
+            (await _resolveLocalVideoFile(
+              reference,
+              cacheKey: messageId == null
+                  ? cacheKey ?? reference.cardKey
+                  : _imageFileCacheKey(messageId, reference),
+              bridgeFileFuture: messageId == null
+                  ? null
+                  : _imageFileFuture(
+                      reference,
+                      cacheKey: _imageFileCacheKey(messageId, reference),
+                    ),
+            )).path,
+          );
+    await launchUrl(uri);
   }
 
   String _toolMessagePreview(ChatMessage message) {
@@ -6749,4 +6952,345 @@ class _ParsedToolMessage {
   final List<String> secondaryItems;
   final bool primaryIsList;
   final String? trailingNote;
+}
+
+class _SessionVideoPreview extends StatefulWidget {
+  const _SessionVideoPreview({
+    super.key,
+    required this.reference,
+    required this.sessionId,
+    required this.cacheKey,
+    required this.resolveLocalVideoFile,
+    required this.initialMuted,
+    required this.onMutedChanged,
+    this.messageId,
+    this.bridgeFileFuture,
+  });
+
+  final MessageImageReference reference;
+  final String sessionId;
+  final String cacheKey;
+  final bool initialMuted;
+  final String? messageId;
+  final Future<BridgeFileResponse>? bridgeFileFuture;
+  final ValueChanged<bool> onMutedChanged;
+  final Future<File> Function(
+    MessageImageReference reference, {
+    required String cacheKey,
+    Future<BridgeFileResponse>? bridgeFileFuture,
+  }) resolveLocalVideoFile;
+
+  @override
+  State<_SessionVideoPreview> createState() => _SessionVideoPreviewState();
+}
+
+class _SessionVideoPreviewState extends State<_SessionVideoPreview> {
+  VideoPlayerController? _controller;
+  Future<void>? _initializeFuture;
+  String? _errorMessage;
+  late bool _muted;
+
+  @override
+  void initState() {
+    super.initState();
+    _muted = widget.initialMuted;
+    _initializePlayer();
+  }
+
+  Future<void> _initializePlayer() async {
+    try {
+      final controller = widget.reference.isRemoteUrl
+          ? VideoPlayerController.networkUrl(Uri.parse(widget.reference.path))
+          : VideoPlayerController.file(
+              await widget.resolveLocalVideoFile(
+                widget.reference,
+                cacheKey: widget.cacheKey,
+                bridgeFileFuture: widget.bridgeFileFuture,
+              ),
+            );
+      _controller = controller;
+      _initializeFuture = controller.initialize().then((_) async {
+        await controller.setVolume(_muted ? 0 : 1);
+        await controller.setLooping(true);
+        await controller.play();
+      });
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _errorMessage =
+              AppLocalizations.of(context)?.imagePreviewLoadFailed ??
+              'Failed to load image preview';
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_controller?.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final errorMessage = _errorMessage;
+    if (errorMessage != null) {
+      return _buildPreviewError(errorMessage);
+    }
+
+    final initializeFuture = _initializeFuture;
+    final controller = _controller;
+    if (initializeFuture == null || controller == null) {
+      return const Center(
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    return FutureBuilder<void>(
+      future: initializeFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(
+            child: SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+        if (snapshot.hasError || !controller.value.isInitialized) {
+          return _buildPreviewError(context.l10n.imagePreviewLoadFailed);
+        }
+        return Center(
+          child: InteractiveViewer(
+            child: AspectRatio(
+              aspectRatio:
+                  controller.value.aspectRatio == 0
+                      ? 16 / 9
+                      : controller.value.aspectRatio,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  VideoPlayer(controller),
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 16,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.48),
+                        borderRadius: BorderRadius.circular(
+                          AppSpacing.radiusPill,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            key: const ValueKey('video-preview-toggle-play'),
+                            onPressed: () async {
+                              if (controller.value.isPlaying) {
+                                await controller.pause();
+                              } else {
+                                await controller.play();
+                              }
+                              if (mounted) {
+                                setState(() {});
+                              }
+                            },
+                            icon: Icon(
+                              controller.value.isPlaying
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                              color: Colors.white,
+                            ),
+                          ),
+                          IconButton(
+                            key: const ValueKey('video-preview-toggle-mute'),
+                            onPressed: () async {
+                              final nextMuted = !_muted;
+                              await controller.setVolume(nextMuted ? 0 : 1);
+                              widget.onMutedChanged(nextMuted);
+                              if (!mounted) {
+                                return;
+                              }
+                              setState(() {
+                                _muted = nextMuted;
+                              });
+                            },
+                            icon: Icon(
+                              _muted
+                                  ? Icons.volume_off_rounded
+                                  : Icons.volume_up_rounded,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Expanded(
+                            child: VideoProgressIndicator(
+                              controller,
+                              allowScrubbing: true,
+                              colors: VideoProgressColors(
+                                playedColor: Colors.white,
+                                bufferedColor: Colors.white.withValues(
+                                  alpha: 0.35,
+                                ),
+                                backgroundColor: Colors.white.withValues(
+                                  alpha: 0.18,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPreviewError(String message) {
+    final brightness = Theme.of(context).brightness;
+    return Center(
+      child: Container(
+        width: double.infinity,
+        padding: AppSpacing.tilePadding,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceFor(brightness),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+          border: Border.all(color: AppColors.outlineStrongFor(brightness)),
+        ),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.textFor(brightness),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VideoThumbnail extends StatefulWidget {
+  const _VideoThumbnail({
+    super.key,
+    required this.reference,
+    required this.cacheKey,
+    required this.resolveLocalVideoFile,
+    required this.fallback,
+    this.fileFuture,
+  });
+
+  final MessageImageReference reference;
+  final String cacheKey;
+  final Future<BridgeFileResponse>? fileFuture;
+  final Future<File> Function(
+    MessageImageReference reference, {
+    required String cacheKey,
+    Future<BridgeFileResponse>? bridgeFileFuture,
+  }) resolveLocalVideoFile;
+  final Widget fallback;
+
+  @override
+  State<_VideoThumbnail> createState() => _VideoThumbnailState();
+}
+
+class _VideoThumbnailState extends State<_VideoThumbnail> {
+  VideoPlayerController? _controller;
+  Future<void>? _initializeFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      final controller = widget.reference.isRemoteUrl
+          ? VideoPlayerController.networkUrl(Uri.parse(widget.reference.path))
+          : VideoPlayerController.file(
+              await widget.resolveLocalVideoFile(
+                widget.reference,
+                cacheKey: widget.cacheKey,
+                bridgeFileFuture: widget.fileFuture,
+              ),
+            );
+      _controller = controller;
+      _initializeFuture = controller.initialize();
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {
+      // Fallback is rendered below.
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_controller?.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    final initializeFuture = _initializeFuture;
+    if (controller == null || initializeFuture == null) {
+      return widget.fallback;
+    }
+
+    return FutureBuilder<void>(
+      future: initializeFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done ||
+            snapshot.hasError ||
+            !controller.value.isInitialized) {
+          return widget.fallback;
+        }
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: controller.value.size.width,
+                height: controller.value.size.height,
+                child: VideoPlayer(controller),
+              ),
+            ),
+            Align(
+              child: Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.36),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.play_arrow_rounded,
+                  key: ValueKey('video-thumbnail-icon-${widget.cacheKey}'),
+                  size: 18,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }

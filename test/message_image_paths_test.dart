@@ -23,6 +23,18 @@ void main() {
       ]);
     });
 
+    test('extracts mp4 paths as video references', () {
+      final references = extractMessageImageReferences(
+        'Preview clip at assets/demo.mp4',
+      );
+
+      expect(references.map((item) => item.path).toList(), [
+        'assets/demo.mp4',
+      ]);
+      expect(references.single.isVideo, isTrue);
+      expect(references.single.isImage, isFalse);
+    });
+
     test('extracts absolute image paths and remote urls', () {
       final references = extractMessageImageReferences(
         'Open `/tmp/report.jpg` and https://example.com/photo.webp',

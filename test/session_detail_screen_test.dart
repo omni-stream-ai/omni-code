@@ -64,6 +64,57 @@ void main() {
     expect(find.text('Test Session'), findsOneWidget);
   });
 
+  testWidgets('loads current session title from bridge on first open',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1') {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'session': _sessionJson(title: 'Bridge Generated Title'),
+                'git_status': null,
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(title: 'New session'),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Bridge Generated Title'), findsOneWidget);
+  });
+
   testWidgets('pressing enter sends the current draft on desktop',
       (tester) async {
     final sentBodies = <Map<String, dynamic>>[];
@@ -1351,7 +1402,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('New session'), findsOneWidget);
+    expect(find.text('Generated title'), findsOneWidget);
 
     final input = find.byType(TextField);
     await tester.tap(input);
@@ -2152,6 +2203,84 @@ void main() {
     );
     expect(fileRequest.url.queryParameters, {
       'path': 'assets/result.png',
+      'session_id': 'session-1',
+    });
+  });
+
+  testWidgets('assistant mp4 path shows video preview card', (tester) async {
+    final requests = <http.Request>[];
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _messageJson(
+                  id: 'assistant-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: 'Saved video at assets/demo.mp4',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/files') {
+          return http.Response.bytes(
+            const <int>[0, 0, 0, 0],
+            200,
+            headers: {'content-type': 'video/mp4'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.byKey(
+        const ValueKey('assistant-image-card-assistant-1-assets/demo.mp4'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey(
+          'video-thumbnail-icon-assistant-1-assets/demo.mp4',
+        ),
+      ),
+      findsOneWidget,
+    );
+
+    final fileRequest = requests.singleWhere(
+      (request) => request.url.path == '/files',
+    );
+    expect(fileRequest.url.queryParameters, {
+      'path': 'assets/demo.mp4',
       'session_id': 'session-1',
     });
   });
