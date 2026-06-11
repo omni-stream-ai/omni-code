@@ -57,6 +57,14 @@ jobs:
           is_primary_branch="false"
           tag_name="v${current_name}"
 
+          resolve_previous_tag() {
+            if [[ "$current_name" == *-* ]]; then
+              git tag --sort=-version:refname | grep -Fxv "${tag_name}" | head -n1 || true
+            else
+              git tag --sort=-version:refname | grep -Fxv "${tag_name}" | grep -E '^v[^-]+$' | head -n1 || true
+            fi
+          }
+
           disable_release_for_branch_version_combo() {
             if [[ "$is_primary_branch" != "true" && "$stable" == "true" ]]; then
               echo "Skipping release for stable version ${current_name} on non-main branch ${branch_name}."
@@ -90,7 +98,7 @@ jobs:
 
             if [[ "$version_changed" == "true" || "$workflow_changed" == "true" ]]; then
               git fetch --tags --force
-              previous_tag="$(git tag --sort=-version:refname | grep -Fxv "${tag_name}" | head -n1 || true)"
+              previous_tag="$(resolve_previous_tag)"
               if git rev-parse -q --verify "refs/tags/${tag_name}" >/dev/null; then
                 tag_exists="true"
               fi
@@ -143,7 +151,7 @@ jobs:
             should_build="true"
             should_release="false"
             git fetch --tags --force
-            previous_tag="$(git tag --sort=-version:refname | grep -Fxv "${tag_name}" | head -n1 || true)"
+            previous_tag="$(resolve_previous_tag)"
           fi
 
           {
