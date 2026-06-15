@@ -722,6 +722,30 @@ abstract class AppLocalizations {
   /// **'Agent'**
   String get agentLabel;
 
+  /// No description provided for @agentInstalledStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed'**
+  String get agentInstalledStatus;
+
+  /// No description provided for @agentNotInstalledStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Not installed'**
+  String get agentNotInstalledStatus;
+
+  /// No description provided for @installAgent.
+  ///
+  /// In en, this message translates to:
+  /// **'Install agent'**
+  String get installAgent;
+
+  /// No description provided for @installingAgent.
+  ///
+  /// In en, this message translates to:
+  /// **'Installing...'**
+  String get installingAgent;
+
   /// No description provided for @create.
   ///
   /// In en, this message translates to:

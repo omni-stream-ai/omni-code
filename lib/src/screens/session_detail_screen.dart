@@ -24,6 +24,7 @@ import '../services/tts_service.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import '../widgets/anchored_overlay_panel.dart';
 import '../widgets/app_back_header.dart';
 import '../widgets/app_skeleton.dart';
 import '../widgets/session_call_mode_view.dart';
@@ -76,6 +77,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   final _messageInputFocusNode = FocusNode(
     debugLabel: 'session-message-input-focus',
   );
+  final _composerTextFieldKey = GlobalKey();
+  final _composerSuggestionsOverlayController = OverlayPortalController();
   final _stopReplyFocusNode = FocusNode(
     debugLabel: 'session-stop-reply-focus',
   );
@@ -102,6 +105,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Timer? _refreshSessionSummaryDebounce;
   bool _refreshSessionSummaryInFlight = false;
   bool _returnFocusToComposerAfterReply = false;
+  bool _composerSuggestionsOverlayShown = false;
 
   String? _recordingPath;
   String _recognizedSpeech = '';
@@ -144,6 +148,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   String? _speechStatus;
   String? _speechError;
   ApprovalRequest? _pendingApproval;
+  List<AgentCommand> _agentCommands = const [];
+  List<FileCompletionItem> _fileCompletions = const [];
+  int _selectedCommandSuggestionIndex = 0;
+  int _selectedFileCompletionIndex = 0;
+  bool _commandSuggestionsDismissed = false;
+  bool _fileSuggestionsDismissed = false;
+  String _lastCommandQuery = '';
+  String? _lastFileCompletionQuery;
+  int _fileCompletionRequestToken = 0;
+  bool _loadingFileCompletions = false;
   bool _restoringSession = false;
   bool _expandingHistory = false;
   bool _appInForeground = true;
@@ -451,6 +465,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _overrideProviderId = _session.providerId;
     _pendingApproval = _session.pendingApproval;
     _creatingSession = widget.sessionInitializer != null;
+    _controller.addListener(_handleComposerTextChanged);
+    _messageInputFocusNode.addListener(_handleComposerFocusChanged);
     if (widget.enableSpeechServices) {
       _initializeSpeech();
       _initializeTts();
@@ -467,6 +483,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       unawaited(_loadSessionDetail());
     }
     _loadProviders();
+    _loadAgentCommands();
   }
 
   @override
@@ -483,6 +500,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     unawaited(_speechInputService.cancel());
     unawaited(_bridgeRealtimeAsrService.cancel());
     _ttsService.stop();
+    _controller.removeListener(_handleComposerTextChanged);
+    _messageInputFocusNode.removeListener(_handleComposerFocusChanged);
     _controller.dispose();
     _messageInputFocusNode.dispose();
     _stopReplyFocusNode.dispose();
@@ -512,14 +531,516 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     try {
       final providers = await _client.getModelProviders();
       if (!mounted) return;
-      final compatible = _session.agent.compatibleFormats;
+      final compatible =
+          _client.agentDescriptorFor(_session.agentId).compatibleFormats;
       setState(() {
-        _providers =
-            providers.where((p) => compatible.contains(p.format)).toList();
+        _providers = compatible.isEmpty
+            ? providers
+            : providers.where((p) => compatible.contains(p.format)).toList();
       });
     } catch (_) {
       // Silently ignore — provider selector just won't show
     }
+  }
+
+  Future<void> _loadAgentCommands() async {
+    try {
+      final commands = await _client.listAgentCommands();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _agentCommands = commands;
+        _selectedCommandSuggestionIndex = 0;
+      });
+    } catch (_) {
+      // Suggestions are optional; keep composer usable if this endpoint fails.
+    }
+  }
+
+  void _handleComposerTextChanged() {
+    final query = _commandQuery;
+    final queryChanged = query != _lastCommandQuery;
+    _lastCommandQuery = query;
+    if (queryChanged) {
+      _commandSuggestionsDismissed = false;
+      _selectedCommandSuggestionIndex = 0;
+    }
+    final fileQuery = _fileCompletionQuery;
+    final fileQueryChanged = fileQuery != _lastFileCompletionQuery;
+    _lastFileCompletionQuery = fileQuery;
+    if (fileQueryChanged) {
+      _fileSuggestionsDismissed = false;
+      _selectedFileCompletionIndex = 0;
+      if (fileQuery == null) {
+        _fileCompletionRequestToken += 1;
+        _fileCompletions = const [];
+        _loadingFileCompletions = false;
+      } else {
+        unawaited(_loadFileCompletions(fileQuery));
+      }
+    }
+    if (mounted) {
+      setState(() {});
+      _syncComposerSuggestionsOverlay();
+    }
+  }
+
+  void _handleComposerFocusChanged() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+    _syncComposerSuggestionsOverlay();
+  }
+
+  String get _commandQuery {
+    final text = _controller.text;
+    if (!text.startsWith('/')) {
+      return '';
+    }
+    final firstWhitespace = text.indexOf(RegExp(r'\s'));
+    final token =
+        firstWhitespace >= 0 ? text.substring(0, firstWhitespace) : text;
+    return token.trim();
+  }
+
+  List<AgentCommand> get _matchingCommandSuggestions {
+    final query = _commandQuery.toLowerCase();
+    if (query.isEmpty) {
+      return const [];
+    }
+    final suggestions = _agentCommands.where((command) {
+      final agentId = command.agentId?.trim();
+      if (agentId != null &&
+          agentId.isNotEmpty &&
+          agentId != _session.agentId) {
+        return false;
+      }
+      if (query == '/') {
+        return true;
+      }
+      if (command.name.toLowerCase().startsWith(query)) {
+        return true;
+      }
+      return command.aliases
+          .any((alias) => alias.toLowerCase().startsWith(query));
+    }).toList(growable: false);
+    if (_selectedCommandSuggestionIndex >= suggestions.length &&
+        suggestions.isNotEmpty) {
+      _selectedCommandSuggestionIndex = suggestions.length - 1;
+    }
+    return suggestions;
+  }
+
+  String? get _fileCompletionQuery {
+    final selection = _controller.selection;
+    if (!selection.isValid || !selection.isCollapsed) {
+      return null;
+    }
+    final text = _controller.text;
+    final offset = selection.baseOffset;
+    if (offset < 0 || offset > text.length) {
+      return null;
+    }
+    final beforeCursor = text.substring(0, offset);
+    final tokenMatch =
+        RegExp(r'(^|\s)(@([A-Za-z0-9._\-/]*))$').firstMatch(beforeCursor);
+    if (tokenMatch == null) {
+      return null;
+    }
+    final token = tokenMatch.group(3)?.trim() ?? '';
+    if (token.startsWith('/')) {
+      return null;
+    }
+    if (token.startsWith('../')) {
+      return null;
+    }
+    return token.startsWith('./') ? token.substring(2) : token;
+  }
+
+  bool get _showCommandSuggestions {
+    if (_voiceComposerMode ||
+        !_messageInputFocusNode.hasFocus ||
+        _commandSuggestionsDismissed) {
+      return false;
+    }
+    return _matchingCommandSuggestions.isNotEmpty;
+  }
+
+  bool get _showFileSuggestions {
+    if (_voiceComposerMode ||
+        !_messageInputFocusNode.hasFocus ||
+        _fileSuggestionsDismissed ||
+        _showCommandSuggestions) {
+      return false;
+    }
+    return _loadingFileCompletions || _matchingFileCompletions.isNotEmpty;
+  }
+
+  bool get _showComposerSuggestions =>
+      _showCommandSuggestions || _showFileSuggestions;
+
+  bool get _composerSuggestionsOverlayAvailable =>
+      !_voiceComposerMode &&
+      _session.status != SessionStatus.running &&
+      _session.status != SessionStatus.awaitingApproval &&
+      _pendingApproval == null;
+
+  List<FileCompletionItem> get _matchingFileCompletions {
+    final query = _fileCompletionQuery ?? '';
+    if (query.isEmpty) {
+      return _fileCompletions;
+    }
+    final normalizedQuery = query.toLowerCase();
+    final suggestions = _fileCompletions.where((item) {
+      final path = item.path.toLowerCase();
+      return path.contains(normalizedQuery);
+    }).toList(growable: false);
+    if (_selectedFileCompletionIndex >= suggestions.length &&
+        suggestions.isNotEmpty) {
+      _selectedFileCompletionIndex = suggestions.length - 1;
+    }
+    return suggestions;
+  }
+
+  void _moveSelectedCommandSuggestion(int delta) {
+    final suggestions = _matchingCommandSuggestions;
+    if (suggestions.isEmpty) {
+      return;
+    }
+    setState(() {
+      final nextIndex =
+          (_selectedCommandSuggestionIndex + delta) % suggestions.length;
+      _selectedCommandSuggestionIndex =
+          nextIndex < 0 ? suggestions.length - 1 : nextIndex;
+    });
+  }
+
+  void _moveSelectedFileCompletion(int delta) {
+    final suggestions = _matchingFileCompletions;
+    if (suggestions.isEmpty) {
+      return;
+    }
+    setState(() {
+      final nextIndex = (_selectedFileCompletionIndex + delta) % suggestions.length;
+      _selectedFileCompletionIndex =
+          nextIndex < 0 ? suggestions.length - 1 : nextIndex;
+    });
+  }
+
+  void _dismissCommandSuggestions() {
+    if (!_showCommandSuggestions) {
+      return;
+    }
+    setState(() {
+      _commandSuggestionsDismissed = true;
+    });
+    _syncComposerSuggestionsOverlay();
+  }
+
+  void _dismissFileSuggestions() {
+    if (!_showFileSuggestions) {
+      return;
+    }
+    setState(() {
+      _fileSuggestionsDismissed = true;
+    });
+    _syncComposerSuggestionsOverlay();
+  }
+
+  void _syncComposerSuggestionsOverlay() {
+    if (!_composerSuggestionsOverlayAvailable) {
+      _composerSuggestionsOverlayShown = false;
+      return;
+    }
+    if (_showComposerSuggestions) {
+      if (_composerSuggestionsOverlayShown) {
+        return;
+      }
+      _composerSuggestionsOverlayController.show();
+      _composerSuggestionsOverlayShown = true;
+    } else {
+      if (!_composerSuggestionsOverlayShown) {
+        return;
+      }
+      _composerSuggestionsOverlayController.hide();
+      _composerSuggestionsOverlayShown = false;
+    }
+  }
+
+  void _applyCommandSuggestion(AgentCommand command) {
+    final text = _controller.text;
+    final firstWhitespace = text.indexOf(RegExp(r'\s'));
+    final suffix =
+        firstWhitespace >= 0 ? text.substring(firstWhitespace).trimLeft() : '';
+    final replacement =
+        suffix.isEmpty ? '${command.name} ' : '${command.name} $suffix';
+    _controller.value = TextEditingValue(
+      text: replacement,
+      selection: TextSelection.collapsed(offset: replacement.length),
+    );
+    setState(() {
+      _commandSuggestionsDismissed = true;
+      _selectedCommandSuggestionIndex = 0;
+    });
+    _syncComposerSuggestionsOverlay();
+  }
+
+  void _applyFileCompletion(FileCompletionItem item) {
+    final selection = _controller.selection;
+    if (!selection.isValid || !selection.isCollapsed) {
+      return;
+    }
+    final text = _controller.text;
+    final offset = selection.baseOffset;
+    final beforeCursor = text.substring(0, offset);
+    final tokenMatch =
+        RegExp(r'(^|\s)(@([A-Za-z0-9._\-/]*))$').firstMatch(beforeCursor);
+    if (tokenMatch == null) {
+      return;
+    }
+    final leading = tokenMatch.group(1) ?? '';
+    final start = tokenMatch.start + leading.length;
+    final replacement = '@${item.path}';
+    final nextText = '${text.substring(0, start)}$replacement${text.substring(offset)}';
+    final nextOffset = start + replacement.length;
+    _controller.value = TextEditingValue(
+      text: nextText,
+      selection: TextSelection.collapsed(offset: nextOffset),
+    );
+    setState(() {
+      _fileSuggestionsDismissed = true;
+      _selectedFileCompletionIndex = 0;
+      _fileCompletions = const [];
+      _loadingFileCompletions = false;
+    });
+    _syncComposerSuggestionsOverlay();
+  }
+
+  Future<void> _loadFileCompletions(String query) async {
+    final normalized = query.trim();
+    final requestToken = ++_fileCompletionRequestToken;
+    setState(() {
+      _loadingFileCompletions = true;
+    });
+    try {
+      final items = await _client.listFileCompletions(
+        prefix: normalized,
+        sessionId: _session.id,
+        limit: 8,
+      );
+      if (!mounted || requestToken != _fileCompletionRequestToken) {
+        return;
+      }
+      setState(() {
+        _fileCompletions = items;
+        _loadingFileCompletions = false;
+        final matchingItems = _matchingFileCompletions;
+        if (_selectedFileCompletionIndex >= matchingItems.length) {
+          _selectedFileCompletionIndex =
+              matchingItems.isEmpty ? 0 : matchingItems.length - 1;
+        }
+      });
+      _syncComposerSuggestionsOverlay();
+    } catch (_) {
+      if (!mounted || requestToken != _fileCompletionRequestToken) {
+        return;
+      }
+      setState(() {
+        _fileCompletions = const [];
+        _loadingFileCompletions = false;
+      });
+      _syncComposerSuggestionsOverlay();
+    }
+  }
+
+  Widget _buildCommandSuggestionsPanel(Color deepSurface, Color outlineStrong) {
+    final suggestions = _matchingCommandSuggestions;
+    if (!_showCommandSuggestions) {
+      return const SizedBox.shrink();
+    }
+    return _buildSuggestionPanel(
+      key: const Key('session-command-suggestions'),
+      deepSurface: deepSurface,
+      outlineStrong: outlineStrong,
+      itemCount: suggestions.length,
+      itemBuilder: (context, index, brightness) {
+        final suggestion = suggestions[index];
+        return _buildSuggestionTile(
+          brightness: brightness,
+          selected: index == _selectedCommandSuggestionIndex,
+          itemKey: Key('session-command-suggestion-$index'),
+          onTap: () => _applyCommandSuggestion(suggestion),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      suggestion.name,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    if ((suggestion.description ?? '').trim().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          top: AppSpacing.textStack,
+                        ),
+                        child: Text(
+                          suggestion.description!.trim(),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (suggestion.aliases.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: AppSpacing.compact),
+                  child: Text(
+                    suggestion.aliases.first,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFileSuggestionsPanel(Color deepSurface, Color outlineStrong) {
+    if (!_showFileSuggestions) {
+      return const SizedBox.shrink();
+    }
+    final suggestions = _matchingFileCompletions;
+    return _buildSuggestionPanel(
+      key: const Key('session-file-suggestions'),
+      deepSurface: deepSurface,
+      outlineStrong: outlineStrong,
+      loading: _loadingFileCompletions,
+      itemCount: suggestions.length,
+      itemBuilder: (context, index, brightness) {
+        final suggestion = suggestions[index];
+        return _buildSuggestionTile(
+          brightness: brightness,
+          selected: index == _selectedFileCompletionIndex,
+          itemKey: Key('session-file-suggestion-$index'),
+          onTap: () => _applyFileCompletion(suggestion),
+          child: Row(
+            children: [
+              Icon(
+                suggestion.isDir
+                    ? Icons.folder_outlined
+                    : Icons.insert_drive_file_outlined,
+                size: 16,
+                color: AppColors.textSoftFor(brightness),
+              ),
+              const SizedBox(width: AppSpacing.compact),
+              Expanded(
+                child: Text(
+                  suggestion.path,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSuggestionPanel({
+    required Key key,
+    required Color deepSurface,
+    required Color outlineStrong,
+    required int itemCount,
+    required Widget Function(BuildContext, int, Brightness) itemBuilder,
+    bool loading = false,
+  }) {
+    final brightness = Theme.of(context).brightness;
+    return Container(
+      key: key,
+      decoration: BoxDecoration(
+        color: deepSurface,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+        border: Border.all(color: outlineStrong),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: brightness == Brightness.dark
+                ? 0.32
+                : 0.12),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: loading
+          ? const Padding(
+              padding: EdgeInsets.all(AppSpacing.card),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var index = 0; index < itemCount; index += 1)
+                  itemBuilder(context, index, brightness),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildSuggestionTile({
+    required Brightness brightness,
+    required bool selected,
+    required Key itemKey,
+    required VoidCallback onTap,
+    required Widget child,
+  }) {
+    return Material(
+      color: selected
+          ? AppColors.primaryFor(brightness).withValues(
+              alpha: brightness == Brightness.dark ? 0.18 : 0.1,
+            )
+          : Colors.transparent,
+      child: InkWell(
+        key: itemKey,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.card,
+            vertical: AppSpacing.compact,
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildComposerSuggestionsOverlay(
+    Color deepSurface,
+    Color outlineStrong,
+  ) {
+    if (!_showComposerSuggestions) {
+      return const SizedBox.shrink();
+    }
+    final panel = _showCommandSuggestions
+        ? _buildCommandSuggestionsPanel(deepSurface, outlineStrong)
+        : _buildFileSuggestionsPanel(deepSurface, outlineStrong);
+    return Material(
+      color: Colors.transparent,
+      child: AnchoredOverlayPanel(
+        targetKey: _composerTextFieldKey,
+        maxWidth: _composerMaxWidth,
+        child: panel,
+      ),
+    );
   }
 
   void _scheduleRefreshSessionSummary() {
@@ -846,59 +1367,81 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   deepSurface: deepSurface,
                   outlineStrong: outlineStrong,
                 )
-              : Focus(
-                  onKeyEvent: _handleMessageInputKeyEvent,
-                  child: TextField(
-                    key: const Key('session-message-input'),
-                    controller: _controller,
-                    focusNode: _messageInputFocusNode,
-                    enabled: !isSessionBusy,
-                    maxLines: 4,
-                    minLines: 1,
-                    textInputAction:
-                        _isMobilePlatform ? TextInputAction.newline : null,
-                    decoration: InputDecoration(
-                      hintText: _isListening
-                          ? context.l10n.voiceInputInProgress
-                          : context.l10n.messageInputHint,
-                      filled: true,
-                      fillColor: deepSurface,
-                      suffixIcon: Padding(
-                        padding: const EdgeInsetsDirectional.only(
-                          start: AppSpacing.micro,
-                          end: AppSpacing.compact,
-                        ),
-                        child: voiceButton,
-                      ),
-                      suffixIconConstraints: const BoxConstraints(
-                        minWidth: 48,
-                        minHeight: 44,
-                      ),
-                      contentPadding: const EdgeInsetsDirectional.only(
-                        start: AppSpacing.card,
-                        end: AppSpacing.compact,
-                        top: AppSpacing.stack,
-                        bottom: AppSpacing.stack,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppSpacing.radiusPanel),
-                        borderSide: BorderSide(color: inputBorderColor),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppSpacing.radiusPanel),
-                        borderSide: BorderSide(color: inputBorderColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppSpacing.radiusPanel),
-                        borderSide: BorderSide(
-                          color: AppColors.primaryFor(brightness),
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OverlayPortal(
+                      controller: _composerSuggestionsOverlayController,
+                      overlayChildBuilder: (context) =>
+                          _buildComposerSuggestionsOverlay(
+                            deepSurface,
+                            outlineStrong,
+                          ),
+                      child: KeyedSubtree(
+                        key: _composerTextFieldKey,
+                        child: Focus(
+                          onKeyEvent: _handleMessageInputKeyEvent,
+                          child: TextField(
+                            key: const Key('session-message-input'),
+                            controller: _controller,
+                            focusNode: _messageInputFocusNode,
+                            enabled: !isSessionBusy,
+                            maxLines: 4,
+                            minLines: 1,
+                            textInputAction: _isMobilePlatform
+                                ? TextInputAction.newline
+                                : null,
+                            decoration: InputDecoration(
+                              hintText: _isListening
+                                  ? context.l10n.voiceInputInProgress
+                                  : context.l10n.messageInputHint,
+                              filled: true,
+                              fillColor: deepSurface,
+                              suffixIcon: Padding(
+                                padding: const EdgeInsetsDirectional.only(
+                                  start: AppSpacing.micro,
+                                  end: AppSpacing.compact,
+                                ),
+                                child: voiceButton,
+                              ),
+                              suffixIconConstraints: const BoxConstraints(
+                                minWidth: 48,
+                                minHeight: 44,
+                              ),
+                              contentPadding: const EdgeInsetsDirectional.only(
+                                start: AppSpacing.card,
+                                end: AppSpacing.compact,
+                                top: AppSpacing.stack,
+                                bottom: AppSpacing.stack,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppSpacing.radiusPanel,
+                                ),
+                                borderSide:
+                                    BorderSide(color: inputBorderColor),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppSpacing.radiusPanel,
+                                ),
+                                borderSide:
+                                    BorderSide(color: inputBorderColor),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppSpacing.radiusPanel,
+                                ),
+                                borderSide: BorderSide(
+                                  color: AppColors.primaryFor(brightness),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
         ),
         if (!_voiceComposerMode) ...[
@@ -937,6 +1480,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _voiceHoldLifted = false;
       _voiceHoldGlobalPosition = null;
     });
+    _syncComposerSuggestionsOverlay();
     if (enablingVoiceMode && widget.enableSpeechServices && !_speechReady) {
       unawaited(_ensureSpeechInitialized());
     }
@@ -1488,8 +2032,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
-  String _agentLabel(AgentKind agent) {
-    return agent.label;
+  String _agentLabel(String agentId) {
+    return _client.agentLabelFor(agentId);
   }
 
   Widget _buildPendingApprovalCard(double maxHeight) {
@@ -1586,7 +2130,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               children: [
                 Text(
                   context.l10n.agentAwaitingPermission(
-                    _agentLabel(_session.agent),
+                    _agentLabel(_session.agentId),
                   ),
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: AppColors.warningTextFor(brightness),
@@ -4108,6 +4652,36 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_isMobilePlatform) {
       return KeyEventResult.ignored;
     }
+    final commandSuggestions = _matchingCommandSuggestions;
+    final isArrowDown = event.logicalKey == LogicalKeyboardKey.arrowDown;
+    final isArrowUp = event.logicalKey == LogicalKeyboardKey.arrowUp;
+    final isEscape = event.logicalKey == LogicalKeyboardKey.escape;
+    if (event is KeyDownEvent && (_showCommandSuggestions || _showFileSuggestions)) {
+      if (isArrowDown) {
+        if (_showCommandSuggestions) {
+          _moveSelectedCommandSuggestion(1);
+        } else {
+          _moveSelectedFileCompletion(1);
+        }
+        return KeyEventResult.handled;
+      }
+      if (isArrowUp) {
+        if (_showCommandSuggestions) {
+          _moveSelectedCommandSuggestion(-1);
+        } else {
+          _moveSelectedFileCompletion(-1);
+        }
+        return KeyEventResult.handled;
+      }
+      if (isEscape) {
+        if (_showCommandSuggestions) {
+          _dismissCommandSuggestions();
+        } else {
+          _dismissFileSuggestions();
+        }
+        return KeyEventResult.handled;
+      }
+    }
     final isEnterKey = event.logicalKey == LogicalKeyboardKey.enter ||
         event.logicalKey == LogicalKeyboardKey.numpadEnter;
     if (!isEnterKey || HardwareKeyboard.instance.isShiftPressed) {
@@ -4121,6 +4695,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     if (event is! KeyDownEvent) {
       return KeyEventResult.ignored;
+    }
+    if (_showCommandSuggestions && commandSuggestions.isNotEmpty) {
+      _applyCommandSuggestion(
+        commandSuggestions[_selectedCommandSuggestionIndex],
+      );
+      return KeyEventResult.handled;
+    }
+    final fileSuggestions = _matchingFileCompletions;
+    if (_showFileSuggestions && fileSuggestions.isNotEmpty) {
+      _applyFileCompletion(fileSuggestions[_selectedFileCompletionIndex]);
+      return KeyEventResult.handled;
     }
     unawaited(_sendTextMessage());
     return KeyEventResult.handled;

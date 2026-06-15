@@ -13,6 +13,30 @@ import 'package:omni_code/src/settings/app_settings_store.dart';
 import 'package:omni_code/src/theme/app_theme.dart';
 import 'package:omni_code/src/widgets/create_session_dialog.dart';
 
+Map<String, dynamic> _agentJson({
+  required String id,
+  required String label,
+  required bool installed,
+  required List<String> aliases,
+  required List<String> compatibleFormats,
+  bool selectable = true,
+  bool defaultSelected = false,
+  String? installedPath,
+  String installHint = '',
+}) {
+  return {
+    'id': id,
+    'label': label,
+    'aliases': aliases,
+    'selectable': selectable,
+    'default_selected': defaultSelected,
+    'compatible_formats': compatibleFormats,
+    'installed': installed,
+    'installed_path': installedPath,
+    'install_hint': installHint,
+  };
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -101,6 +125,56 @@ void main() {
       (tester) async {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/agents') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _agentJson(
+                  id: 'codex',
+                  label: 'Codex',
+                  aliases: const ['codex'],
+                  compatibleFormats: const ['codex'],
+                  defaultSelected: true,
+                  installed: true,
+                  installedPath: '/usr/local/bin/codex',
+                  installHint: 'manual',
+                ),
+                _agentJson(
+                  id: 'claude_code',
+                  label: 'Claude Code',
+                  aliases: const ['claude_code', 'claudecode'],
+                  compatibleFormats: const ['anthropic-messages'],
+                  installed: true,
+                  installedPath: '/usr/local/bin/claude',
+                  installHint: 'manual',
+                ),
+                _agentJson(
+                  id: 'open_code',
+                  label: 'OpenCode',
+                  aliases: const ['open_code', 'opencode'],
+                  compatibleFormats: const [
+                    'openai-compatible',
+                    'anthropic-messages',
+                    'codex',
+                  ],
+                  installed: false,
+                  installHint: 'install via brew',
+                ),
+                _agentJson(
+                  id: 'custom',
+                  label: 'Custom Agent',
+                  aliases: const ['fallback'],
+                  compatibleFormats: const ['openai-compatible'],
+                  selectable: false,
+                  installed: false,
+                  installHint: 'n/a',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
         if (request.method == 'GET' && request.url.path == '/settings') {
           return http.Response(
             jsonEncode({
@@ -152,6 +226,7 @@ void main() {
     final l10n = AppLocalizations.of(tester.element(find.byType(AlertDialog)))!;
     expect(find.text(l10n.providerSessionLabel), findsOneWidget);
     expect(find.text(l10n.providerAuto), findsOneWidget);
+    expect(find.text(l10n.agentInstalledStatus), findsNothing);
 
     await tester.tap(find.byType(DropdownButtonFormField<String>).last);
     await tester.pumpAndSettle();
@@ -167,6 +242,221 @@ void main() {
     expect(find.byType(AlertDialog), findsNothing);
   });
 
+  testWidgets('create session dialog blocks create until agent is installed',
+      (tester) async {
+    var installCalls = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/agents') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _agentJson(
+                  id: 'codex',
+                  label: 'Codex',
+                  aliases: const ['codex'],
+                  compatibleFormats: const ['codex'],
+                  defaultSelected: true,
+                  installed: false,
+                  installHint: 'npm install -g @openai/codex',
+                ),
+                _agentJson(
+                  id: 'claude_code',
+                  label: 'Claude Code',
+                  aliases: const ['claude_code', 'claudecode'],
+                  compatibleFormats: const ['anthropic-messages'],
+                  installed: true,
+                  installedPath: '/usr/local/bin/claude',
+                  installHint: 'manual',
+                ),
+                _agentJson(
+                  id: 'open_code',
+                  label: 'OpenCode',
+                  aliases: const ['open_code', 'opencode'],
+                  compatibleFormats: const [
+                    'openai-compatible',
+                    'anthropic-messages',
+                    'codex',
+                  ],
+                  installed: true,
+                  installedPath: '/usr/local/bin/opencode',
+                  installHint: 'manual',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'POST' && request.url.path == '/agents/install') {
+          installCalls += 1;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'agent': 'codex',
+                'success': true,
+                'message': 'installed successfully',
+                'installed_path': '/usr/local/bin/codex',
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/settings') {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'model_providers': [],
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () {
+                  showDialog<CreateSessionDialogResult>(
+                    context: context,
+                    builder: (_) => CreateSessionDialog(client: client),
+                  );
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.of(tester.element(find.byType(AlertDialog)))!;
+    expect(find.text(l10n.agentNotInstalledStatus), findsOneWidget);
+    expect(find.text('npm install -g @openai/codex'), findsOneWidget);
+    expect(find.text('Codex (${l10n.agentNotInstalledStatus})'), findsOneWidget);
+
+    final installButton = tester.widget<FilledButton>(
+      find.byKey(const Key('create-or-install-agent-button')),
+    );
+    expect(installButton.onPressed, isNotNull);
+    expect(find.text(l10n.installAgent), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('create-or-install-agent-button')));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(installCalls, 1);
+    expect(find.text(l10n.agentInstalledStatus), findsNothing);
+
+    final enabledCreateButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, l10n.create),
+    );
+    expect(enabledCreateButton.onPressed, isNotNull);
+  });
+
+  testWidgets('create session dialog shows install error and keeps install button',
+      (tester) async {
+    var installCalls = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/agents') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _agentJson(
+                  id: 'codex',
+                  label: 'Codex',
+                  aliases: const ['codex'],
+                  compatibleFormats: const ['codex'],
+                  defaultSelected: true,
+                  installed: false,
+                  installHint: 'npm install -g @openai/codex',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'POST' && request.url.path == '/agents/install') {
+          installCalls += 1;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'agent': 'codex',
+                'success': false,
+                'message': 'install failed',
+                'installed_path': null,
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/settings') {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'model_providers': [],
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () {
+                  showDialog<CreateSessionDialogResult>(
+                    context: context,
+                    builder: (_) => CreateSessionDialog(client: client),
+                  );
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.of(tester.element(find.byType(AlertDialog)))!;
+    await tester.tap(find.byKey(const Key('create-or-install-agent-button')));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(installCalls, 1);
+    expect(find.text('install failed'), findsOneWidget);
+    expect(find.byKey(const Key('agent-install-error')), findsOneWidget);
+    expect(find.text(l10n.installAgent), findsOneWidget);
+    expect(find.text(l10n.agentNotInstalledStatus), findsOneWidget);
+    expect(find.byType(AlertDialog), findsOneWidget);
+  });
+
   testWidgets('create session dialog defaults to last selected provider for project',
       (tester) async {
     appSettingsController.debugReplaceSettings(
@@ -178,6 +468,48 @@ void main() {
     );
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/agents') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _agentJson(
+                  id: 'codex',
+                  label: 'Codex',
+                  aliases: const ['codex'],
+                  compatibleFormats: const ['codex'],
+                  defaultSelected: true,
+                  installed: true,
+                  installedPath: '/usr/local/bin/codex',
+                  installHint: 'manual',
+                ),
+                _agentJson(
+                  id: 'claude_code',
+                  label: 'Claude Code',
+                  aliases: const ['claude_code', 'claudecode'],
+                  compatibleFormats: const ['anthropic-messages'],
+                  installed: true,
+                  installedPath: '/usr/local/bin/claude',
+                  installHint: 'manual',
+                ),
+                _agentJson(
+                  id: 'open_code',
+                  label: 'OpenCode',
+                  aliases: const ['open_code', 'opencode'],
+                  compatibleFormats: const [
+                    'openai-compatible',
+                    'anthropic-messages',
+                    'codex',
+                  ],
+                  installed: true,
+                  installedPath: '/usr/local/bin/opencode',
+                  installHint: 'manual',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
         if (request.method == 'GET' && request.url.path == '/settings') {
           return http.Response(
             jsonEncode({
@@ -245,6 +577,48 @@ void main() {
       (tester) async {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/agents') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _agentJson(
+                  id: 'codex',
+                  label: 'Codex',
+                  aliases: const ['codex'],
+                  compatibleFormats: const ['codex'],
+                  defaultSelected: true,
+                  installed: true,
+                  installedPath: '/usr/local/bin/codex',
+                  installHint: 'manual',
+                ),
+                _agentJson(
+                  id: 'claude_code',
+                  label: 'Claude Code',
+                  aliases: const ['claude_code', 'claudecode'],
+                  compatibleFormats: const ['anthropic-messages'],
+                  installed: true,
+                  installedPath: '/usr/local/bin/claude',
+                  installHint: 'manual',
+                ),
+                _agentJson(
+                  id: 'open_code',
+                  label: 'OpenCode',
+                  aliases: const ['open_code', 'opencode'],
+                  compatibleFormats: const [
+                    'openai-compatible',
+                    'anthropic-messages',
+                    'codex',
+                  ],
+                  installed: true,
+                  installedPath: '/usr/local/bin/opencode',
+                  installHint: 'manual',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
         if (request.method == 'GET' && request.url.path == '/settings') {
           return http.Response(
             jsonEncode({
@@ -299,6 +673,89 @@ void main() {
 
     final l10n = AppLocalizations.of(tester.element(find.byType(AlertDialog)))!;
     expect(find.text(l10n.providerAuto), findsOneWidget);
+  });
+
+  testWidgets('create session dialog uses selectable agents and server default',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(lastSelectedAgent: 'unknown-agent'),
+    );
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/agents') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _agentJson(
+                  id: 'custom',
+                  label: 'Custom Agent',
+                  aliases: const ['fallback'],
+                  compatibleFormats: const ['openai-compatible'],
+                  selectable: false,
+                  installed: false,
+                  installHint: 'n/a',
+                ),
+                _agentJson(
+                  id: 'open_code',
+                  label: 'OpenCode',
+                  aliases: const ['open_code', 'opencode'],
+                  compatibleFormats: const [
+                    'openai-compatible',
+                    'anthropic-messages',
+                    'codex',
+                  ],
+                  defaultSelected: true,
+                  installed: true,
+                  installedPath: '/usr/local/bin/opencode',
+                  installHint: 'manual',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/settings') {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'model_providers': [],
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () {
+                  showDialog<CreateSessionDialogResult>(
+                    context: context,
+                    builder: (_) => CreateSessionDialog(client: client),
+                  );
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('OpenCode'), findsOneWidget);
+    expect(find.text('Custom Agent'), findsNothing);
   });
 
 }

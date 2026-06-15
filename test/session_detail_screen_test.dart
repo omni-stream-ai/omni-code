@@ -18,7 +18,9 @@ import 'package:omni_code/src/services/speech_input_service.dart';
 import 'package:omni_code/src/services/tts_service.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 import 'package:omni_code/src/settings/app_settings_store.dart';
+import 'package:omni_code/src/theme/app_spacing.dart';
 import 'package:omni_code/src/theme/app_theme.dart';
+import 'package:omni_code/src/widgets/anchored_overlay_panel.dart';
 import 'package:omni_code/src/widgets/session_call_mode_view.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
@@ -47,7 +49,8 @@ void main() {
         .setMockMethodCallHandler(_localNotificationsChannel, null);
   });
 
-  testWidgets('shows session title in the session detail header', (tester) async {
+  testWidgets('shows session title in the session detail header',
+      (tester) async {
     await tester.pumpWidget(
       _TestApp(
         home: SessionDetailScreen(
@@ -152,6 +155,772 @@ void main() {
       variant: const TargetPlatformVariant(<TargetPlatform>{
         TargetPlatform.linux,
       }));
+
+  testWidgets('slash input shows command suggestions', (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/agents/commands') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'kind': 'codex',
+                  'commands': [
+                    {
+                      'name': '/review',
+                      'description': 'Review the diff',
+                      'aliases': ['/rev'],
+                    },
+                    {
+                      'name': '/summarize',
+                      'description': 'Summarize the current changes',
+                    },
+                  ],
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-message-input')));
+    await tester.enterText(find.byKey(const Key('session-message-input')), '/');
+    await tester.pump();
+
+    expect(
+        find.byKey(const Key('session-command-suggestions')), findsOneWidget);
+    expect(find.text('/review'), findsOneWidget);
+    expect(find.text('Review the diff'), findsOneWidget);
+    expect(find.text('/summarize'), findsOneWidget);
+  });
+
+  testWidgets('command suggestions overlay does not change composer height',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/agents/commands') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'kind': 'codex',
+                  'commands': [
+                    {
+                      'name': '/review',
+                      'description': 'Review the diff',
+                    },
+                  ],
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final composer = find.byKey(const Key('session-message-composer'));
+    final input = find.byKey(const Key('session-message-input'));
+    final initialHeight = tester.getSize(composer).height;
+
+    await tester.tap(input);
+    await tester.enterText(input, '/');
+    await tester.pump();
+
+    expect(
+      tester.getSize(composer).height,
+      initialHeight,
+    );
+    expect(
+      find.byKey(const Key('session-command-suggestions')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('anchored overlay flips above when bottom space is tight',
+      (tester) async {
+    final targetKey = GlobalKey();
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: Scaffold(
+          body: _AnchoredOverlayTestHost(
+            targetKey: targetKey,
+            child: Container(
+              key: const Key('anchored-overlay-test-panel'),
+              height: 120,
+              color: Colors.red,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final targetRect = tester.getRect(find.byKey(targetKey));
+    final panelRect =
+        tester.getRect(find.byKey(const Key('anchored-overlay-test-panel')));
+
+    expect(panelRect.bottom, lessThanOrEqualTo(targetRect.top));
+  });
+
+  testWidgets('anchored overlay keeps tight gap above for short content',
+      (tester) async {
+    final targetKey = GlobalKey();
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: Scaffold(
+          body: _AnchoredOverlayTestHost(
+            targetKey: targetKey,
+            child: Container(
+              key: const Key('anchored-overlay-short-test-panel'),
+              height: 36,
+              color: Colors.blue,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final targetRect = tester.getRect(find.byKey(targetKey));
+    final panelRect = tester.getRect(
+      find.byKey(const Key('anchored-overlay-short-test-panel')),
+    );
+
+    expect(targetRect.top - panelRect.bottom, AppSpacing.compact);
+  });
+
+  testWidgets('anchored overlay aligns to target right edge near screen edge',
+      (tester) async {
+    final targetKey = GlobalKey();
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: Scaffold(
+          body: _AnchoredOverlayTestHost(
+            targetKey: targetKey,
+            alignment: Alignment.bottomRight,
+            child: Container(
+              key: const Key('anchored-overlay-right-edge-test-panel'),
+              height: 60,
+              color: Colors.green,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final targetRect = tester.getRect(find.byKey(targetKey));
+    final panelRect = tester.getRect(
+      find.byKey(const Key('anchored-overlay-right-edge-test-panel')),
+    );
+
+    expect(panelRect.right, 800 - AppSpacing.screenX);
+    expect(panelRect.right, lessThanOrEqualTo(targetRect.right));
+    expect(panelRect.left, greaterThanOrEqualTo(AppSpacing.screenX));
+  });
+
+  testWidgets('anchored overlay prefers target width before max width',
+      (tester) async {
+    final targetKey = GlobalKey();
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: Scaffold(
+          body: _AnchoredOverlayTestHost(
+            targetKey: targetKey,
+            child: Container(
+              key: const Key('anchored-overlay-width-test-panel'),
+              height: 60,
+              color: Colors.orange,
+            ),
+            overlayBuilder: (targetKey, child) => AnchoredOverlayPanel(
+              targetKey: targetKey,
+              maxWidth: 760,
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final targetRect = tester.getRect(find.byKey(targetKey));
+    final panelRect = tester.getRect(
+      find.byKey(const Key('anchored-overlay-width-test-panel')),
+    );
+
+    expect(panelRect.width, 240);
+    expect(panelRect.width, lessThan(760));
+    expect(panelRect.width, greaterThanOrEqualTo(targetRect.width));
+  });
+
+  testWidgets('pressing enter accepts selected command suggestion',
+      (tester) async {
+    final sentBodies = <Map<String, dynamic>>[];
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/agents/commands') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'kind': 'codex',
+                  'commands': [
+                    {
+                      'name': '/review',
+                      'description': 'Review the diff',
+                    },
+                  ],
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          sentBodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: '/review',
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.enterText(input, '/');
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(tester.widget<TextField>(input).controller!.text, '/review ');
+    expect(sentBodies, isEmpty);
+  },
+      variant:
+          const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
+
+  testWidgets('at input shows file suggestions', (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/agents/commands') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/files/completions') {
+          expect(request.url.queryParameters['prefix'], 'lib/src/scr');
+          expect(request.url.queryParameters['session_id'], 'session-1');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {'path': 'lib/src/screens/', 'is_dir': true},
+                {
+                  'path': 'lib/src/screens/session_detail_screen.dart',
+                  'is_dir': false,
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.enterText(input, 'open @lib/src/scr');
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-file-suggestions')), findsOneWidget);
+    expect(find.text('lib/src/screens/'), findsOneWidget);
+    expect(
+      find.text('lib/src/screens/session_detail_screen.dart'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('at input filters broad file suggestions locally', (
+    tester,
+  ) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/agents/commands') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/files/completions') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {'path': 'README.md', 'is_dir': false},
+                {'path': 'lib/', 'is_dir': true},
+                {'path': 'lib/src/screens/', 'is_dir': true},
+                {'path': 'assets/app-icon.svg', 'is_dir': false},
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.enterText(input, 'open @lib');
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-file-suggestions')), findsOneWidget);
+    expect(find.text('lib/'), findsOneWidget);
+    expect(find.text('lib/src/screens/'), findsOneWidget);
+    expect(find.text('README.md'), findsNothing);
+    expect(find.text('assets/app-icon.svg'), findsNothing);
+  });
+
+  testWidgets('bare at shows root file suggestions', (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/agents/commands') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/files/completions') {
+          expect(request.url.queryParameters['prefix'], '');
+          expect(request.url.queryParameters['session_id'], 'session-1');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {'path': 'lib/', 'is_dir': true},
+                {'path': 'README.md', 'is_dir': false},
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.enterText(input, '@');
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-file-suggestions')), findsOneWidget);
+    expect(find.text('lib/'), findsOneWidget);
+    expect(find.text('README.md'), findsOneWidget);
+  });
+
+  testWidgets('dot-prefixed at input shows hidden file suggestions', (
+    tester,
+  ) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/agents/commands') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/files/completions') {
+          expect(request.url.queryParameters['prefix'], '.');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {'path': '.github/', 'is_dir': true},
+                {'path': '.gitignore', 'is_dir': false},
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.enterText(input, '@.');
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-file-suggestions')), findsOneWidget);
+    expect(find.text('.github/'), findsOneWidget);
+    expect(find.text('.gitignore'), findsOneWidget);
+  });
+
+  testWidgets('inline at text does not show file suggestions', (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/agents/commands') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/files/completions') {
+          fail('should not request file completions for inline @ text');
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.enterText(input, 'email foo@bar');
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-file-suggestions')), findsNothing);
+  });
+
+  testWidgets('pressing enter accepts selected file suggestion',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/agents/commands') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/files/completions') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'path': 'lib/src/screens/session_detail_screen.dart',
+                  'is_dir': false,
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.enterText(input, 'open @lib/src/scr');
+    await tester.pump();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(
+      tester.widget<TextField>(input).controller!.text,
+      'open @lib/src/screens/session_detail_screen.dart',
+    );
+  },
+      variant:
+          const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
 
   testWidgets('composer focus moves to stop after send', (tester) async {
     final client = BridgeClient(
@@ -4799,7 +5568,7 @@ SessionSummary _session({
     id: 'session-1',
     projectId: 'project-1',
     title: title,
-    agent: AgentKind.codex,
+    agentId: 'codex',
     briefReplyMode: briefReplyMode,
     status: status,
     updatedAt: DateTime(2026, 5, 9, 10),
@@ -5365,3 +6134,62 @@ const String _tinySvg =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">'
     '<rect width="10" height="10" fill="#66C8FF"/>'
     '</svg>';
+
+class _AnchoredOverlayTestHost extends StatefulWidget {
+  const _AnchoredOverlayTestHost({
+    required this.targetKey,
+    required this.child,
+    this.alignment = Alignment.bottomLeft,
+    this.overlayBuilder,
+  });
+
+  final GlobalKey targetKey;
+  final Widget child;
+  final Alignment alignment;
+  final Widget Function(GlobalKey targetKey, Widget child)? overlayBuilder;
+
+  @override
+  State<_AnchoredOverlayTestHost> createState() =>
+      _AnchoredOverlayTestHostState();
+}
+
+class _AnchoredOverlayTestHostState extends State<_AnchoredOverlayTestHost> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Align(
+          alignment: widget.alignment,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: KeyedSubtree(
+              key: widget.targetKey,
+              child: const SizedBox(width: 220, height: 44),
+            ),
+          ),
+        ),
+        (widget.overlayBuilder ?? _defaultOverlayBuilder)(
+          widget.targetKey,
+          widget.child,
+        ),
+      ],
+    );
+  }
+
+  Widget _defaultOverlayBuilder(GlobalKey targetKey, Widget child) {
+    return AnchoredOverlayPanel(
+      targetKey: targetKey,
+      child: child,
+    );
+  }
+}

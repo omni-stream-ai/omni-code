@@ -369,6 +369,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get agentLabel => 'Agent';
 
   @override
+  String get agentInstalledStatus => 'Installed';
+
+  @override
+  String get agentNotInstalledStatus => 'Not installed';
+
+  @override
+  String get installAgent => 'Install agent';
+
+  @override
+  String get installingAgent => 'Installing...';
+
+  @override
   String get create => 'Create';
 
   @override
