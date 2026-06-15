@@ -47,7 +47,7 @@ class AnchoredOverlayPanel extends StatelessWidget {
     final availableBelow = safeBottom - (rect.bottom + gap);
     final availableAbove = (rect.top - gap) - safeTop;
     final showBelow = switch ((preferBelow, availableBelow, availableAbove)) {
-      (true, final below, final above) when below >= maxHeight => true,
+      (true, final below, _) when below >= maxHeight => true,
       (true, _, final above) when above > availableBelow => false,
       (false, _, final above) when above > 0 => false,
       _ => availableBelow >= availableAbove,
