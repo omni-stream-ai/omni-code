@@ -362,6 +362,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get agentLabel => 'Agent';
 
   @override
+  String get agentInstalledStatus => '已安装';
+
+  @override
+  String get agentNotInstalledStatus => '未安装';
+
+  @override
+  String get installAgent => '安装 Agent';
+
+  @override
+  String get installingAgent => '安装中...';
+
+  @override
   String get create => '创建';
 
   @override

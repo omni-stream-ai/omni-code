@@ -21,6 +21,23 @@ enum ApiFormat {
   }
 }
 
+List<ApiFormat> parseApiFormats(Iterable<dynamic>? values) {
+  if (values == null) {
+    return const [];
+  }
+  final formats = <ApiFormat>[];
+  for (final value in values) {
+    if (value is! String) {
+      continue;
+    }
+    final format = ApiFormat.parse(value);
+    if (!formats.contains(format)) {
+      formats.add(format);
+    }
+  }
+  return List.unmodifiable(formats);
+}
+
 const autoProviderId = 'AUTO';
 
 bool isAutoProviderId(String? providerId) =>
@@ -97,46 +114,6 @@ class ModelProviderConfig {
   }
 }
 
-enum AgentKind {
-  codex('codex', 'Codex', ['codex']),
-  claudecode('claude_code', 'Claude Code', ['claude_code', 'claudecode']),
-  opencode('open_code', 'OpenCode'),
-  custom('custom', 'Agent', []);
-
-  const AgentKind(this.id, this.label, [this.aliases = const []]);
-
-  final String id;
-  final String label;
-  final List<String> aliases;
-
-  bool get isSelectable => this != AgentKind.custom;
-
-  bool matches(String value) {
-    return value == id || aliases.contains(value);
-  }
-
-  /// API formats compatible with this agent, matching the server-side resolution logic.
-  List<ApiFormat> get compatibleFormats {
-    switch (this) {
-      case AgentKind.claudecode:
-        return const [ApiFormat.anthropicMessages];
-      case AgentKind.codex:
-        return const [ApiFormat.codex];
-      case AgentKind.opencode:
-        return const [
-          ApiFormat.openaiCompatible,
-          ApiFormat.anthropicMessages,
-          ApiFormat.codex,
-        ];
-      case AgentKind.custom:
-        return const [ApiFormat.openaiCompatible];
-    }
-  }
-
-  static List<AgentKind> get selectableValues =>
-      AgentKind.values.where((kind) => kind.isSelectable).toList();
-}
-
 enum SessionStatus { idle, running, awaitingApproval, waiting, failed }
 
 enum MessageRole { user, assistant, system }
@@ -149,13 +126,66 @@ enum ApprovalChoice {
   cancel,
 }
 
-AgentKind parseAgentKind(String value) {
-  for (final kind in AgentKind.values) {
-    if (kind.matches(value)) {
-      return kind;
-    }
+class AgentDescriptor {
+  const AgentDescriptor({
+    required this.id,
+    required this.label,
+    this.aliases = const [],
+    this.selectable = true,
+    this.defaultSelected = false,
+    this.compatibleFormats = const [],
+  });
+
+  final String id;
+  final String label;
+  final List<String> aliases;
+  final bool selectable;
+  final bool defaultSelected;
+  final List<ApiFormat> compatibleFormats;
+
+  bool matches(String value) {
+    return value == id || aliases.contains(value);
   }
-  return AgentKind.custom;
+
+  factory AgentDescriptor.fromJson(Map<String, dynamic> json) {
+    final id = (json['id'] as String?)?.trim();
+    final legacyKind = (json['kind'] as String?)?.trim();
+    final resolvedId = (id != null && id.isNotEmpty) ? id : (legacyKind ?? '');
+    final compatibleFormats = parseApiFormats(
+      json['compatible_formats'] as List<dynamic>?,
+    );
+    final trimmedLabel = (json['label'] as String?)?.trim();
+    return AgentDescriptor(
+      id: resolvedId.isNotEmpty ? resolvedId : 'unknown',
+      label: trimmedLabel?.isNotEmpty == true
+          ? trimmedLabel!
+          : (resolvedId.isNotEmpty ? resolvedId : 'Agent'),
+      aliases: _readStringList(json['aliases']) ?? const [],
+      selectable: json['selectable'] as bool? ?? true,
+      defaultSelected: json['default_selected'] as bool? ?? false,
+      compatibleFormats: compatibleFormats,
+    );
+  }
+}
+
+AgentDescriptor fallbackAgentDescriptor(String? resolvedId) {
+  final normalized = resolvedId?.trim() ?? '';
+  return AgentDescriptor(
+    id: normalized.isEmpty ? 'unknown' : normalized,
+    label: normalized.isEmpty ? 'Agent' : normalized,
+    compatibleFormats: const [],
+  );
+}
+
+List<String>? _readStringList(Object? value) {
+  if (value is! List) {
+    return null;
+  }
+  return List.unmodifiable(
+    value.whereType<String>().map((item) => item.trim()).where((item) {
+      return item.isNotEmpty;
+    }),
+  );
 }
 
 class ApprovalRequest {
@@ -209,6 +239,99 @@ class ClientAuthRequest {
       requestId: (json['request_id'] as String?) ?? '',
       status: (json['status'] as String?) ?? 'pending',
       token: json['token'] as String?,
+    );
+  }
+}
+
+class AgentSummary {
+  const AgentSummary({
+    required this.descriptor,
+    required this.installed,
+    required this.installHint,
+    this.installedPath,
+  });
+
+  final AgentDescriptor descriptor;
+  final bool installed;
+  final String installHint;
+  final String? installedPath;
+
+  String get id => descriptor.id;
+  String get label => descriptor.label;
+  List<String> get aliases => descriptor.aliases;
+  bool get selectable => descriptor.selectable;
+  bool get defaultSelected => descriptor.defaultSelected;
+  List<ApiFormat> get compatibleFormats => descriptor.compatibleFormats;
+
+  factory AgentSummary.fromJson(Map<String, dynamic> json) {
+    return AgentSummary(
+      descriptor: AgentDescriptor.fromJson(json),
+      installed: json['installed'] as bool? ?? false,
+      installHint: json['install_hint'] as String? ?? '',
+      installedPath: json['installed_path'] as String?,
+    );
+  }
+}
+
+class AgentInstallResult {
+  const AgentInstallResult({
+    required this.agentId,
+    required this.success,
+    this.message,
+    this.installedPath,
+  });
+
+  final String agentId;
+  final bool success;
+  final String? message;
+  final String? installedPath;
+
+  factory AgentInstallResult.fromJson(Map<String, dynamic> json) {
+    return AgentInstallResult(
+      agentId: json['agent'] as String? ?? '',
+      success: json['success'] as bool? ?? false,
+      message: json['message'] as String?,
+      installedPath: json['installed_path'] as String?,
+    );
+  }
+}
+
+class AgentCommand {
+  const AgentCommand({
+    required this.name,
+    this.description,
+    this.agentId,
+    this.aliases = const [],
+  });
+
+  final String name;
+  final String? description;
+  final String? agentId;
+  final List<String> aliases;
+
+  factory AgentCommand.fromJson(Map<String, dynamic> json) {
+    return AgentCommand(
+      name: json['name'] as String? ?? '',
+      description: json['description'] as String?,
+      agentId: json['agent_id'] as String? ?? json['agent'] as String?,
+      aliases: _readStringList(json['aliases']) ?? const [],
+    );
+  }
+}
+
+class FileCompletionItem {
+  const FileCompletionItem({
+    required this.path,
+    required this.isDir,
+  });
+
+  final String path;
+  final bool isDir;
+
+  factory FileCompletionItem.fromJson(Map<String, dynamic> json) {
+    return FileCompletionItem(
+      path: json['path'] as String? ?? '',
+      isDir: json['is_dir'] as bool? ?? false,
     );
   }
 }
@@ -335,7 +458,7 @@ class SessionSummary {
     required this.id,
     required this.projectId,
     required this.title,
-    required this.agent,
+    required this.agentId,
     required this.briefReplyMode,
     required this.status,
     required this.updatedAt,
@@ -349,7 +472,7 @@ class SessionSummary {
   final String id;
   final String projectId;
   final String title;
-  final AgentKind agent;
+  final String agentId;
   final bool briefReplyMode;
   final SessionStatus status;
   final DateTime updatedAt;
@@ -363,7 +486,7 @@ class SessionSummary {
     String? id,
     String? projectId,
     String? title,
-    AgentKind? agent,
+    String? agentId,
     bool? briefReplyMode,
     SessionStatus? status,
     DateTime? updatedAt,
@@ -380,7 +503,7 @@ class SessionSummary {
       id: id ?? this.id,
       projectId: projectId ?? this.projectId,
       title: title ?? this.title,
-      agent: agent ?? this.agent,
+      agentId: agentId ?? this.agentId,
       briefReplyMode: briefReplyMode ?? this.briefReplyMode,
       status: status ?? this.status,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -399,7 +522,7 @@ class SessionSummary {
       id: json['id'] as String,
       projectId: json['project_id'] as String,
       title: json['title'] as String,
-      agent: parseAgentKind(json['agent'] as String),
+      agentId: json['agent'] as String,
       briefReplyMode: json['brief_reply_mode'] as bool? ?? false,
       status: parseSessionStatus(json['status'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),

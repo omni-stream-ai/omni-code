@@ -144,15 +144,15 @@ void main() {
       final session = await client.createSession(
         projectId: 'project-1',
         title: 'Test',
-        agent: AgentKind.claudecode.id,
+        agent: 'claude_code',
         briefReplyMode: false,
       );
 
       expect(body['project_id'], 'project-1');
       expect(body['title'], 'Test');
-      expect(body['agent'], AgentKind.claudecode.id);
+      expect(body['agent'], 'claude_code');
       expect(body.containsKey('provider_id'), isFalse);
-      expect(session.agent, AgentKind.claudecode);
+      expect(session.agentId, 'claude_code');
     });
 
     test('includes provider id when specified', () async {
@@ -187,6 +187,7 @@ void main() {
       final session = await client.createSession(
         projectId: 'project-1',
         title: 'Provider Session',
+        agent: 'codex',
         providerId: 'openai',
       );
 
@@ -226,11 +227,178 @@ void main() {
       final session = await client.createSession(
         projectId: 'project-1',
         title: 'Auto Provider Session',
+        agent: 'codex',
         providerId: autoProviderId,
       );
 
       expect(body['provider_id'], 'AUTO');
       expect(session.providerId, 'AUTO');
+    });
+  });
+
+  group('BridgeClient agents', () {
+    test('listAgents decodes install status', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.path, '/agents');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'codex',
+                  'label': 'Codex',
+                  'aliases': ['codex'],
+                  'selectable': true,
+                  'default_selected': true,
+                  'compatible_formats': ['codex'],
+                  'installed': true,
+                  'installed_path': '/usr/local/bin/codex',
+                  'install_hint': 'manual hint',
+                },
+                {
+                  'id': 'open_code',
+                  'label': 'OpenCode',
+                  'aliases': ['open_code', 'opencode'],
+                  'selectable': true,
+                  'default_selected': false,
+                  'compatible_formats': [
+                    'openai-compatible',
+                    'anthropic-messages',
+                    'codex',
+                  ],
+                  'installed': false,
+                  'installed_path': null,
+                  'install_hint': 'install via brew',
+                },
+                {
+                  'id': 'custom',
+                  'label': 'Custom Agent',
+                  'aliases': ['fallback'],
+                  'selectable': false,
+                  'default_selected': false,
+                  'compatible_formats': ['openai-compatible'],
+                  'installed': false,
+                  'installed_path': null,
+                  'install_hint': 'n/a',
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final agents = await client.listAgents();
+
+      expect(agents, hasLength(3));
+      expect(agents.first.id, 'codex');
+      expect(agents.first.installed, isTrue);
+      expect(agents[1].id, 'open_code');
+      expect(agents[1].installed, isFalse);
+      expect(agents[2].selectable, isFalse);
+      expect(client.agentDescriptorFor('claudecode').id, 'claudecode');
+      expect(client.agentDescriptorFor('custom').label, 'Custom Agent');
+    });
+
+    test('listAgentCommands decodes slash metadata', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.path, '/agents/commands');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'kind': 'codex',
+                  'commands': [
+                    {
+                      'name': '/review',
+                      'description': 'Review the diff',
+                      'aliases': ['/rev'],
+                    },
+                  ],
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final commands = await client.listAgentCommands();
+
+      expect(commands, hasLength(1));
+      expect(commands.first.name, '/review');
+      expect(commands.first.description, 'Review the diff');
+      expect(commands.first.agentId, 'codex');
+      expect(commands.first.aliases, ['/rev']);
+    });
+
+    test('listFileCompletions sends prefix and session id', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.path, '/files/completions');
+          expect(request.url.queryParameters['prefix'], 'lib/src/scr');
+          expect(request.url.queryParameters['session_id'], 'session-1');
+          expect(request.url.queryParameters['limit'], '8');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {'path': 'lib/src/screens/', 'is_dir': true},
+                {'path': 'lib/src/screens/session_detail_screen.dart', 'is_dir': false},
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final items = await client.listFileCompletions(
+        prefix: 'lib/src/scr',
+        sessionId: 'session-1',
+        limit: 8,
+      );
+
+      expect(items, hasLength(2));
+      expect(items.first.path, 'lib/src/screens/');
+      expect(items.first.isDir, isTrue);
+      expect(items.last.path, 'lib/src/screens/session_detail_screen.dart');
+      expect(items.last.isDir, isFalse);
+    });
+
+    test('installAgent posts selected agent and decodes result', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/agents/install');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'agent': 'claude_code',
+                'success': true,
+                'message': 'installed',
+                'installed_path': '/usr/local/bin/claude',
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final result = await client.installAgent('claude_code');
+
+      expect(body['agent'], 'claude_code');
+      expect(result.agentId, 'claude_code');
+      expect(result.success, isTrue);
+      expect(result.installedPath, '/usr/local/bin/claude');
     });
   });
 
@@ -869,7 +1037,7 @@ SessionSummary _session({
     id: id,
     projectId: projectId,
     title: id,
-    agent: AgentKind.codex,
+    agentId: 'codex',
     briefReplyMode: false,
     status: SessionStatus.idle,
     updatedAt: updatedAt,

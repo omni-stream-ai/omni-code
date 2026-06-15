@@ -565,7 +565,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       title: (initialTitle != null && initialTitle.isNotEmpty)
           ? initialTitle
           : l10n.newSession,
-      agent: parseAgentKind(result.$2),
+      agentId: result.$2,
       briefReplyMode: appSettingsController.settings.compressAssistantReplies,
       status: SessionStatus.idle,
       updatedAt: DateTime.now(),
@@ -631,7 +631,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     }
     return sessions.where((session) {
       final haystack =
-          '${session.title} ${session.lastMessagePreview ?? ''} ${session.agent.label}'
+          '${session.title} ${session.lastMessagePreview ?? ''} ${_client.agentLabelFor(session.agentId)}'
               .toLowerCase();
       return haystack.contains(query);
     }).toList(growable: false);
@@ -713,7 +713,7 @@ class _SessionSummaryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.textTight),
                 Text(
-                  '${session.agent.label} · $updatedAtLabel',
+                  '${bridgeClient.agentLabelFor(session.agentId)} · $updatedAtLabel',
                   style: textTheme.labelSmall?.copyWith(
                     fontSize: 9,
                     fontWeight: FontWeight.w600,
