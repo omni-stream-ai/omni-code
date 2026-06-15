@@ -21,8 +21,24 @@ class FileAppSettingsStore implements AppSettingsStore {
   }
 
   Future<File> _settingsFile() async {
-    final directory = await getApplicationDocumentsDirectory();
+    final directory = await _settingsDirectory();
     return File('${directory.path}/omni-code-settings.json');
+  }
+
+  Future<Directory> _settingsDirectory() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      await directory.create(recursive: true);
+      return directory;
+    } on MissingPlatformDirectoryException {
+      final home = Platform.environment['HOME'];
+      if (home == null || home.isEmpty) {
+        rethrow;
+      }
+      final fallback = Directory('$home/.config/omni-code');
+      await fallback.create(recursive: true);
+      return fallback;
+    }
   }
 }
 

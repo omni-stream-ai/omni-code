@@ -22,6 +22,7 @@ class BridgeClient {
   _CacheEntry<List<SessionSummary>>? _sessionsCache;
   final Map<String, _CacheEntry<List<SessionSummary>>> _projectSessionsCache =
       {};
+  Map<String, AgentDescriptor> _agentDescriptors = {};
 
   void _assertJsonResponse(http.Response response) {
     final contentType = response.headers['content-type'] ?? '';
@@ -229,6 +230,27 @@ class BridgeClient {
         ?.value
         .where((session) => session.id == sessionId)
         .firstOrNull;
+  }
+
+  AgentDescriptor agentDescriptorFor(String agentId) {
+    final direct = _agentDescriptors[agentId];
+    if (direct != null) {
+      return direct;
+    }
+    for (final descriptor in _agentDescriptors.values) {
+      if (descriptor.matches(agentId)) {
+        return descriptor;
+      }
+    }
+    return fallbackAgentDescriptor(agentId);
+  }
+
+  String agentLabelFor(String agentId) => agentDescriptorFor(agentId).label;
+
+  void _storeAgentDescriptors(Iterable<AgentSummary> agents) {
+    _agentDescriptors = {
+      for (final agent in agents) agent.id: agent.descriptor,
+    };
   }
 
   Future<List<ProjectSummary>> listProjects({bool forceRefresh = false}) async {
@@ -545,10 +567,113 @@ class BridgeClient {
         .toList();
   }
 
+  Future<List<AgentSummary>> listAgents() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/agents'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    final agents = _decodeApiListData(response.body)
+        .whereType<Map<String, dynamic>>()
+        .map(AgentSummary.fromJson)
+        .toList(growable: false);
+    _storeAgentDescriptors(agents);
+    return agents;
+  }
+
+  Future<List<AgentCommand>> listAgentCommands() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/agents/commands'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    final groups = _decodeApiListData(response.body).whereType<Map<String, dynamic>>();
+    final commands = <AgentCommand>[];
+    for (final group in groups) {
+      final agentId =
+          group['kind'] as String? ?? group['agent_id'] as String? ?? '';
+      final items = group['commands'];
+      if (items is! List) {
+        continue;
+      }
+      for (final item in items.whereType<Map<String, dynamic>>()) {
+        commands.add(
+          AgentCommand.fromJson({
+            ...item,
+            if (agentId.isNotEmpty) 'agent_id': agentId,
+          }),
+        );
+      }
+    }
+    return List.unmodifiable(commands);
+  }
+
+  Future<List<FileCompletionItem>> listFileCompletions({
+    required String prefix,
+    String? projectId,
+    String? sessionId,
+    int? limit,
+  }) async {
+    final trimmedPrefix = prefix.trim();
+    if ((projectId == null || projectId.trim().isEmpty) &&
+        (sessionId == null || sessionId.trim().isEmpty)) {
+      throw ArgumentError('projectId or sessionId is required.');
+    }
+    final queryParameters = <String, String>{
+      'prefix': trimmedPrefix,
+    };
+    final trimmedProjectId = projectId?.trim();
+    final trimmedSessionId = sessionId?.trim();
+    if (trimmedProjectId != null && trimmedProjectId.isNotEmpty) {
+      queryParameters['project_id'] = trimmedProjectId;
+    }
+    if (trimmedSessionId != null && trimmedSessionId.isNotEmpty) {
+      queryParameters['session_id'] = trimmedSessionId;
+    }
+    if (limit != null && limit > 0) {
+      queryParameters['limit'] = '$limit';
+    }
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/files/completions')
+          .replace(queryParameters: queryParameters),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return _decodeApiListData(response.body)
+        .whereType<Map<String, dynamic>>()
+        .map(FileCompletionItem.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<AgentInstallResult> installAgent(String agentId) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/agents/install'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'agent': agentId}),
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    return AgentInstallResult.fromJson(_decodeApiData(response.body));
+  }
+
   Future<SessionSummary> createSession({
     required String projectId,
     String? title,
-    String agent = 'codex',
+    required String agent,
     bool? briefReplyMode,
     String? providerId,
   }) async {

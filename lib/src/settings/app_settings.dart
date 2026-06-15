@@ -130,7 +130,7 @@ class AppSettings {
       callModeSpeechPauseMillis: defaultCallModeSpeechPauseMillis,
       callModeWakeWordEnabled: false,
       callModeWakeWords: defaultCallModeWakeWords,
-      lastSelectedAgent: 'codex',
+      lastSelectedAgent: '',
       lastSelectedProviderByProject: const {},
       voiceComposerMode: false,
     );

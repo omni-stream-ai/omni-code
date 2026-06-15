@@ -528,7 +528,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       title: (initialTitle != null && initialTitle.isNotEmpty)
           ? initialTitle
           : l10n.newSession,
-      agent: parseAgentKind(sessionResult.$2),
+      agentId: sessionResult.$2,
       briefReplyMode: appSettingsController.settings.compressAssistantReplies,
       status: SessionStatus.idle,
       updatedAt: DateTime.now(),
@@ -1010,7 +1010,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (projectName != null && projectName.isNotEmpty) {
       parts.add(projectName);
     }
-    parts.add(session.agent.id);
+    parts.add(_client.agentLabelFor(session.agentId));
     parts.add(_statusLabel(session.status));
     return parts.join(' · ');
   }

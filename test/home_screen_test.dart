@@ -1112,7 +1112,7 @@ class _FakeProjectDetailScreen extends StatelessWidget {
                 id: 'session-${project.id}',
                 projectId: project.id,
                 title: 'session-${project.id}',
-                agent: AgentKind.codex,
+                agentId: 'codex',
                 briefReplyMode: false,
                 status: SessionStatus.running,
                 updatedAt: DateTime(2026, 5, 5, 12),

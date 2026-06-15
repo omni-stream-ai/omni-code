@@ -133,13 +133,13 @@ void main() {
     expect(settings.updateTargetVersion, 'v0.2.1');
   });
 
-  test('lastSelectedAgent defaults to codex', () {
-    expect(AppSettings.defaults().lastSelectedAgent, 'codex');
+  test('lastSelectedAgent defaults to empty', () {
+    expect(AppSettings.defaults().lastSelectedAgent, '');
   });
 
-  test('missing last_selected_agent falls back to codex', () {
+  test('missing last_selected_agent falls back to empty', () {
     final settings = AppSettings.fromJson(<String, dynamic>{});
-    expect(settings.lastSelectedAgent, 'codex');
+    expect(settings.lastSelectedAgent, '');
   });
 
   test('lastSelectedAgent round-trips through json', () {
