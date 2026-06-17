@@ -321,6 +321,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String forkedFromSession(Object source) {
+    return 'Fork 来源：$source';
+  }
+
+  @override
   String loadMoreSessions(int count) {
     return '加载更多 ($count 条)';
   }
@@ -616,7 +621,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get send => '发送';
 
   @override
-  String get imageAttachment => '图片附件';
+  String get imageAttachment => '上传文件或图片';
 
   @override
   String get previewImage => '预览';

@@ -467,6 +467,7 @@ class SessionSummary {
     this.pendingApproval,
     this.errorMessage,
     this.providerId,
+    this.forkedFromSessionId,
   });
 
   final String id;
@@ -481,6 +482,7 @@ class SessionSummary {
   final ApprovalRequest? pendingApproval;
   final String? errorMessage;
   final String? providerId;
+  final String? forkedFromSessionId;
 
   SessionSummary copyWith({
     String? id,
@@ -498,6 +500,8 @@ class SessionSummary {
     bool clearErrorMessage = false,
     String? providerId,
     bool clearProviderId = false,
+    String? forkedFromSessionId,
+    bool clearForkedFromSessionId = false,
   }) {
     return SessionSummary(
       id: id ?? this.id,
@@ -514,6 +518,9 @@ class SessionSummary {
       errorMessage:
           clearErrorMessage ? null : errorMessage ?? this.errorMessage,
       providerId: clearProviderId ? null : providerId ?? this.providerId,
+      forkedFromSessionId: clearForkedFromSessionId
+          ? null
+          : forkedFromSessionId ?? this.forkedFromSessionId,
     );
   }
 
@@ -530,6 +537,7 @@ class SessionSummary {
       lastMessagePreview: json['last_message_preview'] as String?,
       errorMessage: json['error_message'] as String?,
       providerId: json['provider_id'] as String?,
+      forkedFromSessionId: json['forked_from_session_id'] as String?,
       pendingApproval: json['pending_approval'] == null
           ? null
           : ApprovalRequest.fromJson(

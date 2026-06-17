@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:super_clipboard/super_clipboard.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
@@ -43,6 +45,9 @@ class SessionDetailScreen extends StatefulWidget {
     this.speechInputService,
     this.ttsService,
     this.bridgeRealtimeAsrService,
+    this.pickImages,
+    this.readClipboardText,
+    this.readClipboardAttachments,
   });
 
   static const routeName = '/session';
@@ -55,6 +60,9 @@ class SessionDetailScreen extends StatefulWidget {
   final SpeechInputService? speechInputService;
   final TtsService? ttsService;
   final BridgeRealtimeAsrService? bridgeRealtimeAsrService;
+  final Future<List<String>> Function()? pickImages;
+  final Future<String?> Function()? readClipboardText;
+  final Future<List<String>> Function()? readClipboardAttachments;
 
   @override
   State<SessionDetailScreen> createState() => _SessionDetailScreenState();
@@ -109,6 +117,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _refreshSessionSummaryInFlight = false;
   bool _returnFocusToComposerAfterReply = false;
   bool _composerSuggestionsOverlayShown = false;
+  bool _pickingAttachments = false;
+  bool _uploadingAttachments = false;
+  final List<_PendingAttachment> _pendingAttachments = <_PendingAttachment>[];
 
   String? _recordingPath;
   String _recognizedSpeech = '';
@@ -569,6 +580,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   void _handleComposerTextChanged() {
+    if (_voiceComposerMode) {
+      return;
+    }
     final query = _commandQuery;
     final queryChanged = query != _lastCommandQuery;
     _lastCommandQuery = query;
@@ -733,7 +747,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     setState(() {
-      final nextIndex = (_selectedFileCompletionIndex + delta) % suggestions.length;
+      final nextIndex =
+          (_selectedFileCompletionIndex + delta) % suggestions.length;
       _selectedFileCompletionIndex =
           nextIndex < 0 ? suggestions.length - 1 : nextIndex;
     });
@@ -813,7 +828,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final leading = tokenMatch.group(1) ?? '';
     final start = tokenMatch.start + leading.length;
     final replacement = '@${item.path}';
-    final nextText = '${text.substring(0, start)}$replacement${text.substring(offset)}';
+    final nextText =
+        '${text.substring(0, start)}$replacement${text.substring(offset)}';
     final nextOffset = start + replacement.length;
     _controller.value = TextEditingValue(
       text: nextText,
@@ -979,9 +995,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         border: Border.all(color: outlineStrong),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: brightness == Brightness.dark
-                ? 0.32
-                : 0.12),
+            color: Colors.black
+                .withValues(alpha: brightness == Brightness.dark ? 0.32 : 0.12),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),
@@ -1115,7 +1130,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return _buildCallModeScaffold(context);
     }
     final theme = Theme.of(context);
-    final isSessionBusy = _session.status == SessionStatus.running;
+    final isSessionBusy =
+        _session.status == SessionStatus.running || _uploadingAttachments;
     final hasActiveTurn = _session.status == SessionStatus.running ||
         _session.status == SessionStatus.awaitingApproval ||
         _pendingApproval != null;
@@ -1384,70 +1400,93 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               : Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (_pendingAttachments.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          bottom: AppSpacing.compact,
+                        ),
+                        child: _buildPendingAttachmentStrip(
+                          deepSurface: deepSurface,
+                          outlineStrong: outlineStrong,
+                        ),
+                      ),
                     OverlayPortal(
                       controller: _composerSuggestionsOverlayController,
                       overlayChildBuilder: (context) =>
                           _buildComposerSuggestionsOverlay(
-                            deepSurface,
-                            outlineStrong,
-                          ),
+                        deepSurface,
+                        outlineStrong,
+                      ),
                       child: KeyedSubtree(
                         key: _composerTextFieldKey,
-                        child: Focus(
-                          onKeyEvent: _handleMessageInputKeyEvent,
-                          child: TextField(
-                            key: const Key('session-message-input'),
-                            controller: _controller,
-                            focusNode: _messageInputFocusNode,
-                            enabled: !isSessionBusy,
-                            maxLines: 4,
-                            minLines: 1,
-                            textInputAction: _isMobilePlatform
-                                ? TextInputAction.newline
-                                : null,
-                            decoration: InputDecoration(
-                              hintText: _isListening
-                                  ? context.l10n.voiceInputInProgress
-                                  : context.l10n.messageInputHint,
-                              filled: true,
-                              fillColor: deepSurface,
-                              suffixIcon: Padding(
-                                padding: const EdgeInsetsDirectional.only(
-                                  start: AppSpacing.micro,
+                        child: CallbackShortcuts(
+                          bindings: {
+                            const SingleActivator(
+                              LogicalKeyboardKey.keyV,
+                              control: true,
+                            ): () => unawaited(_handlePasteShortcut()),
+                            const SingleActivator(
+                              LogicalKeyboardKey.keyV,
+                              meta: true,
+                            ): () => unawaited(_handlePasteShortcut()),
+                          },
+                          child: Focus(
+                            onKeyEvent: _handleMessageInputKeyEvent,
+                            child: TextField(
+                              key: const Key('session-message-input'),
+                              controller: _controller,
+                              focusNode: _messageInputFocusNode,
+                              enabled: !isSessionBusy,
+                              maxLines: 4,
+                              minLines: 1,
+                              textInputAction: _isMobilePlatform
+                                  ? TextInputAction.newline
+                                  : null,
+                              decoration: InputDecoration(
+                                hintText: _isListening
+                                    ? context.l10n.voiceInputInProgress
+                                    : context.l10n.messageInputHint,
+                                filled: true,
+                                fillColor: deepSurface,
+                                suffixIcon: Padding(
+                                  padding: const EdgeInsetsDirectional.only(
+                                    start: AppSpacing.micro,
+                                    end: AppSpacing.compact,
+                                  ),
+                                  child: voiceButton,
+                                ),
+                                suffixIconConstraints: const BoxConstraints(
+                                  minWidth: 48,
+                                  minHeight: 44,
+                                ),
+                                contentPadding:
+                                    const EdgeInsetsDirectional.only(
+                                  start: AppSpacing.card,
                                   end: AppSpacing.compact,
+                                  top: AppSpacing.stack,
+                                  bottom: AppSpacing.stack,
                                 ),
-                                child: voiceButton,
-                              ),
-                              suffixIconConstraints: const BoxConstraints(
-                                minWidth: 48,
-                                minHeight: 44,
-                              ),
-                              contentPadding: const EdgeInsetsDirectional.only(
-                                start: AppSpacing.card,
-                                end: AppSpacing.compact,
-                                top: AppSpacing.stack,
-                                bottom: AppSpacing.stack,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(
-                                  AppSpacing.radiusPanel,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.radiusPanel,
+                                  ),
+                                  borderSide:
+                                      BorderSide(color: inputBorderColor),
                                 ),
-                                borderSide:
-                                    BorderSide(color: inputBorderColor),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(
-                                  AppSpacing.radiusPanel,
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.radiusPanel,
+                                  ),
+                                  borderSide:
+                                      BorderSide(color: inputBorderColor),
                                 ),
-                                borderSide:
-                                    BorderSide(color: inputBorderColor),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(
-                                  AppSpacing.radiusPanel,
-                                ),
-                                borderSide: BorderSide(
-                                  color: AppColors.primaryFor(brightness),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.radiusPanel,
+                                  ),
+                                  borderSide: BorderSide(
+                                    color: AppColors.primaryFor(brightness),
+                                  ),
                                 ),
                               ),
                             ),
@@ -1459,6 +1498,32 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 ),
         ),
         if (!_voiceComposerMode) ...[
+          const SizedBox(width: AppSpacing.compact),
+          IconButton(
+            key: const Key('session-image-picker-button'),
+            tooltip: context.l10n.imageAttachment,
+            onPressed:
+                isSessionBusy || _pickingAttachments ? null : _pickAttachments,
+            style: IconButton.styleFrom(
+              backgroundColor: deepSurface,
+              foregroundColor: AppColors.textSoftFor(brightness),
+              disabledBackgroundColor: deepSurface,
+              disabledForegroundColor: AppColors.mutedFor(brightness),
+              side: BorderSide(color: outlineStrong),
+              minimumSize: const Size.square(44),
+              fixedSize: const Size.square(44),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+              ),
+            ),
+            icon: _pickingAttachments
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.attach_file_rounded, size: 20),
+          ),
           const SizedBox(width: AppSpacing.compact),
           IconButton(
             key: const Key('session-send-button'),
@@ -1480,6 +1545,88 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildPendingAttachmentStrip({
+    required Color deepSurface,
+    required Color outlineStrong,
+  }) {
+    final brightness = Theme.of(context).brightness;
+    return SizedBox(
+      height: 72,
+      child: ListView.separated(
+        key: const Key('session-pending-image-strip'),
+        scrollDirection: Axis.horizontal,
+        itemCount: _pendingAttachments.length,
+        separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.compact),
+        itemBuilder: (context, index) {
+          final attachment = _pendingAttachments[index];
+          return Container(
+            key: ValueKey('session-pending-image-$index'),
+            width: 132,
+            padding: const EdgeInsets.all(AppSpacing.iconTight),
+            decoration: BoxDecoration(
+              color: deepSurface,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+              border: Border.all(color: outlineStrong),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(
+                      AppSpacing.radiusControl,
+                    ),
+                    color: AppColors.panelFor(brightness),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: attachment.isImage
+                      ? Image.file(
+                          File(attachment.path),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Icon(
+                            Icons.broken_image_outlined,
+                            color: AppColors.mutedFor(brightness),
+                            size: 18,
+                          ),
+                        )
+                      : Icon(
+                          Icons.insert_drive_file_outlined,
+                          color: AppColors.mutedFor(brightness),
+                          size: 20,
+                        ),
+                ),
+                const SizedBox(width: AppSpacing.iconTight),
+                Expanded(
+                  child: Text(
+                    attachment.fileName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: AppColors.textFor(brightness),
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ),
+                IconButton(
+                  key: ValueKey('session-remove-pending-image-$index'),
+                  tooltip: context.l10n.close,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _removePendingAttachmentAt(index),
+                  icon: Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: AppColors.mutedSoftFor(brightness),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -1509,6 +1656,67 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     } catch (error) {
       debugPrint('[session] failed to persist voice composer mode: $error');
     }
+  }
+
+  Future<void> _pickAttachments() async {
+    setState(() {
+      _speechError = null;
+      _pickingAttachments = true;
+    });
+    try {
+      final pickedPaths = widget.pickImages != null
+          ? await widget.pickImages!()
+          : await _pickAttachmentsWithSelector();
+      if (!mounted || pickedPaths.isEmpty) {
+        return;
+      }
+      _addPendingAttachmentPaths(pickedPaths);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _speechError = context.l10n.sendFailed('$error');
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _pickingAttachments = false;
+        });
+      }
+    }
+  }
+
+  Future<List<String>> _pickAttachmentsWithSelector() async {
+    final files = await openFiles(
+      acceptedTypeGroups: const [
+        XTypeGroup(
+          label: 'files',
+        ),
+      ],
+    );
+    return files.map((file) => file.path).whereType<String>().toList();
+  }
+
+  void _removePendingAttachmentAt(int index) {
+    setState(() {
+      _pendingAttachments.removeAt(index);
+    });
+  }
+
+  void _addPendingAttachmentPaths(List<String> paths) {
+    setState(() {
+      for (final path in paths) {
+        final attachment = _PendingAttachment.local(path);
+        if (!_pendingAttachments.any((item) => item.path == path)) {
+          _pendingAttachments.add(attachment);
+        }
+      }
+    });
+  }
+
+  void _handleComposerDraftChanged() {
+    _handleComposerTextChanged();
   }
 
   Widget _buildHoldToTalkControl({
@@ -3090,8 +3298,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     if (reference.isVideo && !kIsWeb) {
-      final isDesktopExternal =
-          defaultTargetPlatform == TargetPlatform.linux ||
+      final isDesktopExternal = defaultTargetPlatform == TargetPlatform.linux ||
           defaultTargetPlatform == TargetPlatform.windows;
       if (isDesktopExternal) {
         await _openVideoExternally(
@@ -3108,7 +3315,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     var currentIndex =
         initialIndex.clamp(0, galleryReferences.length - 1).toInt();
     var backdropMode = _ImagePreviewBackdropMode.dark;
-    final previewSessionToken = DateTime.now().microsecondsSinceEpoch.toString();
+    final previewSessionToken =
+        DateTime.now().microsecondsSinceEpoch.toString();
 
     await showDialog<void>(
       context: context,
@@ -3605,8 +3813,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     return _videoFileFutures.putIfAbsent(cacheKey, () async {
       final fileResponse =
-          bridgeFileFuture ??
-          _imageFileFuture(reference, cacheKey: cacheKey);
+          bridgeFileFuture ?? _imageFileFuture(reference, cacheKey: cacheKey);
       if (fileResponse == null) {
         throw StateError('Missing local video file bytes.');
       }
@@ -3627,9 +3834,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   String _previewAnimatedRemoteUrl(String path, String token) {
     final uri = Uri.parse(path);
-    return uri.replace(
-      fragment: 'preview-restart-$token',
-    ).toString();
+    return uri
+        .replace(
+          fragment: 'preview-restart-$token',
+        )
+        .toString();
   }
 
   Future<void> _openVideoExternally(
@@ -3651,7 +3860,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                       reference,
                       cacheKey: _imageFileCacheKey(messageId, reference),
                     ),
-            )).path,
+            ))
+                .path,
           );
     await launchUrl(uri);
   }
@@ -4889,7 +5099,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final isArrowDown = event.logicalKey == LogicalKeyboardKey.arrowDown;
     final isArrowUp = event.logicalKey == LogicalKeyboardKey.arrowUp;
     final isEscape = event.logicalKey == LogicalKeyboardKey.escape;
-    if (event is KeyDownEvent && (_showCommandSuggestions || _showFileSuggestions)) {
+    if (event is KeyDownEvent &&
+        (_showCommandSuggestions || _showFileSuggestions)) {
       if (isArrowDown) {
         if (_showCommandSuggestions) {
           _moveSelectedCommandSuggestion(1);
@@ -4955,6 +5166,126 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     };
   }
 
+  Future<void> _handlePasteShortcut() async {
+    final pastedPaths = widget.readClipboardAttachments != null
+        ? await widget.readClipboardAttachments!()
+        : widget.readClipboardText == null
+            ? await _readClipboardAttachmentPaths()
+            : const <String>[];
+    if (!mounted) {
+      return;
+    }
+    if (pastedPaths.isNotEmpty) {
+      _addPendingAttachmentPaths(pastedPaths);
+      return;
+    }
+
+    final text = widget.readClipboardText != null
+        ? await widget.readClipboardText!()
+        : (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    final attachments = _attachmentsFromPastedText(text);
+    if (!mounted || attachments.isEmpty) {
+      return;
+    }
+    setState(() {
+      for (final attachment in attachments) {
+        if (!_pendingAttachments.any((item) => item.path == attachment.path)) {
+          _pendingAttachments.add(attachment);
+        }
+      }
+    });
+  }
+
+  Future<List<String>> _readClipboardAttachmentPaths() async {
+    final clipboard = SystemClipboard.instance;
+    if (clipboard == null) {
+      return const <String>[];
+    }
+    final reader = await clipboard.read();
+    final paths = <String>[];
+
+    for (final item in reader.items) {
+      final fileUri = await item.readValue(Formats.fileUri);
+      if (fileUri != null && fileUri.isScheme('file')) {
+        paths.add(fileUri.toFilePath());
+        continue;
+      }
+
+      for (final candidate in _clipboardFileFormats) {
+        if (!item.canProvide(candidate.format)) {
+          continue;
+        }
+        final path = await _readClipboardFile(
+          item,
+          candidate.format,
+          extension: candidate.extension,
+          fallbackName: candidate.fallbackName,
+        );
+        if (path != null) {
+          paths.add(path);
+          break;
+        }
+      }
+    }
+
+    return paths;
+  }
+
+  Future<String?> _readClipboardFile(
+    ClipboardDataReader reader,
+    FileFormat format, {
+    required String extension,
+    required String fallbackName,
+  }) async {
+    final completer = Completer<String?>();
+    final progress = reader.getFile(
+      format,
+      (dataFile) async {
+        final suggestedName = await reader.getSuggestedName();
+        final fileName = _clipboardFileName(
+          dataFile.fileName ?? suggestedName,
+          fallbackName: fallbackName,
+          extension: extension,
+        );
+        final directory = await getTemporaryDirectory();
+        final file = File(
+          '${directory.path}/omni-code-paste-${DateTime.now().microsecondsSinceEpoch}-$fileName',
+        );
+        await file.writeAsBytes(await dataFile.readAll(), flush: true);
+        if (!completer.isCompleted) {
+          completer.complete(file.path);
+        }
+      },
+      onError: (error) {
+        if (!completer.isCompleted) {
+          completer.completeError(error);
+        }
+      },
+    );
+    if (progress == null && !completer.isCompleted) {
+      completer.complete(null);
+    }
+    if (!completer.isCompleted) {
+      return completer.future;
+    }
+    return completer.future;
+  }
+
+  String _clipboardFileName(
+    String? rawName, {
+    required String fallbackName,
+    required String extension,
+  }) {
+    final trimmed = rawName?.trim();
+    final baseName = trimmed == null || trimmed.isEmpty
+        ? fallbackName
+        : _PendingAttachment.fileNameForPath(trimmed);
+    if (baseName.toLowerCase().endsWith('.$extension')) {
+      return baseName;
+    }
+    return '$baseName.$extension';
+  }
+
   Future<void> _sendTextMessage() async {
     if (_creatingSession) {
       setState(() {
@@ -4968,8 +5299,25 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       });
       return;
     }
+    if (_uploadingAttachments) {
+      return;
+    }
 
-    final content = _controller.text.trim();
+    final String content;
+    try {
+      content = await _buildOutgoingMessageContent();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _speechError = context.l10n.sendFailed('$error');
+      });
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
     if (content.isEmpty) {
       setState(() {
         _speechError = context.l10n.messageInputRequired;
@@ -5018,6 +5366,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _speechError = null;
       if (localMessageId == null) {
         _controller.clear();
+        _pendingAttachments.clear();
         _messages.add(localMessage);
       } else {
         final index = _messages.indexWhere((item) => item.id == localMessageId);
@@ -5128,6 +5477,74 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     return prompts.isEmpty ? null : prompts.join('\n\n');
+  }
+
+  Future<String> _buildOutgoingMessageContent() async {
+    final trimmedText = _controller.text.trim();
+    final attachmentMarkdown = await _buildAttachmentMarkdown();
+    if (trimmedText.isEmpty) {
+      return attachmentMarkdown;
+    }
+    if (attachmentMarkdown.isEmpty) {
+      return trimmedText;
+    }
+    return '$trimmedText\n\n$attachmentMarkdown';
+  }
+
+  Future<String> _buildAttachmentMarkdown() async {
+    if (_pendingAttachments.isEmpty) {
+      return '';
+    }
+    setState(() {
+      _uploadingAttachments = true;
+    });
+    try {
+      final markdown = <String>[];
+      for (final attachment in _pendingAttachments) {
+        final uploaded = await _client.uploadFile(attachment.path);
+        final url = uploaded.absoluteUrl.isNotEmpty
+            ? uploaded.absoluteUrl
+            : uploaded.url;
+        final fileName = uploaded.fileName.isNotEmpty
+            ? uploaded.fileName
+            : attachment.fileName;
+        markdown.add(
+          attachment.isImage || uploaded.contentType.startsWith('image/')
+              ? '![${_escapeMarkdownLabel(fileName)}]($url)'
+              : '[${_escapeMarkdownLabel(fileName)}]($url)',
+        );
+      }
+      return markdown.join('\n');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploadingAttachments = false;
+        });
+      }
+    }
+  }
+
+  List<_PendingAttachment> _attachmentsFromPastedText(String? text) {
+    final trimmedText = text?.trim() ?? '';
+    if (trimmedText.isEmpty) {
+      return const <_PendingAttachment>[];
+    }
+    final matches = RegExp(
+      r'(?:file://)?(?:/[^\s]+|[A-Za-z]:\\[^\s]+)',
+    ).allMatches(trimmedText);
+    return matches
+        .map((match) => match.group(0))
+        .whereType<String>()
+        .map((rawPath) {
+      final uri = Uri.tryParse(rawPath);
+      final path =
+          uri != null && uri.scheme == 'file' ? uri.toFilePath() : rawPath;
+      return _PendingAttachment.local(path);
+    }).toList(growable: false);
+  }
+
+  String _escapeMarkdownLabel(String label) {
+    return _PendingAttachment.escapeMarkdownLabel(label);
   }
 
   String? _speechPlaybackSystemPrompt(String inputMode) {
@@ -7052,7 +7469,7 @@ class _SessionVideoPreviewState extends State<_SessionVideoPreview> {
         setState(() {
           _errorMessage =
               AppLocalizations.of(context)?.imagePreviewLoadFailed ??
-              'Failed to load image preview';
+                  'Failed to load image preview';
         });
       }
     }
@@ -7101,10 +7518,9 @@ class _SessionVideoPreviewState extends State<_SessionVideoPreview> {
         return Center(
           child: InteractiveViewer(
             child: AspectRatio(
-              aspectRatio:
-                  controller.value.aspectRatio == 0
-                      ? 16 / 9
-                      : controller.value.aspectRatio,
+              aspectRatio: controller.value.aspectRatio == 0
+                  ? 16 / 9
+                  : controller.value.aspectRatio,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -7213,6 +7629,131 @@ class _SessionVideoPreviewState extends State<_SessionVideoPreview> {
     );
   }
 }
+
+class _PendingAttachment {
+  const _PendingAttachment({
+    required this.path,
+    required this.fileName,
+    required this.isImage,
+  });
+
+  factory _PendingAttachment.local(String path) {
+    final fileName = fileNameForPath(path);
+    return _PendingAttachment(
+      path: path,
+      fileName: fileName,
+      isImage: _isImageFileName(fileName),
+    );
+  }
+
+  final String path;
+  final String fileName;
+  final bool isImage;
+
+  static String escapeMarkdownLabel(String label) {
+    return label.replaceAll('[', r'\[').replaceAll(']', r'\]');
+  }
+
+  static String fileNameForPath(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    final slashIndex = normalized.lastIndexOf('/');
+    if (slashIndex < 0 || slashIndex == normalized.length - 1) {
+      return normalized;
+    }
+    return normalized.substring(slashIndex + 1);
+  }
+
+  static bool _isImageFileName(String fileName) {
+    final lower = fileName.toLowerCase();
+    return lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.bmp') ||
+        lower.endsWith('.svg');
+  }
+}
+
+class _ClipboardFileFormatCandidate {
+  const _ClipboardFileFormatCandidate({
+    required this.format,
+    required this.extension,
+    required this.fallbackName,
+  });
+
+  final FileFormat format;
+  final String extension;
+  final String fallbackName;
+}
+
+const _clipboardFileFormats = <_ClipboardFileFormatCandidate>[
+  _ClipboardFileFormatCandidate(
+    format: Formats.png,
+    extension: 'png',
+    fallbackName: 'pasted-image',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.jpeg,
+    extension: 'jpg',
+    fallbackName: 'pasted-image',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.gif,
+    extension: 'gif',
+    fallbackName: 'pasted-image',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.webp,
+    extension: 'webp',
+    fallbackName: 'pasted-image',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.svg,
+    extension: 'svg',
+    fallbackName: 'pasted-image',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.bmp,
+    extension: 'bmp',
+    fallbackName: 'pasted-image',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.pdf,
+    extension: 'pdf',
+    fallbackName: 'pasted-file',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.doc,
+    extension: 'doc',
+    fallbackName: 'pasted-file',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.docx,
+    extension: 'docx',
+    fallbackName: 'pasted-file',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.plainTextFile,
+    extension: 'txt',
+    fallbackName: 'pasted-file',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.csv,
+    extension: 'csv',
+    fallbackName: 'pasted-file',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.json,
+    extension: 'json',
+    fallbackName: 'pasted-file',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.zip,
+    extension: 'zip',
+    fallbackName: 'pasted-file',
+  ),
+];
 
 class _VideoThumbnail extends StatefulWidget {
   const _VideoThumbnail({

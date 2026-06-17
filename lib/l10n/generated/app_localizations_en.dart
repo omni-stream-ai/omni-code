@@ -326,6 +326,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String forkedFromSession(Object source) {
+    return 'Forked from $source';
+  }
+
+  @override
   String loadMoreSessions(int count) {
     return 'Load more ($count)';
   }
@@ -639,7 +644,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get send => 'Send';
 
   @override
-  String get imageAttachment => 'Image attachment';
+  String get imageAttachment => 'Upload file or image';
 
   @override
   String get previewImage => 'Preview';

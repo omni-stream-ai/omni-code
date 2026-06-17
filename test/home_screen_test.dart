@@ -329,6 +329,64 @@ void main() {
     expect(find.text(l10n.loadMoreSessionsLabel), findsNothing);
   });
 
+  testWidgets('home shows fork source for forked sessions', (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _projectJson(
+                  id: 'project-1',
+                  name: 'Project One',
+                  updatedAt: '2026-05-05T11:00:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/sessions') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _sessionJson(
+                  id: 'child-session',
+                  projectId: 'project-1',
+                  title: 'Child Session',
+                  updatedAt: '2026-05-05T12:00:00.000',
+                  forkedFromSessionId: 'parent-session',
+                ),
+                _sessionJson(
+                  id: 'parent-session',
+                  projectId: 'project-1',
+                  title: 'Parent Session',
+                  updatedAt: '2026-05-05T11:00:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(HomeScreen)),
+    )!;
+    expect(
+      find.text(l10n.forkedFromSession('Parent Session')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('home refresh keeps expanded recent session count',
       (tester) async {
     var sessionsRequestCount = 0;
@@ -1076,6 +1134,7 @@ Map<String, Object?> _sessionJson({
   required String title,
   required String updatedAt,
   String? preview,
+  String? forkedFromSessionId,
 }) {
   return {
     'id': id,
@@ -1088,6 +1147,7 @@ Map<String, Object?> _sessionJson({
     'unread_count': 0,
     'last_message_preview': preview,
     'pending_approval': null,
+    'forked_from_session_id': forkedFromSessionId,
   };
 }
 

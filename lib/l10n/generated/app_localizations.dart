@@ -644,6 +644,12 @@ abstract class AppLocalizations {
   /// **'{agent} · Updated {time}'**
   String sessionUpdatedAtWithAgent(Object agent, Object time);
 
+  /// No description provided for @forkedFromSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Forked from {source}'**
+  String forkedFromSession(Object source);
+
   /// No description provided for @loadMoreSessions.
   ///
   /// In en, this message translates to:
@@ -1205,7 +1211,7 @@ abstract class AppLocalizations {
   /// No description provided for @imageAttachment.
   ///
   /// In en, this message translates to:
-  /// **'Image attachment'**
+  /// **'Upload file or image'**
   String get imageAttachment;
 
   /// No description provided for @previewImage.

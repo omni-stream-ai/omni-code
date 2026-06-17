@@ -179,6 +179,12 @@
       "time": {}
     }
   },
+  "forkedFromSession": "Forked from {source}",
+  "@forkedFromSession": {
+    "placeholders": {
+      "source": {}
+    }
+  },
   "loadMoreSessions": "Load more ({count})",
   "@loadMoreSessions": {
     "placeholders": {
@@ -311,7 +317,7 @@
   },
   "callModeWakeWordModelUnsupported": "The current speech model does not support wake words. Wake word detection has been automatically disabled.",
   "send": "Send",
-  "imageAttachment": "Image attachment",
+  "imageAttachment": "Upload file or image",
   "previewImage": "Preview",
   "imagePreviewTitle": "Image preview",
   "imagePreviewLoadFailed": "Failed to load image preview",

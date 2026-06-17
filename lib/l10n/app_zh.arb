@@ -179,6 +179,12 @@
       "time": {}
     }
   },
+  "forkedFromSession": "Fork 来源：{source}",
+  "@forkedFromSession": {
+    "placeholders": {
+      "source": {}
+    }
+  },
   "loadMoreSessions": "加载更多 ({count} 条)",
   "@loadMoreSessions": {
     "placeholders": {
@@ -311,7 +317,7 @@
   },
   "callModeWakeWordModelUnsupported": "当前语音模型不支持唤醒词，已自动关闭唤醒词功能。",
   "send": "发送",
-  "imageAttachment": "图片附件",
+  "imageAttachment": "上传文件或图片",
   "previewImage": "预览",
   "imagePreviewTitle": "图片预览",
   "imagePreviewLoadFailed": "加载图片预览失败",

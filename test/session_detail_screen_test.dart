@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -49,7 +50,8 @@ void main() {
         .setMockMethodCallHandler(_localNotificationsChannel, null);
   });
 
-  testWidgets('shows session title in the session detail header', (tester) async {
+  testWidgets('shows session title in the session detail header',
+      (tester) async {
     await tester.pumpWidget(
       _TestApp(
         home: SessionDetailScreen(
@@ -205,6 +207,429 @@ void main() {
       variant: const TargetPlatformVariant(<TargetPlatform>{
         TargetPlatform.linux,
       }));
+
+  testWidgets('image picker sends image markdown without text', (tester) async {
+    final photo = await tester.runAsync(() async {
+      final dir = await Directory.systemTemp.createTemp('omni-code-test-');
+      final file = File('${dir.path}/photo.png');
+      await file.writeAsBytes([1, 2, 3]);
+      return file;
+    });
+    final sentBodies = <Map<String, dynamic>>[];
+    final uploadedPaths = <String>[];
+    final client = _UploadingBridgeClient(
+      uploadHandler: (path) async {
+        uploadedPaths.add(path);
+        return const BridgeUploadResponse(
+          id: 'uuid-photo.png',
+          fileName: 'photo.png',
+          contentType: 'image/png',
+          sizeBytes: 12345,
+          url: '/uploads/uuid-photo.png',
+          absoluteUrl: 'http://127.0.0.1:8787/uploads/uuid-photo.png',
+        );
+      },
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sentBodies.add(body);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-image-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-image-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+          pickImages: () async => [photo!.path],
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-pending-image-strip')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('session-image-picker-button')));
+    await tester.pump();
+
+    expect(
+        find.byKey(const Key('session-pending-image-strip')), findsOneWidget);
+    expect(find.text('photo.png'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+    for (var i = 0; i < 20 && sentBodies.isEmpty; i += 1) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(sentBodies, hasLength(1));
+    expect(uploadedPaths, [photo!.path]);
+    expect(sentBodies.single['content'],
+        '![photo.png](http://127.0.0.1:8787/uploads/uuid-photo.png)');
+    expect(sentBodies.single['input_mode'], 'text');
+    expect(find.byKey(const Key('session-pending-image-strip')), findsNothing);
+  });
+
+  testWidgets('text and picked images send together', (tester) async {
+    final files = await tester.runAsync(() async {
+      final dir = await Directory.systemTemp.createTemp('omni-code-test-');
+      final photo = File('${dir.path}/photo.png');
+      final report = File('${dir.path}/report.pdf');
+      await photo.writeAsBytes([1, 2, 3]);
+      await report.writeAsBytes([4, 5, 6]);
+      return [photo, report];
+    });
+    final sentBodies = <Map<String, dynamic>>[];
+    var uploadCount = 0;
+    final uploadedPaths = <String>[];
+    final client = _UploadingBridgeClient(
+      uploadHandler: (path) async {
+        uploadedPaths.add(path);
+        uploadCount += 1;
+        final fileName = uploadCount == 1 ? 'photo.png' : 'report.pdf';
+        final contentType = uploadCount == 1 ? 'image/png' : 'application/pdf';
+        return BridgeUploadResponse(
+          id: 'uuid-$fileName',
+          fileName: fileName,
+          contentType: contentType,
+          sizeBytes: uploadCount,
+          url: '/uploads/uuid-$fileName',
+          absoluteUrl: 'http://127.0.0.1:8787/uploads/uuid-$fileName',
+        );
+      },
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sentBodies.add(body);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-image-2',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-image-2',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+          pickImages: () async => files!.map((file) => file.path).toList(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.enterText(
+      find.byKey(const Key('session-message-input')),
+      'Please inspect these images',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-image-picker-button')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+    for (var i = 0; i < 20 && sentBodies.isEmpty; i += 1) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(sentBodies, hasLength(1));
+    expect(
+      sentBodies.single['content'],
+      'Please inspect these images\n\n'
+      '![photo.png](http://127.0.0.1:8787/uploads/uuid-photo.png)\n'
+      '[report.pdf](http://127.0.0.1:8787/uploads/uuid-report.pdf)',
+    );
+    expect(uploadCount, 2);
+    expect(uploadedPaths, files!.map((file) => file.path).toList());
+  });
+
+  testWidgets('pasted file path is queued and uploaded', (tester) async {
+    final files = await tester.runAsync(() async {
+      final dir = await Directory.systemTemp.createTemp('omni-code-test-');
+      final report = File('${dir.path}/report.pdf');
+      await report.writeAsBytes([4, 5, 6]);
+      return [report];
+    });
+    final sentBodies = <Map<String, dynamic>>[];
+    var uploadCount = 0;
+    final client = _UploadingBridgeClient(
+      uploadHandler: (path) async {
+        uploadCount += 1;
+        return const BridgeUploadResponse(
+          id: 'uuid-report.pdf',
+          fileName: 'report.pdf',
+          contentType: 'application/pdf',
+          sizeBytes: 3,
+          url: '/uploads/uuid-report.pdf',
+          absoluteUrl: 'http://127.0.0.1:8787/uploads/uuid-report.pdf',
+        );
+      },
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sentBodies.add(body);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-file-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-file-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+          readClipboardText: () async => files!.single.path,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-message-input')));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+
+    expect(
+        find.byKey(const Key('session-pending-image-strip')), findsOneWidget);
+    expect(find.text('report.pdf'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+    for (var i = 0; i < 20 && sentBodies.isEmpty; i += 1) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(uploadCount, 1);
+    expect(sentBodies.single['content'],
+        '[report.pdf](http://127.0.0.1:8787/uploads/uuid-report.pdf)');
+  });
+
+  testWidgets('pasted image attachment is queued and uploaded', (tester) async {
+    final files = await tester.runAsync(() async {
+      final dir = await Directory.systemTemp.createTemp('omni-code-test-');
+      final image = File('${dir.path}/clipboard.png');
+      await image.writeAsBytes([1, 2, 3]);
+      return [image];
+    });
+    final sentBodies = <Map<String, dynamic>>[];
+    var uploadCount = 0;
+    final client = _UploadingBridgeClient(
+      uploadHandler: (path) async {
+        uploadCount += 1;
+        expect(path, files!.single.path);
+        return const BridgeUploadResponse(
+          id: 'uuid-clipboard.png',
+          fileName: 'clipboard.png',
+          contentType: 'image/png',
+          sizeBytes: 3,
+          url: '/uploads/uuid-clipboard.png',
+          absoluteUrl: 'http://127.0.0.1:8787/uploads/uuid-clipboard.png',
+        );
+      },
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sentBodies.add(body);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-clipboard-image-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-clipboard-image-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+          readClipboardAttachments: () async =>
+              files!.map((file) => file.path).toList(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-message-input')));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+
+    expect(
+        find.byKey(const Key('session-pending-image-strip')), findsOneWidget);
+    expect(find.text('clipboard.png'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+    for (var i = 0; i < 20 && sentBodies.isEmpty; i += 1) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(uploadCount, 1);
+    expect(sentBodies.single['content'],
+        '![clipboard.png](http://127.0.0.1:8787/uploads/uuid-clipboard.png)');
+  });
 
   testWidgets('slash input shows command suggestions', (tester) async {
     final client = BridgeClient(
@@ -5836,6 +6261,18 @@ class _FakeHttpClient extends http.BaseClient {
       request: request,
     );
   }
+}
+
+class _UploadingBridgeClient extends BridgeClient {
+  _UploadingBridgeClient({
+    required this.uploadHandler,
+    required super.httpClient,
+  });
+
+  final Future<BridgeUploadResponse> Function(String path) uploadHandler;
+
+  @override
+  Future<BridgeUploadResponse> uploadFile(String path) => uploadHandler(path);
 }
 
 class _StreamingEventHttpClient extends http.BaseClient {

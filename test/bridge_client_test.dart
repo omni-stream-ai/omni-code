@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:omni_code/src/bridge_client.dart';
 import 'package:omni_code/src/bridge_speech_models.dart';
@@ -532,6 +533,50 @@ void main() {
     });
   });
 
+  group('BridgeClient uploadFile', () {
+    test('posts multipart file and parses upload response', () async {
+      final dir = await Directory.systemTemp.createTemp('omni-code-test-');
+      final file = File('${dir.path}/photo.png');
+      await file.writeAsBytes([1, 2, 3]);
+
+      late http.Request capturedRequest;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          capturedRequest = request;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'id': 'uuid-photo.png',
+                'file_name': 'photo.png',
+                'content_type': 'image/png',
+                'size_bytes': 12345,
+                'url': '/uploads/uuid-photo.png',
+                'absolute_url': 'http://127.0.0.1:8787/uploads/uuid-photo.png',
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final upload = await client.uploadFile(file.path);
+
+      expect(capturedRequest.method, 'POST');
+      expect(capturedRequest.url.path, '/uploads');
+      expect(
+        capturedRequest.headers['content-type'],
+        contains('multipart/form-data'),
+      );
+      expect(capturedRequest.body, contains('name="file"'));
+      expect(capturedRequest.body, contains('filename="photo.png"'));
+      expect(upload.fileName, 'photo.png');
+      expect(upload.contentType, 'image/png');
+      expect(
+          upload.absoluteUrl, 'http://127.0.0.1:8787/uploads/uuid-photo.png');
+    });
+  });
+
   group('BridgeClient listSessions', () {
     test('sorts sessions by updatedAt descending and seeds cache', () async {
       final client = BridgeClient(
@@ -594,6 +639,40 @@ void main() {
         client.peekSessions()?.map((item) => item.id).toList(),
         ['session-newest', 'session-middle', 'session-oldest'],
       );
+    });
+
+    test('parses fork source session id from session summaries', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.path, '/sessions');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'child-session',
+                  'project_id': 'project-1',
+                  'title': 'Child',
+                  'agent': 'codex',
+                  'brief_reply_mode': false,
+                  'status': 'idle',
+                  'updated_at': '2026-05-05T11:00:00.000',
+                  'unread_count': 0,
+                  'last_message_preview': null,
+                  'pending_approval': null,
+                  'forked_from_session_id': 'parent-session',
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final sessions = await client.listSessions();
+
+      expect(sessions.single.forkedFromSessionId, 'parent-session');
     });
 
     test(
@@ -1140,6 +1219,11 @@ class _FakeHttpClient extends http.BaseClient {
     if (request is http.Request) {
       nextRequest.body = request.body;
       nextRequest.encoding = request.encoding;
+    } else {
+      nextRequest.bodyBytes = await request.finalize().toBytes();
+      nextRequest.headers
+        ..clear()
+        ..addAll(request.headers);
     }
     final response = await _handler(nextRequest);
     return http.StreamedResponse(

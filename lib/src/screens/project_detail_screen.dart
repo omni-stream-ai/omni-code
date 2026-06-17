@@ -327,6 +327,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                                         session.status,
                                         brightness,
                                       ),
+                                      forkSourceLabel:
+                                          _forkSourceLabel(session, sessions),
                                       updatedAtLabel: _formatSessionUpdatedAt(
                                         session.updatedAt,
                                       ),
@@ -647,6 +649,32 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   bool _shouldShowLoadMore(List<SessionSummary> sessions) {
     return _searchQuery.isEmpty && sessions.length > _visibleCount;
   }
+
+  String? _forkSourceLabel(
+    SessionSummary session,
+    List<SessionSummary> sessions,
+  ) {
+    final sourceId = session.forkedFromSessionId;
+    if (sourceId == null || sourceId.isEmpty) {
+      return null;
+    }
+    final sourceSession = sessions
+        .where((candidate) => candidate.id == sourceId)
+        .cast<SessionSummary?>()
+        .firstOrNull;
+    final sourceTitle = sourceSession?.title.trim();
+    final source = sourceTitle != null && sourceTitle.isNotEmpty
+        ? sourceTitle
+        : _shortSessionId(sourceId);
+    return context.l10n.forkedFromSession(source);
+  }
+
+  String _shortSessionId(String sessionId) {
+    if (sessionId.length <= 12) {
+      return sessionId;
+    }
+    return '${sessionId.substring(0, 8)}...';
+  }
 }
 
 class _SessionSummaryCard extends StatelessWidget {
@@ -654,6 +682,7 @@ class _SessionSummaryCard extends StatelessWidget {
     required this.session,
     required this.statusLabel,
     required this.statusColor,
+    required this.forkSourceLabel,
     required this.updatedAtLabel,
     required this.onTap,
   });
@@ -661,6 +690,7 @@ class _SessionSummaryCard extends StatelessWidget {
   final SessionSummary session;
   final String statusLabel;
   final Color statusColor;
+  final String? forkSourceLabel;
   final String updatedAtLabel;
   final VoidCallback onTap;
 
@@ -729,11 +759,49 @@ class _SessionSummaryCard extends StatelessWidget {
                     style: textTheme.bodySmall?.copyWith(fontSize: 10),
                   ),
                 ],
+                if (forkSourceLabel != null) ...[
+                  const SizedBox(height: AppSpacing.textTight),
+                  _ForkSourceLabel(label: forkSourceLabel!),
+                ],
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ForkSourceLabel extends StatelessWidget {
+  const _ForkSourceLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.call_split_rounded,
+          size: 12,
+          color: AppColors.mutedSoftFor(brightness),
+        ),
+        const SizedBox(width: AppSpacing.micro),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.mutedSoftFor(brightness),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ),
+      ],
     );
   }
 }
