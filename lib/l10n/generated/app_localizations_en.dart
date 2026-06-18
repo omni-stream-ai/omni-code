@@ -351,6 +351,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sessionStatusAwaitingApproval => 'Awaiting approval';
 
   @override
+  String get sessionStatusInterrupted => 'Interrupted';
+
+  @override
   String get sessionStatusWaiting => 'Waiting';
 
   @override

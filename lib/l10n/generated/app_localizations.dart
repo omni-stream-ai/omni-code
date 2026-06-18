@@ -686,6 +686,12 @@ abstract class AppLocalizations {
   /// **'Awaiting approval'**
   String get sessionStatusAwaitingApproval;
 
+  /// No description provided for @sessionStatusInterrupted.
+  ///
+  /// In en, this message translates to:
+  /// **'Interrupted'**
+  String get sessionStatusInterrupted;
+
   /// No description provided for @sessionStatusWaiting.
   ///
   /// In en, this message translates to:

@@ -1055,6 +1055,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return context.l10n.sessionStatusRunning;
       case SessionStatus.awaitingApproval:
         return context.l10n.sessionStatusAwaitingApproval;
+      case SessionStatus.interrupted:
+        return context.l10n.sessionStatusInterrupted;
       case SessionStatus.waiting:
         return context.l10n.sessionStatusWaiting;
       case SessionStatus.failed:
@@ -1070,6 +1072,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return AppColors.signalFor(brightness);
       case SessionStatus.awaitingApproval:
         return AppColors.warningFor(brightness);
+      case SessionStatus.interrupted:
+        return AppColors.outlineStrongFor(brightness);
       case SessionStatus.waiting:
         return AppColors.outlineStrongFor(brightness);
       case SessionStatus.failed:

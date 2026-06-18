@@ -346,6 +346,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sessionStatusAwaitingApproval => '待审批';
 
   @override
+  String get sessionStatusInterrupted => '已中断';
+
+  @override
   String get sessionStatusWaiting => '等待中';
 
   @override

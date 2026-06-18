@@ -511,15 +511,20 @@ class BridgeClient {
     }
   }
 
-  Future<void> cancelReply(String sessionId) async {
+  Future<bool> cancelReply(String sessionId) async {
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/sessions/$sessionId/cancel'),
       headers: _defaultHeaders,
     );
 
-    if (response.statusCode != 204) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(_extractErrorMessage(response));
     }
+    if (response.body.trim().isEmpty) {
+      return true;
+    }
+    final data = _decodeApiData(response.body);
+    return data['cancelled'] as bool? ?? true;
   }
 
   Future<void> submitApproval(
@@ -613,7 +618,8 @@ class BridgeClient {
       throw ClientUnauthorizedException(response.body);
     }
     _assertJsonResponse(response);
-    final groups = _decodeApiListData(response.body).whereType<Map<String, dynamic>>();
+    final groups =
+        _decodeApiListData(response.body).whereType<Map<String, dynamic>>();
     final commands = <AgentCommand>[];
     for (final group in groups) {
       final agentId =

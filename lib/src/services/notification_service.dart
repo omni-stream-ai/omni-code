@@ -306,6 +306,8 @@ class NotificationService {
         return 'running';
       case SessionStatus.awaitingApproval:
         return 'awaiting_approval';
+      case SessionStatus.interrupted:
+        return 'interrupted';
       case SessionStatus.waiting:
         return 'waiting';
       case SessionStatus.failed:

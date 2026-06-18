@@ -114,7 +114,14 @@ class ModelProviderConfig {
   }
 }
 
-enum SessionStatus { idle, running, awaitingApproval, waiting, failed }
+enum SessionStatus {
+  idle,
+  running,
+  awaitingApproval,
+  interrupted,
+  waiting,
+  failed,
+}
 
 enum MessageRole { user, assistant, system }
 
@@ -416,6 +423,8 @@ SessionStatus parseSessionStatus(String value) {
       return SessionStatus.running;
     case 'awaiting_approval':
       return SessionStatus.awaitingApproval;
+    case 'interrupted':
+      return SessionStatus.interrupted;
     case 'waiting':
       return SessionStatus.waiting;
     case 'failed':

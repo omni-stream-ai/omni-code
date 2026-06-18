@@ -603,6 +603,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         return context.l10n.sessionStatusRunning;
       case SessionStatus.awaitingApproval:
         return context.l10n.sessionStatusAwaitingApproval;
+      case SessionStatus.interrupted:
+        return context.l10n.sessionStatusInterrupted;
       case SessionStatus.waiting:
         return context.l10n.sessionStatusWaiting;
       case SessionStatus.failed:
@@ -618,6 +620,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         return AppColors.primaryFor(brightness);
       case SessionStatus.awaitingApproval:
         return AppColors.warningFor(brightness);
+      case SessionStatus.interrupted:
+        return AppColors.mutedFor(brightness);
       case SessionStatus.waiting:
         return AppColors.mutedFor(brightness);
       case SessionStatus.failed:
@@ -632,7 +636,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     }
     return sessions.where((session) {
       final haystack = '${session.title} ${session.lastMessagePreview ?? ''} '
-              '${session.gitStatus?.label ?? ''} '
               '${_client.agentLabelFor(session.agentId)}'
           .toLowerCase();
       return haystack.contains(query);

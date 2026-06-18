@@ -201,6 +201,7 @@
   "sessionStatusIdle": "空闲",
   "sessionStatusRunning": "回复中",
   "sessionStatusAwaitingApproval": "待审批",
+  "sessionStatusInterrupted": "已中断",
   "sessionStatusWaiting": "等待中",
   "sessionStatusFailed": "失败",
   "noSessionsYet": "当前项目还没有会话",

@@ -201,6 +201,7 @@
   "sessionStatusIdle": "Idle",
   "sessionStatusRunning": "Running",
   "sessionStatusAwaitingApproval": "Awaiting approval",
+  "sessionStatusInterrupted": "Interrupted",
   "sessionStatusWaiting": "Waiting",
   "sessionStatusFailed": "Failed",
   "noSessionsYet": "No sessions in this project yet",

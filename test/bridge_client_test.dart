@@ -237,6 +237,69 @@ void main() {
     });
   });
 
+  group('BridgeClient cancelReply', () {
+    test('accepts bridge cancel result bodies', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/sessions/session-1/cancel');
+          return http.Response(
+            jsonEncode({
+              'data': {'cancelled': true},
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final cancelled = await client.cancelReply('session-1');
+
+      expect(cancelled, isTrue);
+    });
+
+    test('returns false when bridge reports no active turn was cancelled',
+        () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/sessions/session-1/cancel');
+          return http.Response(
+            jsonEncode({
+              'data': {'cancelled': false},
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final cancelled = await client.cancelReply('session-1');
+
+      expect(cancelled, isFalse);
+    });
+
+    test('keeps accepting legacy empty cancel responses', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/sessions/session-1/cancel');
+          return http.Response('', 204);
+        }),
+      );
+
+      final cancelled = await client.cancelReply('session-1');
+
+      expect(cancelled, isTrue);
+    });
+  });
+
+  group('SessionStatus parsing', () {
+    test('parses interrupted sessions', () {
+      expect(parseSessionStatus('interrupted'), SessionStatus.interrupted);
+    });
+  });
+
   group('BridgeClient agents', () {
     test('listAgents decodes install status', () async {
       final client = BridgeClient(
@@ -437,6 +500,7 @@ void main() {
       final session = await client.createSession(
         projectId: 'project-1',
         title: 'Provider Session',
+        agent: 'codex',
         providerId: 'openai',
       );
 
@@ -476,6 +540,7 @@ void main() {
       final session = await client.createSession(
         projectId: 'project-1',
         title: 'Auto Provider Session',
+        agent: 'codex',
         providerId: autoProviderId,
       );
 

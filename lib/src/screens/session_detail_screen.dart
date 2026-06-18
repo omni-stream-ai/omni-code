@@ -455,7 +455,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   void _syncComposerFocusForSessionStatus(SessionStatus status) {
     if (status == SessionStatus.running) {
       _requestStopReplyFocusAfterFrame();
-    } else if (status == SessionStatus.idle) {
+    } else if (status == SessionStatus.idle ||
+        status == SessionStatus.interrupted) {
       _requestComposerFocusAfterFrame(consumeReturnRequest: true);
     }
   }
@@ -1713,10 +1714,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         }
       }
     });
-  }
-
-  void _handleComposerDraftChanged() {
-    _handleComposerTextChanged();
   }
 
   Widget _buildHoldToTalkControl({
@@ -5584,8 +5581,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _cancellingReply = true;
     });
     try {
-      await _client.cancelReply(_session.id);
+      final cancelled = await _client.cancelReply(_session.id);
       if (!mounted) {
+        return;
+      }
+      if (!cancelled) {
+        setState(() {
+          _cancellingReply = false;
+        });
+        unawaited(_restoreSessionAfterResume());
         return;
       }
       setState(() {
