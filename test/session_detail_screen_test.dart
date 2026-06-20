@@ -6171,6 +6171,109 @@ void main() {
     );
   });
 
+  testWidgets('session reasoning effort selector patches session default',
+      (tester) async {
+    final patchBodies = <Map<String, dynamic>>[];
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'PATCH' &&
+            request.url.path == '/sessions/session-1') {
+          patchBodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-reasoning-effort-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('High').last);
+    await tester.pump();
+
+    expect(patchBodies, hasLength(1));
+    expect(patchBodies.single['reasoning_effort'], 'high');
+  });
+
+  testWidgets('session reasoning effort selector can clear back to default',
+      (tester) async {
+    final patchBodies = <Map<String, dynamic>>[];
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'PATCH' &&
+            request.url.path == '/sessions/session-1') {
+          patchBodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(reasoningEffort: ReasoningEffort.high),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-reasoning-effort-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('Default').last);
+    await tester.pump();
+
+    expect(patchBodies, hasLength(1));
+    expect(patchBodies.single.containsKey('reasoning_effort'), isTrue);
+    expect(patchBodies.single['reasoning_effort'], isNull);
+  });
+
   testWidgets('approval resolved does not show approval granted banner',
       (tester) async {
     final approval = _approvalRequest(
@@ -6256,6 +6359,7 @@ SessionSummary _session({
   SessionStatus status = SessionStatus.idle,
   bool briefReplyMode = false,
   String title = 'Test Session',
+  ReasoningEffort? reasoningEffort,
 }) {
   return SessionSummary(
     id: 'session-1',
@@ -6268,6 +6372,7 @@ SessionSummary _session({
     unreadCount: 0,
     lastMessagePreview: null,
     pendingApproval: null,
+    reasoningEffort: reasoningEffort,
   );
 }
 
@@ -6342,6 +6447,7 @@ Map<String, dynamic> _messageJson({
 Map<String, dynamic> _sessionJson({
   String status = 'idle',
   String title = 'Test Session',
+  String? reasoningEffort,
 }) {
   return {
     'id': 'session-1',
@@ -6354,6 +6460,7 @@ Map<String, dynamic> _sessionJson({
     'unread_count': 0,
     'last_message_preview': null,
     'pending_approval': null,
+    'reasoning_effort': reasoningEffort,
   };
 }
 

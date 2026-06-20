@@ -456,6 +456,7 @@ class BridgeClient {
     String inputMode = 'text',
     String? systemPrompt,
     String? providerId,
+    ReasoningEffort? reasoningEffort,
   }) async {
     final body = <String, dynamic>{
       'content': content,
@@ -467,6 +468,9 @@ class BridgeClient {
     }
     if (providerId != null && providerId.isNotEmpty) {
       body['provider_id'] = providerId;
+    }
+    if (reasoningEffort != null) {
+      body['reasoning_effort'] = reasoningEffort.apiValue;
     }
 
     final response = await _httpClient.post(
@@ -496,15 +500,34 @@ class BridgeClient {
     String sessionId,
     String? providerId,
   ) async {
+    await updateSessionDefaults(sessionId, providerId: providerId);
+  }
+
+  Future<void> updateSessionDefaults(
+    String sessionId, {
+    String? providerId,
+    bool clearProviderId = false,
+    ReasoningEffort? reasoningEffort,
+    bool clearReasoningEffort = false,
+  }) async {
+    final body = <String, dynamic>{};
+    if (clearProviderId) {
+      body['provider_id'] = null;
+    } else if (providerId != null) {
+      body['provider_id'] = providerId;
+    }
+    if (clearReasoningEffort) {
+      body['reasoning_effort'] = null;
+    } else if (reasoningEffort != null) {
+      body['reasoning_effort'] = reasoningEffort.apiValue;
+    }
     final response = await _httpClient.patch(
       Uri.parse('$baseUrl/sessions/$sessionId'),
       headers: {
         ..._defaultHeaders,
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({
-        'provider_id': providerId,
-      }),
+      body: jsonEncode(body),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(_extractErrorMessage(response));
@@ -702,6 +725,7 @@ class BridgeClient {
     required String agent,
     bool? briefReplyMode,
     String? providerId,
+    ReasoningEffort? reasoningEffort,
   }) async {
     final body = <String, dynamic>{
       'project_id': projectId,
@@ -712,6 +736,9 @@ class BridgeClient {
     };
     if (providerId != null && providerId.isNotEmpty) {
       body['provider_id'] = providerId;
+    }
+    if (reasoningEffort != null) {
+      body['reasoning_effort'] = reasoningEffort.apiValue;
     }
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/sessions'),

@@ -83,6 +83,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   );
   static const int _initialVisibleTurnCount = 10;
   static const int _historyTurnBatchSize = 10;
+  static const String _defaultProviderMenuValue =
+      '__session_default_provider__';
+  static const String _defaultReasoningEffortMenuValue =
+      '__session_default_reasoning_effort__';
   final _controller = TextEditingController();
   final _messageInputFocusNode = FocusNode(
     debugLabel: 'session-message-input-focus',
@@ -185,6 +189,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   int _visibleTurnCount = 0;
   String? _dismissedErrorBannerMessage;
   String? _overrideProviderId;
+  ReasoningEffort? _overrideReasoningEffort;
   List<ModelProviderConfig> _providers = const [];
   GitStatusDetail? _gitStatus;
 
@@ -481,6 +486,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _session = widget.session;
     _voiceComposerMode = appSettingsController.settings.voiceComposerMode;
     _overrideProviderId = _session.providerId;
+    _overrideReasoningEffort = _session.reasoningEffort;
     _pendingApproval = _session.pendingApproval;
     _creatingSession = widget.sessionInitializer != null;
     _controller.addListener(_handleComposerTextChanged);
@@ -1168,6 +1174,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ),
         actions: [
           _buildProviderSelector(),
+          _buildReasoningEffortSelector(),
           _buildCallModeAction(unavailableMessage: callModeUnavailableMessage),
         ],
       ),
@@ -1227,7 +1234,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }) {
     final theme = Theme.of(context);
     final brightness = theme.brightness;
-    final surface = AppColors.panelFor(brightness);
     final deepSurface = AppColors.panelDeepFor(brightness);
     final outline = AppColors.outlineFor(brightness);
     final outlineStrong = AppColors.outlineStrongFor(brightness);
@@ -2231,15 +2237,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     ?.name ??
                 l10n.providerDefault;
 
-    return PopupMenuButton<String?>(
+    return PopupMenuButton<String>(
       tooltip: l10n.providerOverride,
       onSelected: (value) {
         final previous = _overrideProviderId;
+        final nextValue =
+            value == _defaultProviderMenuValue ? null : value;
         setState(() {
-          _overrideProviderId = value;
+          _overrideProviderId = nextValue;
         });
         unawaited(
-          _client.updateSessionProvider(_session.id, value).catchError((e) {
+          _client.updateSessionProvider(_session.id, nextValue).catchError((e) {
             debugPrint('[provider] updateSessionProvider failed: $e');
             if (!mounted) return;
             setState(() {
@@ -2293,7 +2301,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           ),
         ),
         PopupMenuItem(
-          value: null,
+          value: _defaultProviderMenuValue,
           child: Row(
             children: [
               if (_overrideProviderId == null)
@@ -2347,6 +2355,141 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ),
       ),
     );
+  }
+
+  Widget _buildReasoningEffortSelector() {
+    final theme = Theme.of(context);
+    final l10n = context.l10n;
+    final currentLabel = _overrideReasoningEffort == null
+        ? l10n.reasoningEffortDefault
+        : _reasoningEffortLabel(_overrideReasoningEffort!);
+
+    return PopupMenuButton<Object>(
+      key: const Key('session-reasoning-effort-button'),
+      tooltip: l10n.reasoningEffortOverride,
+      onSelected: (value) {
+        final previous = _overrideReasoningEffort;
+        final nextValue = value == _defaultReasoningEffortMenuValue
+            ? null
+            : value as ReasoningEffort;
+        setState(() {
+          _overrideReasoningEffort = nextValue;
+          _session = _session.copyWith(
+            reasoningEffort: nextValue,
+            clearReasoningEffort: nextValue == null,
+          );
+        });
+        unawaited(
+          _client
+              .updateSessionDefaults(
+                _session.id,
+                reasoningEffort: nextValue,
+                clearReasoningEffort: nextValue == null,
+              )
+              .catchError((e) {
+                debugPrint('[session] updateSessionDefaults failed: $e');
+                if (!mounted) return;
+                setState(() {
+                  _overrideReasoningEffort = previous;
+                  _session = _session.copyWith(
+                    reasoningEffort: previous,
+                    clearReasoningEffort: previous == null,
+                  );
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(context.l10n.reasoningEffortOverrideFailed),
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+              }),
+        );
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem<Object>(
+          value: _defaultReasoningEffortMenuValue,
+          child: Row(
+            children: [
+              if (_overrideReasoningEffort == null)
+                Icon(
+                  Icons.check_rounded,
+                  size: 18,
+                  color: theme.colorScheme.tertiary,
+                )
+              else
+                const SizedBox(width: 18),
+              const SizedBox(width: 8),
+              Text(l10n.reasoningEffortDefault),
+            ],
+          ),
+        ),
+        ...ReasoningEffort.values.map(
+          (effort) => PopupMenuItem<Object>(
+            value: effort,
+            child: Row(
+              children: [
+                if (_overrideReasoningEffort == effort)
+                  Icon(
+                    Icons.check_rounded,
+                    size: 18,
+                    color: theme.colorScheme.tertiary,
+                  )
+                else
+                  const SizedBox(width: 18),
+                const SizedBox(width: 8),
+                Text(_reasoningEffortLabel(effort)),
+              ],
+            ),
+          ),
+        ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.psychology_alt_outlined,
+              size: 20,
+              color: _overrideReasoningEffort != null
+                  ? theme.colorScheme.tertiary
+                  : theme.iconTheme.color,
+            ),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                currentLabel,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: _overrideReasoningEffort != null
+                      ? theme.colorScheme.tertiary
+                      : theme.textTheme.labelSmall?.color,
+                  fontWeight: _overrideReasoningEffort != null
+                      ? FontWeight.w600
+                      : FontWeight.w400,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 18,
+              color: theme.iconTheme.color,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _reasoningEffortLabel(ReasoningEffort effort) {
+    return switch (effort) {
+      ReasoningEffort.low => context.l10n.reasoningEffortLow,
+      ReasoningEffort.medium => context.l10n.reasoningEffortMedium,
+      ReasoningEffort.high => context.l10n.reasoningEffortHigh,
+      ReasoningEffort.xhigh => context.l10n.reasoningEffortXhigh,
+      ReasoningEffort.max => context.l10n.reasoningEffortMax,
+    };
   }
 
   Widget _buildCallModeAction({required String? unavailableMessage}) {
@@ -5577,6 +5720,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         inputMode: inputMode,
         systemPrompt: _messageSystemPrompt(inputMode),
         providerId: _overrideProviderId,
+        reasoningEffort: _overrideReasoningEffort,
       );
       if (!mounted) {
         return false;

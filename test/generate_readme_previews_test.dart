@@ -899,6 +899,7 @@ Map<String, Object?> _sessionJson(SessionSummary session) {
     'unread_count': session.unreadCount,
     'last_message_preview': session.lastMessagePreview,
     'pending_approval': null,
+    'reasoning_effort': session.reasoningEffort?.apiValue,
   };
 }
 

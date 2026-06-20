@@ -572,6 +572,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       updatedAt: DateTime.now(),
       unreadCount: 0,
       providerId: result.$3,
+      reasoningEffort: result.$4,
     );
     final sessionFuture = _client.createSession(
       projectId: _project.id,
@@ -579,6 +580,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       agent: result.$2,
       briefReplyMode: appSettingsController.settings.compressAssistantReplies,
       providerId: result.$3,
+      reasoningEffort: result.$4,
     );
 
     await navigator.push(

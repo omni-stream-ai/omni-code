@@ -534,6 +534,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       updatedAt: DateTime.now(),
       unreadCount: 0,
       providerId: sessionResult.$3,
+      reasoningEffort: sessionResult.$4,
     );
     final sessionFuture = _client.createSession(
       projectId: project.id,
@@ -541,6 +542,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       agent: sessionResult.$2,
       briefReplyMode: appSettingsController.settings.compressAssistantReplies,
       providerId: sessionResult.$3,
+      reasoningEffort: sessionResult.$4,
     );
 
     await Navigator.of(context).push(

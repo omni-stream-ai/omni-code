@@ -1396,6 +1396,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providerOverrideFailed => '供应商选择保存失败';
 
   @override
+  String get reasoningEffortDefault => '默认';
+
+  @override
+  String get reasoningEffortLow => '低';
+
+  @override
+  String get reasoningEffortMedium => '中';
+
+  @override
+  String get reasoningEffortHigh => '高';
+
+  @override
+  String get reasoningEffortXhigh => '超高';
+
+  @override
+  String get reasoningEffortMax => '最高';
+
+  @override
+  String get reasoningEffortOverride => '思考强度';
+
+  @override
+  String get reasoningEffortSessionLabel => '思考强度';
+
+  @override
+  String get reasoningEffortOverrideFailed => '思考强度保存失败';
+
+  @override
   String get confirm => '确认';
 
   @override

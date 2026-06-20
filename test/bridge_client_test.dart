@@ -235,6 +235,109 @@ void main() {
       expect(body['provider_id'], 'AUTO');
       expect(session.providerId, 'AUTO');
     });
+
+    test('includes reasoning effort when specified', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/sessions');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'id': 'session-4',
+                'project_id': 'project-1',
+                'title': 'Reasoning Session',
+                'agent': 'codex',
+                'brief_reply_mode': false,
+                'status': 'idle',
+                'updated_at': '2026-05-05T11:00:00.000',
+                'unread_count': 0,
+                'last_message_preview': null,
+                'pending_approval': null,
+                'reasoning_effort': 'high',
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final session = await client.createSession(
+        projectId: 'project-1',
+        title: 'Reasoning Session',
+        agent: 'codex',
+        reasoningEffort: ReasoningEffort.high,
+      );
+
+      expect(body['reasoning_effort'], 'high');
+      expect(session.reasoningEffort, ReasoningEffort.high);
+    });
+  });
+
+  group('BridgeClient session defaults and messaging', () {
+    test('sends reasoning effort when posting a message', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/sessions/session-1/messages');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': {
+                  'id': 'user-1',
+                  'session_id': 'session-1',
+                  'role': 'user',
+                  'content': 'Hello',
+                  'created_at': '2026-05-05T11:00:00.000',
+                },
+                'reply': {
+                  'id': 'assistant-1',
+                  'session_id': 'session-1',
+                  'role': 'assistant',
+                  'content': 'Hi',
+                  'created_at': '2026-05-05T11:00:01.000',
+                },
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      await client.sendMessage(
+        'session-1',
+        'Hello',
+        reasoningEffort: ReasoningEffort.max,
+      );
+
+      expect(body['reasoning_effort'], 'max');
+    });
+
+    test('clears session reasoning effort with null patch value', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'PATCH');
+          expect(request.url.path, '/sessions/session-1');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response('', 204);
+        }),
+      );
+
+      await client.updateSessionDefaults(
+        'session-1',
+        clearReasoningEffort: true,
+      );
+
+      expect(body.containsKey('reasoning_effort'), isTrue);
+      expect(body['reasoning_effort'], isNull);
+    });
   });
 
   group('BridgeClient cancelReply', () {
@@ -1260,6 +1363,7 @@ SessionSummary _session({
   required String projectId,
   required DateTime updatedAt,
   String? lastMessagePreview,
+  ReasoningEffort? reasoningEffort,
 }) {
   return SessionSummary(
     id: id,
@@ -1272,6 +1376,7 @@ SessionSummary _session({
     unreadCount: 0,
     lastMessagePreview: lastMessagePreview,
     pendingApproval: null,
+    reasoningEffort: reasoningEffort,
   );
 }
 

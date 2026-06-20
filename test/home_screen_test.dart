@@ -1135,6 +1135,7 @@ Map<String, Object?> _sessionJson({
   required String updatedAt,
   String? preview,
   String? forkedFromSessionId,
+  String? reasoningEffort,
 }) {
   return {
     'id': id,
@@ -1148,6 +1149,7 @@ Map<String, Object?> _sessionJson({
     'last_message_preview': preview,
     'pending_approval': null,
     'forked_from_session_id': forkedFromSessionId,
+    'reasoning_effort': reasoningEffort,
   };
 }
 

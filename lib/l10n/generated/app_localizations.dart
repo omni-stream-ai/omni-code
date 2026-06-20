@@ -2600,6 +2600,60 @@ abstract class AppLocalizations {
   /// **'Failed to save provider selection'**
   String get providerOverrideFailed;
 
+  /// No description provided for @reasoningEffortDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get reasoningEffortDefault;
+
+  /// No description provided for @reasoningEffortLow.
+  ///
+  /// In en, this message translates to:
+  /// **'Low'**
+  String get reasoningEffortLow;
+
+  /// No description provided for @reasoningEffortMedium.
+  ///
+  /// In en, this message translates to:
+  /// **'Medium'**
+  String get reasoningEffortMedium;
+
+  /// No description provided for @reasoningEffortHigh.
+  ///
+  /// In en, this message translates to:
+  /// **'High'**
+  String get reasoningEffortHigh;
+
+  /// No description provided for @reasoningEffortXhigh.
+  ///
+  /// In en, this message translates to:
+  /// **'XHigh'**
+  String get reasoningEffortXhigh;
+
+  /// No description provided for @reasoningEffortMax.
+  ///
+  /// In en, this message translates to:
+  /// **'Max'**
+  String get reasoningEffortMax;
+
+  /// No description provided for @reasoningEffortOverride.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning Effort'**
+  String get reasoningEffortOverride;
+
+  /// No description provided for @reasoningEffortSessionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning effort'**
+  String get reasoningEffortSessionLabel;
+
+  /// No description provided for @reasoningEffortOverrideFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to save reasoning effort'**
+  String get reasoningEffortOverrideFailed;
+
   /// No description provided for @confirm.
   ///
   /// In en, this message translates to:

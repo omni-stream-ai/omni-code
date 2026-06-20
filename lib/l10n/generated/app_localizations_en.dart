@@ -1444,6 +1444,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get providerOverrideFailed => 'Failed to save provider selection';
 
   @override
+  String get reasoningEffortDefault => 'Default';
+
+  @override
+  String get reasoningEffortLow => 'Low';
+
+  @override
+  String get reasoningEffortMedium => 'Medium';
+
+  @override
+  String get reasoningEffortHigh => 'High';
+
+  @override
+  String get reasoningEffortXhigh => 'XHigh';
+
+  @override
+  String get reasoningEffortMax => 'Max';
+
+  @override
+  String get reasoningEffortOverride => 'Reasoning Effort';
+
+  @override
+  String get reasoningEffortSessionLabel => 'Reasoning effort';
+
+  @override
+  String get reasoningEffortOverrideFailed => 'Failed to save reasoning effort';
+
+  @override
   String get confirm => 'Confirm';
 
   @override

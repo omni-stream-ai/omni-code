@@ -7,7 +7,12 @@ import '../settings/app_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 
-typedef CreateSessionDialogResult = (String?, String, String?);
+typedef CreateSessionDialogResult = (
+  String?,
+  String,
+  String?,
+  ReasoningEffort?
+);
 
 const _defaultProviderValue = '__default_provider__';
 const _autoProviderValue = '__auto_provider__';
@@ -30,6 +35,7 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
   final _titleController = TextEditingController();
   String _agent = appSettingsController.settings.lastSelectedAgent;
   late String? _providerId = widget.initialProviderId;
+  ReasoningEffort? _reasoningEffort;
   List<ModelProviderConfig> _allProviders = const [];
   List<AgentSummary> _agentOptions = const [];
   bool _loadingProviders = true;
@@ -345,6 +351,30 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
                 labelText: context.l10n.providerSessionLabel,
               ),
             ),
+            const SizedBox(height: AppSpacing.stack),
+            DropdownButtonFormField<ReasoningEffort?>(
+              initialValue: _reasoningEffort,
+              items: [
+                DropdownMenuItem<ReasoningEffort?>(
+                  value: null,
+                  child: Text(context.l10n.reasoningEffortDefault),
+                ),
+                ...ReasoningEffort.values.map(
+                  (effort) => DropdownMenuItem<ReasoningEffort?>(
+                    value: effort,
+                    child: Text(_reasoningEffortLabel(context, effort)),
+                  ),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _reasoningEffort = value;
+                });
+              },
+              decoration: InputDecoration(
+                labelText: context.l10n.reasoningEffortSessionLabel,
+              ),
+            ),
           ],
         ],
       ),
@@ -365,6 +395,7 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
                         title.isEmpty ? null : title,
                         _agent,
                         _providerId,
+                        _reasoningEffort,
                       ));
                     },
           child: Text(
@@ -377,5 +408,18 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
         ),
       ],
     );
+  }
+
+  String _reasoningEffortLabel(
+    BuildContext context,
+    ReasoningEffort effort,
+  ) {
+    return switch (effort) {
+      ReasoningEffort.low => context.l10n.reasoningEffortLow,
+      ReasoningEffort.medium => context.l10n.reasoningEffortMedium,
+      ReasoningEffort.high => context.l10n.reasoningEffortHigh,
+      ReasoningEffort.xhigh => context.l10n.reasoningEffortXhigh,
+      ReasoningEffort.max => context.l10n.reasoningEffortMax,
+    };
   }
 }

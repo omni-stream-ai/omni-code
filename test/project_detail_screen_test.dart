@@ -818,6 +818,7 @@ Map<String, Object?> _sessionJson({
   required String title,
   required String updatedAt,
   String? preview,
+  String? reasoningEffort,
 }) {
   return {
     'id': id,
@@ -830,6 +831,7 @@ Map<String, Object?> _sessionJson({
     'unread_count': 0,
     'last_message_preview': preview,
     'pending_approval': null,
+    'reasoning_effort': reasoningEffort,
   };
 }
 
