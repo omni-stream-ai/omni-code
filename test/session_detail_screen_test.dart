@@ -227,6 +227,7 @@ void main() {
           sizeBytes: 12345,
           url: '/uploads/uuid-photo.png',
           absoluteUrl: 'http://127.0.0.1:8787/uploads/uuid-photo.png',
+          localPath: '/tmp/uuid-photo.png',
         );
       },
       httpClient: _FakeHttpClient((request) async {
@@ -296,7 +297,6 @@ void main() {
 
     expect(
         find.byKey(const Key('session-pending-image-strip')), findsOneWidget);
-    expect(find.text('photo.png'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
@@ -306,8 +306,7 @@ void main() {
 
     expect(sentBodies, hasLength(1));
     expect(uploadedPaths, [photo!.path]);
-    expect(sentBodies.single['content'],
-        '![photo.png](http://127.0.0.1:8787/uploads/uuid-photo.png)');
+    expect(sentBodies.single['content'], '![photo.png](/tmp/uuid-photo.png)');
     expect(sentBodies.single['input_mode'], 'text');
     expect(find.byKey(const Key('session-pending-image-strip')), findsNothing);
   });
@@ -337,6 +336,7 @@ void main() {
           sizeBytes: uploadCount,
           url: '/uploads/uuid-$fileName',
           absoluteUrl: 'http://127.0.0.1:8787/uploads/uuid-$fileName',
+          localPath: '/tmp/uuid-$fileName',
         );
       },
       httpClient: _FakeHttpClient((request) async {
@@ -416,14 +416,14 @@ void main() {
     expect(
       sentBodies.single['content'],
       'Please inspect these images\n\n'
-      '![photo.png](http://127.0.0.1:8787/uploads/uuid-photo.png)\n'
-      '[report.pdf](http://127.0.0.1:8787/uploads/uuid-report.pdf)',
+      '![photo.png](/tmp/uuid-photo.png)\n'
+      '[report.pdf](/tmp/uuid-report.pdf)',
     );
     expect(uploadCount, 2);
     expect(uploadedPaths, files!.map((file) => file.path).toList());
   });
 
-  testWidgets('pasted file path is queued and uploaded', (tester) async {
+  testWidgets('pasted file path is inserted as text', (tester) async {
     final files = await tester.runAsync(() async {
       final dir = await Directory.systemTemp.createTemp('omni-code-test-');
       final report = File('${dir.path}/report.pdf');
@@ -511,9 +511,7 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump();
 
-    expect(
-        find.byKey(const Key('session-pending-image-strip')), findsOneWidget);
-    expect(find.text('report.pdf'), findsOneWidget);
+    expect(find.byKey(const Key('session-pending-image-strip')), findsNothing);
 
     await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
@@ -521,9 +519,106 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    expect(uploadCount, 1);
-    expect(sentBodies.single['content'],
-        '[report.pdf](http://127.0.0.1:8787/uploads/uuid-report.pdf)');
+    expect(uploadCount, 0);
+    expect(sentBodies.single['content'], files!.single.path);
+  });
+
+  testWidgets('pasted plain text with slash is not treated as file',
+      (tester) async {
+    final sentBodies = <Map<String, dynamic>>[];
+    var uploadCount = 0;
+    final client = _UploadingBridgeClient(
+      uploadHandler: (path) async {
+        uploadCount += 1;
+        return const BridgeUploadResponse(
+          id: 'unexpected-upload',
+          fileName: 'unexpected.txt',
+          contentType: 'text/plain',
+          sizeBytes: 3,
+          url: '/uploads/unexpected-upload',
+          absoluteUrl: 'http://127.0.0.1:8787/uploads/unexpected-upload',
+        );
+      },
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sentBodies.add(body);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-text-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-text-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+          readClipboardText: () async => '随便粘贴一点文本 / 不是文件路径',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-message-input')));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-pending-image-strip')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+    for (var i = 0; i < 20 && sentBodies.isEmpty; i += 1) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(uploadCount, 0);
+    expect(
+      sentBodies.single['content'],
+      '随便粘贴一点文本 / 不是文件路径',
+    );
   });
 
   testWidgets('pasted image attachment is queued and uploaded', (tester) async {
@@ -546,6 +641,7 @@ void main() {
           sizeBytes: 3,
           url: '/uploads/uuid-clipboard.png',
           absoluteUrl: 'http://127.0.0.1:8787/uploads/uuid-clipboard.png',
+          localPath: '/tmp/uuid-clipboard.png',
         );
       },
       httpClient: _FakeHttpClient((request) async {
@@ -618,7 +714,6 @@ void main() {
 
     expect(
         find.byKey(const Key('session-pending-image-strip')), findsOneWidget);
-    expect(find.text('clipboard.png'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
@@ -628,7 +723,7 @@ void main() {
 
     expect(uploadCount, 1);
     expect(sentBodies.single['content'],
-        '![clipboard.png](http://127.0.0.1:8787/uploads/uuid-clipboard.png)');
+        '![clipboard.png](/tmp/uuid-clipboard.png)');
   });
 
   testWidgets('slash input shows command suggestions', (tester) async {
@@ -691,6 +786,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('session-message-input')));
     await tester.enterText(find.byKey(const Key('session-message-input')), '/');
+    await tester.pump();
+    await tester.pump();
     await tester.pump();
 
     expect(
@@ -756,15 +853,19 @@ void main() {
 
     final composer = find.byKey(const Key('session-message-composer'));
     final input = find.byKey(const Key('session-message-input'));
-    final initialHeight = tester.getSize(composer).height;
 
     await tester.tap(input);
+    await tester.pump();
+    final expandedHeight = tester.getSize(composer).height;
+
     await tester.enterText(input, '/');
+    await tester.pump();
+    await tester.pump();
     await tester.pump();
 
     expect(
       tester.getSize(composer).height,
-      initialHeight,
+      expandedHeight,
     );
     expect(
       find.byKey(const Key('session-command-suggestions')),
@@ -1461,6 +1562,7 @@ void main() {
       find.byKey(const Key('session-message-input')),
       'Focus flow',
     );
+    await tester.pump();
     await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump();
@@ -1531,6 +1633,7 @@ void main() {
       find.byKey(const Key('session-message-input')),
       'Focus flow',
     );
+    await tester.pump();
     await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump();
@@ -1680,18 +1783,86 @@ void main() {
     );
     await tester.pump();
 
-    final field = tester.widget<TextField>(find.byType(TextField));
-    final suffixIcon = field.decoration?.suffixIcon;
-
-    expect(suffixIcon, isNotNull);
+    expect(find.byKey(const Key('session-voice-mode-toggle')), findsOneWidget);
+    expect(find.byKey(const Key('session-voice-input-button')), findsOneWidget);
     expect(
-      find.descendant(
-        of: find.byWidget(suffixIcon!),
-        matching: find.byKey(const Key('session-voice-input-button')),
+        find.byKey(const Key('session-image-picker-button')), findsOneWidget);
+    expect(find.byKey(const Key('session-send-button')), findsNothing);
+    expect(
+      tester.getSize(find.byKey(const Key('session-voice-mode-toggle'))).height,
+      tester
+          .getSize(find.byKey(const Key('session-text-composer-surface')))
+          .height,
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('session-message-input')),
+      'Ready to send',
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-voice-mode-toggle')), findsNothing);
+    expect(find.byKey(const Key('session-voice-input-button')), findsNothing);
+    expect(find.byKey(const Key('session-send-button')), findsOneWidget);
+  });
+
+  testWidgets('voice mode toggle switches composer to hold-to-talk',
+      (tester) async {
+    final speechService = _FakeSpeechInputService(initializeResult: true);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          speechInputService: speechService,
+          ttsService: _FakeTtsService(systemAvailable: true),
+        ),
       ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-message-input')), findsOneWidget);
+    expect(
+      find.byKey(const Key('session-hold-to-talk-button')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-message-input')), findsNothing);
+    expect(
+      find.byKey(const Key('session-hold-to-talk-button')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('session-send-button')), findsOneWidget);
+    expect(speechService.startListeningCalls, 0);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('session-hold-to-talk-button')))
+          .height,
+      tester.getSize(find.byKey(const Key('session-voice-mode-toggle'))).height,
+    );
+
+    final holdButton = find.byKey(const Key('session-hold-to-talk-button'));
+    final start = tester.getCenter(holdButton);
+    final gesture = await tester.startGesture(start);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump();
+
+    expect(find.text('Slide up for text or cancel'), findsOneWidget);
+    expect(speechService.startListeningCalls, 1);
+
+    await gesture.moveTo(Offset(start.dx - 120, start.dy - 120));
+    await tester.pump();
+
+    expect(
+        find.byKey(const Key('session-voice-release-insert')), findsOneWidget);
+    expect(
+        find.byKey(const Key('session-voice-release-cancel')), findsOneWidget);
+
+    await gesture.up();
+    await tester.pump();
   });
 
   testWidgets('pressing enter keeps the current draft on mobile',
@@ -1920,6 +2091,7 @@ void main() {
 
     final input = find.byType(TextField);
     await tester.enterText(input, 'Read this back');
+    await tester.pump();
     await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -2017,6 +2189,7 @@ void main() {
 
     final input = find.byType(TextField);
     await tester.enterText(input, 'Summarize this');
+    await tester.pump();
     await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -2112,6 +2285,7 @@ void main() {
 
     final input = find.byType(TextField);
     await tester.enterText(input, 'Do not compress this');
+    await tester.pump();
     await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -2192,6 +2366,7 @@ void main() {
 
     final input = find.byType(TextField);
     await tester.enterText(input, 'Read this back');
+    await tester.pump();
     await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -3511,6 +3686,44 @@ void main() {
     expect(bubbleFinder, findsOneWidget);
     expect(tester.getSize(bubbleFinder).width, greaterThan(500));
     expect(tester.getSize(bubbleFinder).width, lessThanOrEqualTo(620));
+  });
+
+  testWidgets('user image message bubble shrinks around image preview',
+      (tester) async {
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(1280, 1600);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    const dataUri = 'data:image/png;base64,'
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+    final client = _clientForMessages([
+      _messageJson(
+        id: 'user-image',
+        sessionId: 'session-1',
+        role: 'user',
+        content: '你现在能看到这个图片吗\n\n![image]($dataUri)',
+        createdAt: '2026-05-09T10:00:00.000',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final bubbleFinder =
+        find.byKey(const ValueKey('user-message-bubble-user-image'));
+    expect(bubbleFinder, findsOneWidget);
+    expect(tester.getSize(bubbleFinder).width, lessThan(360));
   });
 
   testWidgets(
@@ -5172,6 +5385,8 @@ void main() {
 
     expect(field.controller!.text, 'before spoken words after');
     expect(field.controller!.selection.baseOffset, 19);
+    expect(find.byKey(const Key('session-voice-input-button')), findsOneWidget);
+    expect(find.byKey(const Key('session-send-button')), findsOneWidget);
   });
 
   testWidgets('hold voice sends transcript when released in place',
@@ -5239,9 +5454,7 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
-    await tester.pump();
-    final holdButton = find.byKey(const Key('session-hold-to-talk-button'));
+    final holdButton = find.byKey(const Key('session-voice-input-button'));
     final gesture = await tester.startGesture(tester.getCenter(holdButton));
     await tester.pump(const Duration(milliseconds: 600));
     expect(speechService.startListeningCalls, 1);
@@ -5279,16 +5492,16 @@ void main() {
     expect(speechService.initializeCalls, 1);
     expect(speechService.startListeningCalls, 0);
 
-    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
-    await tester.pump();
-    final holdButton = find.byKey(const Key('session-hold-to-talk-button'));
+    final holdButton = find.byKey(const Key('session-voice-input-button'));
     final gesture = await tester.startGesture(tester.getCenter(holdButton));
     await tester.pump(const Duration(milliseconds: 600));
 
-    expect(find.text('Preparing microphone'), findsOneWidget);
+    expect(speechService.initializeCalls, 1);
     expect(speechService.startListeningCalls, 0);
 
     initializeCompleter.complete(true);
+    await tester.pump();
+    await tester.pump();
     await tester.pump();
 
     expect(speechService.initializeCalls, 1);
@@ -5317,87 +5530,15 @@ void main() {
 
     expect(speechService.initializeCalls, 1);
 
-    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
-    await tester.pump();
-    final holdButton = find.byKey(const Key('session-hold-to-talk-button'));
+    final holdButton = find.byKey(const Key('session-voice-input-button'));
     final gesture = await tester.startGesture(tester.getCenter(holdButton));
     await tester.pump(const Duration(milliseconds: 600));
 
     expect(speechService.startListeningCalls, 1);
     expect(find.text('Preparing microphone'), findsNothing);
-    expect(find.text('Listening...'), findsOneWidget);
+    expect(speechService.startListeningCalls, 1);
 
     await gesture.up();
-    await tester.pump();
-  });
-
-  testWidgets('voice composer mode persists after toggle', (tester) async {
-    final speechService = _FakeSpeechInputService(initializeResult: true);
-
-    await tester.pumpWidget(
-      _TestApp(
-        home: SessionDetailScreen(
-          session: _session(),
-          client: _clientForMessages(const <Map<String, dynamic>>[]),
-          speechInputService: speechService,
-          ttsService: _FakeTtsService(systemAvailable: true),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    expect(appSettingsController.settings.voiceComposerMode, isFalse);
-
-    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
-    await tester.pump();
-    await tester.pump();
-
-    expect(appSettingsController.settings.voiceComposerMode, isTrue);
-    expect(
-      find.byKey(const Key('session-hold-to-talk-button')),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
-    await tester.pump();
-    await tester.pump();
-
-    expect(appSettingsController.settings.voiceComposerMode, isFalse);
-    expect(find.byKey(const Key('session-message-input')), findsOneWidget);
-  });
-
-  testWidgets('saved voice composer mode is restored and prewarmed on entry',
-      (tester) async {
-    final initializeCompleter = Completer<bool>();
-    final speechService = _FakeSpeechInputService(
-      initializeResult: true,
-      initializeCompleter: initializeCompleter,
-    );
-    appSettingsController.debugReplaceSettings(
-      AppSettings.defaults().copyWith(voiceComposerMode: true),
-    );
-
-    await tester.pumpWidget(
-      _TestApp(
-        home: SessionDetailScreen(
-          session: _session(),
-          client: _clientForMessages(const <Map<String, dynamic>>[]),
-          speechInputService: speechService,
-          ttsService: _FakeTtsService(systemAvailable: true),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    expect(
-      find.byKey(const Key('session-hold-to-talk-button')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const Key('session-message-input')), findsNothing);
-    expect(speechService.initializeCalls, 1);
-    expect(speechService.startListeningCalls, 0);
-
-    initializeCompleter.complete(true);
     await tester.pump();
   });
 
@@ -5448,23 +5589,22 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
-    await tester.pump();
-    final holdButton = find.byKey(const Key('session-hold-to-talk-button'));
+    final holdButton = find.byKey(const Key('session-voice-input-button'));
     final start = tester.getCenter(holdButton);
     final gesture = await tester.startGesture(start);
     await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump();
+    expect(speechService.startListeningCalls, 1);
     speechService.emitResult('draft words', isFinal: true);
-    await gesture.moveTo(Offset(start.dx - 90, start.dy - 96));
+    await tester.pump();
+    await gesture.moveTo(Offset(start.dx - 120, start.dy - 120));
     await tester.pump();
 
-    expect(find.text('Release left for text, right to cancel'), findsOneWidget);
     expect(
         find.byKey(const Key('session-voice-release-insert')), findsOneWidget);
 
     await gesture.up();
     await tester.pump();
-    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
     await tester.pump();
 
     final field = tester.widget<TextField>(find.byType(TextField));

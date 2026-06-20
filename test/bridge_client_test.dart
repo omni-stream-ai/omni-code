@@ -617,6 +617,7 @@ void main() {
                 'size_bytes': 12345,
                 'url': '/uploads/uuid-photo.png',
                 'absolute_url': 'http://127.0.0.1:8787/uploads/uuid-photo.png',
+                'local_path': '/tmp/uuid-photo.png',
               },
             }),
             200,
@@ -639,6 +640,7 @@ void main() {
       expect(upload.contentType, 'image/png');
       expect(
           upload.absoluteUrl, 'http://127.0.0.1:8787/uploads/uuid-photo.png');
+      expect(upload.localPath, '/tmp/uuid-photo.png');
     });
   });
 
@@ -813,6 +815,7 @@ void main() {
         'session-c',
       ]);
     });
+
   });
 
   group('BridgeClient route lookups', () {

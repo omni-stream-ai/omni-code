@@ -119,6 +119,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _composerSuggestionsOverlayShown = false;
   bool _pickingAttachments = false;
   bool _uploadingAttachments = false;
+  bool _composerDraftFromVoice = false;
+  bool _markNextComposerChangeAsVoice = false;
   final List<_PendingAttachment> _pendingAttachments = <_PendingAttachment>[];
 
   String? _recordingPath;
@@ -151,7 +153,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Future<void>? _callModeInterruptFuture;
   bool _callModeSubmittingVoiceUtterance = false;
   bool _callModeSendingVoiceUtterance = false;
-  late bool _voiceComposerMode;
+  bool _voiceComposerMode = false;
   bool _voiceHoldActive = false;
   bool _voiceHoldLifted = false;
   Offset? _voiceHoldGlobalPosition;
@@ -394,6 +396,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final updatedText = '$before$insertedText$after';
     final caretOffset = before.length + insertedText.length;
 
+    _markNextComposerChangeAsVoice = true;
     _controller.value = TextEditingValue(
       text: updatedText,
       selection: TextSelection.collapsed(offset: caretOffset),
@@ -485,9 +488,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (widget.enableSpeechServices) {
       _initializeSpeech();
       _initializeTts();
-      if (_voiceComposerMode) {
-        unawaited(_ensureSpeechInitialized());
-      }
     }
     if (_creatingSession) {
       _loadingMessages = false;
@@ -575,14 +575,18 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _agentCommands = commands;
         _selectedCommandSuggestionIndex = 0;
       });
+      _syncComposerSuggestionsOverlayAfterFrame();
     } catch (_) {
       // Suggestions are optional; keep composer usable if this endpoint fails.
     }
   }
 
   void _handleComposerTextChanged() {
-    if (_voiceComposerMode) {
-      return;
+    if (_markNextComposerChangeAsVoice) {
+      _markNextComposerChangeAsVoice = false;
+      _composerDraftFromVoice = _controller.text.trim().isNotEmpty;
+    } else if (_composerDraftFromVoice) {
+      _composerDraftFromVoice = false;
     }
     final query = _commandQuery;
     final queryChanged = query != _lastCommandQuery;
@@ -607,7 +611,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     if (mounted) {
       setState(() {});
-      _syncComposerSuggestionsOverlay();
+      _syncComposerSuggestionsOverlayAfterFrame();
     }
   }
 
@@ -616,7 +620,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     setState(() {});
-    _syncComposerSuggestionsOverlay();
+    _syncComposerSuggestionsOverlayAfterFrame();
   }
 
   String get _commandQuery {
@@ -685,17 +689,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   bool get _showCommandSuggestions {
-    if (_voiceComposerMode ||
-        !_messageInputFocusNode.hasFocus ||
-        _commandSuggestionsDismissed) {
+    if (!_messageInputFocusNode.hasFocus || _commandSuggestionsDismissed) {
       return false;
     }
     return _matchingCommandSuggestions.isNotEmpty;
   }
 
   bool get _showFileSuggestions {
-    if (_voiceComposerMode ||
-        !_messageInputFocusNode.hasFocus ||
+    if (!_messageInputFocusNode.hasFocus ||
         _fileSuggestionsDismissed ||
         _showCommandSuggestions) {
       return false;
@@ -707,7 +708,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _showCommandSuggestions || _showFileSuggestions;
 
   bool get _composerSuggestionsOverlayAvailable =>
-      !_voiceComposerMode &&
       _session.status != SessionStatus.running &&
       _session.status != SessionStatus.awaitingApproval &&
       _pendingApproval == null;
@@ -781,9 +781,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     if (_showComposerSuggestions) {
-      if (_composerSuggestionsOverlayShown) {
-        return;
-      }
       _composerSuggestionsOverlayController.show();
       _composerSuggestionsOverlayShown = true;
     } else {
@@ -793,6 +790,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _composerSuggestionsOverlayController.hide();
       _composerSuggestionsOverlayShown = false;
     }
+  }
+
+  void _syncComposerSuggestionsOverlayAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _syncComposerSuggestionsOverlay();
+    });
   }
 
   void _applyCommandSuggestion(AgentCommand command) {
@@ -869,7 +875,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               matchingItems.isEmpty ? 0 : matchingItems.length - 1;
         }
       });
-      _syncComposerSuggestionsOverlay();
+      _syncComposerSuggestionsOverlayAfterFrame();
     } catch (_) {
       if (!mounted || requestToken != _fileCompletionRequestToken) {
         return;
@@ -878,7 +884,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _fileCompletions = const [];
         _loadingFileCompletions = false;
       });
-      _syncComposerSuggestionsOverlay();
+      _syncComposerSuggestionsOverlayAfterFrame();
     }
   }
 
@@ -1234,10 +1240,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         AppSpacing.block,
         AppSpacing.block,
       ),
-      decoration: BoxDecoration(
-        color: surface,
-        border: Border(top: BorderSide(color: outline)),
-      ),
+      decoration:
+          BoxDecoration(border: Border(top: BorderSide(color: outline))),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: _composerMaxWidth),
@@ -1323,57 +1327,82 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final brightness = Theme.of(context).brightness;
     final voiceButtonDisabled = isSessionBusy ||
         _voiceInputStarting ||
-        (!_speechReady && !_isListening);
-    final holdToTalkDisabled =
-        isSessionBusy || (_voiceInputStarting && !_voiceHoldActive);
+        (_systemAsrUnavailable && !_isListening);
     final voiceLabel =
         _isListening ? context.l10n.stopVoice : context.l10n.voiceInput;
-    final modeButtonLabel = _voiceComposerMode
-        ? context.l10n.keyboardInput
-        : context.l10n.voiceInput;
     final inputBorderColor =
         _isListening ? AppColors.primaryFor(brightness) : outlineStrong;
     final activeVoiceIconColor = brightness == Brightness.dark
         ? AppColors.onPrimaryFor(brightness)
         : AppColors.textFor(brightness);
+    final holdToTalkDisabled =
+        isSessionBusy || (_voiceInputStarting && !_voiceHoldActive);
+    const collapsedComposerHeight = 48.0;
+    final hasSendableDraft =
+        _controller.text.trim().isNotEmpty || _pendingAttachments.isNotEmpty;
+    final showVoiceButton = !hasSendableDraft || _composerDraftFromVoice;
+    final showExpandedComposer = !_voiceComposerMode &&
+        (_messageInputFocusNode.hasFocus ||
+            hasSendableDraft ||
+            _pendingAttachments.isNotEmpty ||
+            _voiceInputStarting ||
+            _isListening ||
+            _voiceHoldActive);
+    final holdStatusLabel = _voiceInputStarting && !_speechReady
+        ? context.l10n.callModePreparingListening
+        : _voiceHoldActive
+            ? _voiceHoldLifted
+                ? context.l10n.voiceHoldReleaseHint
+                : context.l10n.voiceInputInProgress
+            : null;
     final voiceButton = _withUnavailableTooltip(
       message: showVoiceInputUnavailableTooltip
           ? systemSpeechUnavailableMessage
           : null,
-      child: _ComposerVoiceButton(
-        key: const Key('session-voice-input-button'),
-        label: voiceLabel,
-        disabled: voiceButtonDisabled,
-        isListening: _isListening,
-        isStarting: _voiceInputStarting,
-        animation: _callModeOrbController,
-        activeBackgroundColor: AppColors.primaryFor(brightness).withValues(
-          alpha: brightness == Brightness.dark ? 1 : 0.82,
+      child: KeyedSubtree(
+        key: _holdToTalkButtonKey,
+        child: _ComposerVoiceButton(
+          key: const Key('session-voice-input-button'),
+          label: voiceLabel,
+          disabled: voiceButtonDisabled,
+          isListening: _isListening,
+          isStarting: _voiceInputStarting,
+          animation: _callModeOrbController,
+          activeBackgroundColor: AppColors.primaryFor(brightness).withValues(
+            alpha: brightness == Brightness.dark ? 1 : 0.82,
+          ),
+          activeIconColor: activeVoiceIconColor,
+          idleIconColor: AppColors.textSoftFor(brightness),
+          disabledIconColor: AppColors.mutedFor(brightness),
+          focusColor: AppColors.primaryFor(brightness).withValues(
+            alpha: brightness == Brightness.dark ? 0.16 : 0.22,
+          ),
+          onPressed: _toggleListening,
+          onLongPressStart: (details) =>
+              _startHoldToTalk(details.globalPosition),
+          onLongPressMoveUpdate: (details) =>
+              _updateHoldToTalk(details.globalPosition),
+          onLongPressEnd: (details) =>
+              _finishHoldToTalk(details.globalPosition),
+          onLongPressCancel: () => _finishHoldToTalk(null, cancelled: true),
         ),
-        activeIconColor: activeVoiceIconColor,
-        idleIconColor: AppColors.textSoftFor(brightness),
-        disabledIconColor: AppColors.mutedFor(brightness),
-        focusColor: AppColors.primaryFor(brightness).withValues(
-          alpha: brightness == Brightness.dark ? 0.16 : 0.22,
-        ),
-        onPressed: _toggleListening,
       ),
     );
-    final modeButton = _withUnavailableTooltip(
-      message: !_voiceComposerMode && showVoiceInputUnavailableTooltip
+    final voiceModeButton = _withUnavailableTooltip(
+      message: showVoiceInputUnavailableTooltip
           ? systemSpeechUnavailableMessage
           : null,
       child: IconButton(
         key: const Key('session-voice-mode-toggle'),
-        tooltip: modeButtonLabel,
+        tooltip: _voiceComposerMode ? context.l10n.keyboardInput : voiceLabel,
         onPressed: isSessionBusy ? null : _toggleVoiceComposerMode,
         style: IconButton.styleFrom(
           backgroundColor: deepSurface,
           foregroundColor: AppColors.textSoftFor(brightness),
           disabledForegroundColor: AppColors.mutedFor(brightness),
           side: BorderSide(color: outlineStrong),
-          minimumSize: const Size.square(44),
-          fixedSize: const Size.square(44),
+          minimumSize: const Size(44, collapsedComposerHeight),
+          fixedSize: const Size(44, collapsedComposerHeight),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
           ),
@@ -1384,165 +1413,248 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ),
       ),
     );
-
-    return Row(
-      key: const Key('session-message-composer'),
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        modeButton,
-        const SizedBox(width: AppSpacing.compact),
-        Expanded(
-          child: _voiceComposerMode
-              ? _buildHoldToTalkControl(
-                  disabled: holdToTalkDisabled,
-                  deepSurface: deepSurface,
-                  outlineStrong: outlineStrong,
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_pendingAttachments.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(
-                          bottom: AppSpacing.compact,
-                        ),
-                        child: _buildPendingAttachmentStrip(
-                          deepSurface: deepSurface,
-                          outlineStrong: outlineStrong,
-                        ),
-                      ),
-                    OverlayPortal(
-                      controller: _composerSuggestionsOverlayController,
-                      overlayChildBuilder: (context) =>
-                          _buildComposerSuggestionsOverlay(
-                        deepSurface,
-                        outlineStrong,
-                      ),
-                      child: KeyedSubtree(
-                        key: _composerTextFieldKey,
-                        child: CallbackShortcuts(
-                          bindings: {
-                            const SingleActivator(
-                              LogicalKeyboardKey.keyV,
-                              control: true,
-                            ): () => unawaited(_handlePasteShortcut()),
-                            const SingleActivator(
-                              LogicalKeyboardKey.keyV,
-                              meta: true,
-                            ): () => unawaited(_handlePasteShortcut()),
-                          },
-                          child: Focus(
-                            onKeyEvent: _handleMessageInputKeyEvent,
-                            child: TextField(
-                              key: const Key('session-message-input'),
-                              controller: _controller,
-                              focusNode: _messageInputFocusNode,
-                              enabled: !isSessionBusy,
-                              maxLines: 4,
-                              minLines: 1,
-                              textInputAction: _isMobilePlatform
-                                  ? TextInputAction.newline
-                                  : null,
-                              decoration: InputDecoration(
-                                hintText: _isListening
-                                    ? context.l10n.voiceInputInProgress
-                                    : context.l10n.messageInputHint,
-                                filled: true,
-                                fillColor: deepSurface,
-                                suffixIcon: Padding(
-                                  padding: const EdgeInsetsDirectional.only(
-                                    start: AppSpacing.micro,
-                                    end: AppSpacing.compact,
-                                  ),
-                                  child: voiceButton,
-                                ),
-                                suffixIconConstraints: const BoxConstraints(
-                                  minWidth: 48,
-                                  minHeight: 44,
-                                ),
-                                contentPadding:
-                                    const EdgeInsetsDirectional.only(
-                                  start: AppSpacing.card,
-                                  end: AppSpacing.compact,
-                                  top: AppSpacing.stack,
-                                  bottom: AppSpacing.stack,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(
-                                    AppSpacing.radiusPanel,
-                                  ),
-                                  borderSide:
-                                      BorderSide(color: inputBorderColor),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(
-                                    AppSpacing.radiusPanel,
-                                  ),
-                                  borderSide:
-                                      BorderSide(color: inputBorderColor),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(
-                                    AppSpacing.radiusPanel,
-                                  ),
-                                  borderSide: BorderSide(
-                                    color: AppColors.primaryFor(brightness),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-        ),
-        if (!_voiceComposerMode) ...[
-          const SizedBox(width: AppSpacing.compact),
-          IconButton(
-            key: const Key('session-image-picker-button'),
-            tooltip: context.l10n.imageAttachment,
-            onPressed:
-                isSessionBusy || _pickingAttachments ? null : _pickAttachments,
-            style: IconButton.styleFrom(
-              backgroundColor: deepSurface,
-              foregroundColor: AppColors.textSoftFor(brightness),
-              disabledBackgroundColor: deepSurface,
-              disabledForegroundColor: AppColors.mutedFor(brightness),
-              side: BorderSide(color: outlineStrong),
-              minimumSize: const Size.square(44),
-              fixedSize: const Size.square(44),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-              ),
-            ),
-            icon: _pickingAttachments
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.attach_file_rounded, size: 20),
-          ),
-          const SizedBox(width: AppSpacing.compact),
-          IconButton(
+    final actionButtons = <Widget>[
+      IconButton(
+        key: const Key('session-image-picker-button'),
+        tooltip: context.l10n.imageAttachment,
+        onPressed:
+            isSessionBusy || _pickingAttachments ? null : _pickAttachments,
+        style: IconButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          foregroundColor: AppColors.textSoftFor(brightness),
+          disabledBackgroundColor: Colors.transparent,
+          disabledForegroundColor: AppColors.mutedFor(brightness),
+          minimumSize: const Size.square(32),
+          fixedSize: const Size.square(32),
+          padding: EdgeInsets.zero,
+          shape: const CircleBorder(),
+        ).copyWith(side: const WidgetStatePropertyAll(BorderSide.none)),
+        icon: _pickingAttachments
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.attach_file_rounded, size: 20),
+      ),
+      if (showVoiceButton) ...[
+        const SizedBox(width: AppSpacing.micro),
+        voiceButton,
+      ],
+      if (hasSendableDraft)
+        Padding(
+          padding: const EdgeInsetsDirectional.only(start: 2),
+          child: IconButton(
             key: const Key('session-send-button'),
             tooltip: context.l10n.send,
             onPressed: isSessionBusy ? null : _sendTextMessage,
             style: IconButton.styleFrom(
               backgroundColor: AppColors.primaryFor(brightness),
               foregroundColor: AppColors.onPrimaryFor(brightness),
-              disabledBackgroundColor: deepSurface,
+              disabledBackgroundColor: Colors.transparent,
               disabledForegroundColor: AppColors.mutedFor(brightness),
-              side: BorderSide(color: AppColors.primaryFor(brightness)),
-              minimumSize: const Size.square(44),
-              fixedSize: const Size.square(44),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-              ),
+              minimumSize: const Size.square(34),
+              fixedSize: const Size.square(34),
+              padding: EdgeInsets.zero,
+              shape: const CircleBorder(),
+            ).copyWith(side: const WidgetStatePropertyAll(BorderSide.none)),
+            icon: const Icon(
+              Icons.send_rounded,
+              size: 20,
             ),
-            icon: const Icon(Icons.send_rounded, size: 20),
+          ),
+        ),
+    ];
+    final messageInput = KeyedSubtree(
+      key: _composerTextFieldKey,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(
+            LogicalKeyboardKey.keyV,
+            control: true,
+          ): () => unawaited(_handlePasteShortcut()),
+          const SingleActivator(
+            LogicalKeyboardKey.keyV,
+            meta: true,
+          ): () => unawaited(_handlePasteShortcut()),
+        },
+        child: Focus(
+          onKeyEvent: _handleMessageInputKeyEvent,
+          child: TextField(
+            key: const Key('session-message-input'),
+            controller: _controller,
+            focusNode: _messageInputFocusNode,
+            enabled: !isSessionBusy,
+            maxLines: showExpandedComposer ? 4 : 1,
+            minLines: 1,
+            textInputAction: _isMobilePlatform ? TextInputAction.newline : null,
+            decoration: InputDecoration(
+              hintText: _isListening
+                  ? context.l10n.voiceInputInProgress
+                  : context.l10n.messageInputHint,
+              filled: false,
+              contentPadding: EdgeInsetsDirectional.only(
+                start: AppSpacing.card,
+                end: showExpandedComposer ? AppSpacing.card : AppSpacing.micro,
+                top: showExpandedComposer
+                    ? AppSpacing.stack
+                    : AppSpacing.compact,
+                bottom: showExpandedComposer
+                    ? AppSpacing.compact
+                    : AppSpacing.compact,
+              ),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
+            ),
+          ),
+        ),
+      ),
+    );
+    final textComposerSurface = SizedBox(
+      key: const Key('session-text-composer-surface'),
+      height: showExpandedComposer ? null : collapsedComposerHeight,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: deepSurface,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+          border: Border.all(color: inputBorderColor),
+        ),
+        child: Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(
+            0,
+            0,
+            AppSpacing.compact,
+            AppSpacing.micro,
+          ),
+          child: OverlayPortal(
+            controller: _composerSuggestionsOverlayController,
+            overlayChildBuilder: (context) => _buildComposerSuggestionsOverlay(
+              deepSurface,
+              outlineStrong,
+            ),
+            child: showExpandedComposer
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      messageInput,
+                      Padding(
+                        padding: const EdgeInsetsDirectional.only(
+                          start: AppSpacing.card,
+                        ),
+                        child: Row(
+                          children: [
+                            const Spacer(),
+                            ...actionButtons,
+                          ],
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(child: messageInput),
+                      ...actionButtons,
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    );
+    final composerContent = _voiceComposerMode
+        ? _buildHoldToTalkControl(
+            disabled: holdToTalkDisabled,
+            deepSurface: deepSurface,
+            outlineStrong: outlineStrong,
+          )
+        : textComposerSurface;
+
+    return Column(
+      key: const Key('session-message-composer'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_pendingAttachments.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.compact),
+            child: _buildPendingAttachmentStrip(
+              deepSurface: deepSurface,
+              outlineStrong: outlineStrong,
+            ),
+          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (showExpandedComposer)
+              const SizedBox.shrink()
+            else
+              voiceModeButton,
+            SizedBox(width: showExpandedComposer ? 0 : AppSpacing.compact),
+            Expanded(child: composerContent),
+          ],
+        ),
+        if (!_voiceComposerMode && _voiceHoldActive && _voiceHoldLifted) ...[
+          const SizedBox(height: AppSpacing.compact),
+          Row(
+            children: [
+              Expanded(
+                child: _VoiceReleaseTarget(
+                  key: const Key('session-voice-release-insert'),
+                  label: context.l10n.voiceHoldReleaseToText,
+                  icon: Icons.edit_note_rounded,
+                  selected:
+                      _voiceHoldReleaseAction() == _VoiceHoldAction.insert,
+                  selectedColor: AppColors.primaryFor(brightness),
+                  backgroundColor: deepSurface,
+                  borderColor: outlineStrong,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.compact),
+              Expanded(
+                child: _VoiceReleaseTarget(
+                  key: const Key('session-voice-release-cancel'),
+                  label: context.l10n.voiceHoldReleaseCancel,
+                  icon: Icons.close_rounded,
+                  selected:
+                      _voiceHoldReleaseAction() == _VoiceHoldAction.cancel,
+                  selectedColor: AppColors.errorTextFor(brightness),
+                  backgroundColor: deepSurface,
+                  borderColor: outlineStrong,
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (!_voiceComposerMode && _voiceHoldActive && !_voiceHoldLifted) ...[
+          const SizedBox(height: AppSpacing.micro),
+          Text(
+            holdStatusLabel ?? context.l10n.voiceHoldSlideUpHint,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.mutedSoftFor(brightness),
+                ),
+          ),
+          const SizedBox(height: AppSpacing.micro),
+          Text(
+            context.l10n.voiceHoldSlideUpHint,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.mutedSoftFor(brightness),
+                ),
+          ),
+        ] else if (!_voiceComposerMode &&
+            _voiceHoldActive &&
+            _voiceHoldLifted) ...[
+          const SizedBox(height: AppSpacing.micro),
+          Text(
+            holdStatusLabel ?? context.l10n.voiceHoldReleaseHint,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.mutedSoftFor(brightness),
+                ),
           ),
         ],
       ],
@@ -1555,72 +1667,95 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }) {
     final brightness = Theme.of(context).brightness;
     return SizedBox(
-      height: 72,
+      height: 100,
       child: ListView.separated(
         key: const Key('session-pending-image-strip'),
         scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.only(top: 6, right: 6),
         itemCount: _pendingAttachments.length,
         separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.compact),
         itemBuilder: (context, index) {
           final attachment = _pendingAttachments[index];
           return Container(
             key: ValueKey('session-pending-image-$index'),
-            width: 132,
-            padding: const EdgeInsets.all(AppSpacing.iconTight),
+            width: 136,
             decoration: BoxDecoration(
               color: deepSurface,
               borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
               border: Border.all(color: outlineStrong),
             ),
-            child: Row(
+            child: Stack(
+              clipBehavior: Clip.none,
               children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(
-                      AppSpacing.radiusControl,
-                    ),
-                    color: AppColors.panelFor(brightness),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: attachment.isImage
-                      ? Image.file(
-                          File(attachment.path),
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Icon(
-                            Icons.broken_image_outlined,
-                            color: AppColors.mutedFor(brightness),
-                            size: 18,
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+                    child: attachment.isImage
+                        ? Image.file(
+                            File(attachment.path),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: AppColors.panelFor(brightness),
+                              alignment: Alignment.center,
+                              child: Icon(
+                                Icons.broken_image_outlined,
+                                color: AppColors.mutedFor(brightness),
+                                size: 20,
+                              ),
+                            ),
+                          )
+                        : Container(
+                            color: AppColors.panelFor(brightness),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.compact,
+                              vertical: AppSpacing.compact,
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              attachment.fileName,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelMedium
+                                  ?.copyWith(
+                                    color: AppColors.textFor(brightness),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
                           ),
-                        )
-                      : Icon(
-                          Icons.insert_drive_file_outlined,
-                          color: AppColors.mutedFor(brightness),
-                          size: 20,
-                        ),
-                ),
-                const SizedBox(width: AppSpacing.iconTight),
-                Expanded(
-                  child: Text(
-                    attachment.fileName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: AppColors.textFor(brightness),
-                          fontWeight: FontWeight.w600,
-                        ),
                   ),
                 ),
-                IconButton(
-                  key: ValueKey('session-remove-pending-image-$index'),
-                  tooltip: context.l10n.close,
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => _removePendingAttachmentAt(index),
-                  icon: Icon(
-                    Icons.close_rounded,
-                    size: 18,
-                    color: AppColors.mutedSoftFor(brightness),
+                Positioned(
+                  top: -6,
+                  right: -6,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceFor(brightness).withValues(
+                        alpha: 0.92,
+                      ),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.outlineStrongFor(brightness),
+                      ),
+                    ),
+                    child: IconButton(
+                      key: ValueKey('session-remove-pending-image-$index'),
+                      tooltip: context.l10n.close,
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 28,
+                        height: 28,
+                      ),
+                      padding: EdgeInsets.zero,
+                      onPressed: () => _removePendingAttachmentAt(index),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: 16,
+                        color: AppColors.textFor(brightness),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -1629,34 +1764,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         },
       ),
     );
-  }
-
-  void _toggleVoiceComposerMode() {
-    if (_voiceHoldActive) {
-      unawaited(_finishHoldToTalk(null, cancelled: true));
-    }
-    final enablingVoiceMode = !_voiceComposerMode;
-    setState(() {
-      _voiceComposerMode = enablingVoiceMode;
-      _voiceHoldActive = false;
-      _voiceHoldLifted = false;
-      _voiceHoldGlobalPosition = null;
-    });
-    _syncComposerSuggestionsOverlay();
-    if (enablingVoiceMode && widget.enableSpeechServices && !_speechReady) {
-      unawaited(_ensureSpeechInitialized());
-    }
-    unawaited(_persistVoiceComposerMode(enablingVoiceMode));
-  }
-
-  Future<void> _persistVoiceComposerMode(bool enabled) async {
-    try {
-      await appSettingsController.save(
-        appSettingsController.settings.copyWith(voiceComposerMode: enabled),
-      );
-    } catch (error) {
-      debugPrint('[session] failed to persist voice composer mode: $error');
-    }
   }
 
   Future<void> _pickAttachments() async {
@@ -1714,6 +1821,34 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         }
       }
     });
+  }
+
+  void _toggleVoiceComposerMode() {
+    if (_voiceHoldActive) {
+      unawaited(_finishHoldToTalk(null, cancelled: true));
+    }
+    final enablingVoiceMode = !_voiceComposerMode;
+    setState(() {
+      _voiceComposerMode = enablingVoiceMode;
+      _voiceHoldActive = false;
+      _voiceHoldLifted = false;
+      _voiceHoldGlobalPosition = null;
+    });
+    _syncComposerSuggestionsOverlayAfterFrame();
+    if (enablingVoiceMode && widget.enableSpeechServices && !_speechReady) {
+      unawaited(_ensureSpeechInitialized());
+    }
+    unawaited(_persistVoiceComposerMode(enablingVoiceMode));
+  }
+
+  Future<void> _persistVoiceComposerMode(bool enabled) async {
+    try {
+      await appSettingsController.save(
+        appSettingsController.settings.copyWith(voiceComposerMode: enabled),
+      );
+    } catch (error) {
+      debugPrint('[session] failed to persist voice composer mode: $error');
+    }
   }
 
   Widget _buildHoldToTalkControl({
@@ -1780,6 +1915,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           ),
           const SizedBox(height: AppSpacing.compact),
         ],
+        if (_voiceHoldActive && !_voiceHoldLifted) ...[
+          Text(
+            context.l10n.voiceHoldSlideUpHint,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.mutedSoftFor(brightness),
+                ),
+          ),
+          const SizedBox(height: AppSpacing.micro),
+        ],
         GestureDetector(
           key: _holdToTalkButtonKey,
           behavior: HitTestBehavior.opaque,
@@ -1798,7 +1944,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           child: AnimatedContainer(
             key: const Key('session-hold-to-talk-button'),
             duration: const Duration(milliseconds: 120),
-            height: 44,
+            height: 48,
             width: double.infinity,
             decoration: BoxDecoration(
               color:
@@ -1843,17 +1989,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             ),
           ),
         ),
-        if (_voiceHoldActive && !_voiceHoldLifted) ...[
-          const SizedBox(height: AppSpacing.micro),
-          Text(
-            context.l10n.voiceHoldSlideUpHint,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.mutedSoftFor(brightness),
-                ),
-          ),
-        ],
       ],
     );
   }
@@ -2601,7 +2736,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final localState = _localMessageStates[message.id];
     final canRetry = localState?.state == _LocalMessageState.failed;
     final brightness = Theme.of(context).brightness;
-    final bubbleTextColor = AppColors.accentBlueOnFor(brightness);
+    final bubbleTextColor = AppColors.userMessageOnSurfaceFor(brightness);
     final imageReferences = extractMessageImageReferences(message.content);
     return Align(
       alignment: Alignment.centerRight,
@@ -2613,7 +2748,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           padding: AppSpacing.cardPadding,
           constraints: BoxConstraints(maxWidth: maxWidth),
           decoration: BoxDecoration(
-            color: AppColors.accentBlueFor(brightness),
+            color: AppColors.userMessageSurfaceFor(brightness),
             borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
           ),
           child: Column(
@@ -2623,6 +2758,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 message.content,
                 textColor: bubbleTextColor,
                 maxWidth: maxWidth,
+                shrinkToContent: imageReferences.isNotEmpty,
                 imageReferences: imageReferences,
                 imageAlignment: Alignment.centerRight,
                 imageWrapAlignment: WrapAlignment.end,
@@ -2755,9 +2891,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         padding: AppSpacing.cardPadding,
         constraints: BoxConstraints(maxWidth: maxWidth),
         decoration: BoxDecoration(
-          color: AppColors.panelDeepFor(brightness),
+          color: AppColors.assistantMessageSurfaceFor(brightness),
           borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-          border: Border.all(color: AppColors.outlineFor(brightness)),
+          border: Border.all(
+            color: AppColors.assistantMessageBorderFor(brightness),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2824,6 +2962,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     String content, {
     required Color textColor,
     required double maxWidth,
+    bool shrinkToContent = false,
     required List<MessageImageReference> imageReferences,
     required Alignment imageAlignment,
     required WrapAlignment imageWrapAlignment,
@@ -2901,6 +3040,47 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       ),
     );
 
+    Widget buildImageReferences() {
+      return Align(
+        alignment: imageAlignment,
+        child: Wrap(
+          spacing: AppSpacing.compact,
+          runSpacing: AppSpacing.compact,
+          alignment: imageWrapAlignment,
+          children: [
+            for (var index = 0; index < imageReferences.length; index += 1)
+              imageCardBuilder(imageReferences[index], index),
+          ],
+        ),
+      );
+    }
+
+    if (shrinkToContent && imageReferences.isNotEmpty) {
+      return IntrinsicWidth(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SelectionArea(
+              child: MarkdownBody(
+                data: content,
+                fitContent: true,
+                selectable: false,
+                shrinkWrap: true,
+                softLineBreak: true,
+                styleSheet: styleSheet,
+                syntaxHighlighter: _AssistantCodeSyntaxHighlighter(theme),
+                sizedImageBuilder: (_) => const SizedBox.shrink(),
+                onTapLink: (text, href, title) =>
+                    _handleAssistantMarkdownLinkTap(href),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.compact),
+            buildImageReferences(),
+          ],
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2920,18 +3100,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ),
         if (imageReferences.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.compact),
-          Align(
-            alignment: imageAlignment,
-            child: Wrap(
-              spacing: AppSpacing.compact,
-              runSpacing: AppSpacing.compact,
-              alignment: imageWrapAlignment,
-              children: [
-                for (var index = 0; index < imageReferences.length; index += 1)
-                  imageCardBuilder(imageReferences[index], index),
-              ],
-            ),
-          ),
+          buildImageReferences(),
         ],
       ],
     );
@@ -5180,17 +5349,36 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final text = widget.readClipboardText != null
         ? await widget.readClipboardText!()
         : (await Clipboard.getData(Clipboard.kTextPlain))?.text;
-    final attachments = _attachmentsFromPastedText(text);
-    if (!mounted || attachments.isEmpty) {
+    if (!mounted) {
       return;
     }
-    setState(() {
-      for (final attachment in attachments) {
-        if (!_pendingAttachments.any((item) => item.path == attachment.path)) {
-          _pendingAttachments.add(attachment);
-        }
-      }
-    });
+    _insertPastedTextAtSelection(text);
+  }
+
+  void _insertPastedTextAtSelection(String? pastedText) {
+    if (pastedText == null || pastedText.isEmpty) {
+      return;
+    }
+    final value = _controller.value;
+    final text = value.text;
+    final selection = value.selection;
+    final start = selection.isValid
+        ? math.min(selection.baseOffset, selection.extentOffset)
+        : text.length;
+    final end = selection.isValid
+        ? math.max(selection.baseOffset, selection.extentOffset)
+        : text.length;
+    final replaceStart = math.max(0, math.min(start, text.length));
+    final replaceEnd = math.max(replaceStart, math.min(end, text.length));
+    final updatedText =
+        '${text.substring(0, replaceStart)}$pastedText${text.substring(replaceEnd)}';
+    final caretOffset = replaceStart + pastedText.length;
+    _controller.value = TextEditingValue(
+      text: updatedText,
+      selection: TextSelection.collapsed(offset: caretOffset),
+    );
+    _composerDraftFromVoice = false;
+    _markNextComposerChangeAsVoice = false;
   }
 
   Future<List<String>> _readClipboardAttachmentPaths() async {
@@ -5363,6 +5551,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _speechError = null;
       if (localMessageId == null) {
         _controller.clear();
+        _composerDraftFromVoice = false;
+        _markNextComposerChangeAsVoice = false;
         _pendingAttachments.clear();
         _messages.add(localMessage);
       } else {
@@ -5499,9 +5689,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       final markdown = <String>[];
       for (final attachment in _pendingAttachments) {
         final uploaded = await _client.uploadFile(attachment.path);
-        final url = uploaded.absoluteUrl.isNotEmpty
-            ? uploaded.absoluteUrl
-            : uploaded.url;
+        final url = _attachmentMarkdownUrl(uploaded);
         final fileName = uploaded.fileName.isNotEmpty
             ? uploaded.fileName
             : attachment.fileName;
@@ -5521,23 +5709,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
   }
 
-  List<_PendingAttachment> _attachmentsFromPastedText(String? text) {
-    final trimmedText = text?.trim() ?? '';
-    if (trimmedText.isEmpty) {
-      return const <_PendingAttachment>[];
+  String _attachmentMarkdownUrl(BridgeUploadResponse uploaded) {
+    if (uploaded.localPath.isNotEmpty) {
+      return uploaded.localPath;
     }
-    final matches = RegExp(
-      r'(?:file://)?(?:/[^\s]+|[A-Za-z]:\\[^\s]+)',
-    ).allMatches(trimmedText);
-    return matches
-        .map((match) => match.group(0))
-        .whereType<String>()
-        .map((rawPath) {
-      final uri = Uri.tryParse(rawPath);
-      final path =
-          uri != null && uri.scheme == 'file' ? uri.toFilePath() : rawPath;
-      return _PendingAttachment.local(path);
-    }).toList(growable: false);
+    if (uploaded.absoluteUrl.isNotEmpty) {
+      return uploaded.absoluteUrl;
+    }
+    return uploaded.url;
   }
 
   String _escapeMarkdownLabel(String label) {
@@ -7054,7 +7233,14 @@ class _VoiceReleaseTarget extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final brightness = theme.brightness;
-    final color = selected ? selectedColor : AppColors.mutedSoftFor(brightness);
+    final effectiveSelectedColor = brightness == Brightness.light && selected
+        ? Color.alphaBlend(
+            selectedColor.withValues(alpha: 0.62),
+            AppColors.textFor(brightness),
+          )
+        : selectedColor;
+    final color =
+        selected ? effectiveSelectedColor : AppColors.textFor(brightness);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 120),
       height: 38,
@@ -7066,11 +7252,14 @@ class _VoiceReleaseTarget extends StatelessWidget {
                 selectedColor,
                 base: backgroundColor,
                 darkAlpha: 0.24,
-                lightAlpha: 0.14,
+                lightAlpha: 0.34,
               )
             : backgroundColor,
         borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-        border: Border.all(color: selected ? selectedColor : borderColor),
+        border: Border.all(
+          color: selected ? effectiveSelectedColor : borderColor,
+          width: selected ? 1.4 : 1,
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -7108,6 +7297,10 @@ class _ComposerVoiceButton extends StatefulWidget {
     required this.disabledIconColor,
     required this.focusColor,
     required this.onPressed,
+    required this.onLongPressStart,
+    required this.onLongPressMoveUpdate,
+    required this.onLongPressEnd,
+    required this.onLongPressCancel,
   });
 
   final String label;
@@ -7121,6 +7314,10 @@ class _ComposerVoiceButton extends StatefulWidget {
   final Color disabledIconColor;
   final Color focusColor;
   final VoidCallback onPressed;
+  final ValueChanged<LongPressStartDetails> onLongPressStart;
+  final ValueChanged<LongPressMoveUpdateDetails> onLongPressMoveUpdate;
+  final ValueChanged<LongPressEndDetails> onLongPressEnd;
+  final VoidCallback onLongPressCancel;
 
   @override
   State<_ComposerVoiceButton> createState() => _ComposerVoiceButtonState();
@@ -7174,6 +7371,13 @@ class _ComposerVoiceButtonState extends State<_ComposerVoiceButton> {
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: widget.disabled ? null : widget.onPressed,
+                onLongPressStart:
+                    widget.disabled ? null : widget.onLongPressStart,
+                onLongPressMoveUpdate:
+                    widget.disabled ? null : widget.onLongPressMoveUpdate,
+                onLongPressEnd: widget.disabled ? null : widget.onLongPressEnd,
+                onLongPressCancel:
+                    widget.disabled ? null : widget.onLongPressCancel,
                 child: Center(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
@@ -7735,21 +7939,6 @@ const _clipboardFileFormats = <_ClipboardFileFormatCandidate>[
   _ClipboardFileFormatCandidate(
     format: Formats.docx,
     extension: 'docx',
-    fallbackName: 'pasted-file',
-  ),
-  _ClipboardFileFormatCandidate(
-    format: Formats.plainTextFile,
-    extension: 'txt',
-    fallbackName: 'pasted-file',
-  ),
-  _ClipboardFileFormatCandidate(
-    format: Formats.csv,
-    extension: 'csv',
-    fallbackName: 'pasted-file',
-  ),
-  _ClipboardFileFormatCandidate(
-    format: Formats.json,
-    extension: 'json',
     fallbackName: 'pasted-file',
   ),
   _ClipboardFileFormatCandidate(

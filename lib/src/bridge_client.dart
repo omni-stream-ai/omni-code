@@ -1509,6 +1509,7 @@ class BridgeUploadResponse {
     required this.sizeBytes,
     required this.url,
     required this.absoluteUrl,
+    this.localPath = '',
   });
 
   factory BridgeUploadResponse.fromJson(Map<String, dynamic> json) {
@@ -1519,6 +1520,7 @@ class BridgeUploadResponse {
       sizeBytes: (json['size_bytes'] as num?)?.toInt() ?? 0,
       url: json['url'] as String? ?? '',
       absoluteUrl: json['absolute_url'] as String? ?? '',
+      localPath: json['local_path'] as String? ?? '',
     );
   }
 
@@ -1528,6 +1530,7 @@ class BridgeUploadResponse {
   final int sizeBytes;
   final String url;
   final String absoluteUrl;
+  final String localPath;
 }
 
 class SendMessageResult {

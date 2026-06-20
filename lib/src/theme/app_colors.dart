@@ -160,6 +160,23 @@ class AppColors {
   static Color accentBlueOnFor(Brightness brightness) =>
       brightness == Brightness.dark ? darkPrimaryOn : Colors.white;
 
+  static Color userMessageSurfaceFor(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? const Color(0xFF2F7D99)
+          : const Color(0xFF1E6EDB);
+
+  static Color userMessageOnSurfaceFor(Brightness brightness) => Colors.white;
+
+  static Color assistantMessageSurfaceFor(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? const Color(0xFF121A22)
+          : const Color(0xFFEEF3F8);
+
+  static Color assistantMessageBorderFor(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? const Color(0xFF2B3947)
+          : const Color(0xFFC4CFDA);
+
   static Color accentPurpleFor(Brightness brightness) =>
       brightness == Brightness.dark ? darkAccentPurple : lightAccentPurple;
 
