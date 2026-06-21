@@ -6222,6 +6222,53 @@ void main() {
     expect(patchBodies.single['reasoning_effort'], 'high');
   });
 
+  testWidgets('session reasoning effort selector only exposes common efforts',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-reasoning-effort-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('Default'), findsWidgets);
+    expect(find.text('Low'), findsOneWidget);
+    expect(find.text('Medium'), findsOneWidget);
+    expect(find.text('High'), findsOneWidget);
+    expect(find.text('Xhigh'), findsNothing);
+    expect(find.text('Max'), findsNothing);
+  });
+
   testWidgets('session reasoning effort selector can clear back to default',
       (tester) async {
     final patchBodies = <Map<String, dynamic>>[];
@@ -6272,6 +6319,59 @@ void main() {
     expect(patchBodies, hasLength(1));
     expect(patchBodies.single.containsKey('reasoning_effort'), isTrue);
     expect(patchBodies.single['reasoning_effort'], isNull);
+  });
+
+  testWidgets('clearing reasoning effort updates cached session summary',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'PATCH' &&
+            request.url.path == '/sessions/session-1') {
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+    client.debugSeedSessions([
+      _session(reasoningEffort: ReasoningEffort.high),
+    ]);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(reasoningEffort: ReasoningEffort.high),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-reasoning-effort-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('Default').last);
+    await tester.pump();
+
+    final cached = client.peekSessions();
+    expect(cached, isNotNull);
+    expect(cached!.single.reasoningEffort, isNull);
   });
 
   testWidgets('approval resolved does not show approval granted banner',

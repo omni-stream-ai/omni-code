@@ -137,6 +137,12 @@ enum ReasoningEffort {
   final String apiValue;
 }
 
+const selectableReasoningEfforts = [
+  ReasoningEffort.low,
+  ReasoningEffort.medium,
+  ReasoningEffort.high,
+];
+
 enum ApprovalChoice {
   accept,
   acceptForSession,

@@ -1104,6 +1104,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
       setState(() {
         _session = detail.session;
+        _overrideProviderId = detail.session.providerId;
+        _overrideReasoningEffort = detail.session.reasoningEffort;
         _pendingApproval = detail.session.pendingApproval;
         _gitStatus = detail.gitStatus;
         _reconcileSubmittedApprovalState();
@@ -2245,14 +2247,24 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             value == _defaultProviderMenuValue ? null : value;
         setState(() {
           _overrideProviderId = nextValue;
+          _session = _session.copyWith(
+            providerId: nextValue,
+            clearProviderId: nextValue == null,
+          );
         });
+        _syncSessionSummaryCache();
         unawaited(
           _client.updateSessionProvider(_session.id, nextValue).catchError((e) {
             debugPrint('[provider] updateSessionProvider failed: $e');
             if (!mounted) return;
             setState(() {
               _overrideProviderId = previous;
+              _session = _session.copyWith(
+                providerId: previous,
+                clearProviderId: previous == null,
+              );
             });
+            _syncSessionSummaryCache();
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(context.l10n.providerOverrideFailed),
@@ -2379,6 +2391,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             clearReasoningEffort: nextValue == null,
           );
         });
+        _syncSessionSummaryCache();
         unawaited(
           _client
               .updateSessionDefaults(
@@ -2396,6 +2409,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     clearReasoningEffort: previous == null,
                   );
                 });
+                _syncSessionSummaryCache();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(context.l10n.reasoningEffortOverrideFailed),
@@ -2423,7 +2437,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             ],
           ),
         ),
-        ...ReasoningEffort.values.map(
+        ...selectableReasoningEfforts.map(
           (effort) => PopupMenuItem<Object>(
             value: effort,
             child: Row(

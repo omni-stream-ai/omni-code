@@ -359,7 +359,7 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
                   value: null,
                   child: Text(context.l10n.reasoningEffortDefault),
                 ),
-                ...ReasoningEffort.values.map(
+                ...selectableReasoningEfforts.map(
                   (effort) => DropdownMenuItem<ReasoningEffort?>(
                     value: effort,
                     child: Text(_reasoningEffortLabel(context, effort)),
