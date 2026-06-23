@@ -235,6 +235,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get retry => '重试';
 
   @override
+  String get editMessage => '编辑';
+
+  @override
+  String get withdrawMessage => '撤回';
+
+  @override
   String projectCount(int count) {
     return '$count 个会话';
   }

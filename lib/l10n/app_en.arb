@@ -113,6 +113,8 @@
   "createNewProject": "Create new project",
   "newProject": "New project",
   "retry": "Retry",
+  "editMessage": "Edit",
+  "withdrawMessage": "Withdraw",
   "projectCount": "{count} sessions",
   "@projectCount": {
     "placeholders": {

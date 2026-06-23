@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -93,8 +94,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   );
   final _composerTextFieldKey = GlobalKey();
   final _composerSuggestionsOverlayController = OverlayPortalController();
+  final _imagePickerFocusNode = FocusNode(
+    debugLabel: 'session-image-picker-focus',
+  );
+  final _sendButtonFocusNode = FocusNode(
+    debugLabel: 'session-send-button-focus',
+  );
   final _stopReplyFocusNode = FocusNode(
     debugLabel: 'session-stop-reply-focus',
+  );
+  final _voiceInputButtonFocusNode = FocusNode(
+    debugLabel: 'session-voice-input-button-focus',
   );
   final _holdToTalkButtonKey = GlobalKey();
   final _approvalPrimaryFocusNode = FocusNode(
@@ -119,6 +129,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Timer? _callModeSpeechHintTimer;
   Timer? _refreshSessionSummaryDebounce;
   bool _refreshSessionSummaryInFlight = false;
+  bool _dispatchingQueuedLocalMessage = false;
   bool _returnFocusToComposerAfterReply = false;
   bool _composerSuggestionsOverlayShown = false;
   bool _pickingAttachments = false;
@@ -461,13 +472,65 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   void _syncComposerFocusForSessionStatus(SessionStatus status) {
-    if (status == SessionStatus.running) {
-      _requestStopReplyFocusAfterFrame();
-    } else if (status == SessionStatus.idle ||
+    if (status == SessionStatus.idle ||
         status == SessionStatus.interrupted) {
       _requestComposerFocusAfterFrame(consumeReturnRequest: true);
+      unawaited(_dispatchQueuedLocalMessageIfPossible());
     }
   }
+
+  Widget _buildComposerActionIconButton({
+    required FocusNode focusNode,
+    required Key buttonKey,
+    required String? tooltip,
+    required VoidCallback? onPressed,
+    required ButtonStyle style,
+    required Widget icon,
+  }) {
+    return ListenableBuilder(
+      listenable: focusNode,
+      builder: (context, _) {
+        final brightness = Theme.of(context).brightness;
+        final isFocused = focusNode.hasFocus;
+        final focusColor = AppColors.primaryFor(brightness).withValues(
+          alpha: brightness == Brightness.dark ? 0.2 : 0.14,
+        );
+        final focusOutline = AppColors.primaryFor(brightness).withValues(
+          alpha: brightness == Brightness.dark ? 0.72 : 0.34,
+        );
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: isFocused ? focusColor : Colors.transparent,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isFocused ? focusOutline : Colors.transparent,
+            ),
+          ),
+          child: TextButton(
+            key: buttonKey,
+            focusNode: focusNode,
+            onPressed: onPressed,
+            style: style,
+            child: Tooltip(
+              message: tooltip ?? '',
+              child: icon,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  bool get _composerActionButtonsHaveFocus =>
+      _imagePickerFocusNode.hasFocus ||
+      _sendButtonFocusNode.hasFocus ||
+      _stopReplyFocusNode.hasFocus ||
+      _voiceInputButtonFocusNode.hasFocus;
+
+  bool get _composerHasInteractiveFocus =>
+      _messageInputFocusNode.hasFocus || _composerActionButtonsHaveFocus;
 
   @override
   void initState() {
@@ -491,6 +554,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _creatingSession = widget.sessionInitializer != null;
     _controller.addListener(_handleComposerTextChanged);
     _messageInputFocusNode.addListener(_handleComposerFocusChanged);
+    _imagePickerFocusNode.addListener(_handleComposerFocusChanged);
+    _sendButtonFocusNode.addListener(_handleComposerFocusChanged);
+    _stopReplyFocusNode.addListener(_handleComposerFocusChanged);
+    _voiceInputButtonFocusNode.addListener(_handleComposerFocusChanged);
     if (widget.enableSpeechServices) {
       _initializeSpeech();
       _initializeTts();
@@ -530,9 +597,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _ttsService.stop();
     _controller.removeListener(_handleComposerTextChanged);
     _messageInputFocusNode.removeListener(_handleComposerFocusChanged);
+    _imagePickerFocusNode.removeListener(_handleComposerFocusChanged);
+    _sendButtonFocusNode.removeListener(_handleComposerFocusChanged);
+    _stopReplyFocusNode.removeListener(_handleComposerFocusChanged);
+    _voiceInputButtonFocusNode.removeListener(_handleComposerFocusChanged);
     _controller.dispose();
     _messageInputFocusNode.dispose();
+    _imagePickerFocusNode.dispose();
+    _sendButtonFocusNode.dispose();
     _stopReplyFocusNode.dispose();
+    _voiceInputButtonFocusNode.dispose();
     _approvalPrimaryFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -714,9 +788,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _showCommandSuggestions || _showFileSuggestions;
 
   bool get _composerSuggestionsOverlayAvailable =>
-      _session.status != SessionStatus.running &&
       _session.status != SessionStatus.awaitingApproval &&
       _pendingApproval == null;
+
+  bool get _hasPendingLocalMessage => _localMessageStates.values.any(
+        (draft) => draft.state == _LocalMessageState.pending,
+      );
 
   List<FileCompletionItem> get _matchingFileCompletions {
     final query = _fileCompletionQuery ?? '';
@@ -1145,8 +1222,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return _buildCallModeScaffold(context);
     }
     final theme = Theme.of(context);
-    final isSessionBusy =
-        _session.status == SessionStatus.running || _uploadingAttachments;
+    final isSessionBusy = _uploadingAttachments;
+    final isWaitingForBridgeReply = _session.status == SessionStatus.running;
     final hasActiveTurn = _session.status == SessionStatus.running ||
         _session.status == SessionStatus.awaitingApproval ||
         _pendingApproval != null;
@@ -1219,6 +1296,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             canCancelReply: canCancelReply,
             hasActiveTurn: hasActiveTurn,
             isSessionBusy: isSessionBusy,
+            isWaitingForBridgeReply: isWaitingForBridgeReply,
             showVoiceInputUnavailableTooltip: showVoiceInputUnavailableTooltip,
             systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
           ),
@@ -1231,6 +1309,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required bool canCancelReply,
     required bool hasActiveTurn,
     required bool isSessionBusy,
+    required bool isWaitingForBridgeReply,
     required bool showVoiceInputUnavailableTooltip,
     required String? systemSpeechUnavailableMessage,
   }) {
@@ -1253,87 +1332,34 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: _composerMaxWidth),
-          child: hasActiveTurn
-              ? _buildActiveTurnComposer(
-                  canCancelReply: canCancelReply,
-                  deepSurface: deepSurface,
-                  outlineStrong: outlineStrong,
-                )
-              : _buildIdleComposer(
-                  isSessionBusy: isSessionBusy,
-                  showVoiceInputUnavailableTooltip:
-                      showVoiceInputUnavailableTooltip,
-                  systemSpeechUnavailableMessage:
-                      systemSpeechUnavailableMessage,
-                  deepSurface: deepSurface,
-                  outlineStrong: outlineStrong,
-                ),
+          child: _buildIdleComposer(
+            isSessionBusy: isSessionBusy,
+            isWaitingForBridgeReply: isWaitingForBridgeReply,
+            showVoiceInputUnavailableTooltip: showVoiceInputUnavailableTooltip,
+            systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
+            deepSurface: deepSurface,
+            outlineStrong: outlineStrong,
+            canCancelReply: canCancelReply,
+            hasActiveTurn: hasActiveTurn,
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildActiveTurnComposer({
-    required bool canCancelReply,
-    required Color deepSurface,
-    required Color outlineStrong,
-  }) {
-    final brightness = Theme.of(context).brightness;
-    return Container(
-      key: const Key('session-active-composer'),
-      padding: const EdgeInsets.all(AppSpacing.compact),
-      decoration: BoxDecoration(
-        color: deepSurface,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-        border: Border.all(color: outlineStrong),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              context.l10n.sessionStillRunning,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.mutedSoftFor(brightness),
-                  ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.compact),
-          OutlinedButton.icon(
-            key: const Key('session-stop-reply-button'),
-            focusNode: _stopReplyFocusNode,
-            onPressed: canCancelReply ? _cancelReply : null,
-            icon: _cancellingReply
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.stop_rounded, size: 18),
-            label: Text(context.l10n.stopReply),
-            style: OutlinedButton.styleFrom(
-              backgroundColor: AppColors.warningSurfaceFor(brightness),
-              foregroundColor: AppColors.warningTextFor(brightness),
-              side: BorderSide(color: AppColors.warningBorderFor(brightness)),
-              minimumSize: const Size(0, 40),
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.tileX),
-            ),
-          ),
-        ],
       ),
     );
   }
 
   Widget _buildIdleComposer({
     required bool isSessionBusy,
+    required bool isWaitingForBridgeReply,
     required bool showVoiceInputUnavailableTooltip,
     required String? systemSpeechUnavailableMessage,
     required Color deepSurface,
     required Color outlineStrong,
+    required bool canCancelReply,
+    required bool hasActiveTurn,
   }) {
     final brightness = Theme.of(context).brightness;
     final voiceButtonDisabled = isSessionBusy ||
+        isWaitingForBridgeReply ||
         _voiceInputStarting ||
         (_systemAsrUnavailable && !_isListening);
     final voiceLabel =
@@ -1343,14 +1369,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final activeVoiceIconColor = brightness == Brightness.dark
         ? AppColors.onPrimaryFor(brightness)
         : AppColors.textFor(brightness);
-    final holdToTalkDisabled =
-        isSessionBusy || (_voiceInputStarting && !_voiceHoldActive);
+    final holdToTalkDisabled = isSessionBusy ||
+        isWaitingForBridgeReply ||
+        (_voiceInputStarting && !_voiceHoldActive);
     const collapsedComposerHeight = 48.0;
     final hasSendableDraft =
         _controller.text.trim().isNotEmpty || _pendingAttachments.isNotEmpty;
     final showVoiceButton = !hasSendableDraft || _composerDraftFromVoice;
     final showExpandedComposer = !_voiceComposerMode &&
-        (_messageInputFocusNode.hasFocus ||
+        (_composerHasInteractiveFocus ||
             hasSendableDraft ||
             _pendingAttachments.isNotEmpty ||
             _voiceInputStarting ||
@@ -1371,6 +1398,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         key: _holdToTalkButtonKey,
         child: _ComposerVoiceButton(
           key: const Key('session-voice-input-button'),
+          focusNode: _voiceInputButtonFocusNode,
           label: voiceLabel,
           disabled: voiceButtonDisabled,
           isListening: _isListening,
@@ -1403,7 +1431,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       child: IconButton(
         key: const Key('session-voice-mode-toggle'),
         tooltip: _voiceComposerMode ? context.l10n.keyboardInput : voiceLabel,
-        onPressed: isSessionBusy ? null : _toggleVoiceComposerMode,
+        onPressed:
+            (isSessionBusy || isWaitingForBridgeReply) ? null : _toggleVoiceComposerMode,
         style: IconButton.styleFrom(
           backgroundColor: deepSurface,
           foregroundColor: AppColors.textSoftFor(brightness),
@@ -1422,29 +1451,66 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       ),
     );
     final actionButtons = <Widget>[
-      IconButton(
-        key: const Key('session-image-picker-button'),
-        tooltip: context.l10n.imageAttachment,
-        onPressed:
-            isSessionBusy || _pickingAttachments ? null : _pickAttachments,
-        style: IconButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          foregroundColor: AppColors.textSoftFor(brightness),
-          disabledBackgroundColor: Colors.transparent,
-          disabledForegroundColor: AppColors.mutedFor(brightness),
-          minimumSize: const Size.square(32),
-          fixedSize: const Size.square(32),
-          padding: EdgeInsets.zero,
-          shape: const CircleBorder(),
-        ).copyWith(side: const WidgetStatePropertyAll(BorderSide.none)),
-        icon: _pickingAttachments
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.attach_file_rounded, size: 20),
+      FocusTraversalOrder(
+        order: const NumericFocusOrder(1),
+        child: _buildComposerActionIconButton(
+          focusNode: _imagePickerFocusNode,
+          buttonKey: const Key('session-image-picker-button'),
+          tooltip: context.l10n.imageAttachment,
+          onPressed:
+              isSessionBusy || isWaitingForBridgeReply || _pickingAttachments
+                  ? null
+                  : _pickAttachments,
+          style: TextButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            foregroundColor: AppColors.textSoftFor(brightness),
+            disabledForegroundColor: AppColors.mutedFor(brightness),
+            minimumSize: const Size.square(32),
+            fixedSize: const Size.square(32),
+            padding: EdgeInsets.zero,
+            shape: const CircleBorder(),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          icon: _pickingAttachments
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.attach_file_rounded, size: 20),
+        ),
       ),
+      if (hasActiveTurn) ...[
+        const SizedBox(width: AppSpacing.micro),
+        FocusTraversalOrder(
+          order: const NumericFocusOrder(2),
+          child: _buildComposerActionIconButton(
+            focusNode: _stopReplyFocusNode,
+            buttonKey: const Key('session-stop-reply-button'),
+            tooltip: context.l10n.stopReply,
+            onPressed: canCancelReply ? _cancelReply : null,
+            style: TextButton.styleFrom(
+              backgroundColor: AppColors.warningTextFor(brightness).withValues(
+                alpha: brightness == Brightness.dark ? 0.2 : 0.12,
+              ),
+              foregroundColor: AppColors.warningTextFor(brightness),
+              disabledForegroundColor: AppColors.mutedFor(brightness),
+              minimumSize: const Size.square(32),
+              fixedSize: const Size.square(32),
+              padding: EdgeInsets.zero,
+              shape: const CircleBorder(),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            icon: _cancellingReply
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.stop_rounded, size: 20),
+          ),
+        ),
+      ],
       if (showVoiceButton) ...[
         const SizedBox(width: AppSpacing.micro),
         voiceButton,
@@ -1452,23 +1518,27 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       if (hasSendableDraft)
         Padding(
           padding: const EdgeInsetsDirectional.only(start: 2),
-          child: IconButton(
-            key: const Key('session-send-button'),
-            tooltip: context.l10n.send,
-            onPressed: isSessionBusy ? null : _sendTextMessage,
-            style: IconButton.styleFrom(
-              backgroundColor: AppColors.primaryFor(brightness),
-              foregroundColor: AppColors.onPrimaryFor(brightness),
-              disabledBackgroundColor: Colors.transparent,
-              disabledForegroundColor: AppColors.mutedFor(brightness),
-              minimumSize: const Size.square(34),
-              fixedSize: const Size.square(34),
-              padding: EdgeInsets.zero,
-              shape: const CircleBorder(),
-            ).copyWith(side: const WidgetStatePropertyAll(BorderSide.none)),
-            icon: const Icon(
-              Icons.send_rounded,
-              size: 20,
+          child: FocusTraversalOrder(
+            order: NumericFocusOrder(hasActiveTurn ? 4 : 3),
+            child: _buildComposerActionIconButton(
+              focusNode: _sendButtonFocusNode,
+              buttonKey: const Key('session-send-button'),
+              tooltip: context.l10n.send,
+              onPressed: isSessionBusy ? null : _sendTextMessage,
+              style: TextButton.styleFrom(
+                backgroundColor: AppColors.primaryFor(brightness),
+                foregroundColor: AppColors.onPrimaryFor(brightness),
+                disabledForegroundColor: AppColors.mutedFor(brightness),
+                minimumSize: const Size.square(34),
+                fixedSize: const Size.square(34),
+                padding: EdgeInsets.zero,
+                shape: const CircleBorder(),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              icon: const Icon(
+                Icons.send_rounded,
+                size: 20,
+              ),
             ),
           ),
         ),
@@ -1551,11 +1621,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                         padding: const EdgeInsetsDirectional.only(
                           start: AppSpacing.card,
                         ),
-                        child: Row(
-                          children: [
-                            const Spacer(),
-                            ...actionButtons,
-                          ],
+                        child: FocusTraversalGroup(
+                          policy: OrderedTraversalPolicy(),
+                          child: Row(
+                            children: [
+                              const Spacer(),
+                              ...actionButtons,
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -1563,7 +1636,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 : Row(
                     children: [
                       Expanded(child: messageInput),
-                      ...actionButtons,
+                      FocusTraversalGroup(
+                        policy: OrderedTraversalPolicy(),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: actionButtons,
+                        ),
+                      ),
                     ],
                   ),
           ),
@@ -2892,56 +2971,66 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Widget _buildUserMessage(ChatMessage message, {required double maxWidth}) {
     final localState = _localMessageStates[message.id];
     final canRetry = localState?.state == _LocalMessageState.failed;
+    final canRestoreQueued = localState?.state == _LocalMessageState.queued;
     final brightness = Theme.of(context).brightness;
     final bubbleTextColor = AppColors.userMessageOnSurfaceFor(brightness);
     final imageReferences = extractMessageImageReferences(message.content);
+    final bubble = Container(
+      key: ValueKey('user-message-bubble-${message.id}'),
+      margin: const EdgeInsets.only(bottom: AppSpacing.stack),
+      padding: AppSpacing.cardPadding,
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      decoration: BoxDecoration(
+        color: AppColors.userMessageSurfaceFor(brightness),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildMarkdownMessageBody(
+            message.content,
+            textColor: bubbleTextColor,
+            maxWidth: maxWidth,
+            shrinkToContent: imageReferences.isNotEmpty,
+            imageReferences: imageReferences,
+            imageAlignment: Alignment.centerRight,
+            imageWrapAlignment: WrapAlignment.end,
+            imageCardBuilder: (reference, index) => _buildUserImageCard(
+              reference,
+              messageId: message.id,
+              imageReferences: imageReferences,
+              imageIndex: index,
+              textColor: bubbleTextColor,
+            ),
+          ),
+          if (localState != null) ...[
+            const SizedBox(height: AppSpacing.compact),
+            Text(
+              localState.label(context),
+              style: TextStyle(
+                fontSize: 11,
+                color: localState.state == _LocalMessageState.failed
+                    ? AppColors.errorTextFor(brightness)
+                    : bubbleTextColor.withValues(alpha: 0.78),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
     return Align(
       alignment: Alignment.centerRight,
-      child: GestureDetector(
-        onTap: canRetry ? () => _retryLocalMessage(message.id) : null,
-        child: Container(
-          key: ValueKey('user-message-bubble-${message.id}'),
-          margin: const EdgeInsets.only(bottom: AppSpacing.stack),
-          padding: AppSpacing.cardPadding,
-          constraints: BoxConstraints(maxWidth: maxWidth),
-          decoration: BoxDecoration(
-            color: AppColors.userMessageSurfaceFor(brightness),
-            borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildMarkdownMessageBody(
-                message.content,
-                textColor: bubbleTextColor,
-                maxWidth: maxWidth,
-                shrinkToContent: imageReferences.isNotEmpty,
-                imageReferences: imageReferences,
-                imageAlignment: Alignment.centerRight,
-                imageWrapAlignment: WrapAlignment.end,
-                imageCardBuilder: (reference, index) => _buildUserImageCard(
-                  reference,
-                  messageId: message.id,
-                  imageReferences: imageReferences,
-                  imageIndex: index,
-                  textColor: bubbleTextColor,
-                ),
-              ),
-              if (localState != null) ...[
-                const SizedBox(height: AppSpacing.compact),
-                Text(
-                  localState.label(context),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: localState.state == _LocalMessageState.failed
-                        ? AppColors.errorTextFor(brightness)
-                        : bubbleTextColor.withValues(alpha: 0.78),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
+      child: _UserMessageBubble(
+        bubble: bubble,
+        showActions: canRestoreQueued || canRetry,
+        hoverKey: ValueKey('user-message-hover-${message.id}'),
+        onTapBubble:
+            canRestoreQueued || canRetry ? () => _retryLocalMessage(message.id) : null,
+        onWithdraw:
+            canRestoreQueued ? () => _withdrawQueuedMessage(message.id) : null,
+        onEdit:
+            canRestoreQueued ? () => _editQueuedMessage(message.id) : null,
+        onRetry: canRetry ? () => _retryLocalMessage(message.id) : null,
       ),
     );
   }
@@ -2952,66 +3041,112 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required VoidCallback onTap,
   }) {
     final brightness = Theme.of(context).brightness;
-    final baseSurface = AppColors.panelDeepFor(brightness);
+    final baseSurface = AppColors.assistantMessageSurfaceFor(brightness);
     final backgroundColor = highlighted
         ? AppColors.tintSurfaceFor(
             brightness,
             AppColors.signalFor(brightness),
             base: baseSurface,
-            darkAlpha: 0.30,
-            lightAlpha: 0.18,
+            darkAlpha: 0.18,
+            lightAlpha: 0.12,
           )
-        : baseSurface;
+        : baseSurface.withValues(
+            alpha: brightness == Brightness.dark ? 0.92 : 0.96,
+          );
     final borderColor = highlighted
         ? AppColors.tintBorderFor(
             brightness,
             AppColors.signalFor(brightness),
             base: baseSurface,
-            darkAlpha: 0.56,
-            lightAlpha: 0.30,
+            darkAlpha: 0.38,
+            lightAlpha: 0.22,
           )
-        : AppColors.outlineStrongFor(brightness);
-    final labelColor = highlighted
-        ? AppColors.textFor(brightness)
+        : AppColors.assistantMessageBorderFor(brightness).withValues(
+            alpha: brightness == Brightness.dark ? 0.92 : 0.84,
+          );
+    final iconColor = highlighted
+        ? AppColors.signalFor(brightness)
         : AppColors.mutedSoftFor(brightness);
+    final countBackground = highlighted
+        ? AppColors.signalFor(brightness).withValues(
+            alpha: brightness == Brightness.dark ? 0.16 : 0.12,
+          )
+        : AppColors.panelDeepFor(brightness).withValues(
+            alpha: brightness == Brightness.dark ? 0.84 : 0.08,
+          );
     final countColor = highlighted
-        ? AppColors.textSoftFor(brightness)
+        ? AppColors.textFor(brightness)
         : AppColors.mutedFor(brightness);
 
     return Align(
       alignment: Alignment.centerLeft,
       child: Padding(
         padding: const EdgeInsets.only(bottom: AppSpacing.compact),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.compact,
-                vertical: AppSpacing.iconTight,
-              ),
-              decoration: BoxDecoration(
-                color: backgroundColor,
-                borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
-                border: Border.all(color: borderColor),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.build_outlined, size: 12, color: labelColor),
-                  const SizedBox(width: AppSpacing.micro),
-                  Text(
-                    context.l10n.toolActivity,
-                    style: TextStyle(
-                      color: labelColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+        child: _ToolEntryChip(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+          backgroundColor: backgroundColor,
+          borderColor: borderColor,
+          hoverColor: highlighted
+              ? AppColors.tintSurfaceFor(
+                  brightness,
+                  AppColors.signalFor(brightness),
+                  base: baseSurface,
+                  darkAlpha: 0.24,
+                  lightAlpha: 0.16,
+                )
+              : baseSurface.withValues(
+                  alpha: brightness == Brightness.dark ? 1 : 1,
+                ),
+          hoverBorderColor: highlighted
+              ? AppColors.tintBorderFor(
+                  brightness,
+                  AppColors.signalFor(brightness),
+                  base: baseSurface,
+                  darkAlpha: 0.48,
+                  lightAlpha: 0.28,
+                )
+              : AppColors.outlineStrongFor(brightness),
+          shadowColor: Colors.black.withValues(
+            alpha: brightness == Brightness.dark ? 0.10 : 0.03,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.iconTight,
+              vertical: 4,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 17,
+                  height: 17,
+                  decoration: BoxDecoration(
+                    color: AppColors.panelDeepFor(brightness).withValues(
+                      alpha: brightness == Brightness.dark ? 0.44 : 0.06,
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.build_outlined,
+                    size: 10,
+                    color: iconColor,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1.5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: countBackground,
+                    borderRadius: BorderRadius.circular(
+                      AppSpacing.radiusPill,
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.micro),
-                  Text(
+                  child: Text(
                     count > 99 ? '99+' : '$count',
                     style: TextStyle(
                       color: countColor,
@@ -3019,8 +3154,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -5418,6 +5553,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_isMobilePlatform) {
       return KeyEventResult.ignored;
     }
+    final isTabKey = event.logicalKey == LogicalKeyboardKey.tab;
+    if (event is KeyDownEvent && isTabKey) {
+      if (HardwareKeyboard.instance.isShiftPressed) {
+        return KeyEventResult.ignored;
+      }
+      final nextComposerNode = _imagePickerFocusNode;
+      nextComposerNode.requestFocus();
+      return KeyEventResult.handled;
+    }
     final commandSuggestions = _matchingCommandSuggestions;
     final isArrowDown = event.logicalKey == LogicalKeyboardKey.arrowDown;
     final isArrowUp = event.logicalKey == LogicalKeyboardKey.arrowUp;
@@ -5635,12 +5779,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       });
       return;
     }
-    if (_session.status == SessionStatus.running) {
-      setState(() {
-        _speechError = context.l10n.sessionStillRunning;
-      });
-      return;
-    }
     if (_uploadingAttachments) {
       return;
     }
@@ -5670,7 +5808,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final inputMode = _speechStatus == context.l10n.voiceTranscriptionComplete
         ? 'voice'
         : 'text';
-    await _submitLocalMessage(content, inputMode: inputMode);
+    await _enqueueOrSubmitLocalMessage(content, inputMode: inputMode);
   }
 
   Future<void> _retryLocalMessage(String messageId) async {
@@ -5682,11 +5820,140 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (draft == null || message == null) {
       return;
     }
+    if (draft.state == _LocalMessageState.queued) {
+      _editQueuedMessage(messageId);
+      return;
+    }
     await _submitLocalMessage(
       message.content,
       inputMode: draft.inputMode,
       localMessageId: messageId,
     );
+  }
+
+  Future<void> _enqueueOrSubmitLocalMessage(
+    String content, {
+    required String inputMode,
+  }) async {
+    final status = _session.status;
+    final shouldQueue = status == SessionStatus.running ||
+        status == SessionStatus.awaitingApproval ||
+        _pendingApproval != null ||
+        _hasPendingLocalMessage;
+    if (shouldQueue) {
+      _queueLocalMessage(content, inputMode: inputMode);
+      return;
+    }
+    await _submitLocalMessage(content, inputMode: inputMode);
+  }
+
+  void _queueLocalMessage(String content, {required String inputMode}) {
+    final previousTurnCount = _allTurns.length;
+    final messageId = 'local-${DateTime.now().microsecondsSinceEpoch}';
+    final localMessage = ChatMessage(
+      id: messageId,
+      sessionId: _session.id,
+      role: MessageRole.user,
+      content: content,
+      createdAt: DateTime.now(),
+    );
+    setState(() {
+      _speechError = null;
+      _controller.clear();
+      _composerDraftFromVoice = false;
+      _markNextComposerChangeAsVoice = false;
+      _pendingAttachments.clear();
+      _messages.add(localMessage);
+      _localMessageStates[messageId] = _LocalMessageDraft(
+        state: _LocalMessageState.queued,
+        inputMode: inputMode,
+      );
+      _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
+    });
+    _jumpToBottom();
+    _requestComposerFocusAfterFrame(consumeReturnRequest: false);
+  }
+
+  Future<void> _dispatchQueuedLocalMessageIfPossible() async {
+    if (!mounted ||
+        _dispatchingQueuedLocalMessage ||
+        _hasPendingLocalMessage ||
+        _session.status == SessionStatus.running ||
+        _session.status == SessionStatus.awaitingApproval ||
+        _pendingApproval != null) {
+      return;
+    }
+    final entry = _localMessageStates.entries
+        .where((entry) => entry.value.state == _LocalMessageState.queued)
+        .cast<MapEntry<String, _LocalMessageDraft>?>()
+        .firstWhere((_) => true, orElse: () => null);
+    if (entry == null) {
+      return;
+    }
+    final message = _messages
+        .where((item) => item.id == entry.key)
+        .cast<ChatMessage?>()
+        .firstWhere((_) => true, orElse: () => null);
+    if (message == null) {
+      setState(() {
+        _localMessageStates.remove(entry.key);
+      });
+      return;
+    }
+    _dispatchingQueuedLocalMessage = true;
+    try {
+      await _submitLocalMessage(
+        message.content,
+        inputMode: entry.value.inputMode,
+        localMessageId: entry.key,
+      );
+    } finally {
+      _dispatchingQueuedLocalMessage = false;
+    }
+  }
+
+  void _editQueuedMessage(String messageId) {
+    final draft = _localMessageStates[messageId];
+    if (draft == null || draft.state != _LocalMessageState.queued) {
+      return;
+    }
+    final index = _messages.indexWhere((item) => item.id == messageId);
+    if (index < 0) {
+      return;
+    }
+    final message = _messages[index];
+    setState(() {
+      _messages.removeAt(index);
+      _localMessageStates.remove(messageId);
+      _controller.text = message.content;
+      _controller.selection = TextSelection.collapsed(
+        offset: _controller.text.length,
+      );
+      _composerDraftFromVoice = draft.inputMode == 'voice';
+      _markNextComposerChangeAsVoice = false;
+      _speechError = null;
+      _syncVisibleTurnWindow(previousTotalTurns: _allTurns.length + 1);
+    });
+    _requestComposerFocusAfterFrame(consumeReturnRequest: false);
+  }
+
+  void _withdrawQueuedMessage(String messageId) {
+    final index = _messages.indexWhere((item) => item.id == messageId);
+    if (index < 0) {
+      return;
+    }
+    final previousTurnCount = _allTurns.length;
+    setState(() {
+      final removedMessages = _messages.sublist(index).toList(growable: false);
+      _messages.removeRange(index, _messages.length);
+      for (final removedMessage in removedMessages) {
+        _localMessageStates.remove(removedMessage.id);
+      }
+      _speechError = null;
+      _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
+    });
+    _jumpToBottom();
+    _requestComposerFocusAfterFrame(consumeReturnRequest: false);
   }
 
   Future<bool> _submitLocalMessage(
@@ -5783,8 +6050,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       });
       _returnFocusToComposerAfterReply = true;
       _syncSessionSummaryCache();
-      _requestStopReplyFocusAfterFrame();
+      _requestComposerFocusAfterFrame(consumeReturnRequest: false);
       _scheduleRefreshSessionSummary();
+      unawaited(_dispatchQueuedLocalMessageIfPossible());
       return true;
     } catch (error) {
       if (!mounted) {
@@ -5795,9 +6063,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           state: _LocalMessageState.failed,
           inputMode: inputMode,
         );
-        _speechError = error.toString().contains('already processing a message')
-            ? context.l10n.sessionStillRunning
-            : context.l10n.sendFailed('$error');
+        _speechError = context.l10n.sendFailed('$error');
       });
       return false;
     }
@@ -6677,15 +6943,22 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   ) {
     final turns = <_ConversationTurn>[];
     _ConversationTurn? currentTurn;
+    _ConversationTurn? activeReplyTurn;
     for (final message in messages) {
       if (message.role == MessageRole.user) {
         currentTurn = _ConversationTurn(id: message.id, userMessage: message);
         turns.add(currentTurn);
+        final localState = _localMessageStates[message.id]?.state;
+        if (localState != _LocalMessageState.queued) {
+          activeReplyTurn = currentTurn;
+        }
         continue;
       }
 
+      currentTurn = activeReplyTurn ?? currentTurn;
       currentTurn ??= _ConversationTurn(id: 'orphan-${message.id}');
-      if (turns.isEmpty || !identical(turns.last, currentTurn)) {
+      final alreadyPresent = turns.any((turn) => identical(turn, currentTurn));
+      if (!alreadyPresent) {
         turns.add(currentTurn);
       }
 
@@ -6788,7 +7061,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     for (var index = _messages.length - 1; index >= 0; index -= 1) {
       final message = _messages[index];
       if (message.role == MessageRole.user) {
-        return message.id;
+        final localState = _localMessageStates[message.id]?.state;
+        if (localState != _LocalMessageState.queued) {
+          return message.id;
+        }
       }
     }
     return null;
@@ -7444,6 +7720,7 @@ class _VoiceReleaseTarget extends StatelessWidget {
 class _ComposerVoiceButton extends StatefulWidget {
   const _ComposerVoiceButton({
     super.key,
+    required this.focusNode,
     required this.label,
     required this.disabled,
     required this.isListening,
@@ -7461,6 +7738,7 @@ class _ComposerVoiceButton extends StatefulWidget {
     required this.onLongPressCancel,
   });
 
+  final FocusNode focusNode;
   final String label;
   final bool disabled;
   final bool isListening;
@@ -7505,6 +7783,7 @@ class _ComposerVoiceButtonState extends State<_ComposerVoiceButton> {
           ),
         },
         child: FocusableActionDetector(
+          focusNode: widget.focusNode,
           enabled: !widget.disabled,
           mouseCursor: widget.disabled
               ? SystemMouseCursors.basic
@@ -7720,7 +7999,7 @@ class _AssistantCodeSyntaxHighlighter extends SyntaxHighlighter {
   }
 }
 
-enum _LocalMessageState { pending, failed }
+enum _LocalMessageState { queued, pending, failed }
 
 class _LocalMessageDraft {
   const _LocalMessageDraft({required this.state, required this.inputMode});
@@ -7730,9 +8009,338 @@ class _LocalMessageDraft {
 
   String label(BuildContext context) {
     return switch (state) {
+      _LocalMessageState.queued => context.l10n.draftPending,
       _LocalMessageState.pending => context.l10n.draftPending,
       _LocalMessageState.failed => context.l10n.draftFailed,
     };
+  }
+}
+
+class _UserMessageBubble extends StatefulWidget {
+  const _UserMessageBubble({
+    required this.bubble,
+    required this.showActions,
+    this.hoverKey,
+    this.onTapBubble,
+    this.onWithdraw,
+    this.onEdit,
+    this.onRetry,
+  });
+
+  final Widget bubble;
+  final bool showActions;
+  final Key? hoverKey;
+  final VoidCallback? onTapBubble;
+  final VoidCallback? onWithdraw;
+  final VoidCallback? onEdit;
+  final VoidCallback? onRetry;
+
+  @override
+  State<_UserMessageBubble> createState() => _UserMessageBubbleState();
+}
+
+class _UserMessageBubbleState extends State<_UserMessageBubble> {
+  Timer? _hoverHideTimer;
+
+  bool get _canShowInlineActions => widget.showActions;
+
+  void _showInlineActions() {
+    _hoverHideTimer?.cancel();
+  }
+
+  void _scheduleHideInlineActions() {
+    _hoverHideTimer?.cancel();
+  }
+
+  Future<void> _showActionsSheet() async {
+    if (!widget.showActions) {
+      return;
+    }
+    final l10n = context.l10n;
+    final brightness = Theme.of(context).brightness;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.onWithdraw != null)
+              ListTile(
+                leading: const Icon(Icons.undo_rounded),
+                title: Text(l10n.withdrawMessage),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  widget.onWithdraw?.call();
+                },
+              ),
+            if (widget.onEdit != null)
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: Text(l10n.editMessage),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  widget.onEdit?.call();
+                },
+              ),
+            if (widget.onRetry != null)
+              ListTile(
+                leading: Icon(
+                  Icons.refresh_rounded,
+                  color: AppColors.errorTextFor(brightness),
+                ),
+                title: Text(l10n.retry),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  widget.onRetry?.call();
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _hoverHideTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final actionBarVisible = _canShowInlineActions;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        MouseRegion(
+          key: widget.hoverKey,
+          onEnter: (_) => _showInlineActions(),
+          onExit: (_) => _scheduleHideInlineActions(),
+          child: GestureDetector(
+            onTap: widget.onTapBubble,
+            onLongPress: widget.showActions ? _showActionsSheet : null,
+            child: widget.bubble,
+          ),
+        ),
+        AnimatedSlide(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          offset: actionBarVisible ? Offset.zero : const Offset(0, -0.16),
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOut,
+            opacity: actionBarVisible ? 1 : 0,
+            child: IgnorePointer(
+              ignoring: !actionBarVisible,
+              child: Padding(
+                padding: const EdgeInsets.only(
+                  top: 0,
+                  right: AppSpacing.compact,
+                  bottom: AppSpacing.stack,
+                ),
+                child: Transform.translate(
+                  offset: const Offset(0, -6),
+                  child: MouseRegion(
+                    onEnter: (_) => _showInlineActions(),
+                    onExit: (_) => _scheduleHideInlineActions(),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: AppColors.userMessageOnSurfaceFor(brightness)
+                                .withValues(
+                                  alpha:
+                                      brightness == Brightness.dark ? 0.74 : 0.80,
+                                ),
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.radiusPill,
+                            ),
+                            border: Border.all(
+                              color: Colors.white.withValues(
+                                alpha: brightness == Brightness.dark ? 0.16 : 0.58,
+                              ),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(
+                                  alpha:
+                                      brightness == Brightness.dark ? 0.12 : 0.05,
+                                ),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 4,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (widget.onWithdraw != null)
+                                  _buildMessageActionButton(
+                                    key: const Key(
+                                      'user-message-withdraw-action',
+                                    ),
+                                    tooltip: context.l10n.withdrawMessage,
+                                    icon: Icons.undo_rounded,
+                                    color: AppColors.textSoftFor(brightness),
+                                    onPressed: widget.onWithdraw,
+                                  ),
+                                if (widget.onWithdraw != null &&
+                                    (widget.onEdit != null ||
+                                        widget.onRetry != null))
+                                  _buildActionDivider(brightness),
+                                if (widget.onEdit != null)
+                                  _buildMessageActionButton(
+                                    key: const Key('user-message-edit-action'),
+                                    tooltip: context.l10n.editMessage,
+                                    icon: Icons.edit_outlined,
+                                    color: AppColors.textSoftFor(brightness),
+                                    onPressed: widget.onEdit,
+                                  ),
+                                if (widget.onEdit != null &&
+                                    widget.onRetry != null)
+                                  _buildActionDivider(brightness),
+                                if (widget.onRetry != null)
+                                  _buildMessageActionButton(
+                                    key: const Key('user-message-retry-action'),
+                                    tooltip: context.l10n.retry,
+                                    icon: Icons.refresh_rounded,
+                                    color: AppColors.errorTextFor(brightness),
+                                    onPressed: widget.onRetry,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMessageActionButton({
+    required Key key,
+    required String tooltip,
+    required IconData icon,
+    required Color color,
+    required VoidCallback? onPressed,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+      child: IconButton(
+        key: key,
+        tooltip: tooltip,
+        visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints.tightFor(
+          width: 34,
+          height: 34,
+        ),
+        padding: EdgeInsets.zero,
+        style: IconButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          foregroundColor: color,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+          ),
+        ),
+        onPressed: onPressed,
+        icon: Icon(icon, size: 15.5),
+      ),
+    );
+  }
+
+  Widget _buildActionDivider(Brightness brightness) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Container(
+      width: 1,
+      height: 16,
+      color: AppColors.outlineStrongFor(brightness).withValues(
+        alpha: brightness == Brightness.dark ? 0.28 : 0.18,
+      ),
+      ),
+    );
+  }
+}
+
+class _ToolEntryChip extends StatefulWidget {
+  const _ToolEntryChip({
+    required this.child,
+    required this.onTap,
+    required this.borderRadius,
+    required this.backgroundColor,
+    required this.borderColor,
+    required this.hoverColor,
+    required this.hoverBorderColor,
+    required this.shadowColor,
+  });
+
+  final Widget child;
+  final VoidCallback onTap;
+  final BorderRadius borderRadius;
+  final Color backgroundColor;
+  final Color borderColor;
+  final Color hoverColor;
+  final Color hoverBorderColor;
+  final Color shadowColor;
+
+  @override
+  State<_ToolEntryChip> createState() => _ToolEntryChipState();
+}
+
+class _ToolEntryChipState extends State<_ToolEntryChip> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedSlide(
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        offset: _hovered ? const Offset(0, -0.04) : Offset.zero,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: _hovered ? widget.hoverColor : widget.backgroundColor,
+            borderRadius: widget.borderRadius,
+            border: Border.all(
+              color: _hovered ? widget.hoverBorderColor : widget.borderColor,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: widget.shadowColor,
+                blurRadius: _hovered ? 14 : 10,
+                offset: Offset(0, _hovered ? 5 : 3),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: widget.onTap,
+              borderRadius: widget.borderRadius,
+              child: widget.child,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

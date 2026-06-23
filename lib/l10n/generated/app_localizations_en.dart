@@ -238,6 +238,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get retry => 'Retry';
 
   @override
+  String get editMessage => 'Edit';
+
+  @override
+  String get withdrawMessage => 'Withdraw';
+
+  @override
   String projectCount(int count) {
     return '$count sessions';
   }

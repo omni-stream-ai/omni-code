@@ -500,6 +500,18 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get retry;
 
+  /// No description provided for @editMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get editMessage;
+
+  /// No description provided for @withdrawMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Withdraw'**
+  String get withdrawMessage;
+
   /// No description provided for @projectCount.
   ///
   /// In en, this message translates to:

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -31,6 +32,20 @@ const _localNotificationsChannel =
 _FakeAndroidFlutterLocalNotificationsPlugin _fakeNotifications() {
   return FlutterLocalNotificationsPlatform.instance
       as _FakeAndroidFlutterLocalNotificationsPlugin;
+}
+
+bool _primaryFocusIsWithin(WidgetTester tester, Finder finder) {
+  final focusedContext = FocusManager.instance.primaryFocus?.context;
+  if (focusedContext == null) {
+    return false;
+  }
+  return find
+      .descendant(
+        of: finder,
+        matching: find.byWidget(focusedContext.widget),
+      )
+      .evaluate()
+      .isNotEmpty;
 }
 
 void main() {
@@ -1498,7 +1513,7 @@ void main() {
       variant:
           const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
 
-  testWidgets('composer focus moves to stop after send', (tester) async {
+  testWidgets('composer focus stays in input after send', (tester) async {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
         if (request.method == 'GET' &&
@@ -1569,7 +1584,7 @@ void main() {
 
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
-      'session-stop-reply-focus',
+      'session-message-input-focus',
     );
   });
 
@@ -1640,7 +1655,7 @@ void main() {
 
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
-      'session-stop-reply-focus',
+      'session-message-input-focus',
     );
 
     events.add(
@@ -1805,6 +1820,848 @@ void main() {
     expect(find.byKey(const Key('session-voice-input-button')), findsNothing);
     expect(find.byKey(const Key('session-send-button')), findsOneWidget);
   });
+
+  testWidgets('can queue another message while waiting for bridge reply',
+      (tester) async {
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          if (sendBodies.length == 1) {
+            return firstSendCompleter.future;
+          }
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    expect(sendBodies, hasLength(1));
+    expect(find.text('First message'), findsOneWidget);
+
+    await tester.enterText(input, 'Second message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    final l10n = AppLocalizations.of(tester.element(input))!;
+    expect(sendBodies, hasLength(1));
+    expect(find.text('Second message'), findsOneWidget);
+    expect(find.text(l10n.draftPending), findsNWidgets(2));
+  });
+
+  testWidgets('queued message can be edited back into the composer',
+      (tester) async {
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          if (sendBodies.length == 1) {
+            return firstSendCompleter.future;
+          }
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    await tester.enterText(input, 'Queued draft');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    expect(sendBodies, hasLength(1));
+    expect(find.text('Queued draft'), findsOneWidget);
+
+    await tester.tap(
+      find.ancestor(
+        of: find.text('Queued draft'),
+        matching: find.byType(GestureDetector),
+      ),
+    );
+    await tester.pump();
+
+    final l10n = AppLocalizations.of(tester.element(input))!;
+    expect(find.text('Queued draft'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(input).controller?.text,
+      'Queued draft',
+    );
+    expect(find.text(l10n.draftPending), findsOneWidget);
+  });
+
+  testWidgets('withdrawing a queued message removes it and all following messages',
+      (tester) async {
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          if (sendBodies.length == 1) {
+            return firstSendCompleter.future;
+          }
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    await tester.enterText(input, 'Queued one');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    await tester.enterText(input, 'Queued two');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer();
+    final queuedHoverRegion = find.ancestor(
+      of: find.text('Queued one'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('user-message-hover-'),
+      ),
+    );
+    await mouse.moveTo(tester.getCenter(queuedHoverRegion));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('user-message-withdraw-action')));
+    await tester.pump();
+
+    expect(find.text('First message'), findsOneWidget);
+    expect(find.text('Queued one'), findsNothing);
+    expect(find.text('Queued two'), findsNothing);
+    expect(tester.widget<TextField>(input).controller?.text, isEmpty);
+  }, variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
+
+  testWidgets('composer action icons are reachable by tab', (tester) async {
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.pump();
+    await tester.enterText(input, 'Tab flow');
+    await tester.pump();
+
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'session-message-input-focus',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      isNot('session-message-input-focus'),
+    );
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-image-picker-button')),
+      ),
+      isTrue,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-send-button')),
+      ),
+      isTrue,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'session-message-input-focus',
+    );
+  }, variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
+
+  testWidgets('composer stays expanded while action buttons are focused',
+      (tester) async {
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-send-button')), findsNothing);
+
+    await tester.enterText(input, 'Tab flow');
+    await tester.pump();
+    expect(find.byKey(const Key('session-send-button')), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-send-button')), findsOneWidget);
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-image-picker-button')),
+      ),
+      isTrue,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-send-button')), findsOneWidget);
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-send-button')),
+      ),
+      isTrue,
+    );
+  }, variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
+
+  testWidgets('composer action icons are reachable by shift tab in reverse',
+      (tester) async {
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.pump();
+    await tester.enterText(input, 'Reverse tab flow');
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-send-button')),
+      ),
+      isTrue,
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-image-picker-button')),
+      ),
+      isTrue,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'session-message-input-focus',
+    );
+  }, variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
+
+  testWidgets('tool activity stays with active reply turn when a queued message exists',
+      (tester) async {
+    final events = StreamController<List<int>>();
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+          if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+          if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          if (sendBodies.length == 1) {
+            return firstSendCompleter.future;
+          }
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    await tester.enterText(input, 'Second message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'assistant-tool-anchor',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'Still working',
+              createdAt: '2026-05-09T10:00:02.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'system-tool-1',
+              sessionId: 'session-1',
+              role: 'system',
+              content: '[command:completed] ls',
+              createdAt: '2026-05-09T10:00:03.000',
+            ),
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final toolChip = find.byType(InkWell).last;
+    final firstMessageBubble = find.ancestor(
+      of: find.text('First message'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('user-message-bubble-'),
+      ),
+    ).first;
+    final secondMessageBubble = find.ancestor(
+      of: find.text('Second message'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('user-message-bubble-'),
+      ),
+    ).first;
+
+    expect(
+      tester.getTopLeft(toolChip).dy,
+      greaterThan(tester.getTopLeft(firstMessageBubble).dy),
+    );
+    expect(
+      tester.getTopLeft(toolChip).dy,
+      lessThan(tester.getTopLeft(secondMessageBubble).dy),
+    );
+
+    await events.close();
+  });
+
+  testWidgets('queued follow-up message stays visually after the active reply turn',
+      (tester) async {
+    final events = StreamController<List<int>>();
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({'data': []}),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/events') {
+            return http.Response(
+              '',
+              200,
+              headers: {'content-type': 'text/event-stream'},
+            );
+          }
+          if (request.method == 'POST' &&
+              request.url.path == '/sessions/session-1/messages') {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            sendBodies.add(body);
+            if (sendBodies.length == 1) {
+              return firstSendCompleter.future;
+            }
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'user_message': _messageJson(
+                    id: 'server-user-${sendBodies.length}',
+                    sessionId: 'session-1',
+                    role: 'user',
+                    content: body['content'] as String,
+                    createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
+                  ),
+                  'reply': _messageJson(
+                    id: 'server-reply-${sendBodies.length}',
+                    sessionId: 'session-1',
+                    role: 'assistant',
+                    content: '',
+                    createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
+                  ),
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    await tester.enterText(input, 'Second message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'assistant-tool-anchor-2',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'Still working',
+              createdAt: '2026-05-09T10:00:02.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'system-tool-2',
+              sessionId: 'session-1',
+              role: 'system',
+              content: '[command:completed] ls',
+              createdAt: '2026-05-09T10:00:03.000',
+            ),
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final firstMessageBubble = find.ancestor(
+      of: find.text('First message'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('user-message-bubble-'),
+      ),
+    ).first;
+    final secondMessageBubble = find.ancestor(
+      of: find.text('Second message'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('user-message-bubble-'),
+      ),
+    ).first;
+
+    expect(
+      tester.getTopLeft(secondMessageBubble).dy,
+      greaterThan(tester.getTopLeft(firstMessageBubble).dy),
+    );
+
+    await events.close();
+  });
+
+  testWidgets('hovering queued message shows edit action',
+      (tester) async {
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          if (sendBodies.length == 1) {
+            return firstSendCompleter.future;
+          }
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    await tester.enterText(input, 'Queued draft');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer();
+    final queuedHoverRegion = find.ancestor(
+      of: find.text('Queued draft'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('user-message-hover-'),
+      ),
+    );
+    await mouse.moveTo(
+      tester.getCenter(queuedHoverRegion),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('user-message-withdraw-action')), findsOneWidget);
+    expect(find.byKey(const Key('user-message-edit-action')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('user-message-withdraw-action')));
+    await tester.pump();
+
+    expect(
+      tester.widget<TextField>(input).controller?.text,
+      'Queued draft',
+    );
+  }, variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
 
   testWidgets('voice mode toggle switches composer to hold-to-talk',
       (tester) async {
