@@ -2105,7 +2105,12 @@ void main() {
     await mouse.moveTo(tester.getCenter(queuedHoverRegion));
     await tester.pump();
 
-    await tester.tap(find.byKey(const Key('user-message-withdraw-action')));
+    await tester.tap(
+      find.descendant(
+        of: queuedHoverRegion,
+        matching: find.byKey(const Key('user-message-withdraw-action')),
+      ),
+    );
     await tester.pump();
 
     expect(find.text('First message'), findsOneWidget);
