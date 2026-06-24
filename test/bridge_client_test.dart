@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:omni_code/src/bridge_client.dart';
 import 'package:omni_code/src/bridge_speech_models.dart';
@@ -234,6 +235,172 @@ void main() {
       expect(body['provider_id'], 'AUTO');
       expect(session.providerId, 'AUTO');
     });
+
+    test('includes reasoning effort when specified', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/sessions');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'id': 'session-4',
+                'project_id': 'project-1',
+                'title': 'Reasoning Session',
+                'agent': 'codex',
+                'brief_reply_mode': false,
+                'status': 'idle',
+                'updated_at': '2026-05-05T11:00:00.000',
+                'unread_count': 0,
+                'last_message_preview': null,
+                'pending_approval': null,
+                'reasoning_effort': 'high',
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final session = await client.createSession(
+        projectId: 'project-1',
+        title: 'Reasoning Session',
+        agent: 'codex',
+        reasoningEffort: ReasoningEffort.high,
+      );
+
+      expect(body['reasoning_effort'], 'high');
+      expect(session.reasoningEffort, ReasoningEffort.high);
+    });
+  });
+
+  group('BridgeClient session defaults and messaging', () {
+    test('sends reasoning effort when posting a message', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/sessions/session-1/messages');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': {
+                  'id': 'user-1',
+                  'session_id': 'session-1',
+                  'role': 'user',
+                  'content': 'Hello',
+                  'created_at': '2026-05-05T11:00:00.000',
+                },
+                'reply': {
+                  'id': 'assistant-1',
+                  'session_id': 'session-1',
+                  'role': 'assistant',
+                  'content': 'Hi',
+                  'created_at': '2026-05-05T11:00:01.000',
+                },
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      await client.sendMessage(
+        'session-1',
+        'Hello',
+        reasoningEffort: ReasoningEffort.max,
+      );
+
+      expect(body['reasoning_effort'], 'max');
+    });
+
+    test('clears session reasoning effort with null patch value', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'PATCH');
+          expect(request.url.path, '/sessions/session-1');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response('', 204);
+        }),
+      );
+
+      await client.updateSessionDefaults(
+        'session-1',
+        clearReasoningEffort: true,
+      );
+
+      expect(body.containsKey('reasoning_effort'), isTrue);
+      expect(body['reasoning_effort'], isNull);
+    });
+  });
+
+  group('BridgeClient cancelReply', () {
+    test('accepts bridge cancel result bodies', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/sessions/session-1/cancel');
+          return http.Response(
+            jsonEncode({
+              'data': {'cancelled': true},
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final cancelled = await client.cancelReply('session-1');
+
+      expect(cancelled, isTrue);
+    });
+
+    test('returns false when bridge reports no active turn was cancelled',
+        () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/sessions/session-1/cancel');
+          return http.Response(
+            jsonEncode({
+              'data': {'cancelled': false},
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final cancelled = await client.cancelReply('session-1');
+
+      expect(cancelled, isFalse);
+    });
+
+    test('keeps accepting legacy empty cancel responses', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/sessions/session-1/cancel');
+          return http.Response('', 204);
+        }),
+      );
+
+      final cancelled = await client.cancelReply('session-1');
+
+      expect(cancelled, isTrue);
+    });
+  });
+
+  group('SessionStatus parsing', () {
+    test('parses interrupted sessions', () {
+      expect(parseSessionStatus('interrupted'), SessionStatus.interrupted);
+    });
   });
 
   group('BridgeClient agents', () {
@@ -349,7 +516,10 @@ void main() {
             jsonEncode({
               'data': [
                 {'path': 'lib/src/screens/', 'is_dir': true},
-                {'path': 'lib/src/screens/session_detail_screen.dart', 'is_dir': false},
+                {
+                  'path': 'lib/src/screens/session_detail_screen.dart',
+                  'is_dir': false
+                },
               ],
             }),
             200,
@@ -400,6 +570,86 @@ void main() {
       expect(result.success, isTrue);
       expect(result.installedPath, '/usr/local/bin/claude');
     });
+
+    test('includes provider id when specified', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/sessions');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'id': 'session-2',
+                'project_id': 'project-1',
+                'title': 'Provider Session',
+                'agent': 'codex',
+                'brief_reply_mode': false,
+                'status': 'idle',
+                'updated_at': '2026-05-05T11:00:00.000',
+                'unread_count': 0,
+                'last_message_preview': null,
+                'pending_approval': null,
+                'provider_id': 'openai',
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final session = await client.createSession(
+        projectId: 'project-1',
+        title: 'Provider Session',
+        agent: 'codex',
+        providerId: 'openai',
+      );
+
+      expect(body['provider_id'], 'openai');
+      expect(session.providerId, 'openai');
+    });
+
+    test('includes AUTO provider id for provider auto mode', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/sessions');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'id': 'session-3',
+                'project_id': 'project-1',
+                'title': 'Auto Provider Session',
+                'agent': 'codex',
+                'brief_reply_mode': false,
+                'status': 'idle',
+                'updated_at': '2026-05-05T11:00:00.000',
+                'unread_count': 0,
+                'last_message_preview': null,
+                'pending_approval': null,
+                'provider_id': 'AUTO',
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final session = await client.createSession(
+        projectId: 'project-1',
+        title: 'Auto Provider Session',
+        agent: 'codex',
+        providerId: autoProviderId,
+      );
+
+      expect(body['provider_id'], 'AUTO');
+      expect(session.providerId, 'AUTO');
+    });
   });
 
   group('BridgeClient readFile', () {
@@ -448,6 +698,52 @@ void main() {
       expect(requestUri.queryParameters, {
         'path': '/tmp/output.jpg',
       });
+    });
+  });
+
+  group('BridgeClient uploadFile', () {
+    test('posts multipart file and parses upload response', () async {
+      final dir = await Directory.systemTemp.createTemp('omni-code-test-');
+      final file = File('${dir.path}/photo.png');
+      await file.writeAsBytes([1, 2, 3]);
+
+      late http.Request capturedRequest;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          capturedRequest = request;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'id': 'uuid-photo.png',
+                'file_name': 'photo.png',
+                'content_type': 'image/png',
+                'size_bytes': 12345,
+                'url': '/uploads/uuid-photo.png',
+                'absolute_url': 'http://127.0.0.1:8787/uploads/uuid-photo.png',
+                'local_path': '/tmp/uuid-photo.png',
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final upload = await client.uploadFile(file.path);
+
+      expect(capturedRequest.method, 'POST');
+      expect(capturedRequest.url.path, '/uploads');
+      expect(
+        capturedRequest.headers['content-type'],
+        contains('multipart/form-data'),
+      );
+      expect(capturedRequest.body, contains('name="file"'));
+      expect(capturedRequest.body, contains('filename="photo.png"'));
+      expect(upload.fileName, 'photo.png');
+      expect(upload.contentType, 'image/png');
+      expect(
+          upload.absoluteUrl, 'http://127.0.0.1:8787/uploads/uuid-photo.png');
+      expect(upload.localPath, '/tmp/uuid-photo.png');
     });
   });
 
@@ -513,6 +809,40 @@ void main() {
         client.peekSessions()?.map((item) => item.id).toList(),
         ['session-newest', 'session-middle', 'session-oldest'],
       );
+    });
+
+    test('parses fork source session id from session summaries', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.path, '/sessions');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'child-session',
+                  'project_id': 'project-1',
+                  'title': 'Child',
+                  'agent': 'codex',
+                  'brief_reply_mode': false,
+                  'status': 'idle',
+                  'updated_at': '2026-05-05T11:00:00.000',
+                  'unread_count': 0,
+                  'last_message_preview': null,
+                  'pending_approval': null,
+                  'forked_from_session_id': 'parent-session',
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final sessions = await client.listSessions();
+
+      expect(sessions.single.forkedFromSessionId, 'parent-session');
     });
 
     test(
@@ -588,6 +918,7 @@ void main() {
         'session-c',
       ]);
     });
+
   });
 
   group('BridgeClient route lookups', () {
@@ -1032,6 +1363,7 @@ SessionSummary _session({
   required String projectId,
   required DateTime updatedAt,
   String? lastMessagePreview,
+  ReasoningEffort? reasoningEffort,
 }) {
   return SessionSummary(
     id: id,
@@ -1044,6 +1376,7 @@ SessionSummary _session({
     unreadCount: 0,
     lastMessagePreview: lastMessagePreview,
     pendingApproval: null,
+    reasoningEffort: reasoningEffort,
   );
 }
 
@@ -1059,6 +1392,11 @@ class _FakeHttpClient extends http.BaseClient {
     if (request is http.Request) {
       nextRequest.body = request.body;
       nextRequest.encoding = request.encoding;
+    } else {
+      nextRequest.bodyBytes = await request.finalize().toBytes();
+      nextRequest.headers
+        ..clear()
+        ..addAll(request.headers);
     }
     final response = await _handler(nextRequest);
     return http.StreamedResponse(

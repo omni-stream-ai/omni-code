@@ -238,6 +238,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get retry => 'Retry';
 
   @override
+  String get editMessage => 'Edit';
+
+  @override
+  String get withdrawMessage => 'Withdraw';
+
+  @override
   String projectCount(int count) {
     return '$count sessions';
   }
@@ -326,6 +332,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String forkedFromSession(Object source) {
+    return 'Forked from $source';
+  }
+
+  @override
   String loadMoreSessions(int count) {
     return 'Load more ($count)';
   }
@@ -344,6 +355,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sessionStatusAwaitingApproval => 'Awaiting approval';
+
+  @override
+  String get sessionStatusInterrupted => 'Interrupted';
 
   @override
   String get sessionStatusWaiting => 'Waiting';
@@ -639,7 +653,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get send => 'Send';
 
   @override
-  String get imageAttachment => 'Image attachment';
+  String get imageAttachment => 'Upload file or image';
 
   @override
   String get previewImage => 'Preview';
@@ -1434,6 +1448,33 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get providerOverrideFailed => 'Failed to save provider selection';
+
+  @override
+  String get reasoningEffortDefault => 'Default';
+
+  @override
+  String get reasoningEffortLow => 'Low';
+
+  @override
+  String get reasoningEffortMedium => 'Medium';
+
+  @override
+  String get reasoningEffortHigh => 'High';
+
+  @override
+  String get reasoningEffortXhigh => 'XHigh';
+
+  @override
+  String get reasoningEffortMax => 'Max';
+
+  @override
+  String get reasoningEffortOverride => 'Reasoning Effort';
+
+  @override
+  String get reasoningEffortSessionLabel => 'Reasoning effort';
+
+  @override
+  String get reasoningEffortOverrideFailed => 'Failed to save reasoning effort';
 
   @override
   String get confirm => 'Confirm';

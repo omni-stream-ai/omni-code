@@ -58,6 +58,7 @@ class AppSettings {
     required this.lastSelectedAgent,
     required this.lastSelectedProviderByProject,
     required this.voiceComposerMode,
+    required this.videoPreviewMuted,
   });
 
   final String bridgeUrl;
@@ -91,6 +92,7 @@ class AppSettings {
   final String lastSelectedAgent;
   final Map<String, String?> lastSelectedProviderByProject;
   final bool voiceComposerMode;
+  final bool videoPreviewMuted;
 
   factory AppSettings.defaults() {
     const configuredUrl = String.fromEnvironment('ECHO_MATE_BRIDGE_URL');
@@ -133,6 +135,7 @@ class AppSettings {
       lastSelectedAgent: '',
       lastSelectedProviderByProject: const {},
       voiceComposerMode: false,
+      videoPreviewMuted: true,
     );
   }
 
@@ -167,6 +170,7 @@ class AppSettings {
     String? lastSelectedAgent,
     Map<String, String?>? lastSelectedProviderByProject,
     bool? voiceComposerMode,
+    bool? videoPreviewMuted,
   }) {
     return AppSettings(
       bridgeUrl: bridgeUrl ?? this.bridgeUrl,
@@ -212,11 +216,11 @@ class AppSettings {
       callModeWakeWords: _normalizeCallModeWakeWords(
           callModeWakeWords ?? this.callModeWakeWords),
       lastSelectedAgent: lastSelectedAgent ?? this.lastSelectedAgent,
-      lastSelectedProviderByProject:
-          Map<String, String?>.unmodifiable(
+      lastSelectedProviderByProject: Map<String, String?>.unmodifiable(
         lastSelectedProviderByProject ?? this.lastSelectedProviderByProject,
       ),
       voiceComposerMode: voiceComposerMode ?? this.voiceComposerMode,
+      videoPreviewMuted: videoPreviewMuted ?? this.videoPreviewMuted,
     );
   }
 
@@ -252,6 +256,7 @@ class AppSettings {
       'last_selected_agent': lastSelectedAgent,
       'last_selected_provider_by_project': lastSelectedProviderByProject,
       'voice_composer_mode': voiceComposerMode,
+      'video_preview_muted': videoPreviewMuted,
     };
   }
 
@@ -367,6 +372,11 @@ class AppSettings {
         json,
         'voice_composer_mode',
         defaults.voiceComposerMode,
+      ),
+      videoPreviewMuted: _readBool(
+        json,
+        'video_preview_muted',
+        defaults.videoPreviewMuted,
       ),
     );
   }
@@ -578,6 +588,9 @@ class AppSettingsController extends ChangeNotifier {
           shouldPersist = true;
         }
         if (json['bridge_local_tts_streaming'] == null) {
+          shouldPersist = true;
+        }
+        if (json['video_preview_muted'] == null) {
           shouldPersist = true;
         }
         if (json['tts_provider'] == 'bridge') {

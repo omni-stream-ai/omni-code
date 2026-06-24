@@ -1,14 +1,19 @@
 import 'dart:async';
+import 'dart:ui';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:super_clipboard/super_clipboard.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
 
 import '../app_routes.dart';
 import '../bridge_client.dart';
@@ -41,6 +46,9 @@ class SessionDetailScreen extends StatefulWidget {
     this.speechInputService,
     this.ttsService,
     this.bridgeRealtimeAsrService,
+    this.pickImages,
+    this.readClipboardText,
+    this.readClipboardAttachments,
   });
 
   static const routeName = '/session';
@@ -53,6 +61,9 @@ class SessionDetailScreen extends StatefulWidget {
   final SpeechInputService? speechInputService;
   final TtsService? ttsService;
   final BridgeRealtimeAsrService? bridgeRealtimeAsrService;
+  final Future<List<String>> Function()? pickImages;
+  final Future<String?> Function()? readClipboardText;
+  final Future<List<String>> Function()? readClipboardAttachments;
 
   @override
   State<SessionDetailScreen> createState() => _SessionDetailScreenState();
@@ -73,14 +84,27 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   );
   static const int _initialVisibleTurnCount = 10;
   static const int _historyTurnBatchSize = 10;
+  static const String _defaultProviderMenuValue =
+      '__session_default_provider__';
+  static const String _defaultReasoningEffortMenuValue =
+      '__session_default_reasoning_effort__';
   final _controller = TextEditingController();
   final _messageInputFocusNode = FocusNode(
     debugLabel: 'session-message-input-focus',
   );
   final _composerTextFieldKey = GlobalKey();
   final _composerSuggestionsOverlayController = OverlayPortalController();
+  final _imagePickerFocusNode = FocusNode(
+    debugLabel: 'session-image-picker-focus',
+  );
+  final _sendButtonFocusNode = FocusNode(
+    debugLabel: 'session-send-button-focus',
+  );
   final _stopReplyFocusNode = FocusNode(
     debugLabel: 'session-stop-reply-focus',
+  );
+  final _voiceInputButtonFocusNode = FocusNode(
+    debugLabel: 'session-voice-input-button-focus',
   );
   final _holdToTalkButtonKey = GlobalKey();
   final _approvalPrimaryFocusNode = FocusNode(
@@ -95,6 +119,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   final Set<String> _notifiedAssistantMessageIds = <String>{};
   final Map<String, _LocalMessageDraft> _localMessageStates = {};
   final Map<String, Future<BridgeFileResponse>> _imageFileFutures = {};
+  final Map<String, Future<File>> _videoFileFutures = {};
   late SessionSummary _session;
   final List<ChatMessage> _messages = [];
   StreamSubscription<Map<String, dynamic>>? _eventsSubscription;
@@ -104,8 +129,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Timer? _callModeSpeechHintTimer;
   Timer? _refreshSessionSummaryDebounce;
   bool _refreshSessionSummaryInFlight = false;
+  bool _dispatchingQueuedLocalMessage = false;
   bool _returnFocusToComposerAfterReply = false;
+  String? _cancellingPendingLocalMessageId;
   bool _composerSuggestionsOverlayShown = false;
+  bool _pickingAttachments = false;
+  bool _uploadingAttachments = false;
+  bool _composerDraftFromVoice = false;
+  bool _markNextComposerChangeAsVoice = false;
+  final List<_PendingAttachment> _pendingAttachments = <_PendingAttachment>[];
 
   String? _recordingPath;
   String _recognizedSpeech = '';
@@ -137,7 +169,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Future<void>? _callModeInterruptFuture;
   bool _callModeSubmittingVoiceUtterance = false;
   bool _callModeSendingVoiceUtterance = false;
-  late bool _voiceComposerMode;
+  bool _voiceComposerMode = false;
   bool _voiceHoldActive = false;
   bool _voiceHoldLifted = false;
   Offset? _voiceHoldGlobalPosition;
@@ -169,6 +201,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   int _visibleTurnCount = 0;
   String? _dismissedErrorBannerMessage;
   String? _overrideProviderId;
+  ReasoningEffort? _overrideReasoningEffort;
   List<ModelProviderConfig> _providers = const [];
   GitStatusDetail? _gitStatus;
 
@@ -380,6 +413,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final updatedText = '$before$insertedText$after';
     final caretOffset = before.length + insertedText.length;
 
+    _markNextComposerChangeAsVoice = true;
     _controller.value = TextEditingValue(
       text: updatedText,
       selection: TextSelection.collapsed(offset: caretOffset),
@@ -425,6 +459,21 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     });
   }
 
+  void _requestComposerFocusWhileActiveTurnAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _callModeEnabled ||
+          _creatingSession ||
+          _loadingMessages ||
+          (_session.status != SessionStatus.running &&
+              _session.status != SessionStatus.waiting) ||
+          _pendingApproval != null) {
+        return;
+      }
+      _messageInputFocusNode.requestFocus();
+    });
+  }
+
   void _requestApprovalFocusAfterFrame() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
@@ -439,12 +488,75 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   void _syncComposerFocusForSessionStatus(SessionStatus status) {
-    if (status == SessionStatus.running) {
-      _requestStopReplyFocusAfterFrame();
-    } else if (status == SessionStatus.idle) {
+    if (status == SessionStatus.idle ||
+        status == SessionStatus.interrupted) {
       _requestComposerFocusAfterFrame(consumeReturnRequest: true);
+      unawaited(_dispatchQueuedLocalMessageIfPossible());
     }
   }
+
+  Widget _buildComposerActionIconButton({
+    required FocusNode focusNode,
+    required Key buttonKey,
+    required String? tooltip,
+    required VoidCallback? onPressed,
+    required ButtonStyle style,
+    required Widget icon,
+    FocusNode? nextFocusNode,
+  }) {
+    return ListenableBuilder(
+      listenable: focusNode,
+      builder: (context, _) {
+        final brightness = Theme.of(context).brightness;
+        final isFocused = focusNode.hasFocus;
+        final focusColor = AppColors.primaryFor(brightness).withValues(
+          alpha: brightness == Brightness.dark ? 0.2 : 0.14,
+        );
+        final focusOutline = AppColors.primaryFor(brightness).withValues(
+          alpha: brightness == Brightness.dark ? 0.72 : 0.34,
+        );
+        return CallbackShortcuts(
+          bindings: nextFocusNode == null
+              ? const <ShortcutActivator, VoidCallback>{}
+              : <ShortcutActivator, VoidCallback>{
+                  const SingleActivator(LogicalKeyboardKey.tab): () {
+                    nextFocusNode.requestFocus();
+                  },
+                },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+            decoration: BoxDecoration(
+              color: isFocused ? focusColor : Colors.transparent,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isFocused ? focusOutline : Colors.transparent,
+              ),
+            ),
+            child: TextButton(
+              key: buttonKey,
+              focusNode: focusNode,
+              onPressed: onPressed,
+              style: style,
+              child: Tooltip(
+                message: tooltip ?? '',
+                child: icon,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  bool get _composerActionButtonsHaveFocus =>
+      _imagePickerFocusNode.hasFocus ||
+      _sendButtonFocusNode.hasFocus ||
+      _stopReplyFocusNode.hasFocus ||
+      _voiceInputButtonFocusNode.hasFocus;
+
+  bool get _composerHasInteractiveFocus =>
+      _messageInputFocusNode.hasFocus || _composerActionButtonsHaveFocus;
 
   @override
   void initState() {
@@ -463,16 +575,18 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _session = widget.session;
     _voiceComposerMode = appSettingsController.settings.voiceComposerMode;
     _overrideProviderId = _session.providerId;
+    _overrideReasoningEffort = _session.reasoningEffort;
     _pendingApproval = _session.pendingApproval;
     _creatingSession = widget.sessionInitializer != null;
     _controller.addListener(_handleComposerTextChanged);
     _messageInputFocusNode.addListener(_handleComposerFocusChanged);
+    _imagePickerFocusNode.addListener(_handleComposerFocusChanged);
+    _sendButtonFocusNode.addListener(_handleComposerFocusChanged);
+    _stopReplyFocusNode.addListener(_handleComposerFocusChanged);
+    _voiceInputButtonFocusNode.addListener(_handleComposerFocusChanged);
     if (widget.enableSpeechServices) {
       _initializeSpeech();
       _initializeTts();
-      if (_voiceComposerMode) {
-        unawaited(_ensureSpeechInitialized());
-      }
     }
     if (_creatingSession) {
       _loadingMessages = false;
@@ -488,6 +602,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   @override
   void dispose() {
+    for (final future in _videoFileFutures.values) {
+      unawaited(future.then((file) {
+        if (file.existsSync()) {
+          unawaited(file.delete());
+        }
+      }));
+    }
     _callModeOrbController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _eventsSubscription?.cancel();
@@ -502,9 +623,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _ttsService.stop();
     _controller.removeListener(_handleComposerTextChanged);
     _messageInputFocusNode.removeListener(_handleComposerFocusChanged);
+    _imagePickerFocusNode.removeListener(_handleComposerFocusChanged);
+    _sendButtonFocusNode.removeListener(_handleComposerFocusChanged);
+    _stopReplyFocusNode.removeListener(_handleComposerFocusChanged);
+    _voiceInputButtonFocusNode.removeListener(_handleComposerFocusChanged);
     _controller.dispose();
     _messageInputFocusNode.dispose();
+    _imagePickerFocusNode.dispose();
+    _sendButtonFocusNode.dispose();
     _stopReplyFocusNode.dispose();
+    _voiceInputButtonFocusNode.dispose();
     _approvalPrimaryFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -553,12 +681,19 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _agentCommands = commands;
         _selectedCommandSuggestionIndex = 0;
       });
+      _syncComposerSuggestionsOverlayAfterFrame();
     } catch (_) {
       // Suggestions are optional; keep composer usable if this endpoint fails.
     }
   }
 
   void _handleComposerTextChanged() {
+    if (_markNextComposerChangeAsVoice) {
+      _markNextComposerChangeAsVoice = false;
+      _composerDraftFromVoice = _controller.text.trim().isNotEmpty;
+    } else if (_composerDraftFromVoice) {
+      _composerDraftFromVoice = false;
+    }
     final query = _commandQuery;
     final queryChanged = query != _lastCommandQuery;
     _lastCommandQuery = query;
@@ -582,7 +717,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     if (mounted) {
       setState(() {});
-      _syncComposerSuggestionsOverlay();
+      _syncComposerSuggestionsOverlayAfterFrame();
     }
   }
 
@@ -591,7 +726,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     setState(() {});
-    _syncComposerSuggestionsOverlay();
+    _syncComposerSuggestionsOverlayAfterFrame();
   }
 
   String get _commandQuery {
@@ -660,17 +795,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   bool get _showCommandSuggestions {
-    if (_voiceComposerMode ||
-        !_messageInputFocusNode.hasFocus ||
-        _commandSuggestionsDismissed) {
+    if (!_messageInputFocusNode.hasFocus || _commandSuggestionsDismissed) {
       return false;
     }
     return _matchingCommandSuggestions.isNotEmpty;
   }
 
   bool get _showFileSuggestions {
-    if (_voiceComposerMode ||
-        !_messageInputFocusNode.hasFocus ||
+    if (!_messageInputFocusNode.hasFocus ||
         _fileSuggestionsDismissed ||
         _showCommandSuggestions) {
       return false;
@@ -682,10 +814,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _showCommandSuggestions || _showFileSuggestions;
 
   bool get _composerSuggestionsOverlayAvailable =>
-      !_voiceComposerMode &&
-      _session.status != SessionStatus.running &&
       _session.status != SessionStatus.awaitingApproval &&
       _pendingApproval == null;
+
+  bool get _hasPendingLocalMessage => _localMessageStates.values.any(
+        (draft) => draft.state == _LocalMessageState.pending,
+      );
 
   List<FileCompletionItem> get _matchingFileCompletions {
     final query = _fileCompletionQuery ?? '';
@@ -723,7 +857,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     setState(() {
-      final nextIndex = (_selectedFileCompletionIndex + delta) % suggestions.length;
+      final nextIndex =
+          (_selectedFileCompletionIndex + delta) % suggestions.length;
       _selectedFileCompletionIndex =
           nextIndex < 0 ? suggestions.length - 1 : nextIndex;
     });
@@ -755,9 +890,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     if (_showComposerSuggestions) {
-      if (_composerSuggestionsOverlayShown) {
-        return;
-      }
       _composerSuggestionsOverlayController.show();
       _composerSuggestionsOverlayShown = true;
     } else {
@@ -767,6 +899,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _composerSuggestionsOverlayController.hide();
       _composerSuggestionsOverlayShown = false;
     }
+  }
+
+  void _syncComposerSuggestionsOverlayAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _syncComposerSuggestionsOverlay();
+    });
   }
 
   void _applyCommandSuggestion(AgentCommand command) {
@@ -803,7 +944,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final leading = tokenMatch.group(1) ?? '';
     final start = tokenMatch.start + leading.length;
     final replacement = '@${item.path}';
-    final nextText = '${text.substring(0, start)}$replacement${text.substring(offset)}';
+    final nextText =
+        '${text.substring(0, start)}$replacement${text.substring(offset)}';
     final nextOffset = start + replacement.length;
     _controller.value = TextEditingValue(
       text: nextText,
@@ -842,7 +984,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               matchingItems.isEmpty ? 0 : matchingItems.length - 1;
         }
       });
-      _syncComposerSuggestionsOverlay();
+      _syncComposerSuggestionsOverlayAfterFrame();
     } catch (_) {
       if (!mounted || requestToken != _fileCompletionRequestToken) {
         return;
@@ -851,7 +993,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _fileCompletions = const [];
         _loadingFileCompletions = false;
       });
-      _syncComposerSuggestionsOverlay();
+      _syncComposerSuggestionsOverlayAfterFrame();
     }
   }
 
@@ -969,9 +1111,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         border: Border.all(color: outlineStrong),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: brightness == Brightness.dark
-                ? 0.32
-                : 0.12),
+            color: Colors.black
+                .withValues(alpha: brightness == Brightness.dark ? 0.32 : 0.12),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),
@@ -1066,6 +1207,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
       setState(() {
         _session = detail.session;
+        _overrideProviderId = detail.session.providerId;
+        _overrideReasoningEffort = detail.session.reasoningEffort;
         _pendingApproval = detail.session.pendingApproval;
         _gitStatus = detail.gitStatus;
         _reconcileSubmittedApprovalState();
@@ -1088,8 +1231,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         return;
       }
       setState(() {
+        _session = detail.session;
+        _pendingApproval = detail.session.pendingApproval;
         _gitStatus = detail.gitStatus;
+        _reconcileSubmittedApprovalState();
       });
+      _syncSessionSummaryCache();
     } catch (_) {
       // Best effort — git info is supplementary.
     }
@@ -1101,8 +1248,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return _buildCallModeScaffold(context);
     }
     final theme = Theme.of(context);
-    final isSessionBusy = _session.status == SessionStatus.running;
+    final isSessionBusy = _uploadingAttachments;
+    final isWaitingForBridgeReply = _session.status == SessionStatus.running ||
+        _session.status == SessionStatus.waiting;
     final hasActiveTurn = _session.status == SessionStatus.running ||
+        _session.status == SessionStatus.waiting ||
         _session.status == SessionStatus.awaitingApproval ||
         _pendingApproval != null;
     final canCancelReply = hasActiveTurn && !_cancellingReply;
@@ -1131,6 +1281,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ),
         actions: [
           _buildProviderSelector(),
+          _buildReasoningEffortSelector(),
           _buildCallModeAction(unavailableMessage: callModeUnavailableMessage),
         ],
       ),
@@ -1173,6 +1324,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             canCancelReply: canCancelReply,
             hasActiveTurn: hasActiveTurn,
             isSessionBusy: isSessionBusy,
+            isWaitingForBridgeReply: isWaitingForBridgeReply,
             showVoiceInputUnavailableTooltip: showVoiceInputUnavailableTooltip,
             systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
           ),
@@ -1185,12 +1337,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required bool canCancelReply,
     required bool hasActiveTurn,
     required bool isSessionBusy,
+    required bool isWaitingForBridgeReply,
     required bool showVoiceInputUnavailableTooltip,
     required String? systemSpeechUnavailableMessage,
   }) {
     final theme = Theme.of(context);
     final brightness = theme.brightness;
-    final surface = AppColors.panelFor(brightness);
     final deepSurface = AppColors.panelDeepFor(brightness);
     final outline = AppColors.outlineFor(brightness);
     final outlineStrong = AppColors.outlineStrongFor(brightness);
@@ -1203,146 +1355,128 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         AppSpacing.block,
         AppSpacing.block,
       ),
-      decoration: BoxDecoration(
-        color: surface,
-        border: Border(top: BorderSide(color: outline)),
-      ),
+      decoration:
+          BoxDecoration(border: Border(top: BorderSide(color: outline))),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: _composerMaxWidth),
-          child: hasActiveTurn
-              ? _buildActiveTurnComposer(
-                  canCancelReply: canCancelReply,
-                  deepSurface: deepSurface,
-                  outlineStrong: outlineStrong,
-                )
-              : _buildIdleComposer(
-                  isSessionBusy: isSessionBusy,
-                  showVoiceInputUnavailableTooltip:
-                      showVoiceInputUnavailableTooltip,
-                  systemSpeechUnavailableMessage:
-                      systemSpeechUnavailableMessage,
-                  deepSurface: deepSurface,
-                  outlineStrong: outlineStrong,
-                ),
+          child: _buildIdleComposer(
+            isSessionBusy: isSessionBusy,
+            isWaitingForBridgeReply: isWaitingForBridgeReply,
+            showVoiceInputUnavailableTooltip: showVoiceInputUnavailableTooltip,
+            systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
+            deepSurface: deepSurface,
+            outlineStrong: outlineStrong,
+            canCancelReply: canCancelReply,
+            hasActiveTurn: hasActiveTurn,
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildActiveTurnComposer({
-    required bool canCancelReply,
-    required Color deepSurface,
-    required Color outlineStrong,
-  }) {
-    final brightness = Theme.of(context).brightness;
-    return Container(
-      key: const Key('session-active-composer'),
-      padding: const EdgeInsets.all(AppSpacing.compact),
-      decoration: BoxDecoration(
-        color: deepSurface,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-        border: Border.all(color: outlineStrong),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              context.l10n.sessionStillRunning,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.mutedSoftFor(brightness),
-                  ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.compact),
-          OutlinedButton.icon(
-            key: const Key('session-stop-reply-button'),
-            focusNode: _stopReplyFocusNode,
-            onPressed: canCancelReply ? _cancelReply : null,
-            icon: _cancellingReply
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.stop_rounded, size: 18),
-            label: Text(context.l10n.stopReply),
-            style: OutlinedButton.styleFrom(
-              backgroundColor: AppColors.warningSurfaceFor(brightness),
-              foregroundColor: AppColors.warningTextFor(brightness),
-              side: BorderSide(color: AppColors.warningBorderFor(brightness)),
-              minimumSize: const Size(0, 40),
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.tileX),
-            ),
-          ),
-        ],
       ),
     );
   }
 
   Widget _buildIdleComposer({
     required bool isSessionBusy,
+    required bool isWaitingForBridgeReply,
     required bool showVoiceInputUnavailableTooltip,
     required String? systemSpeechUnavailableMessage,
     required Color deepSurface,
     required Color outlineStrong,
+    required bool canCancelReply,
+    required bool hasActiveTurn,
   }) {
     final brightness = Theme.of(context).brightness;
     final voiceButtonDisabled = isSessionBusy ||
         _voiceInputStarting ||
-        (!_speechReady && !_isListening);
-    final holdToTalkDisabled =
-        isSessionBusy || (_voiceInputStarting && !_voiceHoldActive);
+        (_systemAsrUnavailable && !_isListening);
     final voiceLabel =
         _isListening ? context.l10n.stopVoice : context.l10n.voiceInput;
-    final modeButtonLabel = _voiceComposerMode
-        ? context.l10n.keyboardInput
-        : context.l10n.voiceInput;
     final inputBorderColor =
         _isListening ? AppColors.primaryFor(brightness) : outlineStrong;
     final activeVoiceIconColor = brightness == Brightness.dark
         ? AppColors.onPrimaryFor(brightness)
         : AppColors.textFor(brightness);
+    final holdToTalkDisabled = isSessionBusy ||
+        (_voiceInputStarting && !_voiceHoldActive);
+    const collapsedComposerHeight = 48.0;
+    final hasSendableDraft =
+        _controller.text.trim().isNotEmpty || _pendingAttachments.isNotEmpty;
+    final showVoiceButton = !hasSendableDraft || _composerDraftFromVoice;
+    final showExpandedComposer = !_voiceComposerMode &&
+        (_composerHasInteractiveFocus ||
+            hasSendableDraft ||
+            _pendingAttachments.isNotEmpty ||
+            _voiceInputStarting ||
+            _isListening ||
+            _voiceHoldActive);
+    final holdStatusLabel = _voiceInputStarting && !_speechReady
+        ? context.l10n.callModePreparingListening
+        : _voiceHoldActive
+            ? _voiceHoldLifted
+                ? context.l10n.voiceHoldReleaseHint
+                : context.l10n.voiceInputInProgress
+            : null;
+    final imagePickerNextFocusNode = hasActiveTurn
+        ? _stopReplyFocusNode
+        : hasSendableDraft
+            ? _sendButtonFocusNode
+            : _voiceInputButtonFocusNode;
     final voiceButton = _withUnavailableTooltip(
       message: showVoiceInputUnavailableTooltip
           ? systemSpeechUnavailableMessage
           : null,
-      child: _ComposerVoiceButton(
-        key: const Key('session-voice-input-button'),
-        label: voiceLabel,
-        disabled: voiceButtonDisabled,
-        isListening: _isListening,
-        isStarting: _voiceInputStarting,
-        animation: _callModeOrbController,
-        activeBackgroundColor: AppColors.primaryFor(brightness).withValues(
-          alpha: brightness == Brightness.dark ? 1 : 0.82,
+      child: CallbackShortcuts(
+        bindings: <ShortcutActivator, VoidCallback>{
+          const SingleActivator(LogicalKeyboardKey.tab): () {
+            _messageInputFocusNode.requestFocus();
+          },
+        },
+        child: KeyedSubtree(
+          key: _holdToTalkButtonKey,
+          child: _ComposerVoiceButton(
+            key: const Key('session-voice-input-button'),
+            focusNode: _voiceInputButtonFocusNode,
+            label: voiceLabel,
+            disabled: voiceButtonDisabled,
+            isListening: _isListening,
+            isStarting: _voiceInputStarting,
+            animation: _callModeOrbController,
+            activeBackgroundColor: AppColors.primaryFor(brightness).withValues(
+              alpha: brightness == Brightness.dark ? 1 : 0.82,
+            ),
+            activeIconColor: activeVoiceIconColor,
+            idleIconColor: AppColors.textSoftFor(brightness),
+            disabledIconColor: AppColors.mutedFor(brightness),
+            focusColor: AppColors.primaryFor(brightness).withValues(
+              alpha: brightness == Brightness.dark ? 0.16 : 0.22,
+            ),
+            onPressed: _toggleListening,
+            onLongPressStart: (details) =>
+                _startHoldToTalk(details.globalPosition),
+            onLongPressMoveUpdate: (details) =>
+                _updateHoldToTalk(details.globalPosition),
+            onLongPressEnd: (details) =>
+                _finishHoldToTalk(details.globalPosition),
+            onLongPressCancel: () => _finishHoldToTalk(null, cancelled: true),
+          ),
         ),
-        activeIconColor: activeVoiceIconColor,
-        idleIconColor: AppColors.textSoftFor(brightness),
-        disabledIconColor: AppColors.mutedFor(brightness),
-        focusColor: AppColors.primaryFor(brightness).withValues(
-          alpha: brightness == Brightness.dark ? 0.16 : 0.22,
-        ),
-        onPressed: _toggleListening,
       ),
     );
-    final modeButton = _withUnavailableTooltip(
-      message: !_voiceComposerMode && showVoiceInputUnavailableTooltip
+    final voiceModeButton = _withUnavailableTooltip(
+      message: showVoiceInputUnavailableTooltip
           ? systemSpeechUnavailableMessage
           : null,
       child: IconButton(
         key: const Key('session-voice-mode-toggle'),
-        tooltip: modeButtonLabel,
+        tooltip: _voiceComposerMode ? context.l10n.keyboardInput : voiceLabel,
         onPressed: isSessionBusy ? null : _toggleVoiceComposerMode,
         style: IconButton.styleFrom(
           backgroundColor: deepSurface,
           foregroundColor: AppColors.textSoftFor(brightness),
           disabledForegroundColor: AppColors.mutedFor(brightness),
           side: BorderSide(color: outlineStrong),
-          minimumSize: const Size.square(44),
-          fixedSize: const Size.square(44),
+          minimumSize: const Size(44, collapsedComposerHeight),
+          fixedSize: const Size(44, collapsedComposerHeight),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
           ),
@@ -1353,120 +1487,465 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ),
       ),
     );
-
-    return Row(
-      key: const Key('session-message-composer'),
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        modeButton,
-        const SizedBox(width: AppSpacing.compact),
-        Expanded(
-          child: _voiceComposerMode
-              ? _buildHoldToTalkControl(
-                  disabled: holdToTalkDisabled,
-                  deepSurface: deepSurface,
-                  outlineStrong: outlineStrong,
+    final actionButtons = <Widget>[
+      if (hasActiveTurn) ...[
+        FocusTraversalOrder(
+          order: const NumericFocusOrder(1),
+          child: _buildComposerActionIconButton(
+            focusNode: _stopReplyFocusNode,
+            buttonKey: const Key('session-stop-reply-button'),
+            tooltip: context.l10n.stopReply,
+            onPressed: canCancelReply ? _cancelReply : null,
+            style: TextButton.styleFrom(
+              backgroundColor: AppColors.warningTextFor(brightness).withValues(
+                alpha: brightness == Brightness.dark ? 0.2 : 0.12,
+              ),
+              foregroundColor: AppColors.warningTextFor(brightness),
+              disabledForegroundColor: AppColors.mutedFor(brightness),
+              minimumSize: const Size.square(32),
+              fixedSize: const Size.square(32),
+              padding: EdgeInsets.zero,
+              shape: const CircleBorder(),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            icon: _cancellingReply
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.stop_rounded, size: 20),
+            nextFocusNode: _imagePickerFocusNode,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.micro),
+      ],
+      FocusTraversalOrder(
+        order: NumericFocusOrder(hasActiveTurn ? 2 : 1),
+        child: _buildComposerActionIconButton(
+          focusNode: _imagePickerFocusNode,
+          buttonKey: const Key('session-image-picker-button'),
+          tooltip: context.l10n.imageAttachment,
+          onPressed:
+              isSessionBusy || _pickingAttachments ? null : _pickAttachments,
+          style: TextButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            foregroundColor: AppColors.textSoftFor(brightness),
+            disabledForegroundColor: AppColors.mutedFor(brightness),
+            minimumSize: const Size.square(32),
+            fixedSize: const Size.square(32),
+            padding: EdgeInsets.zero,
+            shape: const CircleBorder(),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          icon: _pickingAttachments
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    OverlayPortal(
-                      controller: _composerSuggestionsOverlayController,
-                      overlayChildBuilder: (context) =>
-                          _buildComposerSuggestionsOverlay(
-                            deepSurface,
-                            outlineStrong,
-                          ),
-                      child: KeyedSubtree(
-                        key: _composerTextFieldKey,
-                        child: Focus(
-                          onKeyEvent: _handleMessageInputKeyEvent,
-                          child: TextField(
-                            key: const Key('session-message-input'),
-                            controller: _controller,
-                            focusNode: _messageInputFocusNode,
-                            enabled: !isSessionBusy,
-                            maxLines: 4,
-                            minLines: 1,
-                            textInputAction: _isMobilePlatform
-                                ? TextInputAction.newline
-                                : null,
-                            decoration: InputDecoration(
-                              hintText: _isListening
-                                  ? context.l10n.voiceInputInProgress
-                                  : context.l10n.messageInputHint,
-                              filled: true,
-                              fillColor: deepSurface,
-                              suffixIcon: Padding(
-                                padding: const EdgeInsetsDirectional.only(
-                                  start: AppSpacing.micro,
-                                  end: AppSpacing.compact,
-                                ),
-                                child: voiceButton,
-                              ),
-                              suffixIconConstraints: const BoxConstraints(
-                                minWidth: 48,
-                                minHeight: 44,
-                              ),
-                              contentPadding: const EdgeInsetsDirectional.only(
-                                start: AppSpacing.card,
-                                end: AppSpacing.compact,
-                                top: AppSpacing.stack,
-                                bottom: AppSpacing.stack,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(
-                                  AppSpacing.radiusPanel,
-                                ),
-                                borderSide:
-                                    BorderSide(color: inputBorderColor),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(
-                                  AppSpacing.radiusPanel,
-                                ),
-                                borderSide:
-                                    BorderSide(color: inputBorderColor),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(
-                                  AppSpacing.radiusPanel,
-                                ),
-                                borderSide: BorderSide(
-                                  color: AppColors.primaryFor(brightness),
-                                ),
-                              ),
-                            ),
+              : const Icon(Icons.attach_file_rounded, size: 20),
+          nextFocusNode: imagePickerNextFocusNode,
+        ),
+      ),
+      if (showVoiceButton) ...[
+        const SizedBox(width: AppSpacing.micro),
+        voiceButton,
+      ],
+      if (hasSendableDraft)
+        Padding(
+          padding: const EdgeInsetsDirectional.only(start: 2),
+          child: FocusTraversalOrder(
+            order: NumericFocusOrder(hasActiveTurn ? 4 : 3),
+            child: _buildComposerActionIconButton(
+              focusNode: _sendButtonFocusNode,
+              buttonKey: const Key('session-send-button'),
+              tooltip: context.l10n.send,
+              onPressed: isSessionBusy ? null : _sendTextMessage,
+              style: TextButton.styleFrom(
+                backgroundColor: AppColors.primaryFor(brightness),
+                foregroundColor: AppColors.onPrimaryFor(brightness),
+                disabledForegroundColor: AppColors.mutedFor(brightness),
+                minimumSize: const Size.square(34),
+                fixedSize: const Size.square(34),
+                padding: EdgeInsets.zero,
+                shape: const CircleBorder(),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              icon: const Icon(
+                Icons.send_rounded,
+                size: 20,
+              ),
+              nextFocusNode: _messageInputFocusNode,
+            ),
+          ),
+        ),
+    ];
+    final messageInput = KeyedSubtree(
+      key: _composerTextFieldKey,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(
+            LogicalKeyboardKey.keyV,
+            control: true,
+          ): () => unawaited(_handlePasteShortcut()),
+          const SingleActivator(
+            LogicalKeyboardKey.keyV,
+            meta: true,
+          ): () => unawaited(_handlePasteShortcut()),
+        },
+        child: Focus(
+          onKeyEvent: _handleMessageInputKeyEvent,
+          child: TextField(
+            key: const Key('session-message-input'),
+            controller: _controller,
+            focusNode: _messageInputFocusNode,
+            enabled: !isSessionBusy,
+            maxLines: showExpandedComposer ? 4 : 1,
+            minLines: 1,
+            textInputAction: _isMobilePlatform ? TextInputAction.newline : null,
+            decoration: InputDecoration(
+              hintText: _isListening
+                  ? context.l10n.voiceInputInProgress
+                  : context.l10n.messageInputHint,
+              filled: false,
+              contentPadding: EdgeInsetsDirectional.only(
+                start: AppSpacing.card,
+                end: showExpandedComposer ? AppSpacing.card : AppSpacing.micro,
+                top: showExpandedComposer
+                    ? AppSpacing.stack
+                    : AppSpacing.compact,
+                bottom: showExpandedComposer
+                    ? AppSpacing.compact
+                    : AppSpacing.compact,
+              ),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
+            ),
+          ),
+        ),
+      ),
+    );
+    final textComposerSurface = SizedBox(
+      key: const Key('session-text-composer-surface'),
+      height: showExpandedComposer ? null : collapsedComposerHeight,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: deepSurface,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+          border: Border.all(color: inputBorderColor),
+        ),
+        child: Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(
+            0,
+            0,
+            AppSpacing.compact,
+            AppSpacing.micro,
+          ),
+          child: OverlayPortal(
+            controller: _composerSuggestionsOverlayController,
+            overlayChildBuilder: (context) => _buildComposerSuggestionsOverlay(
+              deepSurface,
+              outlineStrong,
+            ),
+            child: showExpandedComposer
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      messageInput,
+                      Padding(
+                        padding: const EdgeInsetsDirectional.only(
+                          start: AppSpacing.card,
+                        ),
+                        child: FocusTraversalGroup(
+                          policy: OrderedTraversalPolicy(),
+                          child: Row(
+                            children: [
+                              const Spacer(),
+                              ...actionButtons,
+                            ],
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(child: messageInput),
+                      FocusTraversalGroup(
+                        policy: OrderedTraversalPolicy(),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: actionButtons,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
         ),
-        if (!_voiceComposerMode) ...[
-          const SizedBox(width: AppSpacing.compact),
-          IconButton(
-            key: const Key('session-send-button'),
-            tooltip: context.l10n.send,
-            onPressed: isSessionBusy ? null : _sendTextMessage,
-            style: IconButton.styleFrom(
-              backgroundColor: AppColors.primaryFor(brightness),
-              foregroundColor: AppColors.onPrimaryFor(brightness),
-              disabledBackgroundColor: deepSurface,
-              disabledForegroundColor: AppColors.mutedFor(brightness),
-              side: BorderSide(color: AppColors.primaryFor(brightness)),
-              minimumSize: const Size.square(44),
-              fixedSize: const Size.square(44),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-              ),
+      ),
+    );
+    final composerContent = _voiceComposerMode
+        ? _buildHoldToTalkControl(
+            disabled: holdToTalkDisabled,
+            deepSurface: deepSurface,
+            outlineStrong: outlineStrong,
+          )
+        : textComposerSurface;
+
+    return Column(
+      key: const Key('session-message-composer'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_pendingAttachments.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.compact),
+            child: _buildPendingAttachmentStrip(
+              deepSurface: deepSurface,
+              outlineStrong: outlineStrong,
             ),
-            icon: const Icon(Icons.send_rounded, size: 20),
+          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (showExpandedComposer)
+              const SizedBox.shrink()
+            else
+              voiceModeButton,
+            SizedBox(width: showExpandedComposer ? 0 : AppSpacing.compact),
+            Expanded(child: composerContent),
+          ],
+        ),
+        if (!_voiceComposerMode && _voiceHoldActive && _voiceHoldLifted) ...[
+          const SizedBox(height: AppSpacing.compact),
+          Row(
+            children: [
+              Expanded(
+                child: _VoiceReleaseTarget(
+                  key: const Key('session-voice-release-insert'),
+                  label: context.l10n.voiceHoldReleaseToText,
+                  icon: Icons.edit_note_rounded,
+                  selected:
+                      _voiceHoldReleaseAction() == _VoiceHoldAction.insert,
+                  selectedColor: AppColors.primaryFor(brightness),
+                  backgroundColor: deepSurface,
+                  borderColor: outlineStrong,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.compact),
+              Expanded(
+                child: _VoiceReleaseTarget(
+                  key: const Key('session-voice-release-cancel'),
+                  label: context.l10n.voiceHoldReleaseCancel,
+                  icon: Icons.close_rounded,
+                  selected:
+                      _voiceHoldReleaseAction() == _VoiceHoldAction.cancel,
+                  selectedColor: AppColors.errorTextFor(brightness),
+                  backgroundColor: deepSurface,
+                  borderColor: outlineStrong,
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (!_voiceComposerMode && _voiceHoldActive && !_voiceHoldLifted) ...[
+          const SizedBox(height: AppSpacing.micro),
+          Text(
+            holdStatusLabel ?? context.l10n.voiceHoldSlideUpHint,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.mutedSoftFor(brightness),
+                ),
+          ),
+          const SizedBox(height: AppSpacing.micro),
+          Text(
+            context.l10n.voiceHoldSlideUpHint,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.mutedSoftFor(brightness),
+                ),
+          ),
+        ] else if (!_voiceComposerMode &&
+            _voiceHoldActive &&
+            _voiceHoldLifted) ...[
+          const SizedBox(height: AppSpacing.micro),
+          Text(
+            holdStatusLabel ?? context.l10n.voiceHoldReleaseHint,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.mutedSoftFor(brightness),
+                ),
           ),
         ],
       ],
     );
+  }
+
+  Widget _buildPendingAttachmentStrip({
+    required Color deepSurface,
+    required Color outlineStrong,
+  }) {
+    final brightness = Theme.of(context).brightness;
+    return SizedBox(
+      height: 100,
+      child: ListView.separated(
+        key: const Key('session-pending-image-strip'),
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.only(top: 6, right: 6),
+        itemCount: _pendingAttachments.length,
+        separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.compact),
+        itemBuilder: (context, index) {
+          final attachment = _pendingAttachments[index];
+          return Container(
+            key: ValueKey('session-pending-image-$index'),
+            width: 136,
+            decoration: BoxDecoration(
+              color: deepSurface,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+              border: Border.all(color: outlineStrong),
+            ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+                    child: attachment.isImage
+                        ? Image.file(
+                            File(attachment.path),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: AppColors.panelFor(brightness),
+                              alignment: Alignment.center,
+                              child: Icon(
+                                Icons.broken_image_outlined,
+                                color: AppColors.mutedFor(brightness),
+                                size: 20,
+                              ),
+                            ),
+                          )
+                        : Container(
+                            color: AppColors.panelFor(brightness),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.compact,
+                              vertical: AppSpacing.compact,
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              attachment.fileName,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelMedium
+                                  ?.copyWith(
+                                    color: AppColors.textFor(brightness),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ),
+                  ),
+                ),
+                Positioned(
+                  top: -6,
+                  right: -6,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceFor(brightness).withValues(
+                        alpha: 0.92,
+                      ),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.outlineStrongFor(brightness),
+                      ),
+                    ),
+                    child: IconButton(
+                      key: ValueKey('session-remove-pending-image-$index'),
+                      tooltip: context.l10n.close,
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 28,
+                        height: 28,
+                      ),
+                      padding: EdgeInsets.zero,
+                      onPressed: () => _removePendingAttachmentAt(index),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: 16,
+                        color: AppColors.textFor(brightness),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _pickAttachments() async {
+    setState(() {
+      _speechError = null;
+      _pickingAttachments = true;
+    });
+    try {
+      final pickedPaths = widget.pickImages != null
+          ? await widget.pickImages!()
+          : await _pickAttachmentsWithSelector();
+      if (!mounted || pickedPaths.isEmpty) {
+        return;
+      }
+      _addPendingAttachmentPaths(pickedPaths);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _speechError = context.l10n.sendFailed('$error');
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _pickingAttachments = false;
+        });
+      }
+    }
+  }
+
+  Future<List<String>> _pickAttachmentsWithSelector() async {
+    final files = await openFiles(
+      acceptedTypeGroups: const [
+        XTypeGroup(
+          label: 'files',
+        ),
+      ],
+    );
+    return files.map((file) => file.path).whereType<String>().toList();
+  }
+
+  void _removePendingAttachmentAt(int index) {
+    setState(() {
+      _pendingAttachments.removeAt(index);
+    });
+  }
+
+  void _addPendingAttachmentPaths(List<String> paths) {
+    setState(() {
+      for (final path in paths) {
+        final attachment = _PendingAttachment.local(path);
+        if (!_pendingAttachments.any((item) => item.path == path)) {
+          _pendingAttachments.add(attachment);
+        }
+      }
+    });
   }
 
   void _toggleVoiceComposerMode() {
@@ -1480,7 +1959,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _voiceHoldLifted = false;
       _voiceHoldGlobalPosition = null;
     });
-    _syncComposerSuggestionsOverlay();
+    _syncComposerSuggestionsOverlayAfterFrame();
     if (enablingVoiceMode && widget.enableSpeechServices && !_speechReady) {
       unawaited(_ensureSpeechInitialized());
     }
@@ -1561,6 +2040,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           ),
           const SizedBox(height: AppSpacing.compact),
         ],
+        if (_voiceHoldActive && !_voiceHoldLifted) ...[
+          Text(
+            context.l10n.voiceHoldSlideUpHint,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.mutedSoftFor(brightness),
+                ),
+          ),
+          const SizedBox(height: AppSpacing.micro),
+        ],
         GestureDetector(
           key: _holdToTalkButtonKey,
           behavior: HitTestBehavior.opaque,
@@ -1579,7 +2069,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           child: AnimatedContainer(
             key: const Key('session-hold-to-talk-button'),
             duration: const Duration(milliseconds: 120),
-            height: 44,
+            height: 48,
             width: double.infinity,
             decoration: BoxDecoration(
               color:
@@ -1624,17 +2114,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             ),
           ),
         ),
-        if (_voiceHoldActive && !_voiceHoldLifted) ...[
-          const SizedBox(height: AppSpacing.micro),
-          Text(
-            context.l10n.voiceHoldSlideUpHint,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.mutedSoftFor(brightness),
-                ),
-          ),
-        ],
       ],
     );
   }
@@ -1754,7 +2233,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_callModeSubmittingVoiceUtterance) {
       return l10n.callModeWorking;
     }
-    if (_session.status == SessionStatus.running) {
+    if (_session.status == SessionStatus.running ||
+        _session.status == SessionStatus.waiting) {
       return l10n.callModeWorking;
     }
     if (_callModeAwaitingPlaybackCompletion || _isSpeaking) {
@@ -1778,6 +2258,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     if (_session.status == SessionStatus.awaitingApproval ||
         _session.status == SessionStatus.running ||
+        _session.status == SessionStatus.waiting ||
         _callModeSubmittingVoiceUtterance ||
         _callModeAwaitingPlaybackCompletion ||
         _isSpeaking) {
@@ -1877,20 +2358,32 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     ?.name ??
                 l10n.providerDefault;
 
-    return PopupMenuButton<String?>(
+    return PopupMenuButton<String>(
       tooltip: l10n.providerOverride,
       onSelected: (value) {
         final previous = _overrideProviderId;
+        final nextValue =
+            value == _defaultProviderMenuValue ? null : value;
         setState(() {
-          _overrideProviderId = value;
+          _overrideProviderId = nextValue;
+          _session = _session.copyWith(
+            providerId: nextValue,
+            clearProviderId: nextValue == null,
+          );
         });
+        _syncSessionSummaryCache();
         unawaited(
-          _client.updateSessionProvider(_session.id, value).catchError((e) {
+          _client.updateSessionProvider(_session.id, nextValue).catchError((e) {
             debugPrint('[provider] updateSessionProvider failed: $e');
             if (!mounted) return;
             setState(() {
               _overrideProviderId = previous;
+              _session = _session.copyWith(
+                providerId: previous,
+                clearProviderId: previous == null,
+              );
             });
+            _syncSessionSummaryCache();
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(context.l10n.providerOverrideFailed),
@@ -1939,7 +2432,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           ),
         ),
         PopupMenuItem(
-          value: null,
+          value: _defaultProviderMenuValue,
           child: Row(
             children: [
               if (_overrideProviderId == null)
@@ -1993,6 +2486,143 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ),
       ),
     );
+  }
+
+  Widget _buildReasoningEffortSelector() {
+    final theme = Theme.of(context);
+    final l10n = context.l10n;
+    final currentLabel = _overrideReasoningEffort == null
+        ? l10n.reasoningEffortDefault
+        : _reasoningEffortLabel(_overrideReasoningEffort!);
+
+    return PopupMenuButton<Object>(
+      key: const Key('session-reasoning-effort-button'),
+      tooltip: l10n.reasoningEffortOverride,
+      onSelected: (value) {
+        final previous = _overrideReasoningEffort;
+        final nextValue = value == _defaultReasoningEffortMenuValue
+            ? null
+            : value as ReasoningEffort;
+        setState(() {
+          _overrideReasoningEffort = nextValue;
+          _session = _session.copyWith(
+            reasoningEffort: nextValue,
+            clearReasoningEffort: nextValue == null,
+          );
+        });
+        _syncSessionSummaryCache();
+        unawaited(
+          _client
+              .updateSessionDefaults(
+                _session.id,
+                reasoningEffort: nextValue,
+                clearReasoningEffort: nextValue == null,
+              )
+              .catchError((e) {
+                debugPrint('[session] updateSessionDefaults failed: $e');
+                if (!mounted) return;
+                setState(() {
+                  _overrideReasoningEffort = previous;
+                  _session = _session.copyWith(
+                    reasoningEffort: previous,
+                    clearReasoningEffort: previous == null,
+                  );
+                });
+                _syncSessionSummaryCache();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(context.l10n.reasoningEffortOverrideFailed),
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+              }),
+        );
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem<Object>(
+          value: _defaultReasoningEffortMenuValue,
+          child: Row(
+            children: [
+              if (_overrideReasoningEffort == null)
+                Icon(
+                  Icons.check_rounded,
+                  size: 18,
+                  color: theme.colorScheme.tertiary,
+                )
+              else
+                const SizedBox(width: 18),
+              const SizedBox(width: 8),
+              Text(l10n.reasoningEffortDefault),
+            ],
+          ),
+        ),
+        ...selectableReasoningEfforts.map(
+          (effort) => PopupMenuItem<Object>(
+            value: effort,
+            child: Row(
+              children: [
+                if (_overrideReasoningEffort == effort)
+                  Icon(
+                    Icons.check_rounded,
+                    size: 18,
+                    color: theme.colorScheme.tertiary,
+                  )
+                else
+                  const SizedBox(width: 18),
+                const SizedBox(width: 8),
+                Text(_reasoningEffortLabel(effort)),
+              ],
+            ),
+          ),
+        ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.psychology_alt_outlined,
+              size: 20,
+              color: _overrideReasoningEffort != null
+                  ? theme.colorScheme.tertiary
+                  : theme.iconTheme.color,
+            ),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                currentLabel,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: _overrideReasoningEffort != null
+                      ? theme.colorScheme.tertiary
+                      : theme.textTheme.labelSmall?.color,
+                  fontWeight: _overrideReasoningEffort != null
+                      ? FontWeight.w600
+                      : FontWeight.w400,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 18,
+              color: theme.iconTheme.color,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _reasoningEffortLabel(ReasoningEffort effort) {
+    return switch (effort) {
+      ReasoningEffort.low => context.l10n.reasoningEffortLow,
+      ReasoningEffort.medium => context.l10n.reasoningEffortMedium,
+      ReasoningEffort.high => context.l10n.reasoningEffortHigh,
+      ReasoningEffort.xhigh => context.l10n.reasoningEffortXhigh,
+      ReasoningEffort.max => context.l10n.reasoningEffortMax,
+    };
   }
 
   Widget _buildCallModeAction({required String? unavailableMessage}) {
@@ -2317,10 +2947,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   maxWidth: messageBubbleMaxWidth,
                 ),
               ...turn.assistantMessages.map(
-                (message) => _buildAssistantMessage(
-                  message,
-                  maxWidth: messageBubbleMaxWidth,
-                ),
+                (message) {
+                  final isLastAssistantMessage =
+                      identical(message, turn.assistantMessages.last);
+                  return _buildAssistantMessage(
+                    message,
+                    maxWidth: messageBubbleMaxWidth,
+                    compactBottomSpacing:
+                        isLastAssistantMessage && turn.toolMessages.isNotEmpty,
+                  );
+                },
               ),
               if (turn.toolMessages.isNotEmpty)
                 _buildToolEntry(
@@ -2381,55 +3017,66 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Widget _buildUserMessage(ChatMessage message, {required double maxWidth}) {
     final localState = _localMessageStates[message.id];
     final canRetry = localState?.state == _LocalMessageState.failed;
+    final canRestoreQueued = localState?.state == _LocalMessageState.queued;
     final brightness = Theme.of(context).brightness;
-    final bubbleTextColor = AppColors.accentBlueOnFor(brightness);
+    final bubbleTextColor = AppColors.userMessageOnSurfaceFor(brightness);
     final imageReferences = extractMessageImageReferences(message.content);
+    final bubble = Container(
+      key: ValueKey('user-message-bubble-${message.id}'),
+      margin: const EdgeInsets.only(bottom: AppSpacing.stack),
+      padding: AppSpacing.cardPadding,
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      decoration: BoxDecoration(
+        color: AppColors.userMessageSurfaceFor(brightness),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildMarkdownMessageBody(
+            message.content,
+            textColor: bubbleTextColor,
+            maxWidth: maxWidth,
+            shrinkToContent: imageReferences.isNotEmpty,
+            imageReferences: imageReferences,
+            imageAlignment: Alignment.centerRight,
+            imageWrapAlignment: WrapAlignment.end,
+            imageCardBuilder: (reference, index) => _buildUserImageCard(
+              reference,
+              messageId: message.id,
+              imageReferences: imageReferences,
+              imageIndex: index,
+              textColor: bubbleTextColor,
+            ),
+          ),
+          if (localState != null) ...[
+            const SizedBox(height: AppSpacing.compact),
+            Text(
+              localState.label(context),
+              style: TextStyle(
+                fontSize: 11,
+                color: localState.state == _LocalMessageState.failed
+                    ? AppColors.errorTextFor(brightness)
+                    : bubbleTextColor.withValues(alpha: 0.78),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
     return Align(
       alignment: Alignment.centerRight,
-      child: GestureDetector(
-        onTap: canRetry ? () => _retryLocalMessage(message.id) : null,
-        child: Container(
-          key: ValueKey('user-message-bubble-${message.id}'),
-          margin: const EdgeInsets.only(bottom: AppSpacing.stack),
-          padding: AppSpacing.cardPadding,
-          constraints: BoxConstraints(maxWidth: maxWidth),
-          decoration: BoxDecoration(
-            color: AppColors.accentBlueFor(brightness),
-            borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildMarkdownMessageBody(
-                message.content,
-                textColor: bubbleTextColor,
-                maxWidth: maxWidth,
-                imageReferences: imageReferences,
-                imageAlignment: Alignment.centerRight,
-                imageWrapAlignment: WrapAlignment.end,
-                imageCardBuilder: (reference, index) => _buildUserImageCard(
-                  reference,
-                  messageId: message.id,
-                  imageReferences: imageReferences,
-                  imageIndex: index,
-                  textColor: bubbleTextColor,
-                ),
-              ),
-              if (localState != null) ...[
-                const SizedBox(height: AppSpacing.compact),
-                Text(
-                  localState.label(context),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: localState.state == _LocalMessageState.failed
-                        ? AppColors.errorTextFor(brightness)
-                        : bubbleTextColor.withValues(alpha: 0.78),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
+      child: _UserMessageBubble(
+        bubble: bubble,
+        showActions: canRestoreQueued || canRetry,
+        hoverKey: ValueKey('user-message-hover-${message.id}'),
+        onTapBubble:
+            canRestoreQueued || canRetry ? () => _retryLocalMessage(message.id) : null,
+        onWithdraw:
+            canRestoreQueued ? () => _withdrawQueuedMessage(message.id) : null,
+        onEdit:
+            canRestoreQueued ? () => _editQueuedMessage(message.id) : null,
+        onRetry: canRetry ? () => _retryLocalMessage(message.id) : null,
       ),
     );
   }
@@ -2440,75 +3087,42 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required VoidCallback onTap,
   }) {
     final brightness = Theme.of(context).brightness;
-    final baseSurface = AppColors.panelDeepFor(brightness);
-    final backgroundColor = highlighted
-        ? AppColors.tintSurfaceFor(
-            brightness,
-            AppColors.signalFor(brightness),
-            base: baseSurface,
-            darkAlpha: 0.30,
-            lightAlpha: 0.18,
-          )
-        : baseSurface;
-    final borderColor = highlighted
-        ? AppColors.tintBorderFor(
-            brightness,
-            AppColors.signalFor(brightness),
-            base: baseSurface,
-            darkAlpha: 0.56,
-            lightAlpha: 0.30,
-          )
-        : AppColors.outlineStrongFor(brightness);
-    final labelColor = highlighted
-        ? AppColors.textFor(brightness)
+    final iconColor = highlighted
+        ? AppColors.signalFor(brightness)
         : AppColors.mutedSoftFor(brightness);
     final countColor = highlighted
-        ? AppColors.textSoftFor(brightness)
+        ? AppColors.textFor(brightness)
         : AppColors.mutedFor(brightness);
 
     return Align(
       alignment: Alignment.centerLeft,
       child: Padding(
-        padding: const EdgeInsets.only(bottom: AppSpacing.compact),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.compact,
-                vertical: AppSpacing.iconTight,
-              ),
-              decoration: BoxDecoration(
-                color: backgroundColor,
-                borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
-                border: Border.all(color: borderColor),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.build_outlined, size: 12, color: labelColor),
-                  const SizedBox(width: AppSpacing.micro),
-                  Text(
-                    context.l10n.toolActivity,
-                    style: TextStyle(
-                      color: labelColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
+        padding: const EdgeInsets.only(bottom: AppSpacing.compact / 2),
+        child: _ToolEntryChip(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.iconTight,
+              vertical: 2,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.build_outlined,
+                  size: 14,
+                  color: iconColor,
+                ),
+                const SizedBox(width: 2),
+                Text(
+                  count > 99 ? '99+' : '$count',
+                  style: TextStyle(
+                    color: countColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
                   ),
-                  const SizedBox(width: AppSpacing.micro),
-                  Text(
-                    count > 99 ? '99+' : '$count',
-                    style: TextStyle(
-                      color: countColor,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -2519,6 +3133,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Widget _buildAssistantMessage(
     ChatMessage message, {
     required double maxWidth,
+    bool compactBottomSpacing = false,
   }) {
     final displayContent = _displayContentForMessage(message);
     final imageReferences = extractMessageImageReferences(message.content);
@@ -2532,13 +3147,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       alignment: Alignment.centerLeft,
       child: Container(
         key: ValueKey('assistant-message-bubble-${message.id}'),
-        margin: const EdgeInsets.only(bottom: AppSpacing.stack),
+        margin: EdgeInsets.only(
+          bottom: compactBottomSpacing
+              ? AppSpacing.compact / 2
+              : AppSpacing.stack,
+        ),
         padding: AppSpacing.cardPadding,
         constraints: BoxConstraints(maxWidth: maxWidth),
         decoration: BoxDecoration(
-          color: AppColors.panelDeepFor(brightness),
+          color: Colors.transparent,
           borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-          border: Border.all(color: AppColors.outlineFor(brightness)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2605,6 +3223,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     String content, {
     required Color textColor,
     required double maxWidth,
+    bool shrinkToContent = false,
     required List<MessageImageReference> imageReferences,
     required Alignment imageAlignment,
     required WrapAlignment imageWrapAlignment,
@@ -2617,8 +3236,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       fontSize: 13,
       height: 1.55,
       color: textColor,
-      fontFamily: 'JetBrains Mono',
-      fontFamilyFallback: const <String>['monospace'],
       letterSpacing: 0.1,
     );
     final styleSheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
@@ -2682,6 +3299,47 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       ),
     );
 
+    Widget buildImageReferences() {
+      return Align(
+        alignment: imageAlignment,
+        child: Wrap(
+          spacing: AppSpacing.compact,
+          runSpacing: AppSpacing.compact,
+          alignment: imageWrapAlignment,
+          children: [
+            for (var index = 0; index < imageReferences.length; index += 1)
+              imageCardBuilder(imageReferences[index], index),
+          ],
+        ),
+      );
+    }
+
+    if (shrinkToContent && imageReferences.isNotEmpty) {
+      return IntrinsicWidth(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SelectionArea(
+              child: MarkdownBody(
+                data: content,
+                fitContent: true,
+                selectable: false,
+                shrinkWrap: true,
+                softLineBreak: true,
+                styleSheet: styleSheet,
+                syntaxHighlighter: _AssistantCodeSyntaxHighlighter(theme),
+                sizedImageBuilder: (_) => const SizedBox.shrink(),
+                onTapLink: (text, href, title) =>
+                    _handleAssistantMarkdownLinkTap(href),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.compact),
+            buildImageReferences(),
+          ],
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2701,18 +3359,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ),
         if (imageReferences.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.compact),
-          Align(
-            alignment: imageAlignment,
-            child: Wrap(
-              spacing: AppSpacing.compact,
-              runSpacing: AppSpacing.compact,
-              alignment: imageWrapAlignment,
-              children: [
-                for (var index = 0; index < imageReferences.length; index += 1)
-                  imageCardBuilder(imageReferences[index], index),
-              ],
-            ),
-          ),
+          buildImageReferences(),
         ],
       ],
     );
@@ -2833,7 +3480,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             return const SizedBox.shrink();
           }
           return buildCard(
-            _buildImageThumbnail(
+            _buildMediaThumbnail(
               reference,
               snapshot.data,
               cacheKey: cacheKey,
@@ -2844,7 +3491,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     return buildCard(
-      _buildImageThumbnail(
+      _buildMediaThumbnail(
         reference,
         null,
         cacheKey: cacheKey,
@@ -2885,6 +3532,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
     }
     _imageFileFutures.removeWhere((key, _) => !activeKeys.contains(key));
+    _videoFileFutures.removeWhere((key, _) => !activeKeys.contains(key));
   }
 
   Future<BridgeFileResponse>? _imageFileFuture(
@@ -2907,11 +3555,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return '$messageId-${reference.cardKey}';
   }
 
-  Widget _buildImageThumbnail(
+  Widget _buildMediaThumbnail(
     MessageImageReference reference,
     BridgeFileResponse? file, {
     required String cacheKey,
   }) {
+    if (reference.isVideo) {
+      return _buildVideoThumbnail(reference, cacheKey: cacheKey);
+    }
+
     if (reference.isDataUri) {
       final bytes = reference.dataBytes;
       if (bytes == null) {
@@ -2959,6 +3611,99 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           );
   }
 
+  Widget _buildVideoThumbnail(
+    MessageImageReference reference, {
+    required String cacheKey,
+  }) {
+    if (_supportsInlineVideoThumbnails) {
+      return _VideoThumbnail(
+        key: ValueKey('video-thumbnail-$cacheKey'),
+        reference: reference,
+        cacheKey: cacheKey,
+        resolveLocalVideoFile: _resolveLocalVideoFile,
+        fileFuture: reference.isRemoteUrl
+            ? null
+            : _imageFileFuture(reference, cacheKey: cacheKey),
+        fallback: _buildVideoThumbnailFallback(cacheKey: cacheKey),
+      );
+    }
+
+    return _buildVideoThumbnailFallback(cacheKey: cacheKey);
+  }
+
+  bool get _supportsInlineVideoThumbnails {
+    if (kIsWeb) {
+      return false;
+    }
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+  }
+
+  Widget _buildVideoThumbnailFallback({
+    required String cacheKey,
+  }) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF161A22),
+                const Color(0xFF2A3140),
+              ],
+            ),
+          ),
+          child: const SizedBox.expand(),
+        ),
+        const Positioned(
+          left: 6,
+          top: 6,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Color(0xA6000000),
+              borderRadius: BorderRadius.all(Radius.circular(999)),
+            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              child: Text(
+                'MP4',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ),
+          ),
+        ),
+        Align(
+          child: Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.42),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.22),
+              ),
+            ),
+            child: Icon(
+              Icons.play_arrow_rounded,
+              key: ValueKey('video-thumbnail-icon-$cacheKey'),
+              size: 20,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   void _evictRemoteImageCache(MessageImageReference reference) {
     if (!reference.isRemoteUrl || reference.isSvg) {
       return;
@@ -2977,11 +3722,26 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
 
+    if (reference.isVideo && !kIsWeb) {
+      final isDesktopExternal = defaultTargetPlatform == TargetPlatform.linux ||
+          defaultTargetPlatform == TargetPlatform.windows;
+      if (isDesktopExternal) {
+        await _openVideoExternally(
+          reference,
+          messageId: messageId,
+          cacheKey: cacheKey,
+        );
+        return;
+      }
+    }
+
     final galleryReferences =
         imageReferences ?? <MessageImageReference>[reference];
     var currentIndex =
         initialIndex.clamp(0, galleryReferences.length - 1).toInt();
     var backdropMode = _ImagePreviewBackdropMode.dark;
+    final previewSessionToken =
+        DateTime.now().microsecondsSinceEpoch.toString();
 
     await showDialog<void>(
       context: context,
@@ -3010,7 +3770,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             }
 
             return Image.memory(
-              bytes,
+              currentReference.isAnimatedImage
+                  ? Uint8List.fromList(bytes)
+                  : bytes,
+              key: currentReference.isAnimatedImage
+                  ? ValueKey(
+                      'animated-data-preview-$currentCacheKey-$previewSessionToken',
+                    )
+                  : null,
               fit: BoxFit.contain,
               errorBuilder: (context, _, __) {
                 return _buildImagePreviewError(
@@ -3021,16 +3788,40 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           }
 
           Widget buildFullscreenImage() {
+            if (currentReference.isVideo) {
+              return _SessionVideoPreview(
+                key: ValueKey('video-preview-$currentCacheKey'),
+                reference: currentReference,
+                messageId: messageId,
+                cacheKey: currentCacheKey,
+                sessionId: _session.id,
+                bridgeFileFuture: bridgeFileFuture,
+                resolveLocalVideoFile: _resolveLocalVideoFile,
+                initialMuted: appSettingsController.settings.videoPreviewMuted,
+                onMutedChanged: (muted) {
+                  unawaited(
+                    appSettingsController.save(
+                      appSettingsController.settings.copyWith(
+                        videoPreviewMuted: muted,
+                      ),
+                    ),
+                  );
+                },
+              );
+            }
+
             final isSvg = currentReference.isSvg;
             final dataUriChild = buildDataUriImage();
             if (dataUriChild != null) {
               return InteractiveViewer(
+                maxScale: 40,
                 child: SizedBox.expand(child: dataUriChild),
               );
             }
             if (currentReference.isRemoteUrl) {
               _evictRemoteImageCache(currentReference);
               return InteractiveViewer(
+                maxScale: 40,
                 child: SizedBox.expand(
                   child: isSvg
                       ? SvgPicture.network(
@@ -3046,7 +3837,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                           ),
                         )
                       : Image.network(
-                          currentReference.path,
+                          currentReference.isAnimatedImage
+                              ? _previewAnimatedRemoteUrl(
+                                  currentReference.path,
+                                  previewSessionToken,
+                                )
+                              : currentReference.path,
                           key: ValueKey(
                             'remote-image-preview-$currentCacheKey',
                           ),
@@ -3079,6 +3875,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   );
                 }
                 return InteractiveViewer(
+                  maxScale: 40,
                   child: SizedBox.expand(
                     child: isSvg
                         ? SvgPicture.string(
@@ -3086,7 +3883,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                             fit: BoxFit.contain,
                           )
                         : Image.memory(
-                            snapshot.data!.bytes,
+                            currentReference.isAnimatedImage
+                                ? Uint8List.fromList(snapshot.data!.bytes)
+                                : snapshot.data!.bytes,
+                            key: currentReference.isAnimatedImage
+                                ? ValueKey(
+                                    'animated-local-preview-$currentCacheKey-$previewSessionToken',
+                                  )
+                                : null,
                             fit: BoxFit.contain,
                             errorBuilder: (context, _, __) {
                               return _buildImagePreviewError(
@@ -3421,6 +4225,70 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ),
       ),
     );
+  }
+
+  Future<File> _resolveLocalVideoFile(
+    MessageImageReference reference, {
+    required String cacheKey,
+    Future<BridgeFileResponse>? bridgeFileFuture,
+  }) {
+    if (reference.isAbsoluteLocalPath) {
+      return Future<File>.value(File(reference.path));
+    }
+
+    return _videoFileFutures.putIfAbsent(cacheKey, () async {
+      final fileResponse =
+          bridgeFileFuture ?? _imageFileFuture(reference, cacheKey: cacheKey);
+      if (fileResponse == null) {
+        throw StateError('Missing local video file bytes.');
+      }
+      final bytes = (await fileResponse).bytes;
+      final tempDir = await getTemporaryDirectory();
+      final extension = reference.path.split('.').last.toLowerCase();
+      final safeKey = _safePreviewFileKey(cacheKey);
+      final file =
+          File('${tempDir.path}/omni_code_preview_$safeKey.$extension');
+      await file.writeAsBytes(bytes, flush: true);
+      return file;
+    });
+  }
+
+  String _safePreviewFileKey(String value) {
+    return value.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
+  }
+
+  String _previewAnimatedRemoteUrl(String path, String token) {
+    final uri = Uri.parse(path);
+    return uri
+        .replace(
+          fragment: 'preview-restart-$token',
+        )
+        .toString();
+  }
+
+  Future<void> _openVideoExternally(
+    MessageImageReference reference, {
+    String? messageId,
+    String? cacheKey,
+  }) async {
+    final uri = reference.isRemoteUrl
+        ? Uri.parse(reference.path)
+        : Uri.file(
+            (await _resolveLocalVideoFile(
+              reference,
+              cacheKey: messageId == null
+                  ? cacheKey ?? reference.cardKey
+                  : _imageFileCacheKey(messageId, reference),
+              bridgeFileFuture: messageId == null
+                  ? null
+                  : _imageFileFuture(
+                      reference,
+                      cacheKey: _imageFileCacheKey(messageId, reference),
+                    ),
+            ))
+                .path,
+          );
+    await launchUrl(uri);
   }
 
   String _toolMessagePreview(ChatMessage message) {
@@ -4652,11 +5520,27 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_isMobilePlatform) {
       return KeyEventResult.ignored;
     }
+    final isTabKey = event.logicalKey == LogicalKeyboardKey.tab;
+    if (event is KeyDownEvent && isTabKey) {
+      if (HardwareKeyboard.instance.isShiftPressed) {
+        return KeyEventResult.ignored;
+      }
+      final hasActiveTurn = _session.status == SessionStatus.running ||
+          _session.status == SessionStatus.waiting ||
+          _session.status == SessionStatus.awaitingApproval ||
+          _pendingApproval != null;
+      final nextComposerNode = hasActiveTurn
+          ? _stopReplyFocusNode
+          : _imagePickerFocusNode;
+      nextComposerNode.requestFocus();
+      return KeyEventResult.handled;
+    }
     final commandSuggestions = _matchingCommandSuggestions;
     final isArrowDown = event.logicalKey == LogicalKeyboardKey.arrowDown;
     final isArrowUp = event.logicalKey == LogicalKeyboardKey.arrowUp;
     final isEscape = event.logicalKey == LogicalKeyboardKey.escape;
-    if (event is KeyDownEvent && (_showCommandSuggestions || _showFileSuggestions)) {
+    if (event is KeyDownEvent &&
+        (_showCommandSuggestions || _showFileSuggestions)) {
       if (isArrowDown) {
         if (_showCommandSuggestions) {
           _moveSelectedCommandSuggestion(1);
@@ -4722,6 +5606,145 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     };
   }
 
+  Future<void> _handlePasteShortcut() async {
+    final pastedPaths = widget.readClipboardAttachments != null
+        ? await widget.readClipboardAttachments!()
+        : widget.readClipboardText == null
+            ? await _readClipboardAttachmentPaths()
+            : const <String>[];
+    if (!mounted) {
+      return;
+    }
+    if (pastedPaths.isNotEmpty) {
+      _addPendingAttachmentPaths(pastedPaths);
+      return;
+    }
+
+    final text = widget.readClipboardText != null
+        ? await widget.readClipboardText!()
+        : (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    if (!mounted) {
+      return;
+    }
+    _insertPastedTextAtSelection(text);
+  }
+
+  void _insertPastedTextAtSelection(String? pastedText) {
+    if (pastedText == null || pastedText.isEmpty) {
+      return;
+    }
+    final value = _controller.value;
+    final text = value.text;
+    final selection = value.selection;
+    final start = selection.isValid
+        ? math.min(selection.baseOffset, selection.extentOffset)
+        : text.length;
+    final end = selection.isValid
+        ? math.max(selection.baseOffset, selection.extentOffset)
+        : text.length;
+    final replaceStart = math.max(0, math.min(start, text.length));
+    final replaceEnd = math.max(replaceStart, math.min(end, text.length));
+    final updatedText =
+        '${text.substring(0, replaceStart)}$pastedText${text.substring(replaceEnd)}';
+    final caretOffset = replaceStart + pastedText.length;
+    _controller.value = TextEditingValue(
+      text: updatedText,
+      selection: TextSelection.collapsed(offset: caretOffset),
+    );
+    _composerDraftFromVoice = false;
+    _markNextComposerChangeAsVoice = false;
+  }
+
+  Future<List<String>> _readClipboardAttachmentPaths() async {
+    final clipboard = SystemClipboard.instance;
+    if (clipboard == null) {
+      return const <String>[];
+    }
+    final reader = await clipboard.read();
+    final paths = <String>[];
+
+    for (final item in reader.items) {
+      final fileUri = await item.readValue(Formats.fileUri);
+      if (fileUri != null && fileUri.isScheme('file')) {
+        paths.add(fileUri.toFilePath());
+        continue;
+      }
+
+      for (final candidate in _clipboardFileFormats) {
+        if (!item.canProvide(candidate.format)) {
+          continue;
+        }
+        final path = await _readClipboardFile(
+          item,
+          candidate.format,
+          extension: candidate.extension,
+          fallbackName: candidate.fallbackName,
+        );
+        if (path != null) {
+          paths.add(path);
+          break;
+        }
+      }
+    }
+
+    return paths;
+  }
+
+  Future<String?> _readClipboardFile(
+    ClipboardDataReader reader,
+    FileFormat format, {
+    required String extension,
+    required String fallbackName,
+  }) async {
+    final completer = Completer<String?>();
+    final progress = reader.getFile(
+      format,
+      (dataFile) async {
+        final suggestedName = await reader.getSuggestedName();
+        final fileName = _clipboardFileName(
+          dataFile.fileName ?? suggestedName,
+          fallbackName: fallbackName,
+          extension: extension,
+        );
+        final directory = await getTemporaryDirectory();
+        final file = File(
+          '${directory.path}/omni-code-paste-${DateTime.now().microsecondsSinceEpoch}-$fileName',
+        );
+        await file.writeAsBytes(await dataFile.readAll(), flush: true);
+        if (!completer.isCompleted) {
+          completer.complete(file.path);
+        }
+      },
+      onError: (error) {
+        if (!completer.isCompleted) {
+          completer.completeError(error);
+        }
+      },
+    );
+    if (progress == null && !completer.isCompleted) {
+      completer.complete(null);
+    }
+    if (!completer.isCompleted) {
+      return completer.future;
+    }
+    return completer.future;
+  }
+
+  String _clipboardFileName(
+    String? rawName, {
+    required String fallbackName,
+    required String extension,
+  }) {
+    final trimmed = rawName?.trim();
+    final baseName = trimmed == null || trimmed.isEmpty
+        ? fallbackName
+        : _PendingAttachment.fileNameForPath(trimmed);
+    if (baseName.toLowerCase().endsWith('.$extension')) {
+      return baseName;
+    }
+    return '$baseName.$extension';
+  }
+
   Future<void> _sendTextMessage() async {
     if (_creatingSession) {
       setState(() {
@@ -4729,14 +5752,25 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       });
       return;
     }
-    if (_session.status == SessionStatus.running) {
-      setState(() {
-        _speechError = context.l10n.sessionStillRunning;
-      });
+    if (_uploadingAttachments) {
       return;
     }
 
-    final content = _controller.text.trim();
+    final String content;
+    try {
+      content = await _buildOutgoingMessageContent();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _speechError = context.l10n.sendFailed('$error');
+      });
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
     if (content.isEmpty) {
       setState(() {
         _speechError = context.l10n.messageInputRequired;
@@ -4747,7 +5781,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final inputMode = _speechStatus == context.l10n.voiceTranscriptionComplete
         ? 'voice'
         : 'text';
-    await _submitLocalMessage(content, inputMode: inputMode);
+    await _enqueueOrSubmitLocalMessage(content, inputMode: inputMode);
   }
 
   Future<void> _retryLocalMessage(String messageId) async {
@@ -4759,11 +5793,140 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (draft == null || message == null) {
       return;
     }
+    if (draft.state == _LocalMessageState.queued) {
+      _editQueuedMessage(messageId);
+      return;
+    }
     await _submitLocalMessage(
       message.content,
       inputMode: draft.inputMode,
       localMessageId: messageId,
     );
+  }
+
+  Future<void> _enqueueOrSubmitLocalMessage(
+    String content, {
+    required String inputMode,
+  }) async {
+    final status = _session.status;
+    final shouldQueue = status == SessionStatus.running ||
+        status == SessionStatus.awaitingApproval ||
+        _pendingApproval != null ||
+        _hasPendingLocalMessage;
+    if (shouldQueue) {
+      _queueLocalMessage(content, inputMode: inputMode);
+      return;
+    }
+    await _submitLocalMessage(content, inputMode: inputMode);
+  }
+
+  void _queueLocalMessage(String content, {required String inputMode}) {
+    final previousTurnCount = _allTurns.length;
+    final messageId = 'local-${DateTime.now().microsecondsSinceEpoch}';
+    final localMessage = ChatMessage(
+      id: messageId,
+      sessionId: _session.id,
+      role: MessageRole.user,
+      content: content,
+      createdAt: DateTime.now(),
+    );
+    setState(() {
+      _speechError = null;
+      _controller.clear();
+      _composerDraftFromVoice = false;
+      _markNextComposerChangeAsVoice = false;
+      _pendingAttachments.clear();
+      _messages.add(localMessage);
+      _localMessageStates[messageId] = _LocalMessageDraft(
+        state: _LocalMessageState.queued,
+        inputMode: inputMode,
+      );
+      _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
+    });
+    _jumpToBottom();
+    _requestComposerFocusAfterFrame(consumeReturnRequest: false);
+  }
+
+  Future<void> _dispatchQueuedLocalMessageIfPossible() async {
+    if (!mounted ||
+        _dispatchingQueuedLocalMessage ||
+        _hasPendingLocalMessage ||
+        _session.status == SessionStatus.running ||
+        _session.status == SessionStatus.awaitingApproval ||
+        _pendingApproval != null) {
+      return;
+    }
+    final entry = _localMessageStates.entries
+        .where((entry) => entry.value.state == _LocalMessageState.queued)
+        .cast<MapEntry<String, _LocalMessageDraft>?>()
+        .firstWhere((_) => true, orElse: () => null);
+    if (entry == null) {
+      return;
+    }
+    final message = _messages
+        .where((item) => item.id == entry.key)
+        .cast<ChatMessage?>()
+        .firstWhere((_) => true, orElse: () => null);
+    if (message == null) {
+      setState(() {
+        _localMessageStates.remove(entry.key);
+      });
+      return;
+    }
+    _dispatchingQueuedLocalMessage = true;
+    try {
+      await _submitLocalMessage(
+        message.content,
+        inputMode: entry.value.inputMode,
+        localMessageId: entry.key,
+      );
+    } finally {
+      _dispatchingQueuedLocalMessage = false;
+    }
+  }
+
+  void _editQueuedMessage(String messageId) {
+    final draft = _localMessageStates[messageId];
+    if (draft == null || draft.state != _LocalMessageState.queued) {
+      return;
+    }
+    final index = _messages.indexWhere((item) => item.id == messageId);
+    if (index < 0) {
+      return;
+    }
+    final message = _messages[index];
+    setState(() {
+      _messages.removeAt(index);
+      _localMessageStates.remove(messageId);
+      _controller.text = message.content;
+      _controller.selection = TextSelection.collapsed(
+        offset: _controller.text.length,
+      );
+      _composerDraftFromVoice = draft.inputMode == 'voice';
+      _markNextComposerChangeAsVoice = false;
+      _speechError = null;
+      _syncVisibleTurnWindow(previousTotalTurns: _allTurns.length + 1);
+    });
+    _requestComposerFocusAfterFrame(consumeReturnRequest: false);
+  }
+
+  void _withdrawQueuedMessage(String messageId) {
+    final index = _messages.indexWhere((item) => item.id == messageId);
+    if (index < 0) {
+      return;
+    }
+    final previousTurnCount = _allTurns.length;
+    setState(() {
+      final removedMessages = _messages.sublist(index).toList(growable: false);
+      _messages.removeRange(index, _messages.length);
+      for (final removedMessage in removedMessages) {
+        _localMessageStates.remove(removedMessage.id);
+      }
+      _speechError = null;
+      _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
+    });
+    _jumpToBottom();
+    _requestComposerFocusAfterFrame(consumeReturnRequest: false);
   }
 
   Future<bool> _submitLocalMessage(
@@ -4785,6 +5948,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _speechError = null;
       if (localMessageId == null) {
         _controller.clear();
+        _composerDraftFromVoice = false;
+        _markNextComposerChangeAsVoice = false;
+        _pendingAttachments.clear();
         _messages.add(localMessage);
       } else {
         final index = _messages.indexWhere((item) => item.id == localMessageId);
@@ -4796,9 +5962,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         state: _LocalMessageState.pending,
         inputMode: inputMode,
       );
+      _session = _session.copyWith(
+        status: SessionStatus.waiting,
+        updatedAt: localMessage.createdAt,
+        lastMessagePreview: localMessage.content,
+        clearPendingApproval: true,
+      );
       _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
     });
     _jumpToBottom();
+    _requestComposerFocusWhileActiveTurnAfterFrame();
+    _requestComposerFocusAfterFrame(consumeReturnRequest: false);
 
     try {
       final previousTurnCountAfterLocalInsert = _allTurns.length;
@@ -4808,8 +5982,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         inputMode: inputMode,
         systemPrompt: _messageSystemPrompt(inputMode),
         providerId: _overrideProviderId,
+        reasoningEffort: _overrideReasoningEffort,
       );
       if (!mounted) {
+        return false;
+      }
+      if (_cancellingPendingLocalMessageId == messageId) {
+        setState(() {
+          _cancellingPendingLocalMessageId = null;
+        });
         return false;
       }
       setState(() {
@@ -4856,21 +6037,26 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       });
       _returnFocusToComposerAfterReply = true;
       _syncSessionSummaryCache();
-      _requestStopReplyFocusAfterFrame();
+      _requestComposerFocusWhileActiveTurnAfterFrame();
+      _requestComposerFocusAfterFrame(consumeReturnRequest: false);
       _scheduleRefreshSessionSummary();
+      unawaited(_dispatchQueuedLocalMessageIfPossible());
       return true;
     } catch (error) {
       if (!mounted) {
         return false;
       }
       setState(() {
+        if (_cancellingPendingLocalMessageId == messageId) {
+          _cancellingPendingLocalMessageId = null;
+          _localMessageStates.remove(messageId);
+          return;
+        }
         _localMessageStates[messageId] = _LocalMessageDraft(
           state: _LocalMessageState.failed,
           inputMode: inputMode,
         );
-        _speechError = error.toString().contains('already processing a message')
-            ? context.l10n.sessionStillRunning
-            : context.l10n.sendFailed('$error');
+        _speechError = context.l10n.sendFailed('$error');
       });
       return false;
     }
@@ -4895,6 +6081,63 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     return prompts.isEmpty ? null : prompts.join('\n\n');
+  }
+
+  Future<String> _buildOutgoingMessageContent() async {
+    final trimmedText = _controller.text.trim();
+    final attachmentMarkdown = await _buildAttachmentMarkdown();
+    if (trimmedText.isEmpty) {
+      return attachmentMarkdown;
+    }
+    if (attachmentMarkdown.isEmpty) {
+      return trimmedText;
+    }
+    return '$trimmedText\n\n$attachmentMarkdown';
+  }
+
+  Future<String> _buildAttachmentMarkdown() async {
+    if (_pendingAttachments.isEmpty) {
+      return '';
+    }
+    setState(() {
+      _uploadingAttachments = true;
+    });
+    try {
+      final markdown = <String>[];
+      for (final attachment in _pendingAttachments) {
+        final uploaded = await _client.uploadFile(attachment.path);
+        final url = _attachmentMarkdownUrl(uploaded);
+        final fileName = uploaded.fileName.isNotEmpty
+            ? uploaded.fileName
+            : attachment.fileName;
+        markdown.add(
+          attachment.isImage || uploaded.contentType.startsWith('image/')
+              ? '![${_escapeMarkdownLabel(fileName)}]($url)'
+              : '[${_escapeMarkdownLabel(fileName)}]($url)',
+        );
+      }
+      return markdown.join('\n');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploadingAttachments = false;
+        });
+      }
+    }
+  }
+
+  String _attachmentMarkdownUrl(BridgeUploadResponse uploaded) {
+    if (uploaded.localPath.isNotEmpty) {
+      return uploaded.localPath;
+    }
+    if (uploaded.absoluteUrl.isNotEmpty) {
+      return uploaded.absoluteUrl;
+    }
+    return uploaded.url;
+  }
+
+  String _escapeMarkdownLabel(String label) {
+    return _PendingAttachment.escapeMarkdownLabel(label);
   }
 
   String? _speechPlaybackSystemPrompt(String inputMode) {
@@ -4930,12 +6173,51 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_creatingSession || _cancellingReply) {
       return;
     }
+    final pendingEntry = _localMessageStates.entries
+        .where((entry) => entry.value.state == _LocalMessageState.pending)
+        .cast<MapEntry<String, _LocalMessageDraft>?>()
+        .firstWhere((_) => true, orElse: () => null);
+    if (_session.status == SessionStatus.waiting && pendingEntry != null) {
+      final index = _messages.indexWhere((item) => item.id == pendingEntry.key);
+      final pendingMessage = index >= 0 ? _messages[index] : null;
+      setState(() {
+        _cancellingPendingLocalMessageId = pendingEntry.key;
+        _localMessageStates.remove(pendingEntry.key);
+        if (index >= 0) {
+          _messages.removeAt(index);
+        }
+        _pendingApproval = null;
+        _submittingApproval = false;
+        _submittingApprovalChoice = null;
+        _session = _session.copyWith(
+          status: SessionStatus.idle,
+          updatedAt: DateTime.now(),
+          clearPendingApproval: true,
+        );
+        if (pendingMessage != null) {
+          _controller.text = pendingMessage.content;
+          _controller.selection = TextSelection.collapsed(
+            offset: _controller.text.length,
+          );
+        }
+      });
+      _syncSessionSummaryCache();
+      _requestComposerFocusAfterFrame(consumeReturnRequest: false);
+      return;
+    }
     setState(() {
       _cancellingReply = true;
     });
     try {
-      await _client.cancelReply(_session.id);
+      final cancelled = await _client.cancelReply(_session.id);
       if (!mounted) {
+        return;
+      }
+      if (!cancelled) {
+        setState(() {
+          _cancellingReply = false;
+        });
+        unawaited(_restoreSessionAfterResume());
         return;
       }
       setState(() {
@@ -5686,15 +6968,22 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   ) {
     final turns = <_ConversationTurn>[];
     _ConversationTurn? currentTurn;
+    _ConversationTurn? activeReplyTurn;
     for (final message in messages) {
       if (message.role == MessageRole.user) {
         currentTurn = _ConversationTurn(id: message.id, userMessage: message);
         turns.add(currentTurn);
+        final localState = _localMessageStates[message.id]?.state;
+        if (localState != _LocalMessageState.queued) {
+          activeReplyTurn = currentTurn;
+        }
         continue;
       }
 
+      currentTurn = activeReplyTurn ?? currentTurn;
       currentTurn ??= _ConversationTurn(id: 'orphan-${message.id}');
-      if (turns.isEmpty || !identical(turns.last, currentTurn)) {
+      final alreadyPresent = turns.any((turn) => identical(turn, currentTurn));
+      if (!alreadyPresent) {
         turns.add(currentTurn);
       }
 
@@ -5797,7 +7086,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     for (var index = _messages.length - 1; index >= 0; index -= 1) {
       final message = _messages[index];
       if (message.role == MessageRole.user) {
-        return message.id;
+        final localState = _localMessageStates[message.id]?.state;
+        if (localState != _LocalMessageState.queued) {
+          return message.id;
+        }
       }
     }
     return null;
@@ -6400,7 +7692,14 @@ class _VoiceReleaseTarget extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final brightness = theme.brightness;
-    final color = selected ? selectedColor : AppColors.mutedSoftFor(brightness);
+    final effectiveSelectedColor = brightness == Brightness.light && selected
+        ? Color.alphaBlend(
+            selectedColor.withValues(alpha: 0.62),
+            AppColors.textFor(brightness),
+          )
+        : selectedColor;
+    final color =
+        selected ? effectiveSelectedColor : AppColors.textFor(brightness);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 120),
       height: 38,
@@ -6412,11 +7711,14 @@ class _VoiceReleaseTarget extends StatelessWidget {
                 selectedColor,
                 base: backgroundColor,
                 darkAlpha: 0.24,
-                lightAlpha: 0.14,
+                lightAlpha: 0.34,
               )
             : backgroundColor,
         borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-        border: Border.all(color: selected ? selectedColor : borderColor),
+        border: Border.all(
+          color: selected ? effectiveSelectedColor : borderColor,
+          width: selected ? 1.4 : 1,
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -6443,6 +7745,7 @@ class _VoiceReleaseTarget extends StatelessWidget {
 class _ComposerVoiceButton extends StatefulWidget {
   const _ComposerVoiceButton({
     super.key,
+    required this.focusNode,
     required this.label,
     required this.disabled,
     required this.isListening,
@@ -6454,8 +7757,13 @@ class _ComposerVoiceButton extends StatefulWidget {
     required this.disabledIconColor,
     required this.focusColor,
     required this.onPressed,
+    required this.onLongPressStart,
+    required this.onLongPressMoveUpdate,
+    required this.onLongPressEnd,
+    required this.onLongPressCancel,
   });
 
+  final FocusNode focusNode;
   final String label;
   final bool disabled;
   final bool isListening;
@@ -6467,6 +7775,10 @@ class _ComposerVoiceButton extends StatefulWidget {
   final Color disabledIconColor;
   final Color focusColor;
   final VoidCallback onPressed;
+  final ValueChanged<LongPressStartDetails> onLongPressStart;
+  final ValueChanged<LongPressMoveUpdateDetails> onLongPressMoveUpdate;
+  final ValueChanged<LongPressEndDetails> onLongPressEnd;
+  final VoidCallback onLongPressCancel;
 
   @override
   State<_ComposerVoiceButton> createState() => _ComposerVoiceButtonState();
@@ -6496,6 +7808,7 @@ class _ComposerVoiceButtonState extends State<_ComposerVoiceButton> {
           ),
         },
         child: FocusableActionDetector(
+          focusNode: widget.focusNode,
           enabled: !widget.disabled,
           mouseCursor: widget.disabled
               ? SystemMouseCursors.basic
@@ -6520,6 +7833,13 @@ class _ComposerVoiceButtonState extends State<_ComposerVoiceButton> {
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: widget.disabled ? null : widget.onPressed,
+                onLongPressStart:
+                    widget.disabled ? null : widget.onLongPressStart,
+                onLongPressMoveUpdate:
+                    widget.disabled ? null : widget.onLongPressMoveUpdate,
+                onLongPressEnd: widget.disabled ? null : widget.onLongPressEnd,
+                onLongPressCancel:
+                    widget.disabled ? null : widget.onLongPressCancel,
                 child: Center(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
@@ -6640,8 +7960,6 @@ class _AssistantCodeSyntaxHighlighter extends SyntaxHighlighter {
     final baseStyle = theme.textTheme.bodyMedium?.copyWith(
       color: AppColors.textFor(brightness),
       fontSize: (theme.textTheme.bodyLarge?.fontSize ?? 14) * 0.93,
-      fontFamily: 'JetBrains Mono',
-      fontFamilyFallback: const <String>['monospace'],
       height: 1.55,
       letterSpacing: 0.1,
     );
@@ -6704,7 +8022,7 @@ class _AssistantCodeSyntaxHighlighter extends SyntaxHighlighter {
   }
 }
 
-enum _LocalMessageState { pending, failed }
+enum _LocalMessageState { queued, pending, failed }
 
 class _LocalMessageDraft {
   const _LocalMessageDraft({required this.state, required this.inputMode});
@@ -6714,9 +8032,308 @@ class _LocalMessageDraft {
 
   String label(BuildContext context) {
     return switch (state) {
+      _LocalMessageState.queued => context.l10n.draftPending,
       _LocalMessageState.pending => context.l10n.draftPending,
       _LocalMessageState.failed => context.l10n.draftFailed,
     };
+  }
+}
+
+class _UserMessageBubble extends StatefulWidget {
+  const _UserMessageBubble({
+    required this.bubble,
+    required this.showActions,
+    this.hoverKey,
+    this.onTapBubble,
+    this.onWithdraw,
+    this.onEdit,
+    this.onRetry,
+  });
+
+  final Widget bubble;
+  final bool showActions;
+  final Key? hoverKey;
+  final VoidCallback? onTapBubble;
+  final VoidCallback? onWithdraw;
+  final VoidCallback? onEdit;
+  final VoidCallback? onRetry;
+
+  @override
+  State<_UserMessageBubble> createState() => _UserMessageBubbleState();
+}
+
+class _UserMessageBubbleState extends State<_UserMessageBubble> {
+  Timer? _hoverHideTimer;
+
+  bool get _canShowInlineActions => widget.showActions;
+
+  void _showInlineActions() {
+    _hoverHideTimer?.cancel();
+  }
+
+  void _scheduleHideInlineActions() {
+    _hoverHideTimer?.cancel();
+  }
+
+  Future<void> _showActionsSheet() async {
+    if (!widget.showActions) {
+      return;
+    }
+    final l10n = context.l10n;
+    final brightness = Theme.of(context).brightness;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.onWithdraw != null)
+              ListTile(
+                leading: const Icon(Icons.undo_rounded),
+                title: Text(l10n.withdrawMessage),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  widget.onWithdraw?.call();
+                },
+              ),
+            if (widget.onEdit != null)
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: Text(l10n.editMessage),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  widget.onEdit?.call();
+                },
+              ),
+            if (widget.onRetry != null)
+              ListTile(
+                leading: Icon(
+                  Icons.refresh_rounded,
+                  color: AppColors.errorTextFor(brightness),
+                ),
+                title: Text(l10n.retry),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  widget.onRetry?.call();
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _hoverHideTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final actionBarVisible = _canShowInlineActions;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        MouseRegion(
+          key: widget.hoverKey,
+          onEnter: (_) => _showInlineActions(),
+          onExit: (_) => _scheduleHideInlineActions(),
+          child: GestureDetector(
+            onTap: widget.onTapBubble,
+            onLongPress: widget.showActions ? _showActionsSheet : null,
+            child: widget.bubble,
+          ),
+        ),
+        AnimatedSlide(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          offset: actionBarVisible ? Offset.zero : const Offset(0, -0.16),
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOut,
+            opacity: actionBarVisible ? 1 : 0,
+            child: IgnorePointer(
+              ignoring: !actionBarVisible,
+              child: Padding(
+                padding: const EdgeInsets.only(
+                  top: 0,
+                  right: AppSpacing.compact,
+                  bottom: AppSpacing.stack,
+                ),
+                child: Transform.translate(
+                  offset: const Offset(0, -6),
+                  child: MouseRegion(
+                    onEnter: (_) => _showInlineActions(),
+                    onExit: (_) => _scheduleHideInlineActions(),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: AppColors.userMessageOnSurfaceFor(brightness)
+                                .withValues(
+                                  alpha:
+                                      brightness == Brightness.dark ? 0.74 : 0.80,
+                                ),
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.radiusPill,
+                            ),
+                            border: Border.all(
+                              color: Colors.white.withValues(
+                                alpha: brightness == Brightness.dark ? 0.16 : 0.58,
+                              ),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(
+                                  alpha:
+                                      brightness == Brightness.dark ? 0.12 : 0.05,
+                                ),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 4,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (widget.onWithdraw != null)
+                                  _buildMessageActionButton(
+                                    key: const Key(
+                                      'user-message-withdraw-action',
+                                    ),
+                                    tooltip: context.l10n.withdrawMessage,
+                                    icon: Icons.undo_rounded,
+                                    color: AppColors.textSoftFor(brightness),
+                                    onPressed: widget.onWithdraw,
+                                  ),
+                                if (widget.onWithdraw != null &&
+                                    (widget.onEdit != null ||
+                                        widget.onRetry != null))
+                                  _buildActionDivider(brightness),
+                                if (widget.onEdit != null)
+                                  _buildMessageActionButton(
+                                    key: const Key('user-message-edit-action'),
+                                    tooltip: context.l10n.editMessage,
+                                    icon: Icons.edit_outlined,
+                                    color: AppColors.textSoftFor(brightness),
+                                    onPressed: widget.onEdit,
+                                  ),
+                                if (widget.onEdit != null &&
+                                    widget.onRetry != null)
+                                  _buildActionDivider(brightness),
+                                if (widget.onRetry != null)
+                                  _buildMessageActionButton(
+                                    key: const Key('user-message-retry-action'),
+                                    tooltip: context.l10n.retry,
+                                    icon: Icons.refresh_rounded,
+                                    color: AppColors.errorTextFor(brightness),
+                                    onPressed: widget.onRetry,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMessageActionButton({
+    required Key key,
+    required String tooltip,
+    required IconData icon,
+    required Color color,
+    required VoidCallback? onPressed,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+      child: IconButton(
+        key: key,
+        tooltip: tooltip,
+        visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints.tightFor(
+          width: 34,
+          height: 34,
+        ),
+        padding: EdgeInsets.zero,
+        style: IconButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          foregroundColor: color,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+          ),
+        ),
+        onPressed: onPressed,
+        icon: Icon(icon, size: 15.5),
+      ),
+    );
+  }
+
+  Widget _buildActionDivider(Brightness brightness) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Container(
+      width: 1,
+      height: 16,
+      color: AppColors.outlineStrongFor(brightness).withValues(
+        alpha: brightness == Brightness.dark ? 0.28 : 0.18,
+      ),
+      ),
+    );
+  }
+}
+
+class _ToolEntryChip extends StatefulWidget {
+  const _ToolEntryChip({
+    required this.child,
+    required this.onTap,
+  });
+
+  final Widget child;
+  final VoidCallback onTap;
+
+  @override
+  State<_ToolEntryChip> createState() => _ToolEntryChipState();
+}
+
+class _ToolEntryChipState extends State<_ToolEntryChip> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedSlide(
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        offset: _hovered ? const Offset(0, -0.04) : Offset.zero,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -6749,4 +8366,454 @@ class _ParsedToolMessage {
   final List<String> secondaryItems;
   final bool primaryIsList;
   final String? trailingNote;
+}
+
+class _SessionVideoPreview extends StatefulWidget {
+  const _SessionVideoPreview({
+    super.key,
+    required this.reference,
+    required this.sessionId,
+    required this.cacheKey,
+    required this.resolveLocalVideoFile,
+    required this.initialMuted,
+    required this.onMutedChanged,
+    this.messageId,
+    this.bridgeFileFuture,
+  });
+
+  final MessageImageReference reference;
+  final String sessionId;
+  final String cacheKey;
+  final bool initialMuted;
+  final String? messageId;
+  final Future<BridgeFileResponse>? bridgeFileFuture;
+  final ValueChanged<bool> onMutedChanged;
+  final Future<File> Function(
+    MessageImageReference reference, {
+    required String cacheKey,
+    Future<BridgeFileResponse>? bridgeFileFuture,
+  }) resolveLocalVideoFile;
+
+  @override
+  State<_SessionVideoPreview> createState() => _SessionVideoPreviewState();
+}
+
+class _SessionVideoPreviewState extends State<_SessionVideoPreview> {
+  VideoPlayerController? _controller;
+  Future<void>? _initializeFuture;
+  String? _errorMessage;
+  late bool _muted;
+
+  @override
+  void initState() {
+    super.initState();
+    _muted = widget.initialMuted;
+    _initializePlayer();
+  }
+
+  Future<void> _initializePlayer() async {
+    try {
+      final controller = widget.reference.isRemoteUrl
+          ? VideoPlayerController.networkUrl(Uri.parse(widget.reference.path))
+          : VideoPlayerController.file(
+              await widget.resolveLocalVideoFile(
+                widget.reference,
+                cacheKey: widget.cacheKey,
+                bridgeFileFuture: widget.bridgeFileFuture,
+              ),
+            );
+      _controller = controller;
+      _initializeFuture = controller.initialize().then((_) async {
+        await controller.setVolume(_muted ? 0 : 1);
+        await controller.setLooping(true);
+        await controller.play();
+      });
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _errorMessage =
+              AppLocalizations.of(context)?.imagePreviewLoadFailed ??
+                  'Failed to load image preview';
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_controller?.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final errorMessage = _errorMessage;
+    if (errorMessage != null) {
+      return _buildPreviewError(errorMessage);
+    }
+
+    final initializeFuture = _initializeFuture;
+    final controller = _controller;
+    if (initializeFuture == null || controller == null) {
+      return const Center(
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    return FutureBuilder<void>(
+      future: initializeFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(
+            child: SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+        if (snapshot.hasError || !controller.value.isInitialized) {
+          return _buildPreviewError(context.l10n.imagePreviewLoadFailed);
+        }
+        return Center(
+          child: InteractiveViewer(
+            child: AspectRatio(
+              aspectRatio: controller.value.aspectRatio == 0
+                  ? 16 / 9
+                  : controller.value.aspectRatio,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  VideoPlayer(controller),
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 16,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.48),
+                        borderRadius: BorderRadius.circular(
+                          AppSpacing.radiusPill,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            key: const ValueKey('video-preview-toggle-play'),
+                            onPressed: () async {
+                              if (controller.value.isPlaying) {
+                                await controller.pause();
+                              } else {
+                                await controller.play();
+                              }
+                              if (mounted) {
+                                setState(() {});
+                              }
+                            },
+                            icon: Icon(
+                              controller.value.isPlaying
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                              color: Colors.white,
+                            ),
+                          ),
+                          IconButton(
+                            key: const ValueKey('video-preview-toggle-mute'),
+                            onPressed: () async {
+                              final nextMuted = !_muted;
+                              await controller.setVolume(nextMuted ? 0 : 1);
+                              widget.onMutedChanged(nextMuted);
+                              if (!mounted) {
+                                return;
+                              }
+                              setState(() {
+                                _muted = nextMuted;
+                              });
+                            },
+                            icon: Icon(
+                              _muted
+                                  ? Icons.volume_off_rounded
+                                  : Icons.volume_up_rounded,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Expanded(
+                            child: VideoProgressIndicator(
+                              controller,
+                              allowScrubbing: true,
+                              colors: VideoProgressColors(
+                                playedColor: Colors.white,
+                                bufferedColor: Colors.white.withValues(
+                                  alpha: 0.35,
+                                ),
+                                backgroundColor: Colors.white.withValues(
+                                  alpha: 0.18,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPreviewError(String message) {
+    final brightness = Theme.of(context).brightness;
+    return Center(
+      child: Container(
+        width: double.infinity,
+        padding: AppSpacing.tilePadding,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceFor(brightness),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+          border: Border.all(color: AppColors.outlineStrongFor(brightness)),
+        ),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.textFor(brightness),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PendingAttachment {
+  const _PendingAttachment({
+    required this.path,
+    required this.fileName,
+    required this.isImage,
+  });
+
+  factory _PendingAttachment.local(String path) {
+    final fileName = fileNameForPath(path);
+    return _PendingAttachment(
+      path: path,
+      fileName: fileName,
+      isImage: _isImageFileName(fileName),
+    );
+  }
+
+  final String path;
+  final String fileName;
+  final bool isImage;
+
+  static String escapeMarkdownLabel(String label) {
+    return label.replaceAll('[', r'\[').replaceAll(']', r'\]');
+  }
+
+  static String fileNameForPath(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    final slashIndex = normalized.lastIndexOf('/');
+    if (slashIndex < 0 || slashIndex == normalized.length - 1) {
+      return normalized;
+    }
+    return normalized.substring(slashIndex + 1);
+  }
+
+  static bool _isImageFileName(String fileName) {
+    final lower = fileName.toLowerCase();
+    return lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.bmp') ||
+        lower.endsWith('.svg');
+  }
+}
+
+class _ClipboardFileFormatCandidate {
+  const _ClipboardFileFormatCandidate({
+    required this.format,
+    required this.extension,
+    required this.fallbackName,
+  });
+
+  final FileFormat format;
+  final String extension;
+  final String fallbackName;
+}
+
+const _clipboardFileFormats = <_ClipboardFileFormatCandidate>[
+  _ClipboardFileFormatCandidate(
+    format: Formats.png,
+    extension: 'png',
+    fallbackName: 'pasted-image',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.jpeg,
+    extension: 'jpg',
+    fallbackName: 'pasted-image',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.gif,
+    extension: 'gif',
+    fallbackName: 'pasted-image',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.webp,
+    extension: 'webp',
+    fallbackName: 'pasted-image',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.svg,
+    extension: 'svg',
+    fallbackName: 'pasted-image',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.bmp,
+    extension: 'bmp',
+    fallbackName: 'pasted-image',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.pdf,
+    extension: 'pdf',
+    fallbackName: 'pasted-file',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.doc,
+    extension: 'doc',
+    fallbackName: 'pasted-file',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.docx,
+    extension: 'docx',
+    fallbackName: 'pasted-file',
+  ),
+  _ClipboardFileFormatCandidate(
+    format: Formats.zip,
+    extension: 'zip',
+    fallbackName: 'pasted-file',
+  ),
+];
+
+class _VideoThumbnail extends StatefulWidget {
+  const _VideoThumbnail({
+    super.key,
+    required this.reference,
+    required this.cacheKey,
+    required this.resolveLocalVideoFile,
+    required this.fallback,
+    this.fileFuture,
+  });
+
+  final MessageImageReference reference;
+  final String cacheKey;
+  final Future<BridgeFileResponse>? fileFuture;
+  final Future<File> Function(
+    MessageImageReference reference, {
+    required String cacheKey,
+    Future<BridgeFileResponse>? bridgeFileFuture,
+  }) resolveLocalVideoFile;
+  final Widget fallback;
+
+  @override
+  State<_VideoThumbnail> createState() => _VideoThumbnailState();
+}
+
+class _VideoThumbnailState extends State<_VideoThumbnail> {
+  VideoPlayerController? _controller;
+  Future<void>? _initializeFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      final controller = widget.reference.isRemoteUrl
+          ? VideoPlayerController.networkUrl(Uri.parse(widget.reference.path))
+          : VideoPlayerController.file(
+              await widget.resolveLocalVideoFile(
+                widget.reference,
+                cacheKey: widget.cacheKey,
+                bridgeFileFuture: widget.fileFuture,
+              ),
+            );
+      _controller = controller;
+      _initializeFuture = controller.initialize();
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {
+      // Fallback is rendered below.
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_controller?.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    final initializeFuture = _initializeFuture;
+    if (controller == null || initializeFuture == null) {
+      return widget.fallback;
+    }
+
+    return FutureBuilder<void>(
+      future: initializeFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done ||
+            snapshot.hasError ||
+            !controller.value.isInitialized) {
+          return widget.fallback;
+        }
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: controller.value.size.width,
+                height: controller.value.size.height,
+                child: VideoPlayer(controller),
+              ),
+            ),
+            Align(
+              child: Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.36),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.play_arrow_rounded,
+                  key: ValueKey('video-thumbnail-icon-${widget.cacheKey}'),
+                  size: 18,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }

@@ -542,8 +542,6 @@ class _SubtitlePanel extends StatelessWidget {
                     theme.textTheme.bodyLarge?.copyWith(color: palette.text),
                 code: theme.textTheme.bodyMedium?.copyWith(
                   color: palette.text,
-                  fontFamily: 'JetBrains Mono',
-                  fontFamilyFallback: const <String>['monospace'],
                   height: 1.45,
                   backgroundColor: palette.panelDeep,
                 ),

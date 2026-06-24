@@ -500,6 +500,18 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get retry;
 
+  /// No description provided for @editMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get editMessage;
+
+  /// No description provided for @withdrawMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Withdraw'**
+  String get withdrawMessage;
+
   /// No description provided for @projectCount.
   ///
   /// In en, this message translates to:
@@ -644,6 +656,12 @@ abstract class AppLocalizations {
   /// **'{agent} · Updated {time}'**
   String sessionUpdatedAtWithAgent(Object agent, Object time);
 
+  /// No description provided for @forkedFromSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Forked from {source}'**
+  String forkedFromSession(Object source);
+
   /// No description provided for @loadMoreSessions.
   ///
   /// In en, this message translates to:
@@ -679,6 +697,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Awaiting approval'**
   String get sessionStatusAwaitingApproval;
+
+  /// No description provided for @sessionStatusInterrupted.
+  ///
+  /// In en, this message translates to:
+  /// **'Interrupted'**
+  String get sessionStatusInterrupted;
 
   /// No description provided for @sessionStatusWaiting.
   ///
@@ -1205,7 +1229,7 @@ abstract class AppLocalizations {
   /// No description provided for @imageAttachment.
   ///
   /// In en, this message translates to:
-  /// **'Image attachment'**
+  /// **'Upload file or image'**
   String get imageAttachment;
 
   /// No description provided for @previewImage.
@@ -2587,6 +2611,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to save provider selection'**
   String get providerOverrideFailed;
+
+  /// No description provided for @reasoningEffortDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get reasoningEffortDefault;
+
+  /// No description provided for @reasoningEffortLow.
+  ///
+  /// In en, this message translates to:
+  /// **'Low'**
+  String get reasoningEffortLow;
+
+  /// No description provided for @reasoningEffortMedium.
+  ///
+  /// In en, this message translates to:
+  /// **'Medium'**
+  String get reasoningEffortMedium;
+
+  /// No description provided for @reasoningEffortHigh.
+  ///
+  /// In en, this message translates to:
+  /// **'High'**
+  String get reasoningEffortHigh;
+
+  /// No description provided for @reasoningEffortXhigh.
+  ///
+  /// In en, this message translates to:
+  /// **'XHigh'**
+  String get reasoningEffortXhigh;
+
+  /// No description provided for @reasoningEffortMax.
+  ///
+  /// In en, this message translates to:
+  /// **'Max'**
+  String get reasoningEffortMax;
+
+  /// No description provided for @reasoningEffortOverride.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning Effort'**
+  String get reasoningEffortOverride;
+
+  /// No description provided for @reasoningEffortSessionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning effort'**
+  String get reasoningEffortSessionLabel;
+
+  /// No description provided for @reasoningEffortOverrideFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to save reasoning effort'**
+  String get reasoningEffortOverrideFailed;
 
   /// No description provided for @confirm.
   ///

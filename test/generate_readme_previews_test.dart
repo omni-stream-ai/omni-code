@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
-
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -154,10 +153,13 @@ void main() {
 }
 
 Future<void> _loadPreviewFonts() async {
-  await _loadFontFamily(AppTheme.bodyFontFamily, const [
-    '/usr/share/fonts/OTF/NotoSansCJKsc-Regular.otf',
-    '/usr/share/fonts/OTF/NotoSansCJKsc-Bold.otf',
-  ]);
+  final bodyFontFamily = AppTheme.bodyFontFamily;
+  if (bodyFontFamily != null) {
+    await _loadFontFamily(bodyFontFamily, const [
+      '/usr/share/fonts/OTF/NotoSansCJKsc-Regular.otf',
+      '/usr/share/fonts/OTF/NotoSansCJKsc-Bold.otf',
+    ]);
+  }
   await _loadFontFamily('monospace', const [
     '/usr/share/fonts/OTF/NotoSansMonoCJKsc-Regular.otf',
   ]);
@@ -549,7 +551,8 @@ class _PhoneStatusBar extends StatelessWidget {
             height: 9,
             decoration: BoxDecoration(
               border: Border.all(
-                color: isDark ? const Color(0xfff8fafc) : const Color(0xff111827),
+                color:
+                    isDark ? const Color(0xfff8fafc) : const Color(0xff111827),
                 width: 1.2,
               ),
               borderRadius: BorderRadius.circular(3),
@@ -560,7 +563,9 @@ class _PhoneStatusBar extends StatelessWidget {
                 width: 13,
                 margin: const EdgeInsets.all(1.4),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xfff8fafc) : const Color(0xff111827),
+                  color: isDark
+                      ? const Color(0xfff8fafc)
+                      : const Color(0xff111827),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -889,6 +894,7 @@ Map<String, Object?> _sessionJson(SessionSummary session) {
       SessionStatus.idle => 'idle',
       SessionStatus.running => 'running',
       SessionStatus.awaitingApproval => 'awaiting_approval',
+      SessionStatus.interrupted => 'interrupted',
       SessionStatus.waiting => 'waiting',
       SessionStatus.failed => 'failed',
     },
@@ -896,6 +902,7 @@ Map<String, Object?> _sessionJson(SessionSummary session) {
     'unread_count': session.unreadCount,
     'last_message_preview': session.lastMessagePreview,
     'pending_approval': null,
+    'reasoning_effort': session.reasoningEffort?.apiValue,
   };
 }
 

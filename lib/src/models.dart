@@ -114,9 +114,34 @@ class ModelProviderConfig {
   }
 }
 
-enum SessionStatus { idle, running, awaitingApproval, waiting, failed }
+enum SessionStatus {
+  idle,
+  running,
+  awaitingApproval,
+  interrupted,
+  waiting,
+  failed,
+}
 
 enum MessageRole { user, assistant, system }
+
+enum ReasoningEffort {
+  low('low'),
+  medium('medium'),
+  high('high'),
+  xhigh('xhigh'),
+  max('max');
+
+  const ReasoningEffort(this.apiValue);
+
+  final String apiValue;
+}
+
+const selectableReasoningEfforts = [
+  ReasoningEffort.low,
+  ReasoningEffort.medium,
+  ReasoningEffort.high,
+];
 
 enum ApprovalChoice {
   accept,
@@ -416,6 +441,8 @@ SessionStatus parseSessionStatus(String value) {
       return SessionStatus.running;
     case 'awaiting_approval':
       return SessionStatus.awaitingApproval;
+    case 'interrupted':
+      return SessionStatus.interrupted;
     case 'waiting':
       return SessionStatus.waiting;
     case 'failed':
@@ -433,6 +460,23 @@ MessageRole parseMessageRole(String value) {
       return MessageRole.system;
     default:
       return MessageRole.assistant;
+  }
+}
+
+ReasoningEffort? parseReasoningEffort(String? value) {
+  switch (value) {
+    case 'low':
+      return ReasoningEffort.low;
+    case 'medium':
+      return ReasoningEffort.medium;
+    case 'high':
+      return ReasoningEffort.high;
+    case 'xhigh':
+      return ReasoningEffort.xhigh;
+    case 'max':
+      return ReasoningEffort.max;
+    default:
+      return null;
   }
 }
 
@@ -467,6 +511,8 @@ class SessionSummary {
     this.pendingApproval,
     this.errorMessage,
     this.providerId,
+    this.reasoningEffort,
+    this.forkedFromSessionId,
   });
 
   final String id;
@@ -481,6 +527,8 @@ class SessionSummary {
   final ApprovalRequest? pendingApproval;
   final String? errorMessage;
   final String? providerId;
+  final ReasoningEffort? reasoningEffort;
+  final String? forkedFromSessionId;
 
   SessionSummary copyWith({
     String? id,
@@ -498,6 +546,10 @@ class SessionSummary {
     bool clearErrorMessage = false,
     String? providerId,
     bool clearProviderId = false,
+    ReasoningEffort? reasoningEffort,
+    bool clearReasoningEffort = false,
+    String? forkedFromSessionId,
+    bool clearForkedFromSessionId = false,
   }) {
     return SessionSummary(
       id: id ?? this.id,
@@ -514,6 +566,12 @@ class SessionSummary {
       errorMessage:
           clearErrorMessage ? null : errorMessage ?? this.errorMessage,
       providerId: clearProviderId ? null : providerId ?? this.providerId,
+      reasoningEffort: clearReasoningEffort
+          ? null
+          : reasoningEffort ?? this.reasoningEffort,
+      forkedFromSessionId: clearForkedFromSessionId
+          ? null
+          : forkedFromSessionId ?? this.forkedFromSessionId,
     );
   }
 
@@ -530,6 +588,9 @@ class SessionSummary {
       lastMessagePreview: json['last_message_preview'] as String?,
       errorMessage: json['error_message'] as String?,
       providerId: json['provider_id'] as String?,
+      reasoningEffort:
+          parseReasoningEffort(json['reasoning_effort'] as String?),
+      forkedFromSessionId: json['forked_from_session_id'] as String?,
       pendingApproval: json['pending_approval'] == null
           ? null
           : ApprovalRequest.fromJson(

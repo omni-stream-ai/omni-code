@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -30,6 +32,41 @@ const _localNotificationsChannel =
 _FakeAndroidFlutterLocalNotificationsPlugin _fakeNotifications() {
   return FlutterLocalNotificationsPlatform.instance
       as _FakeAndroidFlutterLocalNotificationsPlugin;
+}
+
+bool _primaryFocusIsWithin(WidgetTester tester, Finder finder) {
+  final focusedContext = FocusManager.instance.primaryFocus?.context;
+  if (focusedContext == null) {
+    return false;
+  }
+  return find
+      .descendant(
+        of: finder,
+        matching: find.byWidget(focusedContext.widget),
+      )
+      .evaluate()
+      .isNotEmpty;
+}
+
+Future<void> _tabUntilFocusWithin(
+  WidgetTester tester,
+  Finder finder, {
+  required int maxTabs,
+  bool reverse = false,
+}) async {
+  for (var i = 0; i < maxTabs; i++) {
+    if (_primaryFocusIsWithin(tester, finder)) {
+      return;
+    }
+    if (reverse) {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    if (reverse) {
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    }
+    await tester.pump();
+  }
 }
 
 void main() {
@@ -63,6 +100,57 @@ void main() {
     await tester.pump();
 
     expect(find.text('Test Session'), findsOneWidget);
+  });
+
+  testWidgets('loads current session title from bridge on first open',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1') {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'session': _sessionJson(title: 'Bridge Generated Title'),
+                'git_status': null,
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(title: 'New session'),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Bridge Generated Title'), findsOneWidget);
   });
 
   testWidgets('pressing enter sends the current draft on desktop',
@@ -156,6 +244,524 @@ void main() {
         TargetPlatform.linux,
       }));
 
+  testWidgets('image picker sends image markdown without text', (tester) async {
+    final photo = await tester.runAsync(() async {
+      final dir = await Directory.systemTemp.createTemp('omni-code-test-');
+      final file = File('${dir.path}/photo.png');
+      await file.writeAsBytes([1, 2, 3]);
+      return file;
+    });
+    final sentBodies = <Map<String, dynamic>>[];
+    final uploadedPaths = <String>[];
+    final client = _UploadingBridgeClient(
+      uploadHandler: (path) async {
+        uploadedPaths.add(path);
+        return const BridgeUploadResponse(
+          id: 'uuid-photo.png',
+          fileName: 'photo.png',
+          contentType: 'image/png',
+          sizeBytes: 12345,
+          url: '/uploads/uuid-photo.png',
+          absoluteUrl: 'http://127.0.0.1:8787/uploads/uuid-photo.png',
+          localPath: '/tmp/uuid-photo.png',
+        );
+      },
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sentBodies.add(body);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-image-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-image-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+          pickImages: () async => [photo!.path],
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-pending-image-strip')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('session-image-picker-button')));
+    await tester.pump();
+
+    expect(
+        find.byKey(const Key('session-pending-image-strip')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+    for (var i = 0; i < 20 && sentBodies.isEmpty; i += 1) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(sentBodies, hasLength(1));
+    expect(uploadedPaths, [photo!.path]);
+    expect(sentBodies.single['content'], '![photo.png](/tmp/uuid-photo.png)');
+    expect(sentBodies.single['input_mode'], 'text');
+    expect(find.byKey(const Key('session-pending-image-strip')), findsNothing);
+  });
+
+  testWidgets('text and picked images send together', (tester) async {
+    final files = await tester.runAsync(() async {
+      final dir = await Directory.systemTemp.createTemp('omni-code-test-');
+      final photo = File('${dir.path}/photo.png');
+      final report = File('${dir.path}/report.pdf');
+      await photo.writeAsBytes([1, 2, 3]);
+      await report.writeAsBytes([4, 5, 6]);
+      return [photo, report];
+    });
+    final sentBodies = <Map<String, dynamic>>[];
+    var uploadCount = 0;
+    final uploadedPaths = <String>[];
+    final client = _UploadingBridgeClient(
+      uploadHandler: (path) async {
+        uploadedPaths.add(path);
+        uploadCount += 1;
+        final fileName = uploadCount == 1 ? 'photo.png' : 'report.pdf';
+        final contentType = uploadCount == 1 ? 'image/png' : 'application/pdf';
+        return BridgeUploadResponse(
+          id: 'uuid-$fileName',
+          fileName: fileName,
+          contentType: contentType,
+          sizeBytes: uploadCount,
+          url: '/uploads/uuid-$fileName',
+          absoluteUrl: 'http://127.0.0.1:8787/uploads/uuid-$fileName',
+          localPath: '/tmp/uuid-$fileName',
+        );
+      },
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sentBodies.add(body);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-image-2',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-image-2',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+          pickImages: () async => files!.map((file) => file.path).toList(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.enterText(
+      find.byKey(const Key('session-message-input')),
+      'Please inspect these images',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-image-picker-button')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+    for (var i = 0; i < 20 && sentBodies.isEmpty; i += 1) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(sentBodies, hasLength(1));
+    expect(
+      sentBodies.single['content'],
+      'Please inspect these images\n\n'
+      '![photo.png](/tmp/uuid-photo.png)\n'
+      '[report.pdf](/tmp/uuid-report.pdf)',
+    );
+    expect(uploadCount, 2);
+    expect(uploadedPaths, files!.map((file) => file.path).toList());
+  });
+
+  testWidgets('pasted file path is inserted as text', (tester) async {
+    final files = await tester.runAsync(() async {
+      final dir = await Directory.systemTemp.createTemp('omni-code-test-');
+      final report = File('${dir.path}/report.pdf');
+      await report.writeAsBytes([4, 5, 6]);
+      return [report];
+    });
+    final sentBodies = <Map<String, dynamic>>[];
+    var uploadCount = 0;
+    final client = _UploadingBridgeClient(
+      uploadHandler: (path) async {
+        uploadCount += 1;
+        return const BridgeUploadResponse(
+          id: 'uuid-report.pdf',
+          fileName: 'report.pdf',
+          contentType: 'application/pdf',
+          sizeBytes: 3,
+          url: '/uploads/uuid-report.pdf',
+          absoluteUrl: 'http://127.0.0.1:8787/uploads/uuid-report.pdf',
+        );
+      },
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sentBodies.add(body);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-file-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-file-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+          readClipboardText: () async => files!.single.path,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-message-input')));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-pending-image-strip')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+    for (var i = 0; i < 20 && sentBodies.isEmpty; i += 1) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(uploadCount, 0);
+    expect(sentBodies.single['content'], files!.single.path);
+  });
+
+  testWidgets('pasted plain text with slash is not treated as file',
+      (tester) async {
+    final sentBodies = <Map<String, dynamic>>[];
+    var uploadCount = 0;
+    final client = _UploadingBridgeClient(
+      uploadHandler: (path) async {
+        uploadCount += 1;
+        return const BridgeUploadResponse(
+          id: 'unexpected-upload',
+          fileName: 'unexpected.txt',
+          contentType: 'text/plain',
+          sizeBytes: 3,
+          url: '/uploads/unexpected-upload',
+          absoluteUrl: 'http://127.0.0.1:8787/uploads/unexpected-upload',
+        );
+      },
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sentBodies.add(body);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-text-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-text-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+          readClipboardText: () async => '随便粘贴一点文本 / 不是文件路径',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-message-input')));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-pending-image-strip')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+    for (var i = 0; i < 20 && sentBodies.isEmpty; i += 1) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(uploadCount, 0);
+    expect(
+      sentBodies.single['content'],
+      '随便粘贴一点文本 / 不是文件路径',
+    );
+  });
+
+  testWidgets('pasted image attachment is queued and uploaded', (tester) async {
+    final files = await tester.runAsync(() async {
+      final dir = await Directory.systemTemp.createTemp('omni-code-test-');
+      final image = File('${dir.path}/clipboard.png');
+      await image.writeAsBytes([1, 2, 3]);
+      return [image];
+    });
+    final sentBodies = <Map<String, dynamic>>[];
+    var uploadCount = 0;
+    final client = _UploadingBridgeClient(
+      uploadHandler: (path) async {
+        uploadCount += 1;
+        expect(path, files!.single.path);
+        return const BridgeUploadResponse(
+          id: 'uuid-clipboard.png',
+          fileName: 'clipboard.png',
+          contentType: 'image/png',
+          sizeBytes: 3,
+          url: '/uploads/uuid-clipboard.png',
+          absoluteUrl: 'http://127.0.0.1:8787/uploads/uuid-clipboard.png',
+          localPath: '/tmp/uuid-clipboard.png',
+        );
+      },
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sentBodies.add(body);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-clipboard-image-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:00.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-clipboard-image-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+          readClipboardAttachments: () async =>
+              files!.map((file) => file.path).toList(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-message-input')));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+
+    expect(
+        find.byKey(const Key('session-pending-image-strip')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+    for (var i = 0; i < 20 && sentBodies.isEmpty; i += 1) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(uploadCount, 1);
+    expect(sentBodies.single['content'],
+        '![clipboard.png](/tmp/uuid-clipboard.png)');
+  });
+
   testWidgets('slash input shows command suggestions', (tester) async {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
@@ -216,6 +822,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('session-message-input')));
     await tester.enterText(find.byKey(const Key('session-message-input')), '/');
+    await tester.pump();
+    await tester.pump();
     await tester.pump();
 
     expect(
@@ -281,15 +889,19 @@ void main() {
 
     final composer = find.byKey(const Key('session-message-composer'));
     final input = find.byKey(const Key('session-message-input'));
-    final initialHeight = tester.getSize(composer).height;
 
     await tester.tap(input);
+    await tester.pump();
+    final expandedHeight = tester.getSize(composer).height;
+
     await tester.enterText(input, '/');
+    await tester.pump();
+    await tester.pump();
     await tester.pump();
 
     expect(
       tester.getSize(composer).height,
-      initialHeight,
+      expandedHeight,
     );
     expect(
       find.byKey(const Key('session-command-suggestions')),
@@ -922,7 +1534,7 @@ void main() {
       variant:
           const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
 
-  testWidgets('composer focus moves to stop after send', (tester) async {
+  testWidgets('composer focus stays in input after send', (tester) async {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
         if (request.method == 'GET' &&
@@ -982,18 +1594,17 @@ void main() {
     await tester.pump();
     await tester.pump();
 
+    final input = find.byKey(const Key('session-message-input'));
     await tester.enterText(
-      find.byKey(const Key('session-message-input')),
+      input,
       'Focus flow',
     );
+    await tester.pump();
     await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump();
 
-    expect(
-      FocusManager.instance.primaryFocus?.debugLabel,
-      'session-stop-reply-focus',
-    );
+    expect(_primaryFocusIsWithin(tester, input), isTrue);
   });
 
   testWidgets('composer focus returns to input when reply finishes',
@@ -1052,18 +1663,17 @@ void main() {
     );
     await tester.pump();
 
+    final input = find.byKey(const Key('session-message-input'));
     await tester.enterText(
-      find.byKey(const Key('session-message-input')),
+      input,
       'Focus flow',
     );
+    await tester.pump();
     await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump();
 
-    expect(
-      FocusManager.instance.primaryFocus?.debugLabel,
-      'session-stop-reply-focus',
-    );
+    expect(_primaryFocusIsWithin(tester, input), isTrue);
 
     events.add(
       utf8.encode(
@@ -1205,18 +1815,1270 @@ void main() {
     );
     await tester.pump();
 
-    final field = tester.widget<TextField>(find.byType(TextField));
-    final suffixIcon = field.decoration?.suffixIcon;
+    expect(find.byKey(const Key('session-voice-mode-toggle')), findsOneWidget);
+    expect(find.byKey(const Key('session-voice-input-button')), findsOneWidget);
+    expect(
+        find.byKey(const Key('session-image-picker-button')), findsOneWidget);
+    expect(find.byKey(const Key('session-send-button')), findsNothing);
+    expect(
+      tester.getSize(find.byKey(const Key('session-voice-mode-toggle'))).height,
+      tester
+          .getSize(find.byKey(const Key('session-text-composer-surface')))
+          .height,
+    );
 
-    expect(suffixIcon, isNotNull);
+    await tester.enterText(
+      find.byKey(const Key('session-message-input')),
+      'Ready to send',
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-voice-mode-toggle')), findsNothing);
+    expect(find.byKey(const Key('session-voice-input-button')), findsNothing);
+    expect(find.byKey(const Key('session-send-button')), findsOneWidget);
+  });
+
+  testWidgets('can queue another message while waiting for bridge reply',
+      (tester) async {
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          if (sendBodies.length == 1) {
+            return firstSendCompleter.future;
+          }
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    expect(sendBodies, hasLength(1));
+    expect(find.text('First message'), findsOneWidget);
+
+    await tester.enterText(input, 'Second message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    final l10n = AppLocalizations.of(tester.element(input))!;
+    expect(sendBodies, hasLength(1));
+    expect(find.text('Second message'), findsOneWidget);
+    expect(find.text(l10n.draftPending), findsNWidgets(2));
+  });
+
+  testWidgets('submitting a message immediately shows pending state',
+      (tester) async {
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return firstSendCompleter.future;
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    final l10n = AppLocalizations.of(tester.element(input))!;
+    expect(find.text('First message'), findsOneWidget);
+    expect(find.text(l10n.draftPending), findsOneWidget);
+    expect(find.byKey(const Key('session-stop-reply-button')), findsOneWidget);
+  });
+
+  testWidgets('composer tab navigation still works while waiting for reply',
+      (tester) async {
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          if (sendBodies.length == 1) {
+            return firstSendCompleter.future;
+          }
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.pump();
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    expect(sendBodies, hasLength(1));
+    expect(find.byKey(const Key('session-image-picker-button')), findsOneWidget);
+    expect(find.byKey(const Key('session-stop-reply-button')), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-stop-reply-button')),
+      ),
+      isTrue,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-image-picker-button')),
+      ),
+      isTrue,
+    );
+  }, variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
+
+  testWidgets('stopping a waiting local message restores it to the composer',
+      (tester) async {
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    var cancelCalls = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          return firstSendCompleter.future;
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/cancel') {
+          cancelCalls += 1;
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'Interrupt me');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    expect(sendBodies, hasLength(1));
+    expect(find.text('Interrupt me'), findsOneWidget);
+    expect(find.byKey(const Key('session-stop-reply-button')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('session-stop-reply-button')));
+    await tester.pump();
+
+    expect(cancelCalls, 0);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('user-message-bubble-local-'),
+      ),
+      findsNothing,
+    );
+    expect(tester.widget<TextField>(input).controller?.text, 'Interrupt me');
+  });
+
+  testWidgets('stopping after reply starts sends cancel request',
+      (tester) async {
+    final sendBodies = <Map<String, dynamic>>[];
+    var cancelCalls = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:02.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/cancel') {
+          cancelCalls += 1;
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'Interrupt after running');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    expect(sendBodies, hasLength(1));
+    expect(find.byKey(const Key('session-stop-reply-button')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('session-stop-reply-button')));
+    await tester.pump();
+
+    expect(cancelCalls, 1);
+  });
+
+  testWidgets('queued message can be edited back into the composer',
+      (tester) async {
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          if (sendBodies.length == 1) {
+            return firstSendCompleter.future;
+          }
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    await tester.enterText(input, 'Queued draft');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    expect(sendBodies, hasLength(1));
+    expect(find.text('Queued draft'), findsOneWidget);
+
+    await tester.tap(
+      find.ancestor(
+        of: find.text('Queued draft'),
+        matching: find.byType(GestureDetector),
+      ),
+    );
+    await tester.pump();
+
+    final l10n = AppLocalizations.of(tester.element(input))!;
+    expect(find.text('Queued draft'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(input).controller?.text,
+      'Queued draft',
+    );
+    expect(find.text(l10n.draftPending), findsOneWidget);
+  });
+
+  testWidgets('withdrawing a queued message removes it and all following messages',
+      (tester) async {
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          if (sendBodies.length == 1) {
+            return firstSendCompleter.future;
+          }
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    await tester.enterText(input, 'Queued one');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    await tester.enterText(input, 'Queued two');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer();
+    final queuedHoverRegion = find.ancestor(
+      of: find.text('Queued one'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('user-message-hover-'),
+      ),
+    );
+    await mouse.moveTo(tester.getCenter(queuedHoverRegion));
+    await tester.pump();
+
+    final withdrawAction = find.byKey(
+      const Key('user-message-withdraw-action'),
+    );
+    expect(withdrawAction.first, findsOneWidget);
+    await tester.tap(withdrawAction.first);
+    await tester.pump();
+
+    expect(find.text('First message'), findsOneWidget);
+    expect(find.text('Queued one'), findsNothing);
+    expect(find.text('Queued two'), findsNothing);
+    expect(tester.widget<TextField>(input).controller?.text, isEmpty);
+  }, variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
+
+  testWidgets('composer action icons are reachable by tab', (tester) async {
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.pump();
+    await tester.enterText(input, 'Tab flow');
+    await tester.pump();
+
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'session-message-input-focus',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      isNot('session-message-input-focus'),
+    );
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-image-picker-button')),
+      ),
+      isTrue,
+    );
+
+    await _tabUntilFocusWithin(
+      tester,
+      find.byKey(const Key('session-send-button')),
+      maxTabs: 3,
+    );
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-send-button')),
+      ),
+      isTrue,
+    );
+
+    await _tabUntilFocusWithin(
+      tester,
+      input,
+      maxTabs: 3,
+    );
+    expect(
+      _primaryFocusIsWithin(tester, input),
+      isTrue,
+    );
+  }, variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
+
+  testWidgets('composer stays expanded while action buttons are focused',
+      (tester) async {
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-send-button')), findsNothing);
+
+    await tester.enterText(input, 'Tab flow');
+    await tester.pump();
+    expect(find.byKey(const Key('session-send-button')), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-send-button')), findsOneWidget);
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-image-picker-button')),
+      ),
+      isTrue,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-send-button')), findsOneWidget);
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-send-button')),
+      ),
+      isTrue,
+    );
+  }, variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
+
+  testWidgets('composer action icons are reachable by shift tab in reverse',
+      (tester) async {
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.pump();
+    await tester.enterText(input, 'Reverse tab flow');
+    await tester.pump();
+
+    await _tabUntilFocusWithin(
+      tester,
+      find.byKey(const Key('session-send-button')),
+      maxTabs: 4,
+    );
+
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-send-button')),
+      ),
+      isTrue,
+    );
+
+    await _tabUntilFocusWithin(
+      tester,
+      find.byKey(const Key('session-image-picker-button')),
+      maxTabs: 3,
+      reverse: true,
+    );
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-image-picker-button')),
+      ),
+      isTrue,
+    );
+
+    await _tabUntilFocusWithin(
+      tester,
+      input,
+      maxTabs: 3,
+      reverse: true,
+    );
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'session-message-input-focus',
+    );
+  }, variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
+
+  testWidgets('tool activity stays with active reply turn when a queued message exists',
+      (tester) async {
+    final events = StreamController<List<int>>();
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+          if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+          if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          if (sendBodies.length == 1) {
+            return firstSendCompleter.future;
+          }
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    await tester.enterText(input, 'Second message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'assistant-tool-anchor',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'Still working',
+              createdAt: '2026-05-09T10:00:02.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'system-tool-1',
+              sessionId: 'session-1',
+              role: 'system',
+              content: '[command:completed] ls',
+              createdAt: '2026-05-09T10:00:03.000',
+            ),
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final toolChip = find.ancestor(
+      of: find.byIcon(Icons.build_outlined),
+      matching: find.byType(InkWell),
+    ).first;
+    final firstMessageBubble = find.ancestor(
+      of: find.text('First message'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('user-message-bubble-'),
+      ),
+    ).first;
+    final secondMessageBubble = find.ancestor(
+      of: find.text('Second message'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('user-message-bubble-'),
+      ),
+    ).first;
+
     expect(
       find.descendant(
-        of: find.byWidget(suffixIcon!),
-        matching: find.byKey(const Key('session-voice-input-button')),
+        of: firstMessageBubble,
+        matching: find.byIcon(Icons.build_outlined),
       ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: secondMessageBubble,
+        matching: find.byIcon(Icons.build_outlined),
+      ),
+      findsNothing,
+    );
+    expect(tester.getTopLeft(toolChip).dy, greaterThan(0));
+
+    await events.close();
+  });
+
+  testWidgets('queued follow-up message stays visually after the active reply turn',
+      (tester) async {
+    final events = StreamController<List<int>>();
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({'data': []}),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/events') {
+            return http.Response(
+              '',
+              200,
+              headers: {'content-type': 'text/event-stream'},
+            );
+          }
+          if (request.method == 'POST' &&
+              request.url.path == '/sessions/session-1/messages') {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            sendBodies.add(body);
+            if (sendBodies.length == 1) {
+              return firstSendCompleter.future;
+            }
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'user_message': _messageJson(
+                    id: 'server-user-${sendBodies.length}',
+                    sessionId: 'session-1',
+                    role: 'user',
+                    content: body['content'] as String,
+                    createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
+                  ),
+                  'reply': _messageJson(
+                    id: 'server-reply-${sendBodies.length}',
+                    sessionId: 'session-1',
+                    role: 'assistant',
+                    content: '',
+                    createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
+                  ),
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    await tester.enterText(input, 'Second message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'assistant-tool-anchor-2',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'Still working',
+              createdAt: '2026-05-09T10:00:02.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'system-tool-2',
+              sessionId: 'session-1',
+              role: 'system',
+              content: '[command:completed] ls',
+              createdAt: '2026-05-09T10:00:03.000',
+            ),
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final firstMessageBubble = find.ancestor(
+      of: find.text('First message'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('user-message-bubble-'),
+      ),
+    ).first;
+    final secondMessageBubble = find.ancestor(
+      of: find.text('Second message'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('user-message-bubble-'),
+      ),
+    ).first;
+
+    expect(
+      tester.getTopLeft(secondMessageBubble).dy,
+      greaterThan(tester.getTopLeft(firstMessageBubble).dy),
+    );
+
+    await events.close();
+  });
+
+  testWidgets('hovering queued message shows edit action',
+      (tester) async {
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          if (sendBodies.length == 1) {
+            return firstSendCompleter.future;
+          }
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    await tester.enterText(input, 'Queued draft');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer();
+    final queuedHoverRegion = find.ancestor(
+      of: find.text('Queued draft'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('user-message-hover-'),
+      ),
+    );
+    await mouse.moveTo(
+      tester.getCenter(queuedHoverRegion),
+    );
+    await tester.pump();
+
+    final withdrawAction = find.byKey(
+      const Key('user-message-withdraw-action'),
+    );
+    final editAction = find.byKey(const Key('user-message-edit-action'));
+    expect(withdrawAction.first, findsOneWidget);
+    expect(editAction.first, findsOneWidget);
+
+    await tester.tap(editAction.first);
+    await tester.pump();
+
+    expect(
+      tester.widget<TextField>(input).controller?.text,
+      'Queued draft',
+    );
+  }, variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
+
+  testWidgets('voice mode toggle switches composer to hold-to-talk',
+      (tester) async {
+    final speechService = _FakeSpeechInputService(initializeResult: true);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          speechInputService: speechService,
+          ttsService: _FakeTtsService(systemAvailable: true),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-message-input')), findsOneWidget);
+    expect(
+      find.byKey(const Key('session-hold-to-talk-button')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('session-message-input')), findsNothing);
+    expect(
+      find.byKey(const Key('session-hold-to-talk-button')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('session-send-button')), findsOneWidget);
+    expect(speechService.startListeningCalls, 0);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('session-hold-to-talk-button')))
+          .height,
+      tester.getSize(find.byKey(const Key('session-voice-mode-toggle'))).height,
+    );
+
+    final holdButton = find.byKey(const Key('session-hold-to-talk-button'));
+    final start = tester.getCenter(holdButton);
+    final gesture = await tester.startGesture(start);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump();
+
+    expect(find.text('Slide up for text or cancel'), findsOneWidget);
+    expect(speechService.startListeningCalls, 1);
+
+    await gesture.moveTo(Offset(start.dx - 120, start.dy - 120));
+    await tester.pump();
+
+    expect(
+        find.byKey(const Key('session-voice-release-insert')), findsOneWidget);
+    expect(
+        find.byKey(const Key('session-voice-release-cancel')), findsOneWidget);
+
+    await gesture.up();
+    await tester.pump();
   });
 
   testWidgets('pressing enter keeps the current draft on mobile',
@@ -1352,7 +3214,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('New session'), findsOneWidget);
+    expect(find.text('Generated title'), findsOneWidget);
 
     final input = find.byType(TextField);
     await tester.tap(input);
@@ -1445,6 +3307,7 @@ void main() {
 
     final input = find.byType(TextField);
     await tester.enterText(input, 'Read this back');
+    await tester.pump();
     await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -1542,6 +3405,7 @@ void main() {
 
     final input = find.byType(TextField);
     await tester.enterText(input, 'Summarize this');
+    await tester.pump();
     await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -1637,6 +3501,7 @@ void main() {
 
     final input = find.byType(TextField);
     await tester.enterText(input, 'Do not compress this');
+    await tester.pump();
     await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -1717,6 +3582,7 @@ void main() {
 
     final input = find.byType(TextField);
     await tester.enterText(input, 'Read this back');
+    await tester.pump();
     await tester.tap(find.byKey(const Key('session-send-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -1876,11 +3742,11 @@ void main() {
     await tester.pump();
 
     final assistantReply = find.text('I checked the relevant files.');
-    final toolActivity = find.text('Tool activity');
+    final toolActivity = find.byIcon(Icons.build_outlined);
     expect(assistantReply, findsOneWidget);
     expect(toolActivity, findsOneWidget);
     expect(
-      tester.getTopLeft(toolActivity).dy,
+      tester.getTopLeft(toolActivity.first).dy,
       greaterThan(tester.getBottomLeft(assistantReply).dy),
     );
   });
@@ -2153,6 +4019,84 @@ void main() {
     );
     expect(fileRequest.url.queryParameters, {
       'path': 'assets/result.png',
+      'session_id': 'session-1',
+    });
+  });
+
+  testWidgets('assistant mp4 path shows video preview card', (tester) async {
+    final requests = <http.Request>[];
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _messageJson(
+                  id: 'assistant-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: 'Saved video at assets/demo.mp4',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/files') {
+          return http.Response.bytes(
+            const <int>[0, 0, 0, 0],
+            200,
+            headers: {'content-type': 'video/mp4'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.byKey(
+        const ValueKey('assistant-image-card-assistant-1-assets/demo.mp4'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey(
+          'video-thumbnail-icon-assistant-1-assets/demo.mp4',
+        ),
+      ),
+      findsOneWidget,
+    );
+
+    final fileRequest = requests.singleWhere(
+      (request) => request.url.path == '/files',
+    );
+    expect(fileRequest.url.queryParameters, {
+      'path': 'assets/demo.mp4',
       'session_id': 'session-1',
     });
   });
@@ -2958,6 +4902,44 @@ void main() {
     expect(bubbleFinder, findsOneWidget);
     expect(tester.getSize(bubbleFinder).width, greaterThan(500));
     expect(tester.getSize(bubbleFinder).width, lessThanOrEqualTo(620));
+  });
+
+  testWidgets('user image message bubble shrinks around image preview',
+      (tester) async {
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(1280, 1600);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    const dataUri = 'data:image/png;base64,'
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+    final client = _clientForMessages([
+      _messageJson(
+        id: 'user-image',
+        sessionId: 'session-1',
+        role: 'user',
+        content: '你现在能看到这个图片吗\n\n![image]($dataUri)',
+        createdAt: '2026-05-09T10:00:00.000',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final bubbleFinder =
+        find.byKey(const ValueKey('user-message-bubble-user-image'));
+    expect(bubbleFinder, findsOneWidget);
+    expect(tester.getSize(bubbleFinder).width, lessThan(360));
   });
 
   testWidgets(
@@ -4619,6 +6601,8 @@ void main() {
 
     expect(field.controller!.text, 'before spoken words after');
     expect(field.controller!.selection.baseOffset, 19);
+    expect(find.byKey(const Key('session-voice-input-button')), findsOneWidget);
+    expect(find.byKey(const Key('session-send-button')), findsOneWidget);
   });
 
   testWidgets('hold voice sends transcript when released in place',
@@ -4686,9 +6670,7 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
-    await tester.pump();
-    final holdButton = find.byKey(const Key('session-hold-to-talk-button'));
+    final holdButton = find.byKey(const Key('session-voice-input-button'));
     final gesture = await tester.startGesture(tester.getCenter(holdButton));
     await tester.pump(const Duration(milliseconds: 600));
     expect(speechService.startListeningCalls, 1);
@@ -4726,16 +6708,16 @@ void main() {
     expect(speechService.initializeCalls, 1);
     expect(speechService.startListeningCalls, 0);
 
-    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
-    await tester.pump();
-    final holdButton = find.byKey(const Key('session-hold-to-talk-button'));
+    final holdButton = find.byKey(const Key('session-voice-input-button'));
     final gesture = await tester.startGesture(tester.getCenter(holdButton));
     await tester.pump(const Duration(milliseconds: 600));
 
-    expect(find.text('Preparing microphone'), findsOneWidget);
+    expect(speechService.initializeCalls, 1);
     expect(speechService.startListeningCalls, 0);
 
     initializeCompleter.complete(true);
+    await tester.pump();
+    await tester.pump();
     await tester.pump();
 
     expect(speechService.initializeCalls, 1);
@@ -4764,87 +6746,15 @@ void main() {
 
     expect(speechService.initializeCalls, 1);
 
-    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
-    await tester.pump();
-    final holdButton = find.byKey(const Key('session-hold-to-talk-button'));
+    final holdButton = find.byKey(const Key('session-voice-input-button'));
     final gesture = await tester.startGesture(tester.getCenter(holdButton));
     await tester.pump(const Duration(milliseconds: 600));
 
     expect(speechService.startListeningCalls, 1);
     expect(find.text('Preparing microphone'), findsNothing);
-    expect(find.text('Listening...'), findsOneWidget);
+    expect(speechService.startListeningCalls, 1);
 
     await gesture.up();
-    await tester.pump();
-  });
-
-  testWidgets('voice composer mode persists after toggle', (tester) async {
-    final speechService = _FakeSpeechInputService(initializeResult: true);
-
-    await tester.pumpWidget(
-      _TestApp(
-        home: SessionDetailScreen(
-          session: _session(),
-          client: _clientForMessages(const <Map<String, dynamic>>[]),
-          speechInputService: speechService,
-          ttsService: _FakeTtsService(systemAvailable: true),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    expect(appSettingsController.settings.voiceComposerMode, isFalse);
-
-    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
-    await tester.pump();
-    await tester.pump();
-
-    expect(appSettingsController.settings.voiceComposerMode, isTrue);
-    expect(
-      find.byKey(const Key('session-hold-to-talk-button')),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
-    await tester.pump();
-    await tester.pump();
-
-    expect(appSettingsController.settings.voiceComposerMode, isFalse);
-    expect(find.byKey(const Key('session-message-input')), findsOneWidget);
-  });
-
-  testWidgets('saved voice composer mode is restored and prewarmed on entry',
-      (tester) async {
-    final initializeCompleter = Completer<bool>();
-    final speechService = _FakeSpeechInputService(
-      initializeResult: true,
-      initializeCompleter: initializeCompleter,
-    );
-    appSettingsController.debugReplaceSettings(
-      AppSettings.defaults().copyWith(voiceComposerMode: true),
-    );
-
-    await tester.pumpWidget(
-      _TestApp(
-        home: SessionDetailScreen(
-          session: _session(),
-          client: _clientForMessages(const <Map<String, dynamic>>[]),
-          speechInputService: speechService,
-          ttsService: _FakeTtsService(systemAvailable: true),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    expect(
-      find.byKey(const Key('session-hold-to-talk-button')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const Key('session-message-input')), findsNothing);
-    expect(speechService.initializeCalls, 1);
-    expect(speechService.startListeningCalls, 0);
-
-    initializeCompleter.complete(true);
     await tester.pump();
   });
 
@@ -4895,23 +6805,22 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
-    await tester.pump();
-    final holdButton = find.byKey(const Key('session-hold-to-talk-button'));
+    final holdButton = find.byKey(const Key('session-voice-input-button'));
     final start = tester.getCenter(holdButton);
     final gesture = await tester.startGesture(start);
     await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump();
+    expect(speechService.startListeningCalls, 1);
     speechService.emitResult('draft words', isFinal: true);
-    await gesture.moveTo(Offset(start.dx - 90, start.dy - 96));
+    await tester.pump();
+    await gesture.moveTo(Offset(start.dx - 120, start.dy - 120));
     await tester.pump();
 
-    expect(find.text('Release left for text, right to cancel'), findsOneWidget);
     expect(
         find.byKey(const Key('session-voice-release-insert')), findsOneWidget);
 
     await gesture.up();
     await tester.pump();
-    await tester.tap(find.byKey(const Key('session-voice-mode-toggle')));
     await tester.pump();
 
     final field = tester.widget<TextField>(find.byType(TextField));
@@ -4945,7 +6854,7 @@ void main() {
     await tester.pump();
 
     var focusedVoiceInput = false;
-    for (var i = 0; i < 10; i++) {
+    for (var i = 0; i < 20; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
       final focusedContext = FocusManager.instance.primaryFocus?.context;
@@ -5478,6 +7387,209 @@ void main() {
     );
   });
 
+  testWidgets('session reasoning effort selector patches session default',
+      (tester) async {
+    final patchBodies = <Map<String, dynamic>>[];
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'PATCH' &&
+            request.url.path == '/sessions/session-1') {
+          patchBodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-reasoning-effort-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('High').last);
+    await tester.pump();
+
+    expect(patchBodies, hasLength(1));
+    expect(patchBodies.single['reasoning_effort'], 'high');
+  });
+
+  testWidgets('session reasoning effort selector only exposes common efforts',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-reasoning-effort-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('Default'), findsWidgets);
+    expect(find.text('Low'), findsOneWidget);
+    expect(find.text('Medium'), findsOneWidget);
+    expect(find.text('High'), findsOneWidget);
+    expect(find.text('Xhigh'), findsNothing);
+    expect(find.text('Max'), findsNothing);
+  });
+
+  testWidgets('session reasoning effort selector can clear back to default',
+      (tester) async {
+    final patchBodies = <Map<String, dynamic>>[];
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'PATCH' &&
+            request.url.path == '/sessions/session-1') {
+          patchBodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(reasoningEffort: ReasoningEffort.high),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-reasoning-effort-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('Default').last);
+    await tester.pump();
+
+    expect(patchBodies, hasLength(1));
+    expect(patchBodies.single.containsKey('reasoning_effort'), isTrue);
+    expect(patchBodies.single['reasoning_effort'], isNull);
+  });
+
+  testWidgets('clearing reasoning effort updates cached session summary',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'PATCH' &&
+            request.url.path == '/sessions/session-1') {
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+    client.debugSeedSessions([
+      _session(reasoningEffort: ReasoningEffort.high),
+    ]);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(reasoningEffort: ReasoningEffort.high),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-reasoning-effort-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('Default').last);
+    await tester.pump();
+
+    final cached = client.peekSessions();
+    expect(cached, isNotNull);
+    expect(cached!.single.reasoningEffort, isNull);
+  });
+
   testWidgets('approval resolved does not show approval granted banner',
       (tester) async {
     final approval = _approvalRequest(
@@ -5563,6 +7675,7 @@ SessionSummary _session({
   SessionStatus status = SessionStatus.idle,
   bool briefReplyMode = false,
   String title = 'Test Session',
+  ReasoningEffort? reasoningEffort,
 }) {
   return SessionSummary(
     id: 'session-1',
@@ -5575,6 +7688,7 @@ SessionSummary _session({
     unreadCount: 0,
     lastMessagePreview: null,
     pendingApproval: null,
+    reasoningEffort: reasoningEffort,
   );
 }
 
@@ -5649,6 +7763,7 @@ Map<String, dynamic> _messageJson({
 Map<String, dynamic> _sessionJson({
   String status = 'idle',
   String title = 'Test Session',
+  String? reasoningEffort,
 }) {
   return {
     'id': 'session-1',
@@ -5661,6 +7776,7 @@ Map<String, dynamic> _sessionJson({
     'unread_count': 0,
     'last_message_preview': null,
     'pending_approval': null,
+    'reasoning_effort': reasoningEffort,
   };
 }
 
@@ -5708,6 +7824,18 @@ class _FakeHttpClient extends http.BaseClient {
       request: request,
     );
   }
+}
+
+class _UploadingBridgeClient extends BridgeClient {
+  _UploadingBridgeClient({
+    required this.uploadHandler,
+    required super.httpClient,
+  });
+
+  final Future<BridgeUploadResponse> Function(String path) uploadHandler;
+
+  @override
+  Future<BridgeUploadResponse> uploadFile(String path) => uploadHandler(path);
 }
 
 class _StreamingEventHttpClient extends http.BaseClient {

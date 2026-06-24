@@ -493,6 +493,9 @@ void main() {
 
   testWidgets('download failure is shown inline on the model card',
       (tester) async {
+    const errorPrefix = 'Download failed for';
+    const errorDetail = 'download request failed with 404';
+
     await tester.pumpWidget(
       _TestApp(
         home: SpeechSettingsScreen(
@@ -503,7 +506,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.textContaining('Bridge error (404)'), findsNothing);
+    expect(find.textContaining(errorPrefix), findsNothing);
+    expect(find.textContaining(errorDetail), findsNothing);
 
     await tester.ensureVisible(find.widgetWithText(FilledButton, 'Change'));
     await tester.tap(find.widgetWithText(FilledButton, 'Change').first);
@@ -513,17 +517,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('DOWNLOAD TASKS'), findsNothing);
-    expect(find.textContaining('Bridge error (404)'), findsOneWidget);
+    expect(find.textContaining(errorPrefix), findsOneWidget);
+    expect(find.textContaining(errorDetail), findsOneWidget);
 
     Navigator.of(tester.element(find.byType(SpeechSettingsScreen))).pop();
     await tester.pumpAndSettle();
-    expect(find.textContaining('Bridge error (404)'), findsOneWidget);
+    expect(find.textContaining(errorPrefix), findsOneWidget);
+    expect(find.textContaining(errorDetail), findsOneWidget);
 
     await tester.ensureVisible(find.byIcon(Icons.close));
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Bridge error (404)'), findsNothing);
+    expect(find.textContaining(errorPrefix), findsNothing);
+    expect(find.textContaining(errorDetail), findsNothing);
   });
 
   testWidgets('download task failure is shown inline on the model card',

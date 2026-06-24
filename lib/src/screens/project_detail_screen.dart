@@ -141,9 +141,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     final statusColor = status == ProjectGitStatus.dirty
         ? AppColors.warningFor(brightness)
         : AppColors.successFor(brightness);
-    final statusLabel = status == ProjectGitStatus.dirty
-        ? l10n.gitDirty
-        : l10n.gitClean;
+    final statusLabel =
+        status == ProjectGitStatus.dirty ? l10n.gitDirty : l10n.gitClean;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -328,6 +327,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                                         session.status,
                                         brightness,
                                       ),
+                                      forkSourceLabel:
+                                          _forkSourceLabel(session, sessions),
                                       updatedAtLabel: _formatSessionUpdatedAt(
                                         session.updatedAt,
                                       ),
@@ -571,6 +572,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       updatedAt: DateTime.now(),
       unreadCount: 0,
       providerId: result.$3,
+      reasoningEffort: result.$4,
     );
     final sessionFuture = _client.createSession(
       projectId: _project.id,
@@ -578,6 +580,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       agent: result.$2,
       briefReplyMode: appSettingsController.settings.compressAssistantReplies,
       providerId: result.$3,
+      reasoningEffort: result.$4,
     );
 
     await navigator.push(
@@ -602,6 +605,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         return context.l10n.sessionStatusRunning;
       case SessionStatus.awaitingApproval:
         return context.l10n.sessionStatusAwaitingApproval;
+      case SessionStatus.interrupted:
+        return context.l10n.sessionStatusInterrupted;
       case SessionStatus.waiting:
         return context.l10n.sessionStatusWaiting;
       case SessionStatus.failed:
@@ -617,6 +622,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         return AppColors.primaryFor(brightness);
       case SessionStatus.awaitingApproval:
         return AppColors.warningFor(brightness);
+      case SessionStatus.interrupted:
+        return AppColors.mutedFor(brightness);
       case SessionStatus.waiting:
         return AppColors.mutedFor(brightness);
       case SessionStatus.failed:
@@ -630,9 +637,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       return sessions;
     }
     return sessions.where((session) {
-      final haystack =
-          '${session.title} ${session.lastMessagePreview ?? ''} ${_client.agentLabelFor(session.agentId)}'
-              .toLowerCase();
+      final haystack = '${session.title} ${session.lastMessagePreview ?? ''} '
+              '${_client.agentLabelFor(session.agentId)}'
+          .toLowerCase();
       return haystack.contains(query);
     }).toList(growable: false);
   }
@@ -647,6 +654,32 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   bool _shouldShowLoadMore(List<SessionSummary> sessions) {
     return _searchQuery.isEmpty && sessions.length > _visibleCount;
   }
+
+  String? _forkSourceLabel(
+    SessionSummary session,
+    List<SessionSummary> sessions,
+  ) {
+    final sourceId = session.forkedFromSessionId;
+    if (sourceId == null || sourceId.isEmpty) {
+      return null;
+    }
+    final sourceSession = sessions
+        .where((candidate) => candidate.id == sourceId)
+        .cast<SessionSummary?>()
+        .firstOrNull;
+    final sourceTitle = sourceSession?.title.trim();
+    final source = sourceTitle != null && sourceTitle.isNotEmpty
+        ? sourceTitle
+        : _shortSessionId(sourceId);
+    return context.l10n.forkedFromSession(source);
+  }
+
+  String _shortSessionId(String sessionId) {
+    if (sessionId.length <= 12) {
+      return sessionId;
+    }
+    return '${sessionId.substring(0, 8)}...';
+  }
 }
 
 class _SessionSummaryCard extends StatelessWidget {
@@ -654,6 +687,7 @@ class _SessionSummaryCard extends StatelessWidget {
     required this.session,
     required this.statusLabel,
     required this.statusColor,
+    required this.forkSourceLabel,
     required this.updatedAtLabel,
     required this.onTap,
   });
@@ -661,6 +695,7 @@ class _SessionSummaryCard extends StatelessWidget {
   final SessionSummary session;
   final String statusLabel;
   final Color statusColor;
+  final String? forkSourceLabel;
   final String updatedAtLabel;
   final VoidCallback onTap;
 
@@ -729,11 +764,49 @@ class _SessionSummaryCard extends StatelessWidget {
                     style: textTheme.bodySmall?.copyWith(fontSize: 10),
                   ),
                 ],
+                if (forkSourceLabel != null) ...[
+                  const SizedBox(height: AppSpacing.textTight),
+                  _ForkSourceLabel(label: forkSourceLabel!),
+                ],
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ForkSourceLabel extends StatelessWidget {
+  const _ForkSourceLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.call_split_rounded,
+          size: 12,
+          color: AppColors.mutedSoftFor(brightness),
+        ),
+        const SizedBox(width: AppSpacing.micro),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.mutedSoftFor(brightness),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ),
+      ],
     );
   }
 }

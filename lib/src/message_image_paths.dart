@@ -37,6 +37,15 @@ class MessageImageReference {
       ? mimeType != null && mimeType!.eq('image/svg+xml')
       : path.toLowerCase().endsWith('.svg');
 
+  bool get isVideo => !isDataUri && path.toLowerCase().endsWith('.mp4');
+
+  bool get isImage => !isVideo;
+
+  bool get isAnimatedImage => isDataUri
+      ? mimeType != null &&
+          (mimeType!.eq('image/gif') || mimeType!.eq('image/webp'))
+      : path.toLowerCase().endsWith('.gif') || path.toLowerCase().endsWith('.webp');
+
   static MessageImageReference? tryParse(String raw) {
     var value = raw.trim();
     if (value.isEmpty) {
@@ -117,7 +126,7 @@ final RegExp _bareDataImagePattern = RegExp(
   caseSensitive: false,
 );
 final RegExp _bareImagePathPattern = RegExp(
-  r"""(?:(?<=^)|(?<=[\s(>:\[\-]))((?:\.\.?[\\/]|[\\/]|[A-Za-z]:[\\/])?[^\s<>()\[\]{}"'`]+\.(?:png|jpe?g|gif|webp|bmp|svg))(?=$|[\s),.!?;:\]\}])""",
+  r"""(?:(?<=^)|(?<=[\s(>:\[\-]))((?:\.\.?[\\/]|[\\/]|[A-Za-z]:[\\/])?[^\s<>()\[\]{}"'`]+\.(?:png|jpe?g|gif|webp|bmp|svg|mp4))(?=$|[\s),.!?;:\]\}])""",
   caseSensitive: false,
 );
 

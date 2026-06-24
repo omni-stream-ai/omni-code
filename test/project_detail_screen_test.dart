@@ -345,7 +345,8 @@ void main() {
     final l10n = AppLocalizations.of(tester.element(find.byType(AlertDialog)))!;
     expect(find.text(l10n.agentNotInstalledStatus), findsOneWidget);
     expect(find.text('npm install -g @openai/codex'), findsOneWidget);
-    expect(find.text('Codex (${l10n.agentNotInstalledStatus})'), findsOneWidget);
+    expect(
+        find.text('Codex (${l10n.agentNotInstalledStatus})'), findsOneWidget);
 
     final installButton = tester.widget<FilledButton>(
       find.byKey(const Key('create-or-install-agent-button')),
@@ -366,7 +367,8 @@ void main() {
     expect(enabledCreateButton.onPressed, isNotNull);
   });
 
-  testWidgets('create session dialog shows install error and keeps install button',
+  testWidgets(
+      'create session dialog shows install error and keeps install button',
       (tester) async {
     var installCalls = 0;
     final client = BridgeClient(
@@ -457,7 +459,8 @@ void main() {
     expect(find.byType(AlertDialog), findsOneWidget);
   });
 
-  testWidgets('create session dialog defaults to last selected provider for project',
+  testWidgets(
+      'create session dialog defaults to last selected provider for project',
       (tester) async {
     appSettingsController.debugReplaceSettings(
       AppSettings.defaults().copyWith(
@@ -573,7 +576,8 @@ void main() {
     expect(find.text('Provider Two'), findsOneWidget);
   });
 
-  testWidgets('create session dialog defaults to auto when project has no saved provider',
+  testWidgets(
+      'create session dialog defaults to auto when project has no saved provider',
       (tester) async {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
@@ -757,7 +761,6 @@ void main() {
     expect(find.text('OpenCode'), findsOneWidget);
     expect(find.text('Custom Agent'), findsNothing);
   });
-
 }
 
 class _TestApp extends StatelessWidget {
@@ -815,6 +818,7 @@ Map<String, Object?> _sessionJson({
   required String title,
   required String updatedAt,
   String? preview,
+  String? reasoningEffort,
 }) {
   return {
     'id': id,
@@ -827,6 +831,7 @@ Map<String, Object?> _sessionJson({
     'unread_count': 0,
     'last_message_preview': preview,
     'pending_approval': null,
+    'reasoning_effort': reasoningEffort,
   };
 }
 

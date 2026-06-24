@@ -113,6 +113,8 @@
   "createNewProject": "Create new project",
   "newProject": "New project",
   "retry": "Retry",
+  "editMessage": "Edit",
+  "withdrawMessage": "Withdraw",
   "projectCount": "{count} sessions",
   "@projectCount": {
     "placeholders": {
@@ -179,6 +181,12 @@
       "time": {}
     }
   },
+  "forkedFromSession": "Forked from {source}",
+  "@forkedFromSession": {
+    "placeholders": {
+      "source": {}
+    }
+  },
   "loadMoreSessions": "Load more ({count})",
   "@loadMoreSessions": {
     "placeholders": {
@@ -195,6 +203,7 @@
   "sessionStatusIdle": "Idle",
   "sessionStatusRunning": "Running",
   "sessionStatusAwaitingApproval": "Awaiting approval",
+  "sessionStatusInterrupted": "Interrupted",
   "sessionStatusWaiting": "Waiting",
   "sessionStatusFailed": "Failed",
   "noSessionsYet": "No sessions in this project yet",
@@ -311,7 +320,7 @@
   },
   "callModeWakeWordModelUnsupported": "The current speech model does not support wake words. Wake word detection has been automatically disabled.",
   "send": "Send",
-  "imageAttachment": "Image attachment",
+  "imageAttachment": "Upload file or image",
   "previewImage": "Preview",
   "imagePreviewTitle": "Image preview",
   "imagePreviewLoadFailed": "Failed to load image preview",
@@ -689,6 +698,15 @@
   "providerDeleted": "Provider deleted",
   "providerSessionLabel": "Provider",
   "providerOverrideFailed": "Failed to save provider selection",
+  "reasoningEffortDefault": "Default",
+  "reasoningEffortLow": "Low",
+  "reasoningEffortMedium": "Medium",
+  "reasoningEffortHigh": "High",
+  "reasoningEffortXhigh": "XHigh",
+  "reasoningEffortMax": "Max",
+  "reasoningEffortOverride": "Reasoning Effort",
+  "reasoningEffortSessionLabel": "Reasoning effort",
+  "reasoningEffortOverrideFailed": "Failed to save reasoning effort",
   "confirm": "Confirm",
   "fieldRequired": "This field is required",
   "gitClean": "clean",

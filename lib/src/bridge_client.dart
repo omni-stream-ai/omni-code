@@ -377,6 +377,27 @@ class BridgeClient {
     );
   }
 
+  Future<BridgeUploadResponse> uploadFile(String path) async {
+    final trimmedPath = path.trim();
+    if (trimmedPath.isEmpty) {
+      throw ArgumentError('path cannot be empty.');
+    }
+
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/uploads'),
+    )..headers.addAll(_defaultHeaders);
+    request.files.add(await http.MultipartFile.fromPath('file', trimmedPath));
+
+    final streamedResponse = await _httpClient.send(request);
+    final response = await http.Response.fromStream(streamedResponse);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+
+    return BridgeUploadResponse.fromJson(_decodeApiData(response.body));
+  }
+
   Future<List<SessionSummary>> listProjectSessions(
     String projectId, {
     bool forceRefresh = false,
@@ -435,6 +456,7 @@ class BridgeClient {
     String inputMode = 'text',
     String? systemPrompt,
     String? providerId,
+    ReasoningEffort? reasoningEffort,
   }) async {
     final body = <String, dynamic>{
       'content': content,
@@ -446,6 +468,9 @@ class BridgeClient {
     }
     if (providerId != null && providerId.isNotEmpty) {
       body['provider_id'] = providerId;
+    }
+    if (reasoningEffort != null) {
+      body['reasoning_effort'] = reasoningEffort.apiValue;
     }
 
     final response = await _httpClient.post(
@@ -475,30 +500,54 @@ class BridgeClient {
     String sessionId,
     String? providerId,
   ) async {
+    await updateSessionDefaults(sessionId, providerId: providerId);
+  }
+
+  Future<void> updateSessionDefaults(
+    String sessionId, {
+    String? providerId,
+    bool clearProviderId = false,
+    ReasoningEffort? reasoningEffort,
+    bool clearReasoningEffort = false,
+  }) async {
+    final body = <String, dynamic>{};
+    if (clearProviderId) {
+      body['provider_id'] = null;
+    } else if (providerId != null) {
+      body['provider_id'] = providerId;
+    }
+    if (clearReasoningEffort) {
+      body['reasoning_effort'] = null;
+    } else if (reasoningEffort != null) {
+      body['reasoning_effort'] = reasoningEffort.apiValue;
+    }
     final response = await _httpClient.patch(
       Uri.parse('$baseUrl/sessions/$sessionId'),
       headers: {
         ..._defaultHeaders,
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({
-        'provider_id': providerId,
-      }),
+      body: jsonEncode(body),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(_extractErrorMessage(response));
     }
   }
 
-  Future<void> cancelReply(String sessionId) async {
+  Future<bool> cancelReply(String sessionId) async {
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/sessions/$sessionId/cancel'),
       headers: _defaultHeaders,
     );
 
-    if (response.statusCode != 204) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(_extractErrorMessage(response));
     }
+    if (response.body.trim().isEmpty) {
+      return true;
+    }
+    final data = _decodeApiData(response.body);
+    return data['cancelled'] as bool? ?? true;
   }
 
   Future<void> submitApproval(
@@ -534,8 +583,7 @@ class BridgeClient {
       },
     };
     if (modelProviders != null) {
-      body['model_providers'] =
-          modelProviders.map((p) => p.toJson()).toList();
+      body['model_providers'] = modelProviders.map((p) => p.toJson()).toList();
     }
     final response = await _httpClient.put(
       Uri.parse('$baseUrl/settings'),
@@ -593,7 +641,8 @@ class BridgeClient {
       throw ClientUnauthorizedException(response.body);
     }
     _assertJsonResponse(response);
-    final groups = _decodeApiListData(response.body).whereType<Map<String, dynamic>>();
+    final groups =
+        _decodeApiListData(response.body).whereType<Map<String, dynamic>>();
     final commands = <AgentCommand>[];
     for (final group in groups) {
       final agentId =
@@ -676,6 +725,7 @@ class BridgeClient {
     required String agent,
     bool? briefReplyMode,
     String? providerId,
+    ReasoningEffort? reasoningEffort,
   }) async {
     final body = <String, dynamic>{
       'project_id': projectId,
@@ -686,6 +736,9 @@ class BridgeClient {
     };
     if (providerId != null && providerId.isNotEmpty) {
       body['provider_id'] = providerId;
+    }
+    if (reasoningEffort != null) {
+      body['reasoning_effort'] = reasoningEffort.apiValue;
     }
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/sessions'),
@@ -1334,7 +1387,7 @@ class BridgeClient {
     final normalizedPath =
         uri != null && uri.hasScheme ? uri.path : trimmed.split('?').first;
     return RegExp(
-      r'\.(png|jpe?g|gif|webp|bmp|svg)$',
+      r'\.(png|jpe?g|gif|webp|bmp|svg|mp4)$',
       caseSensitive: false,
     ).hasMatch(normalizedPath);
   }
@@ -1358,6 +1411,9 @@ class BridgeClient {
     }
     if (normalized.endsWith('.svg')) {
       return 'image/svg+xml';
+    }
+    if (normalized.endsWith('.mp4')) {
+      return 'video/mp4';
     }
     return 'application/octet-stream';
   }
@@ -1470,6 +1526,38 @@ class BridgeFileResponse {
 
   final Uint8List bytes;
   final String contentType;
+}
+
+class BridgeUploadResponse {
+  const BridgeUploadResponse({
+    required this.id,
+    required this.fileName,
+    required this.contentType,
+    required this.sizeBytes,
+    required this.url,
+    required this.absoluteUrl,
+    this.localPath = '',
+  });
+
+  factory BridgeUploadResponse.fromJson(Map<String, dynamic> json) {
+    return BridgeUploadResponse(
+      id: json['id'] as String? ?? '',
+      fileName: json['file_name'] as String? ?? '',
+      contentType: json['content_type'] as String? ?? '',
+      sizeBytes: (json['size_bytes'] as num?)?.toInt() ?? 0,
+      url: json['url'] as String? ?? '',
+      absoluteUrl: json['absolute_url'] as String? ?? '',
+      localPath: json['local_path'] as String? ?? '',
+    );
+  }
+
+  final String id;
+  final String fileName;
+  final String contentType;
+  final int sizeBytes;
+  final String url;
+  final String absoluteUrl;
+  final String localPath;
 }
 
 class SendMessageResult {

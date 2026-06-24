@@ -534,6 +534,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       updatedAt: DateTime.now(),
       unreadCount: 0,
       providerId: sessionResult.$3,
+      reasoningEffort: sessionResult.$4,
     );
     final sessionFuture = _client.createSession(
       projectId: project.id,
@@ -541,6 +542,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       agent: sessionResult.$2,
       briefReplyMode: appSettingsController.settings.compressAssistantReplies,
       providerId: sessionResult.$3,
+      reasoningEffort: sessionResult.$4,
     );
 
     await Navigator.of(context).push(
@@ -700,16 +702,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       children: [
         const SizedBox(height: AppSpacing.compact),
         ...visibleSessions.map(
-          (session) => Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.compact),
-            child: _RecentSessionCard(
-              title: session.title,
-              preview: session.lastMessagePreview,
-              metadata: _sessionMetadataLabel(session),
-              accentColor: _statusColor(session.status, brightness),
-              onTap: () => _openSession(session),
-            ),
-          ),
+          (session) {
+            final forkSource = _forkSourceLabel(session, sessions);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.compact),
+              child: _RecentSessionCard(
+                title: session.title,
+                preview: session.lastMessagePreview,
+                metadata: _sessionMetadataLabel(session),
+                forkSource: forkSource == null
+                    ? null
+                    : l10n.forkedFromSession(forkSource),
+                accentColor: _statusColor(session.status, brightness),
+                onTap: () => _openSession(session),
+              ),
+            );
+          },
         ),
         if (_visibleRecentCount < sessions.length)
           Padding(
@@ -1015,6 +1023,32 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return parts.join(' · ');
   }
 
+  String? _forkSourceLabel(
+    SessionSummary session,
+    List<SessionSummary> sessions,
+  ) {
+    final sourceId = session.forkedFromSessionId;
+    if (sourceId == null || sourceId.isEmpty) {
+      return null;
+    }
+    final sourceSession = sessions
+        .where((candidate) => candidate.id == sourceId)
+        .cast<SessionSummary?>()
+        .firstOrNull;
+    final sourceTitle = sourceSession?.title.trim();
+    if (sourceTitle != null && sourceTitle.isNotEmpty) {
+      return sourceTitle;
+    }
+    return _shortSessionId(sourceId);
+  }
+
+  String _shortSessionId(String sessionId) {
+    if (sessionId.length <= 12) {
+      return sessionId;
+    }
+    return '${sessionId.substring(0, 8)}...';
+  }
+
   String _statusLabel(SessionStatus status) {
     switch (status) {
       case SessionStatus.idle:
@@ -1023,6 +1057,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return context.l10n.sessionStatusRunning;
       case SessionStatus.awaitingApproval:
         return context.l10n.sessionStatusAwaitingApproval;
+      case SessionStatus.interrupted:
+        return context.l10n.sessionStatusInterrupted;
       case SessionStatus.waiting:
         return context.l10n.sessionStatusWaiting;
       case SessionStatus.failed:
@@ -1038,6 +1074,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return AppColors.signalFor(brightness);
       case SessionStatus.awaitingApproval:
         return AppColors.warningFor(brightness);
+      case SessionStatus.interrupted:
+        return AppColors.outlineStrongFor(brightness);
       case SessionStatus.waiting:
         return AppColors.outlineStrongFor(brightness);
       case SessionStatus.failed:
@@ -2026,6 +2064,7 @@ class _RecentSessionCard extends StatelessWidget {
     required this.title,
     required this.preview,
     required this.metadata,
+    required this.forkSource,
     required this.accentColor,
     required this.onTap,
   });
@@ -2033,6 +2072,7 @@ class _RecentSessionCard extends StatelessWidget {
   final String title;
   final String? preview;
   final String metadata;
+  final String? forkSource;
   final Color accentColor;
   final VoidCallback onTap;
 
@@ -2094,11 +2134,49 @@ class _RecentSessionCard extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                 ),
+                if (forkSource != null) ...[
+                  const SizedBox(height: AppSpacing.textTight),
+                  _ForkSourceLabel(label: forkSource!),
+                ],
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ForkSourceLabel extends StatelessWidget {
+  const _ForkSourceLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.call_split_rounded,
+          size: 12,
+          color: AppColors.mutedSoftFor(brightness),
+        ),
+        const SizedBox(width: AppSpacing.micro),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.mutedSoftFor(brightness),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ),
+      ],
     );
   }
 }

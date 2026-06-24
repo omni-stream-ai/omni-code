@@ -235,6 +235,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get retry => '重试';
 
   @override
+  String get editMessage => '编辑';
+
+  @override
+  String get withdrawMessage => '撤回';
+
+  @override
   String projectCount(int count) {
     return '$count 个会话';
   }
@@ -321,6 +327,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String forkedFromSession(Object source) {
+    return 'Fork 来源：$source';
+  }
+
+  @override
   String loadMoreSessions(int count) {
     return '加载更多 ($count 条)';
   }
@@ -339,6 +350,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sessionStatusAwaitingApproval => '待审批';
+
+  @override
+  String get sessionStatusInterrupted => '已中断';
 
   @override
   String get sessionStatusWaiting => '等待中';
@@ -616,7 +630,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get send => '发送';
 
   @override
-  String get imageAttachment => '图片附件';
+  String get imageAttachment => '上传文件或图片';
 
   @override
   String get previewImage => '预览';
@@ -1386,6 +1400,33 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get providerOverrideFailed => '供应商选择保存失败';
+
+  @override
+  String get reasoningEffortDefault => '默认';
+
+  @override
+  String get reasoningEffortLow => '低';
+
+  @override
+  String get reasoningEffortMedium => '中';
+
+  @override
+  String get reasoningEffortHigh => '高';
+
+  @override
+  String get reasoningEffortXhigh => '超高';
+
+  @override
+  String get reasoningEffortMax => '最高';
+
+  @override
+  String get reasoningEffortOverride => '思考强度';
+
+  @override
+  String get reasoningEffortSessionLabel => '思考强度';
+
+  @override
+  String get reasoningEffortOverrideFailed => '思考强度保存失败';
 
   @override
   String get confirm => '确认';
