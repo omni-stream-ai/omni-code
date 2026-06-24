@@ -4,9 +4,9 @@ import 'app_colors.dart';
 import 'app_spacing.dart';
 
 class AppTheme {
-  static const String displayFontFamily = 'JetBrains Mono';
-  static const String bodyFontFamily = 'JetBrains Mono';
-  static const List<String> monoFontFamilyFallback = <String>['monospace'];
+  static const String? displayFontFamily = null;
+  static const String? bodyFontFamily = null;
+  static const List<String>? monoFontFamilyFallback = null;
 
   static ThemeData get darkTheme => _buildTheme(AppColors.darkColorScheme);
 

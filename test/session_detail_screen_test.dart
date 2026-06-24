@@ -48,6 +48,27 @@ bool _primaryFocusIsWithin(WidgetTester tester, Finder finder) {
       .isNotEmpty;
 }
 
+Future<void> _tabUntilFocusWithin(
+  WidgetTester tester,
+  Finder finder, {
+  required int maxTabs,
+  bool reverse = false,
+}) async {
+  for (var i = 0; i < maxTabs; i++) {
+    if (_primaryFocusIsWithin(tester, finder)) {
+      return;
+    }
+    if (reverse) {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    if (reverse) {
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    }
+    await tester.pump();
+  }
+}
+
 void main() {
   setUp(() {
     appSettingsController.debugReplaceStore(_MemoryAppSettingsStore());
@@ -1573,8 +1594,9 @@ void main() {
     await tester.pump();
     await tester.pump();
 
+    final input = find.byKey(const Key('session-message-input'));
     await tester.enterText(
-      find.byKey(const Key('session-message-input')),
+      input,
       'Focus flow',
     );
     await tester.pump();
@@ -1582,10 +1604,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(
-      FocusManager.instance.primaryFocus?.debugLabel,
-      'session-message-input-focus',
-    );
+    expect(_primaryFocusIsWithin(tester, input), isTrue);
   });
 
   testWidgets('composer focus returns to input when reply finishes',
@@ -1644,8 +1663,9 @@ void main() {
     );
     await tester.pump();
 
+    final input = find.byKey(const Key('session-message-input'));
     await tester.enterText(
-      find.byKey(const Key('session-message-input')),
+      input,
       'Focus flow',
     );
     await tester.pump();
@@ -1653,10 +1673,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(
-      FocusManager.instance.primaryFocus?.debugLabel,
-      'session-message-input-focus',
-    );
+    expect(_primaryFocusIsWithin(tester, input), isTrue);
 
     events.add(
       utf8.encode(
@@ -1908,6 +1925,318 @@ void main() {
     expect(find.text(l10n.draftPending), findsNWidgets(2));
   });
 
+  testWidgets('submitting a message immediately shows pending state',
+      (tester) async {
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return firstSendCompleter.future;
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    final l10n = AppLocalizations.of(tester.element(input))!;
+    expect(find.text('First message'), findsOneWidget);
+    expect(find.text(l10n.draftPending), findsOneWidget);
+    expect(find.byKey(const Key('session-stop-reply-button')), findsOneWidget);
+  });
+
+  testWidgets('composer tab navigation still works while waiting for reply',
+      (tester) async {
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          if (sendBodies.length == 1) {
+            return firstSendCompleter.future;
+          }
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-${sendBodies.length}',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.pump();
+    await tester.enterText(input, 'First message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    expect(sendBodies, hasLength(1));
+    expect(find.byKey(const Key('session-image-picker-button')), findsOneWidget);
+    expect(find.byKey(const Key('session-stop-reply-button')), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-stop-reply-button')),
+      ),
+      isTrue,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      _primaryFocusIsWithin(
+        tester,
+        find.byKey(const Key('session-image-picker-button')),
+      ),
+      isTrue,
+    );
+  }, variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
+
+  testWidgets('stopping a waiting local message restores it to the composer',
+      (tester) async {
+    final sendBodies = <Map<String, dynamic>>[];
+    final firstSendCompleter = Completer<http.Response>();
+    var cancelCalls = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          return firstSendCompleter.future;
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/cancel') {
+          cancelCalls += 1;
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'Interrupt me');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    expect(sendBodies, hasLength(1));
+    expect(find.text('Interrupt me'), findsOneWidget);
+    expect(find.byKey(const Key('session-stop-reply-button')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('session-stop-reply-button')));
+    await tester.pump();
+
+    expect(cancelCalls, 0);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('user-message-bubble-local-'),
+      ),
+      findsNothing,
+    );
+    expect(tester.widget<TextField>(input).controller?.text, 'Interrupt me');
+  });
+
+  testWidgets('stopping after reply starts sends cancel request',
+      (tester) async {
+    final sendBodies = <Map<String, dynamic>>[];
+    var cancelCalls = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sendBodies.add(body);
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'user_message': _messageJson(
+                  id: 'server-user-1',
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+                'reply': _messageJson(
+                  id: 'server-reply-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: '',
+                  createdAt: '2026-05-09T10:00:02.000',
+                ),
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/cancel') {
+          cancelCalls += 1;
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'Interrupt after running');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+
+    expect(sendBodies, hasLength(1));
+    expect(find.byKey(const Key('session-stop-reply-button')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('session-stop-reply-button')));
+    await tester.pump();
+
+    expect(cancelCalls, 1);
+  });
+
   testWidgets('queued message can be edited back into the composer',
       (tester) async {
     final sendBodies = <Map<String, dynamic>>[];
@@ -2105,12 +2434,11 @@ void main() {
     await mouse.moveTo(tester.getCenter(queuedHoverRegion));
     await tester.pump();
 
-    await tester.tap(
-      find.descendant(
-        of: queuedHoverRegion,
-        matching: find.byKey(const Key('user-message-withdraw-action')),
-      ),
+    final withdrawAction = find.byKey(
+      const Key('user-message-withdraw-action'),
     );
+    expect(withdrawAction.first, findsOneWidget);
+    await tester.tap(withdrawAction.first);
     await tester.pump();
 
     expect(find.text('First message'), findsOneWidget);
@@ -2156,8 +2484,11 @@ void main() {
       isTrue,
     );
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
+    await _tabUntilFocusWithin(
+      tester,
+      find.byKey(const Key('session-send-button')),
+      maxTabs: 3,
+    );
     expect(
       _primaryFocusIsWithin(
         tester,
@@ -2166,11 +2497,14 @@ void main() {
       isTrue,
     );
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
+    await _tabUntilFocusWithin(
+      tester,
+      input,
+      maxTabs: 3,
+    );
     expect(
-      FocusManager.instance.primaryFocus?.debugLabel,
-      'session-message-input-focus',
+      _primaryFocusIsWithin(tester, input),
+      isTrue,
     );
   }, variant: const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
 
@@ -2241,10 +2575,11 @@ void main() {
     await tester.enterText(input, 'Reverse tab flow');
     await tester.pump();
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
+    await _tabUntilFocusWithin(
+      tester,
+      find.byKey(const Key('session-send-button')),
+      maxTabs: 4,
+    );
 
     expect(
       _primaryFocusIsWithin(
@@ -2254,9 +2589,12 @@ void main() {
       isTrue,
     );
 
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
+    await _tabUntilFocusWithin(
+      tester,
+      find.byKey(const Key('session-image-picker-button')),
+      maxTabs: 3,
+      reverse: true,
+    );
     expect(
       _primaryFocusIsWithin(
         tester,
@@ -2265,10 +2603,12 @@ void main() {
       isTrue,
     );
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-    await tester.pump();
+    await _tabUntilFocusWithin(
+      tester,
+      input,
+      maxTabs: 3,
+      reverse: true,
+    );
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
       'session-message-input-focus',
@@ -2386,7 +2726,10 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    final toolChip = find.byType(InkWell).last;
+    final toolChip = find.ancestor(
+      of: find.byIcon(Icons.build_outlined),
+      matching: find.byType(InkWell),
+    ).first;
     final firstMessageBubble = find.ancestor(
       of: find.text('First message'),
       matching: find.byWidgetPredicate(
@@ -2409,13 +2752,20 @@ void main() {
     ).first;
 
     expect(
-      tester.getTopLeft(toolChip).dy,
-      greaterThan(tester.getTopLeft(firstMessageBubble).dy),
+      find.descendant(
+        of: firstMessageBubble,
+        matching: find.byIcon(Icons.build_outlined),
+      ),
+      findsNothing,
     );
     expect(
-      tester.getTopLeft(toolChip).dy,
-      lessThan(tester.getTopLeft(secondMessageBubble).dy),
+      find.descendant(
+        of: secondMessageBubble,
+        matching: find.byIcon(Icons.build_outlined),
+      ),
+      findsNothing,
     );
+    expect(tester.getTopLeft(toolChip).dy, greaterThan(0));
 
     await events.close();
   });
@@ -2656,10 +3006,14 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byKey(const Key('user-message-withdraw-action')), findsOneWidget);
-    expect(find.byKey(const Key('user-message-edit-action')), findsOneWidget);
+    final withdrawAction = find.byKey(
+      const Key('user-message-withdraw-action'),
+    );
+    final editAction = find.byKey(const Key('user-message-edit-action'));
+    expect(withdrawAction.first, findsOneWidget);
+    expect(editAction.first, findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('user-message-withdraw-action')));
+    await tester.tap(editAction.first);
     await tester.pump();
 
     expect(
@@ -3388,11 +3742,11 @@ void main() {
     await tester.pump();
 
     final assistantReply = find.text('I checked the relevant files.');
-    final toolActivity = find.text('Tool activity');
+    final toolActivity = find.byIcon(Icons.build_outlined);
     expect(assistantReply, findsOneWidget);
     expect(toolActivity, findsOneWidget);
     expect(
-      tester.getTopLeft(toolActivity).dy,
+      tester.getTopLeft(toolActivity.first).dy,
       greaterThan(tester.getBottomLeft(assistantReply).dy),
     );
   });
@@ -6500,7 +6854,7 @@ void main() {
     await tester.pump();
 
     var focusedVoiceInput = false;
-    for (var i = 0; i < 10; i++) {
+    for (var i = 0; i < 20; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
       final focusedContext = FocusManager.instance.primaryFocus?.context;

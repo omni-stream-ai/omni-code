@@ -153,10 +153,13 @@ void main() {
 }
 
 Future<void> _loadPreviewFonts() async {
-  await _loadFontFamily(AppTheme.bodyFontFamily, const [
-    '/usr/share/fonts/OTF/NotoSansCJKsc-Regular.otf',
-    '/usr/share/fonts/OTF/NotoSansCJKsc-Bold.otf',
-  ]);
+  final bodyFontFamily = AppTheme.bodyFontFamily;
+  if (bodyFontFamily != null) {
+    await _loadFontFamily(bodyFontFamily, const [
+      '/usr/share/fonts/OTF/NotoSansCJKsc-Regular.otf',
+      '/usr/share/fonts/OTF/NotoSansCJKsc-Bold.otf',
+    ]);
+  }
   await _loadFontFamily('monospace', const [
     '/usr/share/fonts/OTF/NotoSansMonoCJKsc-Regular.otf',
   ]);

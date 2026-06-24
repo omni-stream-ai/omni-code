@@ -131,6 +131,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _refreshSessionSummaryInFlight = false;
   bool _dispatchingQueuedLocalMessage = false;
   bool _returnFocusToComposerAfterReply = false;
+  String? _cancellingPendingLocalMessageId;
   bool _composerSuggestionsOverlayShown = false;
   bool _pickingAttachments = false;
   bool _uploadingAttachments = false;
@@ -458,6 +459,21 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     });
   }
 
+  void _requestComposerFocusWhileActiveTurnAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _callModeEnabled ||
+          _creatingSession ||
+          _loadingMessages ||
+          (_session.status != SessionStatus.running &&
+              _session.status != SessionStatus.waiting) ||
+          _pendingApproval != null) {
+        return;
+      }
+      _messageInputFocusNode.requestFocus();
+    });
+  }
+
   void _requestApprovalFocusAfterFrame() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
@@ -486,6 +502,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required VoidCallback? onPressed,
     required ButtonStyle style,
     required Widget icon,
+    FocusNode? nextFocusNode,
   }) {
     return ListenableBuilder(
       listenable: focusNode,
@@ -498,24 +515,33 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         final focusOutline = AppColors.primaryFor(brightness).withValues(
           alpha: brightness == Brightness.dark ? 0.72 : 0.34,
         );
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOutCubic,
-          decoration: BoxDecoration(
-            color: isFocused ? focusColor : Colors.transparent,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: isFocused ? focusOutline : Colors.transparent,
+        return CallbackShortcuts(
+          bindings: nextFocusNode == null
+              ? const <ShortcutActivator, VoidCallback>{}
+              : <ShortcutActivator, VoidCallback>{
+                  const SingleActivator(LogicalKeyboardKey.tab): () {
+                    nextFocusNode.requestFocus();
+                  },
+                },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+            decoration: BoxDecoration(
+              color: isFocused ? focusColor : Colors.transparent,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isFocused ? focusOutline : Colors.transparent,
+              ),
             ),
-          ),
-          child: TextButton(
-            key: buttonKey,
-            focusNode: focusNode,
-            onPressed: onPressed,
-            style: style,
-            child: Tooltip(
-              message: tooltip ?? '',
-              child: icon,
+            child: TextButton(
+              key: buttonKey,
+              focusNode: focusNode,
+              onPressed: onPressed,
+              style: style,
+              child: Tooltip(
+                message: tooltip ?? '',
+                child: icon,
+              ),
             ),
           ),
         );
@@ -1223,8 +1249,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     final theme = Theme.of(context);
     final isSessionBusy = _uploadingAttachments;
-    final isWaitingForBridgeReply = _session.status == SessionStatus.running;
+    final isWaitingForBridgeReply = _session.status == SessionStatus.running ||
+        _session.status == SessionStatus.waiting;
     final hasActiveTurn = _session.status == SessionStatus.running ||
+        _session.status == SessionStatus.waiting ||
         _session.status == SessionStatus.awaitingApproval ||
         _pendingApproval != null;
     final canCancelReply = hasActiveTurn && !_cancellingReply;
@@ -1359,7 +1387,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }) {
     final brightness = Theme.of(context).brightness;
     final voiceButtonDisabled = isSessionBusy ||
-        isWaitingForBridgeReply ||
         _voiceInputStarting ||
         (_systemAsrUnavailable && !_isListening);
     final voiceLabel =
@@ -1370,7 +1397,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ? AppColors.onPrimaryFor(brightness)
         : AppColors.textFor(brightness);
     final holdToTalkDisabled = isSessionBusy ||
-        isWaitingForBridgeReply ||
         (_voiceInputStarting && !_voiceHoldActive);
     const collapsedComposerHeight = 48.0;
     final hasSendableDraft =
@@ -1390,37 +1416,49 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 ? context.l10n.voiceHoldReleaseHint
                 : context.l10n.voiceInputInProgress
             : null;
+    final imagePickerNextFocusNode = hasActiveTurn
+        ? _stopReplyFocusNode
+        : hasSendableDraft
+            ? _sendButtonFocusNode
+            : _voiceInputButtonFocusNode;
     final voiceButton = _withUnavailableTooltip(
       message: showVoiceInputUnavailableTooltip
           ? systemSpeechUnavailableMessage
           : null,
-      child: KeyedSubtree(
-        key: _holdToTalkButtonKey,
-        child: _ComposerVoiceButton(
-          key: const Key('session-voice-input-button'),
-          focusNode: _voiceInputButtonFocusNode,
-          label: voiceLabel,
-          disabled: voiceButtonDisabled,
-          isListening: _isListening,
-          isStarting: _voiceInputStarting,
-          animation: _callModeOrbController,
-          activeBackgroundColor: AppColors.primaryFor(brightness).withValues(
-            alpha: brightness == Brightness.dark ? 1 : 0.82,
+      child: CallbackShortcuts(
+        bindings: <ShortcutActivator, VoidCallback>{
+          const SingleActivator(LogicalKeyboardKey.tab): () {
+            _messageInputFocusNode.requestFocus();
+          },
+        },
+        child: KeyedSubtree(
+          key: _holdToTalkButtonKey,
+          child: _ComposerVoiceButton(
+            key: const Key('session-voice-input-button'),
+            focusNode: _voiceInputButtonFocusNode,
+            label: voiceLabel,
+            disabled: voiceButtonDisabled,
+            isListening: _isListening,
+            isStarting: _voiceInputStarting,
+            animation: _callModeOrbController,
+            activeBackgroundColor: AppColors.primaryFor(brightness).withValues(
+              alpha: brightness == Brightness.dark ? 1 : 0.82,
+            ),
+            activeIconColor: activeVoiceIconColor,
+            idleIconColor: AppColors.textSoftFor(brightness),
+            disabledIconColor: AppColors.mutedFor(brightness),
+            focusColor: AppColors.primaryFor(brightness).withValues(
+              alpha: brightness == Brightness.dark ? 0.16 : 0.22,
+            ),
+            onPressed: _toggleListening,
+            onLongPressStart: (details) =>
+                _startHoldToTalk(details.globalPosition),
+            onLongPressMoveUpdate: (details) =>
+                _updateHoldToTalk(details.globalPosition),
+            onLongPressEnd: (details) =>
+                _finishHoldToTalk(details.globalPosition),
+            onLongPressCancel: () => _finishHoldToTalk(null, cancelled: true),
           ),
-          activeIconColor: activeVoiceIconColor,
-          idleIconColor: AppColors.textSoftFor(brightness),
-          disabledIconColor: AppColors.mutedFor(brightness),
-          focusColor: AppColors.primaryFor(brightness).withValues(
-            alpha: brightness == Brightness.dark ? 0.16 : 0.22,
-          ),
-          onPressed: _toggleListening,
-          onLongPressStart: (details) =>
-              _startHoldToTalk(details.globalPosition),
-          onLongPressMoveUpdate: (details) =>
-              _updateHoldToTalk(details.globalPosition),
-          onLongPressEnd: (details) =>
-              _finishHoldToTalk(details.globalPosition),
-          onLongPressCancel: () => _finishHoldToTalk(null, cancelled: true),
         ),
       ),
     );
@@ -1431,8 +1469,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       child: IconButton(
         key: const Key('session-voice-mode-toggle'),
         tooltip: _voiceComposerMode ? context.l10n.keyboardInput : voiceLabel,
-        onPressed:
-            (isSessionBusy || isWaitingForBridgeReply) ? null : _toggleVoiceComposerMode,
+        onPressed: isSessionBusy ? null : _toggleVoiceComposerMode,
         style: IconButton.styleFrom(
           backgroundColor: deepSurface,
           foregroundColor: AppColors.textSoftFor(brightness),
@@ -1451,39 +1488,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       ),
     );
     final actionButtons = <Widget>[
-      FocusTraversalOrder(
-        order: const NumericFocusOrder(1),
-        child: _buildComposerActionIconButton(
-          focusNode: _imagePickerFocusNode,
-          buttonKey: const Key('session-image-picker-button'),
-          tooltip: context.l10n.imageAttachment,
-          onPressed:
-              isSessionBusy || isWaitingForBridgeReply || _pickingAttachments
-                  ? null
-                  : _pickAttachments,
-          style: TextButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            foregroundColor: AppColors.textSoftFor(brightness),
-            disabledForegroundColor: AppColors.mutedFor(brightness),
-            minimumSize: const Size.square(32),
-            fixedSize: const Size.square(32),
-            padding: EdgeInsets.zero,
-            shape: const CircleBorder(),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          icon: _pickingAttachments
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.attach_file_rounded, size: 20),
-        ),
-      ),
       if (hasActiveTurn) ...[
-        const SizedBox(width: AppSpacing.micro),
         FocusTraversalOrder(
-          order: const NumericFocusOrder(2),
+          order: const NumericFocusOrder(1),
           child: _buildComposerActionIconButton(
             focusNode: _stopReplyFocusNode,
             buttonKey: const Key('session-stop-reply-button'),
@@ -1508,9 +1515,39 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.stop_rounded, size: 20),
+            nextFocusNode: _imagePickerFocusNode,
           ),
         ),
+        const SizedBox(width: AppSpacing.micro),
       ],
+      FocusTraversalOrder(
+        order: NumericFocusOrder(hasActiveTurn ? 2 : 1),
+        child: _buildComposerActionIconButton(
+          focusNode: _imagePickerFocusNode,
+          buttonKey: const Key('session-image-picker-button'),
+          tooltip: context.l10n.imageAttachment,
+          onPressed:
+              isSessionBusy || _pickingAttachments ? null : _pickAttachments,
+          style: TextButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            foregroundColor: AppColors.textSoftFor(brightness),
+            disabledForegroundColor: AppColors.mutedFor(brightness),
+            minimumSize: const Size.square(32),
+            fixedSize: const Size.square(32),
+            padding: EdgeInsets.zero,
+            shape: const CircleBorder(),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          icon: _pickingAttachments
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.attach_file_rounded, size: 20),
+          nextFocusNode: imagePickerNextFocusNode,
+        ),
+      ),
       if (showVoiceButton) ...[
         const SizedBox(width: AppSpacing.micro),
         voiceButton,
@@ -1539,6 +1576,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 Icons.send_rounded,
                 size: 20,
               ),
+              nextFocusNode: _messageInputFocusNode,
             ),
           ),
         ),
@@ -2195,7 +2233,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_callModeSubmittingVoiceUtterance) {
       return l10n.callModeWorking;
     }
-    if (_session.status == SessionStatus.running) {
+    if (_session.status == SessionStatus.running ||
+        _session.status == SessionStatus.waiting) {
       return l10n.callModeWorking;
     }
     if (_callModeAwaitingPlaybackCompletion || _isSpeaking) {
@@ -2219,6 +2258,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     if (_session.status == SessionStatus.awaitingApproval ||
         _session.status == SessionStatus.running ||
+        _session.status == SessionStatus.waiting ||
         _callModeSubmittingVoiceUtterance ||
         _callModeAwaitingPlaybackCompletion ||
         _isSpeaking) {
@@ -2907,10 +2947,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   maxWidth: messageBubbleMaxWidth,
                 ),
               ...turn.assistantMessages.map(
-                (message) => _buildAssistantMessage(
-                  message,
-                  maxWidth: messageBubbleMaxWidth,
-                ),
+                (message) {
+                  final isLastAssistantMessage =
+                      identical(message, turn.assistantMessages.last);
+                  return _buildAssistantMessage(
+                    message,
+                    maxWidth: messageBubbleMaxWidth,
+                    compactBottomSpacing:
+                        isLastAssistantMessage && turn.toolMessages.isNotEmpty,
+                  );
+                },
               ),
               if (turn.toolMessages.isNotEmpty)
                 _buildToolEntry(
@@ -3041,39 +3087,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required VoidCallback onTap,
   }) {
     final brightness = Theme.of(context).brightness;
-    final baseSurface = AppColors.assistantMessageSurfaceFor(brightness);
-    final backgroundColor = highlighted
-        ? AppColors.tintSurfaceFor(
-            brightness,
-            AppColors.signalFor(brightness),
-            base: baseSurface,
-            darkAlpha: 0.18,
-            lightAlpha: 0.12,
-          )
-        : baseSurface.withValues(
-            alpha: brightness == Brightness.dark ? 0.92 : 0.96,
-          );
-    final borderColor = highlighted
-        ? AppColors.tintBorderFor(
-            brightness,
-            AppColors.signalFor(brightness),
-            base: baseSurface,
-            darkAlpha: 0.38,
-            lightAlpha: 0.22,
-          )
-        : AppColors.assistantMessageBorderFor(brightness).withValues(
-            alpha: brightness == Brightness.dark ? 0.92 : 0.84,
-          );
     final iconColor = highlighted
         ? AppColors.signalFor(brightness)
         : AppColors.mutedSoftFor(brightness);
-    final countBackground = highlighted
-        ? AppColors.signalFor(brightness).withValues(
-            alpha: brightness == Brightness.dark ? 0.16 : 0.12,
-          )
-        : AppColors.panelDeepFor(brightness).withValues(
-            alpha: brightness == Brightness.dark ? 0.84 : 0.08,
-          );
     final countColor = highlighted
         ? AppColors.textFor(brightness)
         : AppColors.mutedFor(brightness);
@@ -3081,78 +3097,29 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return Align(
       alignment: Alignment.centerLeft,
       child: Padding(
-        padding: const EdgeInsets.only(bottom: AppSpacing.compact),
+        padding: const EdgeInsets.only(bottom: AppSpacing.compact / 2),
         child: _ToolEntryChip(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
-          backgroundColor: backgroundColor,
-          borderColor: borderColor,
-          hoverColor: highlighted
-              ? AppColors.tintSurfaceFor(
-                  brightness,
-                  AppColors.signalFor(brightness),
-                  base: baseSurface,
-                  darkAlpha: 0.24,
-                  lightAlpha: 0.16,
-                )
-              : baseSurface.withValues(
-                  alpha: brightness == Brightness.dark ? 1 : 1,
-                ),
-          hoverBorderColor: highlighted
-              ? AppColors.tintBorderFor(
-                  brightness,
-                  AppColors.signalFor(brightness),
-                  base: baseSurface,
-                  darkAlpha: 0.48,
-                  lightAlpha: 0.28,
-                )
-              : AppColors.outlineStrongFor(brightness),
-          shadowColor: Colors.black.withValues(
-            alpha: brightness == Brightness.dark ? 0.10 : 0.03,
-          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.iconTight,
-              vertical: 4,
+              vertical: 2,
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 17,
-                  height: 17,
-                  decoration: BoxDecoration(
-                    color: AppColors.panelDeepFor(brightness).withValues(
-                      alpha: brightness == Brightness.dark ? 0.44 : 0.06,
-                    ),
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(
-                    Icons.build_outlined,
-                    size: 10,
-                    color: iconColor,
-                  ),
+                Icon(
+                  Icons.build_outlined,
+                  size: 14,
+                  color: iconColor,
                 ),
-                const SizedBox(width: 5),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 5,
-                    vertical: 1.5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: countBackground,
-                    borderRadius: BorderRadius.circular(
-                      AppSpacing.radiusPill,
-                    ),
-                  ),
-                  child: Text(
-                    count > 99 ? '99+' : '$count',
-                    style: TextStyle(
-                      color: countColor,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
+                const SizedBox(width: 2),
+                Text(
+                  count > 99 ? '99+' : '$count',
+                  style: TextStyle(
+                    color: countColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
@@ -3166,6 +3133,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Widget _buildAssistantMessage(
     ChatMessage message, {
     required double maxWidth,
+    bool compactBottomSpacing = false,
   }) {
     final displayContent = _displayContentForMessage(message);
     final imageReferences = extractMessageImageReferences(message.content);
@@ -3179,15 +3147,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       alignment: Alignment.centerLeft,
       child: Container(
         key: ValueKey('assistant-message-bubble-${message.id}'),
-        margin: const EdgeInsets.only(bottom: AppSpacing.stack),
+        margin: EdgeInsets.only(
+          bottom: compactBottomSpacing
+              ? AppSpacing.compact / 2
+              : AppSpacing.stack,
+        ),
         padding: AppSpacing.cardPadding,
         constraints: BoxConstraints(maxWidth: maxWidth),
         decoration: BoxDecoration(
-          color: AppColors.assistantMessageSurfaceFor(brightness),
+          color: Colors.transparent,
           borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-          border: Border.all(
-            color: AppColors.assistantMessageBorderFor(brightness),
-          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3267,8 +3236,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       fontSize: 13,
       height: 1.55,
       color: textColor,
-      fontFamily: 'JetBrains Mono',
-      fontFamilyFallback: const <String>['monospace'],
       letterSpacing: 0.1,
     );
     final styleSheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
@@ -5558,7 +5525,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       if (HardwareKeyboard.instance.isShiftPressed) {
         return KeyEventResult.ignored;
       }
-      final nextComposerNode = _imagePickerFocusNode;
+      final hasActiveTurn = _session.status == SessionStatus.running ||
+          _session.status == SessionStatus.waiting ||
+          _session.status == SessionStatus.awaitingApproval ||
+          _pendingApproval != null;
+      final nextComposerNode = hasActiveTurn
+          ? _stopReplyFocusNode
+          : _imagePickerFocusNode;
       nextComposerNode.requestFocus();
       return KeyEventResult.handled;
     }
@@ -5989,9 +5962,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         state: _LocalMessageState.pending,
         inputMode: inputMode,
       );
+      _session = _session.copyWith(
+        status: SessionStatus.waiting,
+        updatedAt: localMessage.createdAt,
+        lastMessagePreview: localMessage.content,
+        clearPendingApproval: true,
+      );
       _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
     });
     _jumpToBottom();
+    _requestComposerFocusWhileActiveTurnAfterFrame();
+    _requestComposerFocusAfterFrame(consumeReturnRequest: false);
 
     try {
       final previousTurnCountAfterLocalInsert = _allTurns.length;
@@ -6004,6 +5985,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         reasoningEffort: _overrideReasoningEffort,
       );
       if (!mounted) {
+        return false;
+      }
+      if (_cancellingPendingLocalMessageId == messageId) {
+        setState(() {
+          _cancellingPendingLocalMessageId = null;
+        });
         return false;
       }
       setState(() {
@@ -6050,6 +6037,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       });
       _returnFocusToComposerAfterReply = true;
       _syncSessionSummaryCache();
+      _requestComposerFocusWhileActiveTurnAfterFrame();
       _requestComposerFocusAfterFrame(consumeReturnRequest: false);
       _scheduleRefreshSessionSummary();
       unawaited(_dispatchQueuedLocalMessageIfPossible());
@@ -6059,6 +6047,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         return false;
       }
       setState(() {
+        if (_cancellingPendingLocalMessageId == messageId) {
+          _cancellingPendingLocalMessageId = null;
+          _localMessageStates.remove(messageId);
+          return;
+        }
         _localMessageStates[messageId] = _LocalMessageDraft(
           state: _LocalMessageState.failed,
           inputMode: inputMode,
@@ -6178,6 +6171,38 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Future<void> _cancelReply() async {
     if (_creatingSession || _cancellingReply) {
+      return;
+    }
+    final pendingEntry = _localMessageStates.entries
+        .where((entry) => entry.value.state == _LocalMessageState.pending)
+        .cast<MapEntry<String, _LocalMessageDraft>?>()
+        .firstWhere((_) => true, orElse: () => null);
+    if (_session.status == SessionStatus.waiting && pendingEntry != null) {
+      final index = _messages.indexWhere((item) => item.id == pendingEntry.key);
+      final pendingMessage = index >= 0 ? _messages[index] : null;
+      setState(() {
+        _cancellingPendingLocalMessageId = pendingEntry.key;
+        _localMessageStates.remove(pendingEntry.key);
+        if (index >= 0) {
+          _messages.removeAt(index);
+        }
+        _pendingApproval = null;
+        _submittingApproval = false;
+        _submittingApprovalChoice = null;
+        _session = _session.copyWith(
+          status: SessionStatus.idle,
+          updatedAt: DateTime.now(),
+          clearPendingApproval: true,
+        );
+        if (pendingMessage != null) {
+          _controller.text = pendingMessage.content;
+          _controller.selection = TextSelection.collapsed(
+            offset: _controller.text.length,
+          );
+        }
+      });
+      _syncSessionSummaryCache();
+      _requestComposerFocusAfterFrame(consumeReturnRequest: false);
       return;
     }
     setState(() {
@@ -7935,8 +7960,6 @@ class _AssistantCodeSyntaxHighlighter extends SyntaxHighlighter {
     final baseStyle = theme.textTheme.bodyMedium?.copyWith(
       color: AppColors.textFor(brightness),
       fontSize: (theme.textTheme.bodyLarge?.fontSize ?? 14) * 0.93,
-      fontFamily: 'JetBrains Mono',
-      fontFamilyFallback: const <String>['monospace'],
       height: 1.55,
       letterSpacing: 0.1,
     );
@@ -8280,22 +8303,10 @@ class _ToolEntryChip extends StatefulWidget {
   const _ToolEntryChip({
     required this.child,
     required this.onTap,
-    required this.borderRadius,
-    required this.backgroundColor,
-    required this.borderColor,
-    required this.hoverColor,
-    required this.hoverBorderColor,
-    required this.shadowColor,
   });
 
   final Widget child;
   final VoidCallback onTap;
-  final BorderRadius borderRadius;
-  final Color backgroundColor;
-  final Color borderColor;
-  final Color hoverColor;
-  final Color hoverBorderColor;
-  final Color shadowColor;
 
   @override
   State<_ToolEntryChip> createState() => _ToolEntryChipState();
@@ -8313,30 +8324,12 @@ class _ToolEntryChipState extends State<_ToolEntryChip> {
         duration: const Duration(milliseconds: 140),
         curve: Curves.easeOutCubic,
         offset: _hovered ? const Offset(0, -0.04) : Offset.zero,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOutCubic,
-          decoration: BoxDecoration(
-            color: _hovered ? widget.hoverColor : widget.backgroundColor,
-            borderRadius: widget.borderRadius,
-            border: Border.all(
-              color: _hovered ? widget.hoverBorderColor : widget.borderColor,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: widget.shadowColor,
-                blurRadius: _hovered ? 14 : 10,
-                offset: Offset(0, _hovered ? 5 : 3),
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: widget.onTap,
-              borderRadius: widget.borderRadius,
-              child: widget.child,
-            ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+            child: widget.child,
           ),
         ),
       ),
