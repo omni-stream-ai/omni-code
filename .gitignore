@@ -37,3 +37,4 @@ ios/Runner/GoogleService-Info.plist
 *.p12
 *.mobileprovision
 *.orig
+.tmp_flutter_test
