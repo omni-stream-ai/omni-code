@@ -343,6 +343,8 @@ jobs:
         shell: pwsh
         env:
           CMAKE_POLICY_VERSION_MINIMUM: 3.5
+          CXXFLAGS: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
+          CMAKE_CXX_FLAGS: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
         run: flutter build windows --release
 
       - name: Build Linux desktop bundle
