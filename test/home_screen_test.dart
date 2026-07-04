@@ -86,6 +86,402 @@ void main() {
     expect(find.byType(ProjectsScreen), findsOneWidget);
   });
 
+  testWidgets('home mobile shows recent sessions before recent projects',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _projectJson(
+                  id: 'alpha',
+                  name: 'Alpha',
+                  updatedAt: '2026-05-05T15:00:00.000',
+                ),
+                _projectJson(
+                  id: 'beta',
+                  name: 'Beta',
+                  updatedAt: '2026-05-05T14:00:00.000',
+                ),
+                _projectJson(
+                  id: 'gamma',
+                  name: 'Gamma',
+                  updatedAt: '2026-05-05T13:00:00.000',
+                ),
+                _projectJson(
+                  id: 'delta',
+                  name: 'Delta',
+                  updatedAt: '2026-05-05T12:00:00.000',
+                ),
+                _projectJson(
+                  id: 'epsilon',
+                  name: 'Epsilon',
+                  updatedAt: '2026-05-05T11:00:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/sessions') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _sessionJson(
+                  id: 'session-1',
+                  projectId: 'alpha',
+                  title: 'Session One',
+                  updatedAt: '2026-05-05T11:30:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(HomeScreen)),
+    )!;
+    final sessionsTitle = find.text(l10n.recentSessionsTitle);
+    final projectsTitle = find.text('Recent projects');
+
+    expect(sessionsTitle, findsOneWidget);
+    expect(
+      tester.getTopLeft(sessionsTitle).dy,
+      lessThan(tester.getTopLeft(projectsTitle).dy),
+    );
+    expect(find.text('Recent projects'), findsOneWidget);
+    expect(find.text('Alpha'), findsOneWidget);
+    expect(find.text('Beta'), findsOneWidget);
+    expect(find.text('Gamma'), findsOneWidget);
+    expect(find.text('Delta'), findsOneWidget);
+    expect(find.text('Epsilon'), findsNothing);
+  });
+
+  testWidgets('home search filters both projects and sessions', (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _projectJson(
+                  id: 'alpha',
+                  name: 'Alpha',
+                  updatedAt: '2026-05-05T11:00:00.000',
+                ),
+                _projectJson(
+                  id: 'beta',
+                  name: 'Beta',
+                  updatedAt: '2026-05-05T10:00:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/sessions') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _sessionJson(
+                  id: 'session-1',
+                  projectId: 'alpha',
+                  title: 'Fix compile error',
+                  updatedAt: '2026-05-05T11:30:00.000',
+                  preview: 'Investigate analyzer output',
+                ),
+                _sessionJson(
+                  id: 'session-2',
+                  projectId: 'beta',
+                  title: 'Review PR',
+                  updatedAt: '2026-05-05T12:30:00.000',
+                  preview: 'Check beta release notes',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final searchField = find.byType(TextField).first;
+    await tester.enterText(searchField, 'beta');
+
+    expect(find.text('Alpha'), findsAtLeastNWidgets(1));
+    expect(find.text('Fix compile error'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 299));
+
+    expect(find.text('Alpha'), findsAtLeastNWidgets(1));
+    expect(find.text('Fix compile error'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 1));
+
+    expect(find.text('Beta'), findsAtLeastNWidgets(1));
+    expect(find.text('Alpha'), findsNothing);
+    expect(find.text('Review PR'), findsOneWidget);
+    expect(find.text('Fix compile error'), findsNothing);
+  });
+
+  testWidgets('home search caps visible results and can load more sessions',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _projectJson(
+                  id: 'alpha',
+                  name: 'Match Alpha',
+                  updatedAt: '2026-05-05T15:00:00.000',
+                ),
+                _projectJson(
+                  id: 'beta',
+                  name: 'Match Beta',
+                  updatedAt: '2026-05-05T14:00:00.000',
+                ),
+                _projectJson(
+                  id: 'gamma',
+                  name: 'Match Gamma',
+                  updatedAt: '2026-05-05T13:00:00.000',
+                ),
+                _projectJson(
+                  id: 'delta',
+                  name: 'Match Delta',
+                  updatedAt: '2026-05-05T12:00:00.000',
+                ),
+                _projectJson(
+                  id: 'epsilon',
+                  name: 'Match Epsilon',
+                  updatedAt: '2026-05-05T11:00:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/sessions') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                for (var i = 6; i >= 1; i--)
+                  _sessionJson(
+                    id: 'match-session-$i',
+                    projectId: 'alpha',
+                    title: 'Match Session $i',
+                    updatedAt: '2026-05-05T${10 + i}:00:00.000',
+                    preview: 'Match Preview $i',
+                  ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final searchField = find.byType(TextField).first;
+    await tester.enterText(searchField, 'match');
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Match Session 6'), findsOneWidget);
+    expect(find.text('Match Session 5'), findsOneWidget);
+    expect(find.text('Match Session 4'), findsOneWidget);
+    expect(find.text('Match Session 3'), findsOneWidget);
+    expect(find.text('Match Session 2'), findsOneWidget);
+    expect(find.text('Match Session 1'), findsNothing);
+
+    expect(find.text('Match Alpha'), findsOneWidget);
+    expect(find.text('Match Beta'), findsOneWidget);
+    expect(find.text('Match Gamma'), findsOneWidget);
+    expect(find.text('Match Delta'), findsOneWidget);
+    expect(find.text('Match Epsilon'), findsNothing);
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(HomeScreen)),
+    )!;
+    final loadMore = find.text(l10n.loadMoreSessionsLabel);
+    expect(loadMore, findsOneWidget);
+
+    await tester.ensureVisible(loadMore);
+    await tester.tap(loadMore);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Match Session 1'), findsOneWidget);
+  });
+
+  testWidgets('home desktop search aligns with dashboard content width',
+      (tester) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _projectJson(
+                  id: 'alpha',
+                  name: 'Alpha',
+                  updatedAt: '2026-05-05T11:00:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/sessions') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _sessionJson(
+                  id: 'session-1',
+                  projectId: 'alpha',
+                  title: 'Session One',
+                  updatedAt: '2026-05-05T11:30:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final searchField = find.byKey(const Key('home-dashboard-search-field'));
+    final featuredCard = find.byKey(const Key('home-featured-session-card'));
+
+    expect(searchField, findsOneWidget);
+    expect(featuredCard, findsOneWidget);
+
+    final searchRect = tester.getRect(searchField);
+    final featuredRect = tester.getRect(featuredCard);
+
+    expect(searchRect.left, equals(featuredRect.left));
+    expect(searchRect.right, equals(featuredRect.right));
+  });
+
+  testWidgets('home recent project row can start a new session directly',
+      (tester) async {
+    var projectRequests = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          projectRequests += 1;
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _projectJson(
+                  id: 'alpha',
+                  name: 'Alpha',
+                  updatedAt: '2026-05-05T11:00:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/sessions') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _sessionJson(
+                  id: 'session-1',
+                  projectId: 'alpha',
+                  title: 'Session One',
+                  updatedAt: '2026-05-05T11:30:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/agents') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'codex',
+                  'label': 'Codex',
+                  'aliases': ['codex'],
+                  'selectable': true,
+                  'default_selected': true,
+                  'compatible_formats': ['codex'],
+                  'installed': true,
+                  'installed_path': '/usr/local/bin/codex',
+                  'install_hint': 'manual',
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/settings') {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'model_providers': [],
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.tap(find.byKey(const Key('home-project-new-session-alpha')));
+    await tester.pumpAndSettle();
+
+    expect(projectRequests, 1);
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byType(TextField), findsAtLeastNWidgets(2));
+  });
+
   testWidgets('home shows dashboard skeleton while loading initial data',
       (tester) async {
     final gate = Completer<void>();
@@ -128,11 +524,55 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.text('Project One'), findsNothing);
+    expect(find.text('Project One'), findsOneWidget);
     final l10n = AppLocalizations.of(
       tester.element(find.byType(HomeScreen)),
     )!;
     expect(find.text(l10n.noSessionsYet), findsOneWidget);
+  });
+
+  testWidgets('home shows desktop dashboard skeleton while loading wide layout',
+      (tester) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final gate = Completer<void>();
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          await gate.future;
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/sessions') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('home-desktop-loading-skeleton')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('home-dashboard-skeleton')), findsOneWidget);
+    expect(find.byKey(const Key('home-desktop-rail-skeleton')), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    gate.complete();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
   });
 
   testWidgets('projects screen keeps the active project at the top',
@@ -208,6 +648,36 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_projectNames(tester), ['Beta', 'Alpha']);
+  });
+
+  testWidgets('projects screen shows drawer menu button on mobile',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _projectJson(
+                  id: 'alpha',
+                  name: 'Alpha',
+                  updatedAt: '2026-05-05T11:00:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(_TestApp(home: ProjectsScreen(client: client)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.byIcon(Icons.menu_rounded), findsOneWidget);
   });
 
   testWidgets('direct /projects load redirects unauthorized users to home',

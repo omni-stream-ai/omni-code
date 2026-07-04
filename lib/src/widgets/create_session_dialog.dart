@@ -127,7 +127,14 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
   void initState() {
     super.initState();
     _loadProviders();
-    _loadAgents();
+    final cachedAgents = _client.peekAgents();
+    if (cachedAgents != null && cachedAgents.isNotEmpty) {
+      _agentOptions = cachedAgents;
+      _normalizeSelectedAgent();
+      _normalizeProviderSelection();
+      _loadingAgents = false;
+    }
+    _loadAgents(forceRefresh: true);
   }
 
   Future<void> _loadProviders() async {
@@ -151,9 +158,9 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
     }
   }
 
-  Future<void> _loadAgents() async {
+  Future<void> _loadAgents({bool forceRefresh = false}) async {
     try {
-      final agents = await _client.listAgents();
+      final agents = await _client.listAgents(forceRefresh: forceRefresh);
       if (!mounted) {
         return;
       }

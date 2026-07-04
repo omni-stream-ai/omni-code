@@ -162,6 +162,8 @@
   "homeBrowseProjects": "Browse all",
   "searchSessions": "Search session title or summary",
   "searchProjects": "Search project name or path",
+  "noSearchResultsTitle": "No matches found",
+  "noSearchResultsBody": "Try a different project name, path, session title, or summary.",
   "themeSection": "Theme",
   "themeFollowSystem": "Follow system",
   "themeLight": "Light",

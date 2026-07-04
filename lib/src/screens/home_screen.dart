@@ -9,23 +9,26 @@ import '../app_routes.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
+import '../responsive/app_responsive_layout.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_back_header.dart';
 import '../widgets/app_card.dart';
-import '../widgets/create_session_dialog.dart';
+import '../widgets/app_navigation_scaffold.dart';
 import '../widgets/app_skeleton.dart';
 import '../widgets/copyable_message.dart';
+import '../widgets/new_session_flow.dart';
 import 'project_detail_screen.dart';
-import 'session_detail_screen.dart';
 import 'settings_screen.dart';
 
 const _bridgeRepositoryUrl =
     'https://github.com/omni-stream-ai/omni-code-bridge';
 
 enum _HomeSurfaceState { loading, connect, waitingApproval, dashboard }
+
+const double _homeDesktopRailWidth = 312;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.client, this.now});
@@ -41,8 +44,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const _recentPageSize = 5;
   static const _progressMinHeight = AppSpacing.textStack + AppSpacing.hairline;
   static const _resumeRefreshThrottle = Duration(seconds: 15);
+  static const _searchDebounceDuration = Duration(milliseconds: 300);
 
   final _bridgeUrlController = TextEditingController();
+  final _searchController = TextEditingController();
   List<ProjectSummary>? _projects;
   List<SessionSummary>? _recentSessions;
   Object? _projectsError;
@@ -55,8 +60,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isAuthorizing = false;
   bool _isSavingBridgeConfig = false;
   String? _authRequestId;
+  String _searchQuery = '';
   int _visibleRecentCount = _recentPageSize;
   Timer? _authPollTimer;
+  Timer? _searchDebounceTimer;
   DateTime? _lastHomeDataLoadAt;
 
   BridgeClient get _client => widget.client ?? bridgeClient;
@@ -74,10 +81,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _bridgeUrlController.text = appSettingsController.settings.bridgeUrl;
-    _projects = _client.peekProjects();
-    _recentSessions = _client.peekSessions();
-    _visibleRecentCount = min(_recentPageSize, _recentSessions?.length ?? 0);
-    _isLoading = _projects == null && _recentSessions == null;
+    _visibleRecentCount = 0;
+    _isLoading = true;
     unawaited(_loadHomeData());
   }
 
@@ -85,8 +90,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _authPollTimer?.cancel();
+    _searchDebounceTimer?.cancel();
     _bridgeUrlController.dispose();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  void _scheduleSearchQueryUpdate(String value) {
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = Timer(_searchDebounceDuration, () {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _searchQuery = value.trim();
+      });
+    });
+  }
+
+  void _clearSearchQuery() {
+    _searchDebounceTimer?.cancel();
+    _searchController.clear();
+    setState(() {
+      _searchQuery = '';
+    });
   }
 
   @override
@@ -112,20 +139,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _loadHomeData({bool forceRefresh = false}) async {
     _lastHomeDataLoadAt = _now();
-    final cachedProjects = _client.peekProjects();
-    final cachedSessions = _client.peekSessions();
-    final shouldRefreshFromNetwork = forceRefresh ||
-        cachedProjects != null ||
-        cachedSessions != null ||
-        _projects != null ||
-        _recentSessions != null;
-
     setState(() {
       _projectsError = null;
       _recentSessionsError = null;
       _authError = null;
-      _projects = cachedProjects ?? _projects;
-      _recentSessions = cachedSessions ?? _recentSessions;
       _visibleRecentCount =
           _resolvedVisibleRecentCount(_recentSessions?.length ?? 0);
       if (_projects == null && _recentSessions == null) {
@@ -136,15 +153,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
 
     try {
-      final projects = await _client.listProjects(
-        forceRefresh: shouldRefreshFromNetwork,
-      );
+      final projects = await _client.listProjects(forceRefresh: true);
       List<SessionSummary>? sessions;
       Object? sessionsError;
       try {
-        sessions = await _client.listSessions(
-          forceRefresh: shouldRefreshFromNetwork,
-        );
+        sessions = await _client.listSessions(forceRefresh: true);
       } on ClientUnauthorizedException {
         rethrow;
       } catch (error) {
@@ -156,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
       setState(() {
         _projects = projects;
-        _recentSessions = sessions ?? _client.peekSessions() ?? _recentSessions;
+        _recentSessions = sessions ?? _recentSessions;
         _visibleRecentCount =
             _resolvedVisibleRecentCount(_recentSessions?.length ?? 0);
         _recentSessionsError = sessionsError;
@@ -451,6 +464,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _openSession(SessionSummary session) async {
+    debugPrint(
+      '[nav] home open session id=${session.id} project=${session.projectId} '
+      'title=${session.title}',
+    );
     await Navigator.of(context).pushNamed(
       AppRoutes.session(session.projectId, session.id),
       arguments: session,
@@ -462,127 +479,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _newSession() async {
-    final projects = _projects;
-    if (projects == null || projects.isEmpty) {
-      await _createProject();
-      return;
-    }
-
-    final result = await showDialog<_ProjectSelectResult>(
-      context: context,
-      builder: (context) => _SelectProjectDialog(projects: projects),
+    await startNewSessionFlow(
+      context,
+      client: _client,
+      initialProjects: _projects,
+      onSessionClosed: () => _loadHomeData(forceRefresh: true),
     );
-    if (result == null || !mounted) {
-      return;
-    }
-
-    ProjectSummary project;
-    if (result is _SelectExistingProject) {
-      project = result.project;
-    } else {
-      final createResult = await showDialog<(String, String)>(
-        context: context,
-        builder: (context) => const _CreateProjectDialog(),
-      );
-      if (createResult == null || !mounted) {
-        return;
-      }
-      project = await _client.createProject(
-        name: createResult.$1,
-        rootPath: createResult.$2,
-      );
-      if (!mounted) {
-        return;
-      }
-    }
-
-    final l10n = context.l10n;
-    final sessionResult = await showDialog<CreateSessionDialogResult>(
-      context: context,
-      builder: (context) => CreateSessionDialog(
-        client: _client,
-        initialProviderId: appSettingsController
-            .settings.lastSelectedProviderByProject[project.id],
-      ),
-    );
-    if (sessionResult == null || !mounted) {
-      return;
-    }
-
-    final savedProviderSelections = Map<String, String?>.from(
-      appSettingsController.settings.lastSelectedProviderByProject,
-    )..[project.id] = sessionResult.$3;
-    unawaited(
-      appSettingsController.save(
-        appSettingsController.settings.copyWith(
-          lastSelectedAgent: sessionResult.$2,
-          lastSelectedProviderByProject: savedProviderSelections,
-        ),
-      ),
-    );
-
-    final initialTitle = sessionResult.$1?.trim();
-    final placeholderSession = SessionSummary(
-      id: 'local-draft-${DateTime.now().microsecondsSinceEpoch}',
-      projectId: project.id,
-      title: (initialTitle != null && initialTitle.isNotEmpty)
-          ? initialTitle
-          : l10n.newSession,
-      agentId: sessionResult.$2,
-      briefReplyMode: appSettingsController.settings.compressAssistantReplies,
-      status: SessionStatus.idle,
-      updatedAt: DateTime.now(),
-      unreadCount: 0,
-      providerId: sessionResult.$3,
-      reasoningEffort: sessionResult.$4,
-    );
-    final sessionFuture = _client.createSession(
-      projectId: project.id,
-      title: sessionResult.$1,
-      agent: sessionResult.$2,
-      briefReplyMode: appSettingsController.settings.compressAssistantReplies,
-      providerId: sessionResult.$3,
-      reasoningEffort: sessionResult.$4,
-    );
-
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => SessionDetailScreen(
-          session: placeholderSession,
-          sessionInitializer: sessionFuture,
-        ),
-      ),
-    );
-    if (!mounted) {
-      return;
-    }
-    unawaited(_loadHomeData(forceRefresh: true));
   }
 
-  Future<void> _createProject() async {
-    final result = await showDialog<(String, String)>(
-      context: context,
-      builder: (context) => const _CreateProjectDialog(),
+  Future<void> _newSessionForProject(ProjectSummary project) async {
+    await startNewSessionFlow(
+      context,
+      client: _client,
+      initialProject: project,
+      onSessionClosed: () => _loadHomeData(forceRefresh: true),
     );
-    if (result == null) {
-      return;
-    }
+  }
 
-    final project = await _client.createProject(
-      name: result.$1,
-      rootPath: result.$2,
-    );
-    if (!mounted) {
-      return;
-    }
-    await Navigator.of(context).pushNamed(
-      ProjectDetailScreen.routeName,
-      arguments: project,
-    );
-    if (!mounted) {
-      return;
-    }
-    await _reloadHomeData();
+  Future<void> _toggleDesktopSidebarCollapsed() async {
+    await toggleDesktopNavigationCollapsed();
   }
 
   _HomeSurfaceState get _surfaceState {
@@ -605,27 +520,57 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    return Scaffold(
+    final desktopSidebarCollapsed =
+        appSettingsController.settings.desktopNavigationCollapsed;
+    return AppNavigationScaffold(
+      activeRoute: AppRouteKind.home,
       backgroundColor: AppColors.boardFor(brightness),
-      body: DecoratedBox(
+      recentProjects: _client.peekProjects() ?? const <ProjectSummary>[],
+      recentSessions: _client.peekSessions() ?? const <SessionSummary>[],
+      onNavigateHome: () {},
+      onNavigateProjects: _openProjects,
+      onNavigateSettings: _openSettings,
+      onNewSession: _newSession,
+      desktopBreakpoint: AppResponsiveLayout.desktopBreakpoint,
+      desktopSidebarWidth: AppResponsiveLayout.desktopSidebarWidth,
+      desktopSidebarCollapsedWidth:
+          AppResponsiveLayout.desktopSidebarCollapsedWidth,
+      desktopSidebarCollapsed: desktopSidebarCollapsed,
+      onToggleDesktopSidebar: _toggleDesktopSidebarCollapsed,
+      showDesktopSidebar: _surfaceState == _HomeSurfaceState.dashboard,
+      bodyBuilder: (context, useDesktopSidebar, constraints) => DecoratedBox(
         decoration: BoxDecoration(
           gradient: AppColors.boardGradientFor(brightness),
         ),
-        child: SafeArea(
-          child: switch (_surfaceState) {
-            _HomeSurfaceState.loading => _buildLoadingState(),
-            _HomeSurfaceState.connect => _buildConnectState(),
-            _HomeSurfaceState.waitingApproval => _buildWaitingApprovalState(),
-            _HomeSurfaceState.dashboard => _buildDashboardState(),
-          },
-        ),
+        child: switch (_surfaceState) {
+          _HomeSurfaceState.loading => _buildLoadingState(
+              useDesktopLayout: AppResponsiveLayout.isDesktopWidth(
+                constraints.maxWidth,
+              ),
+            ),
+          _HomeSurfaceState.connect => _buildConnectState(),
+          _HomeSurfaceState.waitingApproval => _buildWaitingApprovalState(),
+          _HomeSurfaceState.dashboard => _buildDashboardState(
+              useDesktopSidebar: useDesktopSidebar,
+            ),
+        },
       ),
     );
   }
 
-  Widget _buildLoadingState() {
+  Widget _buildLoadingState({required bool useDesktopLayout}) {
     final l10n = context.l10n;
     final brightness = Theme.of(context).brightness;
+    final useWideDesktopLayout = AppResponsiveLayout.isWideDesktopWidth(
+      MediaQuery.sizeOf(context).width,
+    );
+    if (useDesktopLayout) {
+      return _DesktopHomeLoadingSkeleton(
+        key: const Key('home-desktop-loading-skeleton'),
+        useWideRail: useWideDesktopLayout,
+        brightness: brightness,
+      );
+    }
     return _ShellScrollView(
       children: [
         _ShellHeader(
@@ -651,6 +596,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
           ],
         ),
+        const SizedBox(height: AppSpacing.section),
+        const _SearchBarSkeleton(),
         const SizedBox(height: AppSpacing.section),
         _SectionHeader(title: l10n.recentSessionsTitle),
         const SizedBox(height: AppSpacing.compact),
@@ -932,68 +879,112 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildDashboardState() {
+  Widget _buildDashboardState({required bool useDesktopSidebar}) {
     final l10n = context.l10n;
     final brightness = Theme.of(context).brightness;
-    final projects = _projects ?? const <ProjectSummary>[];
-    final sessions = _recentSessions ?? const <SessionSummary>[];
+    final projects =
+        (_projects ?? const <ProjectSummary>[]).where(_matchesProject).toList();
+    final sessions = (_recentSessions ?? const <SessionSummary>[])
+        .where(_matchesSession)
+        .toList();
+    final visibleProjects = projects.take(4).toList();
     final visibleSessions = sessions.take(_visibleRecentCount).toList();
 
+    final useWideDesktopLayout = AppResponsiveLayout.isWideDesktopWidth(
+        MediaQuery.sizeOf(context).width);
     return Stack(
       children: [
-        _ShellScrollView(
-          onRefresh: _reloadHomeData,
-          children: [
-            _ShellHeader(
-              title: l10n.appTitle.toUpperCase(),
-              subtitle: l10n.homePrompt,
-              trailing: _CircleActionButton(
-                icon: Icons.settings_outlined,
-                onPressed: _openSettings,
-              ),
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: _ActionCard(
-                    icon: Icons.add_comment_outlined,
-                    accentColor: AppColors.accentBlueFor(brightness),
-                    title: l10n.newSession,
-                    subtitle: l10n.homeCreateProjectHint,
-                    onTap: _newSession,
+        if (useDesktopSidebar)
+          _buildDesktopDashboardState(
+            useWideRail: useWideDesktopLayout,
+            brightness: brightness,
+            projects: projects,
+            sessions: sessions,
+          )
+        else
+          _ShellScrollView(
+            onRefresh: _reloadHomeData,
+            children: [
+              _ShellHeader(
+                title: l10n.appTitle.toUpperCase(),
+                subtitle: l10n.homePrompt,
+                trailing: Builder(
+                  builder: (context) => _CircleActionButton(
+                    icon: Icons.menu_rounded,
+                    onPressed: () => Scaffold.of(context).openDrawer(),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.tileY),
-                Expanded(
-                  child: _ActionCard(
-                    icon: Icons.folder_open_outlined,
-                    accentColor: AppColors.projectsAccentFor(brightness),
-                    title: l10n.projectsTitle,
-                    subtitle: projects.isNotEmpty
-                        ? l10n.projectsCount(projects.length)
-                        : l10n.homeBrowseProjects,
-                    onTap: _openProjects,
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: _ActionCard(
+                      icon: Icons.add_comment_outlined,
+                      accentColor: AppColors.accentBlueFor(brightness),
+                      title: l10n.newSession,
+                      subtitle: l10n.homeCreateProjectHint,
+                      onTap: _newSession,
+                    ),
                   ),
+                  const SizedBox(width: AppSpacing.tileY),
+                  Expanded(
+                    child: _ActionCard(
+                      icon: Icons.folder_open_outlined,
+                      accentColor: AppColors.projectsAccentFor(brightness),
+                      title: l10n.projectsTitle,
+                      subtitle: projects.isNotEmpty
+                          ? l10n.projectsCount(projects.length)
+                          : l10n.homeBrowseProjects,
+                      onTap: _openProjects,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.section),
+              _buildDashboardSearchBar(),
+              if (_projectsError != null && projects.isEmpty) ...[
+                const SizedBox(height: AppSpacing.stack),
+                _ErrorPanel(
+                  message: l10n.loadProjectsFailed('$_projectsError'),
+                  onRetry: _reloadHomeData,
                 ),
               ],
-            ),
-            if (_projectsError != null && projects.isEmpty) ...[
-              const SizedBox(height: AppSpacing.stack),
-              _ErrorPanel(
-                message: l10n.loadProjectsFailed('$_projectsError'),
-                onRetry: _reloadHomeData,
-              ),
+              if (projects.isNotEmpty || sessions.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.section),
+                _buildRecentSessionsHeader(),
+                _buildRecentSessionsContent(
+                  context,
+                  sessions,
+                  visibleSessions,
+                  brightness,
+                ),
+              ] else if (_hasSearchQuery) ...[
+                const SizedBox(height: AppSpacing.section),
+                _buildHomeSearchEmptyState(),
+              ] else ...[
+                const SizedBox(height: AppSpacing.section),
+                _buildRecentSessionsHeader(),
+                _buildRecentSessionsContent(
+                  context,
+                  sessions,
+                  visibleSessions,
+                  brightness,
+                ),
+              ],
+              if (projects.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.section),
+                _HomeProjectsPanel(
+                  projects: [...visibleProjects]
+                    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)),
+                  brightness: brightness,
+                  onOpenProject: (project) =>
+                      _openProjectFromHome(context, project),
+                  onCreateSessionForProject: _newSessionForProject,
+                  onOpenProjects: projects.length > 4 ? _openProjects : null,
+                ),
+              ],
             ],
-            const SizedBox(height: AppSpacing.section),
-            _buildRecentSessionsHeader(),
-            _buildRecentSessionsContent(
-              context,
-              sessions,
-              visibleSessions,
-              brightness,
-            ),
-          ],
-        ),
+          ),
         if (_isRefreshing)
           const Positioned(
             top: 0,
@@ -1009,6 +1000,122 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildDesktopDashboardState({
+    required bool useWideRail,
+    required Brightness brightness,
+    required List<ProjectSummary> projects,
+    required List<SessionSummary> sessions,
+  }) {
+    final pinnedSession = _pinnedSession(sessions);
+    final inboxSessions =
+        sessions.where((session) => session.id != pinnedSession?.id).toList();
+    final approvalCount = sessions
+        .where((session) => session.status == SessionStatus.awaitingApproval)
+        .length;
+    final runningCount = sessions
+        .where((session) => session.status == SessionStatus.running)
+        .length;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenX,
+        AppSpacing.screenTop,
+        AppSpacing.screenX,
+        AppSpacing.screenBottom,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: AppSpacing.section),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _HomeDesktopInboxHeader(
+                    onReload: _reloadHomeData,
+                    approvalCount: approvalCount,
+                    runningCount: runningCount,
+                    searchBar: _buildDashboardSearchBar(),
+                  ),
+                  const SizedBox(height: AppSpacing.compact),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(
+                        0,
+                        AppSpacing.micro,
+                        0,
+                        AppSpacing.block,
+                      ),
+                      child: _HomeDesktopInbox(
+                        pinnedSession: pinnedSession,
+                        projects: projects,
+                        sessions: sessions,
+                        visibleSessions: inboxSessions,
+                        hasSearchQuery: _hasSearchQuery,
+                        projectsError: _projectsError,
+                        recentSessionsError: _recentSessionsError,
+                        brightness: brightness,
+                        onOpenSession: _openSession,
+                        onCreateSessionForProject: _newSessionForProject,
+                        onRetry: _reloadHomeData,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (useWideRail) ...[
+            const SizedBox(width: AppSpacing.card),
+            SizedBox(
+              width: _homeDesktopRailWidth,
+              child: _HomeDesktopRail(
+                brightness: brightness,
+                approvalCount: approvalCount,
+                projectsCount: projects.length,
+                needsAuthorization: _needsAuthorization,
+                isWaitingAuth: _isWaitingAuth,
+                authError: _authError,
+                bridgeUrl: appSettingsController.settings.bridgeUrl,
+                runningCount: runningCount,
+                onOpenProjects: _openProjects,
+                onOpenSettings: _openSettings,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  SessionSummary? _pinnedSession(List<SessionSummary> sessions) {
+    if (sessions.isEmpty) {
+      return null;
+    }
+    int rank(SessionStatus status) {
+      return switch (status) {
+        SessionStatus.awaitingApproval => 0,
+        SessionStatus.running => 1,
+        SessionStatus.waiting => 2,
+        SessionStatus.idle => 3,
+        SessionStatus.interrupted => 4,
+        SessionStatus.failed => 5,
+      };
+    }
+
+    final sorted = [...sessions];
+    sorted.sort((a, b) {
+      final rankCompare = rank(a.status).compareTo(rank(b.status));
+      if (rankCompare != 0) {
+        return rankCompare;
+      }
+      return b.updatedAt.compareTo(a.updatedAt);
+    });
+    return sorted.first;
+  }
+
   String _sessionMetadataLabel(SessionSummary session) {
     final parts = <String>[];
     final projectName = _projects
@@ -1021,6 +1128,55 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     parts.add(_client.agentLabelFor(session.agentId));
     parts.add(_statusLabel(session.status));
     return parts.join(' · ');
+  }
+
+  bool get _hasSearchQuery => _searchQuery.trim().isNotEmpty;
+
+  bool _matchesProject(ProjectSummary project) {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) {
+      return true;
+    }
+    return project.name.toLowerCase().contains(query) ||
+        project.rootPath.toLowerCase().contains(query) ||
+        (project.lastSessionPreview?.toLowerCase().contains(query) ?? false);
+  }
+
+  bool _matchesSession(SessionSummary session) {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) {
+      return true;
+    }
+    final project = _projects
+        ?.where((candidate) => candidate.id == session.projectId)
+        .cast<ProjectSummary?>()
+        .firstOrNull;
+    return session.title.toLowerCase().contains(query) ||
+        (session.lastMessagePreview?.toLowerCase().contains(query) ?? false) ||
+        session.id.toLowerCase().contains(query) ||
+        _client.agentLabelFor(session.agentId).toLowerCase().contains(query) ||
+        (project?.name.toLowerCase().contains(query) ?? false) ||
+        (project?.rootPath.toLowerCase().contains(query) ?? false);
+  }
+
+  Widget _buildDashboardSearchBar() {
+    final l10n = context.l10n;
+    return _SearchBar(
+      key: const Key('home-dashboard-search-field'),
+      controller: _searchController,
+      hintText: '${l10n.searchProjects} · ${l10n.searchSessions}',
+      onChanged: (value) {
+        _scheduleSearchQueryUpdate(value);
+      },
+      onClear: _clearSearchQuery,
+    );
+  }
+
+  Widget _buildHomeSearchEmptyState() {
+    return _EmptyPanel(
+      title: context.l10n.noSearchResultsTitle,
+      body: context.l10n.noSearchResultsBody,
+    );
   }
 
   String? _forkSourceLabel(
@@ -1094,27 +1250,49 @@ class ProjectsScreen extends StatefulWidget {
 }
 
 class _ProjectsScreenState extends State<ProjectsScreen> {
+  static const _searchDebounceDuration = Duration(milliseconds: 300);
+
   List<ProjectSummary>? _projects;
   Object? _error;
   bool _isLoading = true;
   bool _isRefreshing = false;
   final _searchController = TextEditingController();
   String _searchQuery = '';
+  Timer? _searchDebounceTimer;
 
   BridgeClient get _client => widget.client ?? bridgeClient;
 
   @override
   void initState() {
     super.initState();
-    _projects = _client.peekProjects();
-    _isLoading = _projects == null;
     unawaited(_loadProjects());
   }
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _scheduleSearchQueryUpdate(String value) {
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = Timer(_searchDebounceDuration, () {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _searchQuery = value.trim();
+      });
+    });
+  }
+
+  void _clearSearchQuery() {
+    _searchDebounceTimer?.cancel();
+    _searchController.clear();
+    setState(() {
+      _searchQuery = '';
+    });
   }
 
   void _redirectToHomeForAuthorization() {
@@ -1128,12 +1306,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   }
 
   Future<void> _loadProjects({bool forceRefresh = false}) async {
-    final cachedProjects = _client.peekProjects();
-    final shouldRefreshFromNetwork =
-        forceRefresh || cachedProjects != null || _projects != null;
+    final cachedProjects = _client.peekProjects() ?? const <ProjectSummary>[];
     setState(() {
       _error = null;
-      _projects = cachedProjects ?? _projects;
       if (_projects == null) {
         _isLoading = true;
       } else {
@@ -1141,8 +1316,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       }
     });
     try {
-      final projects = await _client.listProjects(
-        forceRefresh: shouldRefreshFromNetwork,
+      final projects = _mergeFreshAndCachedProjects(
+        fresh: await _client.listProjects(forceRefresh: true),
+        cached: cachedProjects,
       );
       if (!mounted) {
         return;
@@ -1172,6 +1348,22 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     }
   }
 
+  List<ProjectSummary> _mergeFreshAndCachedProjects({
+    required List<ProjectSummary> fresh,
+    required List<ProjectSummary> cached,
+  }) {
+    final cachedById = {for (final project in cached) project.id: project};
+    return fresh.map((project) {
+      final cachedProject = cachedById[project.id];
+      if (cachedProject != null &&
+          cachedProject.updatedAt.isAfter(project.updatedAt)) {
+        return cachedProject;
+      }
+      return project;
+    }).toList()
+      ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
+  }
+
   Future<void> _reloadProjects() {
     return _loadProjects(forceRefresh: true);
   }
@@ -1190,7 +1382,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   Future<void> _createProject() async {
     final result = await showDialog<(String, String)>(
       context: context,
-      builder: (context) => const _CreateProjectDialog(),
+      builder: (context) => const CreateProjectDialog(),
     );
     if (result == null) {
       return;
@@ -1269,183 +1461,217 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       final query = _searchQuery.toLowerCase();
       return project.name.toLowerCase().contains(query) ||
           project.rootPath.toLowerCase().contains(query);
-    }).toList();
+    }).toList()
+      ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
+    final desktopSidebarCollapsed =
+        appSettingsController.settings.desktopNavigationCollapsed;
 
-    return Scaffold(
+    return AppNavigationScaffold(
+      activeRoute: AppRouteKind.projects,
       backgroundColor: AppColors.boardFor(brightness),
-      body: DecoratedBox(
+      recentProjects: _client.peekProjects() ?? const <ProjectSummary>[],
+      recentSessions: _client.peekSessions() ?? const <SessionSummary>[],
+      desktopBreakpoint: AppResponsiveLayout.desktopBreakpoint,
+      desktopSidebarWidth: AppResponsiveLayout.desktopSidebarWidth,
+      desktopSidebarCollapsedWidth:
+          AppResponsiveLayout.desktopSidebarCollapsedWidth,
+      desktopSidebarCollapsed: desktopSidebarCollapsed,
+      onToggleDesktopSidebar: _toggleDesktopSidebarCollapsed,
+      onNavigateHome: () => Navigator.of(context).popUntil(
+        (route) => route.settings.name == AppRoutes.home || route.isFirst,
+      ),
+      onNavigateProjects: () {},
+      onNavigateSettings: () =>
+          Navigator.of(context).pushNamed(AppRoutes.settings),
+      onOpenProject: _openProject,
+      onOpenSession: (session) {
+        Navigator.of(context).pushNamed(
+          AppRoutes.session(session.projectId, session.id),
+          arguments: session,
+        );
+      },
+      onNewSession: null,
+      bodyBuilder: (context, useDesktop, constraints) => DecoratedBox(
         decoration: BoxDecoration(
           gradient: AppColors.boardGradientFor(brightness),
         ),
-        child: SafeArea(
-          child: Stack(
-            children: [
-              _ShellScrollView(
-                onRefresh: _reloadProjects,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: AppBackHeader(
-                          title: context.l10n.projectsTitle.toUpperCase(),
-                          titleStyle: Theme.of(context)
-                              .textTheme
-                              .headlineMedium
-                              ?.copyWith(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                height: 1.1,
-                                letterSpacing: 0.6,
-                              ),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.tileY),
-                      _CircleActionButton(
-                        icon: Icons.add_rounded,
-                        filled: true,
-                        onPressed: _createProject,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.card),
-                  if (_isLoading)
-                    const _SearchBarSkeleton()
-                  else
-                    _SearchBar(
-                      controller: _searchController,
-                      hintText: context.l10n.searchProjects,
-                      onChanged: (value) {
-                        setState(() {
-                          _searchQuery = value.trim();
-                        });
-                      },
-                      onClear: () {
-                        _searchController.clear();
-                        setState(() {
-                          _searchQuery = '';
-                        });
-                      },
-                    ),
-                  const SizedBox(height: AppSpacing.compact),
-                  if (_isLoading)
-                    const AppSkeletonBlock(width: 90, height: 10)
-                  else
-                    Text(
-                      context.l10n.projectsCount(projects.length),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.mutedFor(brightness),
-                          ),
-                    ),
-                  const SizedBox(height: AppSpacing.compact),
-                  if (_isLoading)
-                    const _ProjectsListSkeleton(
-                      key: Key('projects-list-skeleton'),
-                    )
-                  else if (_error != null && allProjects.isEmpty)
-                    _ErrorPanel(
-                      message: context.l10n.loadProjectsFailed('$_error'),
-                      onRetry: _reloadProjects,
-                    )
-                  else if (allProjects.isEmpty)
-                    _EmptyPanel(
-                      title: context.l10n.noProjectsYet,
-                      body: context.l10n.noProjectsHelp,
-                      actionLabel: context.l10n.createProject,
-                      onAction: _createProject,
-                    )
-                  else if (projects.isEmpty)
-                    _EmptyPanel(
-                      title: context.l10n.noProjectsYet,
-                      body: context.l10n.searchProjects,
-                    )
-                  else
-                    ...projects.map(
-                      (project) => Padding(
-                        padding: const EdgeInsets.only(
-                            bottom: AppSpacing.stackTight),
-                        child: AppCard(
-                          onTap: () => _openProject(project),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.tileX,
-                            vertical: AppSpacing.tileY,
-                          ),
-                          borderRadius: BorderRadius.circular(
-                            AppSpacing.radiusTile,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      project.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium
-                                          ?.copyWith(fontSize: 12),
-                                    ),
-                                    const SizedBox(
-                                        height: AppSpacing.textStack),
-                                    Text(
-                                      project.rootPath,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: AppColors.mutedSoftFor(
-                                                brightness),
-                                          ),
-                                    ),
-                                    if (project.gitBranch != null) ...[
-                                      const SizedBox(
-                                          height: AppSpacing.textTight),
-                                      _buildProjectGitBadge(
-                                        context,
-                                        project.gitBranch!,
-                                        project.gitStatus,
-                                        brightness,
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: AppSpacing.tileY),
-                              Text(
-                                _formatTimestamp(project.updatedAt),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      color: AppColors.mutedSoftFor(brightness),
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              if (_isRefreshing)
-                const Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: IgnorePointer(
-                    child: LinearProgressIndicator(
-                      minHeight: AppSpacing.textStack + AppSpacing.hairline,
-                    ),
+        child: Stack(
+          children: [
+            _buildProjectsBody(
+              context,
+              projects: projects,
+              allProjects: allProjects,
+              brightness: brightness,
+              useDesktop: useDesktop,
+            ),
+            if (_isRefreshing)
+              const Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: LinearProgressIndicator(
+                    minHeight: AppSpacing.textStack + AppSpacing.hairline,
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
+    );
+  }
+
+  Future<void> _toggleDesktopSidebarCollapsed() async {
+    await toggleDesktopNavigationCollapsed();
+  }
+
+  Widget _buildProjectsBody(
+    BuildContext context, {
+    required List<ProjectSummary> projects,
+    required List<ProjectSummary> allProjects,
+    required Brightness brightness,
+    required bool useDesktop,
+  }) {
+    return _ShellScrollView(
+      maxWidth: useDesktop ? 1120 : AppSpacing.contentMaxWidth,
+      onRefresh: _reloadProjects,
+      children: [
+        Row(
+          children: [
+            if (!useDesktop) ...[
+              Builder(
+                builder: (context) => _CircleActionButton(
+                  icon: Icons.menu_rounded,
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.tileY),
+            ],
+            Expanded(
+              child: AppBackHeader(
+                title: context.l10n.projectsTitle.toUpperCase(),
+                titleStyle:
+                    Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          height: 1.1,
+                          letterSpacing: 0.6,
+                        ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.tileY),
+            _CircleActionButton(
+              icon: Icons.add_rounded,
+              filled: true,
+              onPressed: _createProject,
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.card),
+        if (_isLoading)
+          const _SearchBarSkeleton()
+        else
+          _SearchBar(
+            controller: _searchController,
+            hintText: context.l10n.searchProjects,
+            onChanged: (value) {
+              _scheduleSearchQueryUpdate(value);
+            },
+            onClear: _clearSearchQuery,
+          ),
+        const SizedBox(height: AppSpacing.compact),
+        if (_isLoading)
+          const AppSkeletonBlock(width: 90, height: 10)
+        else
+          Text(
+            context.l10n.projectsCount(projects.length),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.mutedFor(brightness),
+                ),
+          ),
+        const SizedBox(height: AppSpacing.compact),
+        if (_isLoading)
+          const _ProjectsListSkeleton(
+            key: Key('projects-list-skeleton'),
+          )
+        else if (_error != null && allProjects.isEmpty)
+          _ErrorPanel(
+            message: context.l10n.loadProjectsFailed('$_error'),
+            onRetry: _reloadProjects,
+          )
+        else if (allProjects.isEmpty)
+          _EmptyPanel(
+            title: context.l10n.noProjectsYet,
+            body: context.l10n.noProjectsHelp,
+            actionLabel: context.l10n.createProject,
+            onAction: _createProject,
+          )
+        else if (projects.isEmpty)
+          _EmptyPanel(
+            title: context.l10n.noProjectsYet,
+            body: context.l10n.searchProjects,
+          )
+        else
+          ...projects.map(
+            (project) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.stackTight),
+              child: AppCard(
+                onTap: () => _openProject(project),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.tileX,
+                  vertical: AppSpacing.tileY,
+                ),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            project.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontSize: 12),
+                          ),
+                          const SizedBox(height: AppSpacing.textStack),
+                          Text(
+                            project.rootPath,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: AppColors.mutedSoftFor(brightness),
+                                    ),
+                          ),
+                          if (project.gitBranch != null) ...[
+                            const SizedBox(height: AppSpacing.textTight),
+                            _buildProjectGitBadge(
+                              context,
+                              project.gitBranch!,
+                              project.gitStatus,
+                              brightness,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.tileY),
+                    Text(
+                      _formatTimestamp(project.updatedAt),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppColors.mutedSoftFor(brightness),
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -1454,10 +1680,12 @@ class _ShellScrollView extends StatelessWidget {
   const _ShellScrollView({
     required this.children,
     this.onRefresh,
+    this.maxWidth = AppSpacing.contentMaxWidth,
   });
 
   final List<Widget> children;
   final Future<void> Function()? onRefresh;
+  final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -1476,8 +1704,8 @@ class _ShellScrollView extends StatelessWidget {
             child: Align(
               alignment: Alignment.topCenter,
               child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxWidth: AppSpacing.contentMaxWidth,
+                constraints: BoxConstraints(
+                  maxWidth: maxWidth,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1918,6 +2146,865 @@ class _ActionCardSkeleton extends StatelessWidget {
   }
 }
 
+class _HomeDesktopInboxHeader extends StatelessWidget {
+  const _HomeDesktopInboxHeader({
+    required this.onReload,
+    required this.approvalCount,
+    required this.runningCount,
+    required this.searchBar,
+  });
+
+  final VoidCallback onReload;
+  final int approvalCount;
+  final int runningCount;
+  final Widget searchBar;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        0,
+        AppSpacing.block,
+        0,
+        AppSpacing.micro,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Return to the sessions that still need judgment.',
+                      style:
+                          Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                height: 1.05,
+                                letterSpacing: -0.6,
+                              ),
+                    ),
+                    const SizedBox(height: AppSpacing.compact),
+                    Text(
+                      approvalCount > 0
+                          ? '$approvalCount approvals are waiting. $runningCount sessions are still moving.'
+                          : '$runningCount sessions are still moving. Resume one and keep the thread intact.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.mutedFor(brightness),
+                            height: 1.45,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              _CircleActionButton(
+                icon: Icons.refresh_rounded,
+                onPressed: onReload,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.card),
+          searchBar,
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeDesktopInbox extends StatelessWidget {
+  const _HomeDesktopInbox({
+    required this.pinnedSession,
+    required this.projects,
+    required this.sessions,
+    required this.visibleSessions,
+    required this.hasSearchQuery,
+    required this.projectsError,
+    required this.recentSessionsError,
+    required this.brightness,
+    required this.onOpenSession,
+    required this.onCreateSessionForProject,
+    required this.onRetry,
+  });
+
+  final SessionSummary? pinnedSession;
+  final List<ProjectSummary> projects;
+  final List<SessionSummary> sessions;
+  final List<SessionSummary> visibleSessions;
+  final bool hasSearchQuery;
+  final Object? projectsError;
+  final Object? recentSessionsError;
+  final Brightness brightness;
+  final ValueChanged<SessionSummary> onOpenSession;
+  final ValueChanged<ProjectSummary> onCreateSessionForProject;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final approvalCount = sessions
+        .where((session) => session.status == SessionStatus.awaitingApproval)
+        .length;
+    final runningCount = sessions
+        .where((session) => session.status == SessionStatus.running)
+        .length;
+    final idleCount = sessions
+        .where((session) => session.status == SessionStatus.idle)
+        .length;
+    final spotlightSession = pinnedSession ??
+        (visibleSessions.isNotEmpty ? visibleSessions.first : null);
+    final queueSessions = visibleSessions
+        .where((session) => session.id != spotlightSession?.id)
+        .take(5)
+        .toList();
+    final recentProjects = [...projects]
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+    if (projectsError != null && sessions.isEmpty) {
+      return _ErrorPanel(
+        message: l10n.loadProjectsFailed('$projectsError'),
+        onRetry: onRetry,
+      );
+    }
+    if (recentSessionsError != null && sessions.isEmpty) {
+      return _ErrorPanel(
+        message: l10n.loadSessionsFailed('$recentSessionsError'),
+        onRetry: onRetry,
+      );
+    }
+    if (sessions.isEmpty && projects.isEmpty) {
+      return _EmptyPanel(
+        title: hasSearchQuery ? l10n.noSearchResultsTitle : l10n.noSessionsYet,
+        body: hasSearchQuery ? l10n.noSearchResultsBody : l10n.noSessionsHelp,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _HomeDesktopHero(
+          projectCount: projects.length,
+          sessionCount: sessions.length,
+          runningCount: runningCount,
+          approvalCount: approvalCount,
+          idleCount: idleCount,
+        ),
+        const SizedBox(height: AppSpacing.section),
+        if (spotlightSession != null)
+          _HomeFeaturedSessionCard(
+            session: spotlightSession,
+            brightness: brightness,
+            onOpenSession: onOpenSession,
+          ),
+        const SizedBox(height: AppSpacing.section),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final stacked = constraints.maxWidth < 1080;
+            final queuePanel = _HomeQueuePanel(
+              sessions: queueSessions,
+              brightness: brightness,
+              onOpenSession: onOpenSession,
+            );
+            final projectsPanel = _HomeProjectsPanel(
+              projects: recentProjects.take(4).toList(),
+              brightness: brightness,
+              onOpenProject: (project) =>
+                  _openProjectFromHome(context, project),
+              onCreateSessionForProject: onCreateSessionForProject,
+              onOpenProjects: recentProjects.length > 4
+                  ? () => _openProjectsFromHome(context)
+                  : null,
+            );
+
+            if (stacked) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  queuePanel,
+                  const SizedBox(height: AppSpacing.card),
+                  projectsPanel,
+                ],
+              );
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: queuePanel),
+                const SizedBox(width: AppSpacing.card),
+                Expanded(child: projectsPanel),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+void _openProjectFromHome(BuildContext context, ProjectSummary project) {
+  Navigator.of(context).pushNamed(
+    AppRoutes.project(project.id),
+    arguments: project,
+  );
+}
+
+void _openProjectsFromHome(BuildContext context) {
+  Navigator.of(context).pushNamed(AppRoutes.projects);
+}
+
+class _HomeDesktopHero extends StatelessWidget {
+  const _HomeDesktopHero({
+    required this.projectCount,
+    required this.sessionCount,
+    required this.runningCount,
+    required this.approvalCount,
+    required this.idleCount,
+  });
+
+  final int projectCount;
+  final int sessionCount;
+  final int runningCount;
+  final int approvalCount;
+  final int idleCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.block,
+        vertical: AppSpacing.tileX,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.panelFor(brightness).withValues(
+          alpha: brightness == Brightness.dark ? 0.58 : 0.74,
+        ),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+        border: Border.all(color: AppColors.outlineFor(brightness)),
+      ),
+      child: Wrap(
+        spacing: AppSpacing.stack,
+        runSpacing: AppSpacing.compact,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          _HomeInlineStat(
+            label: 'Projects',
+            value: '$projectCount',
+          ),
+          _HomeInlineStat(
+            label: 'Threads',
+            value: '$sessionCount',
+          ),
+          _HomeInlineStat(
+            label: 'Active',
+            value: '$runningCount',
+          ),
+          _HomeInlineStat(
+            label: 'Review',
+            value: '$approvalCount',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeInlineStat extends StatelessWidget {
+  const _HomeInlineStat({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+        const SizedBox(width: AppSpacing.textStack),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.mutedFor(brightness),
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HomeProjectRow extends StatelessWidget {
+  const _HomeProjectRow({
+    required this.project,
+    required this.brightness,
+    required this.onTap,
+    required this.onCreateSession,
+  });
+
+  final ProjectSummary project;
+  final Brightness brightness;
+  final VoidCallback onTap;
+  final VoidCallback onCreateSession;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.compact,
+          vertical: AppSpacing.tileY,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    project.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                  ),
+                  const SizedBox(height: AppSpacing.textStack),
+                  Text(
+                    project.rootPath,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.mutedFor(brightness),
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.compact),
+            TextButton.icon(
+              key: Key('home-project-new-session-${project.id}'),
+              onPressed: onCreateSession,
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 32),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.compact,
+                ),
+                backgroundColor: AppColors.panelDeepFor(brightness),
+                foregroundColor: AppColors.accentBlueFor(brightness),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(
+                    AppSpacing.radiusCapsule,
+                  ),
+                ),
+                textStyle: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.1,
+                    ),
+              ),
+              icon: const Icon(Icons.add_comment_outlined, size: 15),
+              label: const Text('New'),
+            ),
+            const SizedBox(width: AppSpacing.textStack),
+            Text(
+              '${project.sessionCount}',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: AppColors.mutedSoftFor(brightness),
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(width: AppSpacing.textStack),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: AppColors.mutedFor(brightness),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeProjectDivider extends StatelessWidget {
+  const _HomeProjectDivider({required this.brightness});
+
+  final Brightness brightness;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.compact),
+      child: Divider(
+        height: 1,
+        thickness: AppSpacing.hairline,
+        color: AppColors.outlineFor(brightness),
+      ),
+    );
+  }
+}
+
+class _HomeFeaturedSessionCard extends StatelessWidget {
+  const _HomeFeaturedSessionCard({
+    required this.session,
+    required this.brightness,
+    required this.onOpenSession,
+  });
+
+  final SessionSummary? session;
+  final Brightness brightness;
+  final ValueChanged<SessionSummary> onOpenSession;
+
+  @override
+  Widget build(BuildContext context) {
+    if (session == null) {
+      return const SizedBox.shrink();
+    }
+
+    return InkWell(
+      key: const Key('home-featured-session-card'),
+      onTap: () => onOpenSession(session!),
+      borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.section,
+          AppSpacing.block,
+          AppSpacing.section,
+          AppSpacing.block,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.panelFor(brightness),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+          border: Border.all(color: AppColors.outlineFor(brightness)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'In focus',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppColors.mutedFor(brightness),
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            const SizedBox(height: AppSpacing.compact),
+            Text(
+              session!.title,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    height: 1.08,
+                    letterSpacing: -0.5,
+                  ),
+            ),
+            const SizedBox(height: AppSpacing.compact),
+            Text(
+              _homeSessionMetadataLabel(context, session!),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.mutedSoftFor(brightness),
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            if (session!.lastMessagePreview?.trim().isNotEmpty == true) ...[
+              const SizedBox(height: AppSpacing.compact),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: Text(
+                  session!.lastMessagePreview!,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.mutedFor(brightness),
+                        height: 1.5,
+                      ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeQueuePanel extends StatelessWidget {
+  const _HomeQueuePanel({
+    required this.sessions,
+    required this.brightness,
+    required this.onOpenSession,
+  });
+
+  final List<SessionSummary> sessions;
+  final Brightness brightness;
+  final ValueChanged<SessionSummary> onOpenSession;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.block),
+      decoration: BoxDecoration(
+        color: AppColors.panelFor(brightness),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+        border: Border.all(color: AppColors.outlineFor(brightness)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionHeader(
+            title: 'Up next',
+            trailing: _DesktopSectionMeta(label: '${sessions.length} threads'),
+          ),
+          const SizedBox(height: AppSpacing.compact),
+          if (sessions.isEmpty)
+            Text(
+              'Nothing urgent is waiting right now.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.mutedFor(brightness),
+                  ),
+            )
+          else
+            ...sessions.map(
+              (session) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.compact),
+                child: _HomeQueueItem(
+                  session: session,
+                  brightness: brightness,
+                  onTap: () => onOpenSession(session),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeQueueItem extends StatelessWidget {
+  const _HomeQueueItem({
+    required this.session,
+    required this.brightness,
+    required this.onTap,
+  });
+
+  final SessionSummary session;
+  final Brightness brightness;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusCapsule),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSpacing.tileX),
+        decoration: BoxDecoration(
+          color: AppColors.boardFor(brightness).withValues(
+            alpha: brightness == Brightness.dark ? 0.44 : 0.74,
+          ),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusCapsule),
+          border: Border.all(color: AppColors.outlineFor(brightness)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              session.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    height: 1.25,
+                  ),
+            ),
+            const SizedBox(height: AppSpacing.textStack + 2),
+            Text(
+              _homeSessionMetadataLabel(context, session),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.mutedFor(brightness),
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeProjectsPanel extends StatelessWidget {
+  const _HomeProjectsPanel({
+    required this.projects,
+    required this.brightness,
+    required this.onOpenProject,
+    required this.onCreateSessionForProject,
+    this.onOpenProjects,
+  });
+
+  final List<ProjectSummary> projects;
+  final Brightness brightness;
+  final ValueChanged<ProjectSummary> onOpenProject;
+  final ValueChanged<ProjectSummary> onCreateSessionForProject;
+  final VoidCallback? onOpenProjects;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.block),
+      decoration: BoxDecoration(
+        color: AppColors.panelFor(brightness),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+        border: Border.all(color: AppColors.outlineFor(brightness)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionHeader(
+            title: 'Recent projects',
+            trailing: _DesktopSectionMeta(label: '${projects.length} visible'),
+          ),
+          const SizedBox(height: AppSpacing.compact),
+          for (final indexedProject in projects.indexed) ...[
+            _HomeProjectRow(
+              project: indexedProject.$2,
+              brightness: brightness,
+              onTap: () => onOpenProject(indexedProject.$2),
+              onCreateSession: () =>
+                  onCreateSessionForProject(indexedProject.$2),
+            ),
+            if (indexedProject.$1 < projects.length - 1)
+              _HomeProjectDivider(brightness: brightness),
+          ],
+          if (onOpenProjects != null) ...[
+            const SizedBox(height: AppSpacing.compact),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton(
+                onPressed: onOpenProjects,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(108, 38),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+                  ),
+                ),
+                child: Text(context.l10n.projectsTitle),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+String _homeSessionMetadataLabel(BuildContext context, SessionSummary session) {
+  final state = context.findAncestorStateOfType<_HomeScreenState>();
+  if (state == null) {
+    return '';
+  }
+  return state._sessionMetadataLabel(session);
+}
+
+class _DesktopSectionMeta extends StatelessWidget {
+  const _DesktopSectionMeta({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Text(
+      label,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: AppColors.mutedFor(brightness),
+            fontWeight: FontWeight.w600,
+          ),
+    );
+  }
+}
+
+class _HomeDesktopRail extends StatelessWidget {
+  const _HomeDesktopRail({
+    required this.brightness,
+    required this.approvalCount,
+    required this.projectsCount,
+    required this.needsAuthorization,
+    required this.isWaitingAuth,
+    required this.authError,
+    required this.bridgeUrl,
+    required this.runningCount,
+    required this.onOpenProjects,
+    required this.onOpenSettings,
+  });
+
+  final Brightness brightness;
+  final int approvalCount;
+  final int projectsCount;
+  final bool needsAuthorization;
+  final bool isWaitingAuth;
+  final Object? authError;
+  final String bridgeUrl;
+  final int runningCount;
+  final VoidCallback onOpenProjects;
+  final VoidCallback onOpenSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    final bridgeSummary =
+        switch ((needsAuthorization, isWaitingAuth, authError)) {
+      (true, _, _) => 'Authorization needed',
+      (_, true, _) => 'Waiting for approval',
+      (_, _, final Object error) => '$error',
+      _ => 'Connected • $bridgeUrl',
+    };
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.compact,
+        AppSpacing.block,
+        0,
+        AppSpacing.block,
+      ),
+      decoration: BoxDecoration(
+        border: Border(
+          left: BorderSide(color: AppColors.outlineFor(brightness)),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Status',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.stack),
+          _HomeRailCard(
+            title: 'Pending approvals',
+            body: approvalCount > 0
+                ? '$approvalCount waiting actions need review'
+                : 'No approvals are waiting right now',
+            warning: true,
+          ),
+          const SizedBox(height: AppSpacing.compact),
+          _HomeRailCard(
+            title: 'Bridge status',
+            body: bridgeSummary,
+          ),
+          const SizedBox(height: AppSpacing.compact),
+          _HomeRailCard(
+            title: 'Voice / device',
+            body: runningCount > 0
+                ? '$runningCount active sessions • microphone ready'
+                : 'Microphone ready • system speech available',
+          ),
+          const SizedBox(height: AppSpacing.compact),
+          _HomeRailCard(
+            title: 'Projects overview',
+            body: '$projectsCount active projects',
+          ),
+          const SizedBox(height: AppSpacing.compact),
+          _HomeRailCard(
+            title: 'Quick actions',
+            body: 'Open projects or adjust settings',
+            actions: [
+              TextButton(
+                onPressed: onOpenProjects,
+                child: Text(context.l10n.projectsTitle),
+              ),
+              TextButton(
+                onPressed: onOpenSettings,
+                child: Text(context.l10n.settingsTitle),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeRailCard extends StatelessWidget {
+  const _HomeRailCard({
+    required this.title,
+    required this.body,
+    this.warning = false,
+    this.actions,
+  });
+
+  final String title;
+  final String body;
+  final bool warning;
+  final List<Widget>? actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.tileX),
+      decoration: BoxDecoration(
+        color: warning
+            ? AppColors.warningSurfaceFor(brightness)
+            : AppColors.panelFor(brightness).withValues(
+                alpha: brightness == Brightness.dark ? 0.66 : 0.88,
+              ),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
+        border: Border.all(
+          color: warning
+              ? AppColors.warningBorderFor(brightness)
+              : AppColors.outlineFor(brightness),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.textStack),
+          Text(
+            body,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.mutedSoftFor(brightness),
+                  height: 1.4,
+                ),
+          ),
+          if (actions != null && actions!.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.compact),
+            Wrap(
+              spacing: AppSpacing.compact,
+              runSpacing: AppSpacing.compact,
+              children: actions!,
+            ),
+          ],
+          const SizedBox(height: AppSpacing.micro),
+        ],
+      ),
+    );
+  }
+}
+
 class _ActionCard extends StatelessWidget {
   const _ActionCard({
     required this.icon,
@@ -1994,6 +3081,177 @@ class _SectionHeader extends StatelessWidget {
         ),
         if (trailing != null) trailing!,
       ],
+    );
+  }
+}
+
+class _DesktopHomeLoadingSkeleton extends StatelessWidget {
+  const _DesktopHomeLoadingSkeleton({
+    super.key,
+    required this.useWideRail,
+    required this.brightness,
+  });
+
+  final bool useWideRail;
+  final Brightness brightness;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenX,
+        AppSpacing.screenTop,
+        AppSpacing.screenX,
+        AppSpacing.screenBottom,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: AppSpacing.section),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: const [
+                  _HomeDesktopInboxHeaderSkeleton(),
+                  SizedBox(height: AppSpacing.compact),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.fromLTRB(
+                        0,
+                        AppSpacing.micro,
+                        0,
+                        AppSpacing.block,
+                      ),
+                      child: _RecentSessionsSkeleton(
+                        key: Key('home-dashboard-skeleton'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (useWideRail) ...[
+            const SizedBox(width: AppSpacing.card),
+            SizedBox(
+              width: _homeDesktopRailWidth,
+              child: _HomeDesktopRailSkeleton(
+                key: const Key('home-desktop-rail-skeleton'),
+                brightness: brightness,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeDesktopInboxHeaderSkeleton extends StatelessWidget {
+  const _HomeDesktopInboxHeaderSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return AppSkeletonCard(
+      padding: AppSpacing.tilePadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: const [
+          Row(
+            children: [
+              AppSkeletonBlock(width: 168, height: 18),
+              Spacer(),
+              AppSkeletonBlock(width: 44, height: 44),
+            ],
+          ),
+          SizedBox(height: AppSpacing.stack),
+          Row(
+            children: [
+              Expanded(child: AppSkeletonBlock(height: 34)),
+              SizedBox(width: AppSpacing.tileY),
+              AppSkeletonBlock(width: 104, height: 34),
+              SizedBox(width: AppSpacing.tileY),
+              AppSkeletonBlock(width: 104, height: 34),
+            ],
+          ),
+          SizedBox(height: AppSpacing.stack),
+          _SearchBarSkeleton(),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeDesktopRailSkeleton extends StatelessWidget {
+  const _HomeDesktopRailSkeleton({super.key, required this.brightness});
+
+  final Brightness brightness;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _DesktopRailCardSkeleton(
+          accentColor: AppColors.accentBlueFor(brightness),
+        ),
+        const SizedBox(height: AppSpacing.compact),
+        _DesktopRailCardSkeleton(
+          accentColor: AppColors.projectsAccentFor(brightness),
+        ),
+        const SizedBox(height: AppSpacing.compact),
+        const Expanded(
+          child: AppSkeletonCard(
+            padding: AppSpacing.tilePadding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppSkeletonBlock(width: 132, height: 14),
+                SizedBox(height: AppSpacing.stack),
+                AppSkeletonBlock(height: 10),
+                SizedBox(height: AppSpacing.textStack),
+                AppSkeletonBlock(width: 188, height: 10),
+                SizedBox(height: AppSpacing.stack),
+                AppSkeletonBlock(height: 34),
+                Spacer(),
+                AppSkeletonBlock(height: 34),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DesktopRailCardSkeleton extends StatelessWidget {
+  const _DesktopRailCardSkeleton({required this.accentColor});
+
+  final Color accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppSkeletonCard(
+      padding: AppSpacing.tilePadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 28,
+            height: 4,
+            decoration: BoxDecoration(
+              color: accentColor,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.stack),
+          const AppSkeletonBlock(width: 132, height: 14),
+          const SizedBox(height: AppSpacing.textStack),
+          const AppSkeletonBlock(height: 10),
+        ],
+      ),
     );
   }
 }
@@ -2213,6 +3471,7 @@ class _SearchBarSkeleton extends StatelessWidget {
 
 class _SearchBar extends StatelessWidget {
   const _SearchBar({
+    super.key,
     required this.controller,
     required this.hintText,
     required this.onChanged,
@@ -2410,131 +3669,4 @@ String _formatTimestamp(DateTime value) {
   String pad(int number) => number.toString().padLeft(2, '0');
   return '${local.year}-${pad(local.month)}-${pad(local.day)} '
       '${pad(local.hour)}:${pad(local.minute)}';
-}
-
-sealed class _ProjectSelectResult {}
-
-class _SelectExistingProject extends _ProjectSelectResult {
-  _SelectExistingProject(this.project);
-
-  final ProjectSummary project;
-}
-
-class _CreateNewProject extends _ProjectSelectResult {}
-
-class _SelectProjectDialog extends StatelessWidget {
-  const _SelectProjectDialog({required this.projects});
-
-  final List<ProjectSummary> projects;
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    return AlertDialog(
-      backgroundColor: AppColors.panelFor(brightness),
-      title: Text(context.l10n.selectProject),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: ListView.separated(
-          shrinkWrap: true,
-          itemCount: projects.length + 1,
-          separatorBuilder: (_, __) => Divider(
-            height: 1,
-            color: AppColors.outlineFor(brightness),
-          ),
-          itemBuilder: (context, index) {
-            if (index == projects.length) {
-              return ListTile(
-                leading: const Icon(Icons.add_circle_outline),
-                title: Text(context.l10n.createNewProject),
-                onTap: () => Navigator.of(context).pop(_CreateNewProject()),
-              );
-            }
-            final project = projects[index];
-            return ListTile(
-              leading: const Icon(Icons.folder_outlined),
-              title: Text(
-                project.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                project.rootPath,
-                style: const TextStyle(fontSize: 12),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              onTap: () =>
-                  Navigator.of(context).pop(_SelectExistingProject(project)),
-            );
-          },
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(context.l10n.cancel),
-        ),
-      ],
-    );
-  }
-}
-
-class _CreateProjectDialog extends StatefulWidget {
-  const _CreateProjectDialog();
-
-  @override
-  State<_CreateProjectDialog> createState() => _CreateProjectDialogState();
-}
-
-class _CreateProjectDialogState extends State<_CreateProjectDialog> {
-  final _nameController = TextEditingController();
-  final _pathController = TextEditingController();
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _pathController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    return AlertDialog(
-      backgroundColor: AppColors.panelFor(brightness),
-      title: Text(context.l10n.newProject),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _nameController,
-            decoration: InputDecoration(labelText: context.l10n.projectName),
-          ),
-          const SizedBox(height: AppSpacing.stack),
-          TextField(
-            controller: _pathController,
-            decoration: InputDecoration(labelText: context.l10n.localPath),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(context.l10n.cancel),
-        ),
-        FilledButton(
-          onPressed: () {
-            final name = _nameController.text.trim();
-            final path = _pathController.text.trim();
-            if (name.isEmpty || path.isEmpty) {
-              return;
-            }
-            Navigator.of(context).pop((name, path));
-          },
-          child: Text(context.l10n.createProject),
-        ),
-      ],
-    );
-  }
 }

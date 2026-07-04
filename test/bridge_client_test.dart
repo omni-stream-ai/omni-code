@@ -278,6 +278,75 @@ void main() {
   });
 
   group('BridgeClient session defaults and messaging', () {
+    test('lists messages using paginated envelope and cursor parameters',
+        () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.path, '/sessions/session-1/messages');
+          expect(request.url.queryParameters, {
+            'limit': '25',
+            'before_id': 'message-50',
+          });
+          expect(request.url.queryParameters, isNot(contains('count_mode')));
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'messages': [
+                  {
+                    'id': 'message-1',
+                    'session_id': 'session-1',
+                    'role': 'user',
+                    'content': 'Older',
+                    'created_at': '2026-05-05T11:00:00.000',
+                  },
+                ],
+                'has_more': true,
+                'next_cursor': 'message-1',
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final page = await client.listMessagesPage(
+        'session-1',
+        limit: 25,
+        beforeId: 'message-50',
+      );
+
+      expect(page.messages.single.id, 'message-1');
+      expect(page.hasMore, isTrue);
+      expect(page.nextCursor, 'message-1');
+    });
+
+    test('parses final SSE event without trailing blank line', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.path, '/sessions/session-1/events');
+          return http.Response(
+            'event: session\n'
+            'data: {"type":"message_delta","payload":{"message_id":"m1","delta":"hello"}}',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }),
+      );
+
+      final events =
+          await client.subscribeToSessionEvents('session-1').toList();
+
+      expect(events, hasLength(1));
+      expect(events.single['event'], 'session');
+      expect(events.single['data'], {
+        'type': 'message_delta',
+        'payload': {'message_id': 'm1', 'delta': 'hello'},
+      });
+    });
+
     test('sends reasoning effort when posting a message', () async {
       late Map<String, dynamic> body;
       final client = BridgeClient(
@@ -314,9 +383,11 @@ void main() {
         'session-1',
         'Hello',
         reasoningEffort: ReasoningEffort.max,
+        clientMessageId: 'local-123',
       );
 
       expect(body['reasoning_effort'], 'max');
+      expect(body['client_message_id'], 'local-123');
     });
 
     test('clears session reasoning effort with null patch value', () async {
@@ -467,6 +538,46 @@ void main() {
       expect(agents[2].selectable, isFalse);
       expect(client.agentDescriptorFor('claudecode').id, 'claudecode');
       expect(client.agentDescriptorFor('custom').label, 'Custom Agent');
+    });
+
+    test('listAgents returns cached data until force refreshed', () async {
+      var requestCount = 0;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.path, '/agents');
+          requestCount += 1;
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'codex',
+                  'label': requestCount == 1 ? 'Cached Agent' : 'Updated Agent',
+                  'aliases': ['codex'],
+                  'selectable': true,
+                  'default_selected': true,
+                  'compatible_formats': ['codex'],
+                  'installed': true,
+                  'installed_path': '/usr/local/bin/codex',
+                  'install_hint': 'manual hint',
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final cached = await client.listAgents();
+      final reused = await client.listAgents();
+      final refreshed = await client.listAgents(forceRefresh: true);
+
+      expect(requestCount, 2);
+      expect(client.peekAgents(), isNotNull);
+      expect(cached.single.label, 'Cached Agent');
+      expect(reused.single.label, 'Cached Agent');
+      expect(refreshed.single.label, 'Updated Agent');
     });
 
     test('listAgentCommands decodes slash metadata', () async {
@@ -918,7 +1029,6 @@ void main() {
         'session-c',
       ]);
     });
-
   });
 
   group('BridgeClient route lookups', () {

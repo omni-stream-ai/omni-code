@@ -102,13 +102,6 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
         ProjectDetailScreen(project: arguments),
       );
     }
-    if (settings.name == SessionDetailScreen.routeName &&
-        arguments is SessionSummary) {
-      return _pageRoute(
-        settings,
-        SessionDetailScreen(session: arguments),
-      );
-    }
     if (settings.name == SpeechSettingsScreen.routeName) {
       return _pageRoute(settings, const SpeechSettingsScreen());
     }
@@ -139,14 +132,6 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
       case AppRouteKind.session:
         final projectId = match.projectId!;
         final sessionId = match.sessionId!;
-        if (arguments is SessionSummary &&
-            arguments.projectId == projectId &&
-            arguments.id == sessionId) {
-          return _pageRoute(
-            settings,
-            SessionDetailScreen(session: arguments),
-          );
-        }
         return _pageRoute(
           settings,
           _SessionRouteLoaderScreen(

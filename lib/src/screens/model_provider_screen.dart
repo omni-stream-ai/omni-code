@@ -2,14 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../app_routes.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
+import '../responsive/app_responsive_layout.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import '../widgets/app_navigation_scaffold.dart';
 import '../widgets/app_back_header.dart';
 import '../widgets/app_card.dart';
+import '../widgets/new_session_flow.dart';
 import '../../l10n/generated/app_localizations.dart';
 
 class ModelProviderScreen extends StatefulWidget {
@@ -22,6 +26,7 @@ class ModelProviderScreen extends StatefulWidget {
 }
 
 class _ModelProviderScreenState extends State<ModelProviderScreen> {
+  static const double _desktopRailWidth = 300;
   List<ModelProviderConfig> _providers = [];
   bool _loading = true;
   String? _error;
@@ -152,73 +157,210 @@ class _ModelProviderScreenState extends State<ModelProviderScreen> {
     unawaited(_saveProviders());
   }
 
+  Future<void> _startNewSession() async {
+    await startNewSessionFlow(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Scaffold(
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.screenX,
-                AppSpacing.card,
-                AppSpacing.screenX,
-                AppSpacing.block,
-              ),
+    final recentProjects =
+        bridgeClient.peekProjects() ?? const <ProjectSummary>[];
+    final recentSessions =
+        bridgeClient.peekSessions() ?? const <SessionSummary>[];
+    final desktopSidebarCollapsed =
+        appSettingsController.settings.desktopNavigationCollapsed;
+    return AppNavigationScaffold(
+      activeRoute: AppRouteKind.settings,
+      recentProjects: recentProjects,
+      recentSessions: recentSessions,
+      desktopBreakpoint: AppResponsiveLayout.desktopBreakpoint,
+      desktopSidebarWidth: AppResponsiveLayout.desktopSidebarWidth,
+      desktopSidebarCollapsedWidth:
+          AppResponsiveLayout.desktopSidebarCollapsedWidth,
+      desktopSidebarCollapsed: desktopSidebarCollapsed,
+      onToggleDesktopSidebar: _toggleDesktopSidebarCollapsed,
+      onNavigateHome: () => Navigator.of(context).popUntil(
+        (route) => route.settings.name == AppRoutes.home || route.isFirst,
+      ),
+      onNavigateProjects: () =>
+          Navigator.of(context).pushNamed(AppRoutes.projects),
+      onNavigateSettings: () => Navigator.of(context).pop(),
+      onOpenProject: (project) {
+        Navigator.of(context).pushNamed(
+          AppRoutes.project(project.id),
+          arguments: project,
+        );
+      },
+      onOpenSession: (session) {
+        Navigator.of(context).pushNamed(
+          AppRoutes.session(session.projectId, session.id),
+          arguments: session,
+        );
+      },
+      onNewSession: _startNewSession,
+      bodyBuilder: (context, useDesktop, constraints) {
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.screenX,
+            AppSpacing.card,
+            AppSpacing.screenX,
+            AppSpacing.block,
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Align(
+              alignment: Alignment.topCenter,
               child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      maxWidth: AppSpacing.contentMaxWidth,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildHeader(context, l10n),
-                        const SizedBox(height: AppSpacing.fieldGap),
-                        if (_loading)
-                          const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(AppSpacing.block),
-                              child: CircularProgressIndicator(),
-                            ),
-                          )
-                        else if (_error != null)
-                          _buildErrorState(context, l10n)
-                        else if (_providers.isEmpty)
-                          _buildEmptyState(context, l10n)
-                        else
-                          _buildProviderList(context, l10n),
-                      ],
-                    ),
-                  ),
+                constraints: BoxConstraints(
+                  maxWidth: useDesktop ? 1240 : AppSpacing.contentMaxWidth,
                 ),
+                child: useDesktop
+                    ? _buildDesktopLayout(context, l10n)
+                    : _buildMobileLayout(context, l10n),
               ),
-            );
-          },
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addProvider,
-        child: const Icon(Icons.add_rounded),
-      ),
+            ),
+          ),
+        );
+      },
+      floatingActionButton: _buildFloatingActionButton(context),
     );
+  }
+
+  Widget? _buildFloatingActionButton(BuildContext context) {
+    final useDesktop =
+        AppResponsiveLayout.isDesktopWidth(MediaQuery.sizeOf(context).width);
+    if (useDesktop) {
+      return null;
+    }
+    return FloatingActionButton(
+      onPressed: _addProvider,
+      child: const Icon(Icons.add_rounded),
+    );
+  }
+
+  Widget _buildMobileLayout(BuildContext context, AppLocalizations l10n) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildHeader(context, l10n),
+        const SizedBox(height: AppSpacing.fieldGap),
+        _buildProviderBody(context, l10n),
+      ],
+    );
+  }
+
+  Widget _buildDesktopLayout(BuildContext context, AppLocalizations l10n) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(context, l10n),
+              const SizedBox(height: AppSpacing.fieldGap),
+              _buildProviderBody(context, l10n),
+            ],
+          ),
+        ),
+        const SizedBox(width: AppSpacing.card),
+        SizedBox(
+          width: _desktopRailWidth,
+          child: _ModelProviderDesktopRail(
+            providers: _providers,
+            loading: _loading,
+            error: _error,
+            onAddProvider: _addProvider,
+            onReload: _loadProviders,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProviderBody(BuildContext context, AppLocalizations l10n) {
+    if (_loading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(AppSpacing.block),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    if (_error != null) {
+      return _buildErrorState(context, l10n);
+    }
+    if (_providers.isEmpty) {
+      return _buildEmptyState(context, l10n);
+    }
+    return _buildProviderList(context, l10n);
   }
 
   Widget _buildHeader(BuildContext context, AppLocalizations l10n) {
     final theme = Theme.of(context);
+    final useDesktop =
+        AppResponsiveLayout.isDesktopWidth(MediaQuery.sizeOf(context).width);
     final titleStyle = theme.textTheme.headlineMedium?.copyWith(
       fontSize: 24,
       fontWeight: FontWeight.w800,
       height: 1.1,
     );
-    return AppBackHeader(
-      title: l10n.modelProvidersSection.toUpperCase(),
-      titleStyle: titleStyle,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        if (!useDesktop) ...[
+          Builder(
+            builder: (context) => Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.compact),
+              child: SizedBox(
+                width: 34,
+                height: 34,
+                child: IconButton(
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.panelDeepFor(theme.brightness),
+                    side: BorderSide.none,
+                    minimumSize: const Size.square(34),
+                    padding: EdgeInsets.zero,
+                    shape: const CircleBorder(),
+                  ),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                  tooltip: 'Open navigation',
+                  icon: const Icon(Icons.menu_rounded, size: 18),
+                ),
+              ),
+            ),
+          ),
+        ],
+        Expanded(
+          child: AppBackHeader(
+            title: l10n.modelProvidersSection.toUpperCase(),
+            titleStyle: titleStyle,
+          ),
+        ),
+        SizedBox(
+          height: 32,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: theme.colorScheme.onPrimary,
+              minimumSize: const Size(72, 32),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.tileX,
+              ),
+              shape: const StadiumBorder(),
+              textStyle: theme.textTheme.labelLarge?.copyWith(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            onPressed: _addProvider,
+            icon: const Icon(Icons.add_rounded, size: 16),
+            label: Text(l10n.addProvider),
+          ),
+        ),
+      ],
     );
   }
 
@@ -249,6 +391,10 @@ class _ModelProviderScreenState extends State<ModelProviderScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _toggleDesktopSidebarCollapsed() {
+    return toggleDesktopNavigationCollapsed();
   }
 
   Widget _buildEmptyState(BuildContext context, AppLocalizations l10n) {
@@ -298,6 +444,162 @@ class _ModelProviderScreenState extends State<ModelProviderScreen> {
           onToggle: (value) => _toggleEnabled(index, value),
         );
       },
+    );
+  }
+}
+
+class _ModelProviderDesktopRail extends StatelessWidget {
+  const _ModelProviderDesktopRail({
+    required this.providers,
+    required this.loading,
+    required this.error,
+    required this.onAddProvider,
+    required this.onReload,
+  });
+
+  final List<ModelProviderConfig> providers;
+  final bool loading;
+  final String? error;
+  final VoidCallback onAddProvider;
+  final VoidCallback onReload;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final enabledCount = providers.where((provider) => provider.enabled).length;
+    final defaultProvider = providers.isEmpty ? null : providers.first;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppCard(
+          padding: AppSpacing.cardPadding,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Provider order',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.stackTight),
+              _ProviderRailRow(
+                label: 'Configured',
+                value: loading ? '...' : '${providers.length}',
+              ),
+              _ProviderRailRow(
+                label: 'Enabled',
+                value: loading ? '...' : '$enabledCount',
+              ),
+              _ProviderRailRow(
+                label: 'Default',
+                value: defaultProvider?.name ?? 'None',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.stackTight),
+        AppCard(
+          padding: AppSpacing.cardPadding,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Actions',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.compact),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onAddProvider,
+                  icon: const Icon(Icons.add_rounded),
+                  label: Text(context.l10n.addProvider),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.compact),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: loading ? null : onReload,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: Text(context.l10n.retry),
+                ),
+              ),
+              if (error != null) ...[
+                const SizedBox(height: AppSpacing.compact),
+                Text(
+                  error!,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.errorTextFor(brightness),
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.stackTight),
+        AppCard(
+          padding: AppSpacing.cardPadding,
+          child: Text(
+            'Drag providers to change priority. Disabled providers stay saved but will not be used for new sessions.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: AppColors.mutedSoftFor(brightness),
+              height: 1.45,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProviderRailRow extends StatelessWidget {
+  const _ProviderRailRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.compact),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppColors.mutedFor(brightness),
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.compact),
+          Flexible(
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -4,15 +4,20 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../app_routes.dart';
 import '../bridge_client.dart';
 import '../bridge_speech_models.dart';
 import '../l10n/app_locale.dart';
+import '../models.dart';
+import '../responsive/app_responsive_layout.dart';
 import '../services/audio_recording_service.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import '../widgets/app_navigation_scaffold.dart';
 import '../widgets/app_back_header.dart';
 import '../widgets/app_card.dart';
+import '../widgets/new_session_flow.dart';
 import '../../l10n/generated/app_localizations.dart';
 
 SpeechStatus? _cachedSpeechStatus;
@@ -102,6 +107,20 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     };
   }
 
+  bool get _ttsProviderSupportedOnCurrentPlatform {
+    return switch (_ttsProvider) {
+      TtsProvider.system => _systemTtsSupportedOnPlatform,
+      TtsProvider.bridgeLocal => true,
+    };
+  }
+
+  bool get _asrProviderSupportedOnCurrentPlatform {
+    return switch (_asrProvider) {
+      AsrProvider.system => _systemAsrSupportedOnPlatform,
+      AsrProvider.whisper || AsrProvider.bridgeLocal => true,
+    };
+  }
+
   @override
   void initState() {
     super.initState();
@@ -149,6 +168,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     });
   }
 
+  Future<void> _startNewSession() async {
+    await startNewSessionFlow(context, client: _client);
+  }
+
   TextStyle _formValueTextStyle(BuildContext context) {
     final theme = Theme.of(context);
     return theme.textTheme.bodyLarge?.copyWith(
@@ -166,216 +189,296 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    final ttsHelpText = _ttsPlatformHelp(l10n);
-    final asrHelpText = _asrPlatformHelp(l10n);
     final formValueTextStyle = _formValueTextStyle(context);
-    return Scaffold(
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.screenX,
-                AppSpacing.card,
-                AppSpacing.screenX,
-                AppSpacing.block,
-              ),
+    final useWideDesktop = AppResponsiveLayout.isWideDesktopWidth(
+        MediaQuery.sizeOf(context).width);
+    final recentProjects = _client.peekProjects() ?? const <ProjectSummary>[];
+    final recentSessions = _client.peekSessions() ?? const <SessionSummary>[];
+    final desktopSidebarCollapsed =
+        appSettingsController.settings.desktopNavigationCollapsed;
+    return AppNavigationScaffold(
+      activeRoute: AppRouteKind.settings,
+      recentProjects: recentProjects,
+      recentSessions: recentSessions,
+      desktopBreakpoint: AppResponsiveLayout.desktopBreakpoint,
+      desktopSidebarWidth: AppResponsiveLayout.desktopSidebarWidth,
+      desktopSidebarCollapsedWidth:
+          AppResponsiveLayout.desktopSidebarCollapsedWidth,
+      desktopSidebarCollapsed: desktopSidebarCollapsed,
+      onToggleDesktopSidebar: _toggleDesktopSidebarCollapsed,
+      onNavigateHome: () => Navigator.of(context).popUntil(
+        (route) => route.settings.name == AppRoutes.home || route.isFirst,
+      ),
+      onNavigateProjects: () =>
+          Navigator.of(context).pushNamed(AppRoutes.projects),
+      onNavigateSettings: () => Navigator.of(context).pop(),
+      onOpenProject: (project) {
+        Navigator.of(context).pushNamed(
+          AppRoutes.project(project.id),
+          arguments: project,
+        );
+      },
+      onOpenSession: (session) {
+        Navigator.of(context).pushNamed(
+          AppRoutes.session(session.projectId, session.id),
+          arguments: session,
+        );
+      },
+      onNewSession: _startNewSession,
+      bodyBuilder: (context, useDesktop, constraints) {
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.screenX,
+            AppSpacing.card,
+            AppSpacing.screenX,
+            AppSpacing.block,
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Align(
+              alignment: Alignment.topCenter,
               child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      maxWidth: AppSpacing.contentMaxWidth,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildHeader(context, l10n),
-                        const SizedBox(height: AppSpacing.stackTight),
-                        _buildSectionCard(
-                          context,
-                          title: l10n.speechSection.toUpperCase(),
-                          children: [
-                            Builder(
-                              builder: (context) {
-                                final selectedTtsProvider =
-                                    TtsProvider.values.contains(_ttsProvider)
-                                        ? _ttsProvider
-                                        : TtsProvider.system;
-                                return DropdownButtonFormField<TtsProvider>(
-                                  initialValue: selectedTtsProvider,
-                                  style: formValueTextStyle,
-                                  decoration: InputDecoration(
-                                    labelText: l10n.ttsProviderLabel,
-                                  ),
-                                  items: [
-                                    DropdownMenuItem(
-                                      value: TtsProvider.system,
-                                      child: Text(l10n.speechSystem),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: TtsProvider.bridgeLocal,
-                                      child: Text(l10n.omniBridgeLocal),
-                                    ),
-                                  ],
-                                  onChanged: (value) {
-                                    if (value != null) {
-                                      setState(() {
-                                        _ttsProvider = value;
-                                      });
-                                    }
-                                  },
-                                );
-                              },
-                            ),
-                            if (ttsHelpText != null)
-                              _buildProviderHelpText(
-                                context,
-                                ttsHelpText,
-                                warning: !_systemTtsSupportedOnPlatform &&
-                                    _ttsProvider == TtsProvider.system,
-                              ),
-                            Builder(
-                              builder: (context) {
-                                final selectedAsrProvider =
-                                    AsrProvider.values.contains(_asrProvider)
-                                        ? _asrProvider
-                                        : AsrProvider.system;
-                                return DropdownButtonFormField<AsrProvider>(
-                                  initialValue: selectedAsrProvider,
-                                  style: formValueTextStyle,
-                                  decoration: InputDecoration(
-                                    labelText: l10n.asrProviderLabel,
-                                  ),
-                                  items: [
-                                    DropdownMenuItem(
-                                      value: AsrProvider.system,
-                                      child: Text(l10n.speechSystem),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: AsrProvider.bridgeLocal,
-                                      child: Text(l10n.omniBridgeLocal),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: AsrProvider.whisper,
-                                      child: Text(l10n.whisperCompatible),
-                                    ),
-                                  ],
-                                  onChanged: (value) {
-                                    if (value != null) {
-                                      setState(() {
-                                        _asrProvider = value;
-                                      });
-                                    }
-                                  },
-                                );
-                              },
-                            ),
-                            if (asrHelpText != null)
-                              _buildProviderHelpText(
-                                context,
-                                asrHelpText,
-                                warning: (!_systemAsrSupportedOnPlatform &&
-                                        _asrProvider == AsrProvider.system) ||
-                                    (!_isWebPlatform &&
-                                        _platform == TargetPlatform.macOS &&
-                                        _asrProvider == AsrProvider.system),
-                              ),
-                            const SizedBox(height: AppSpacing.compact),
-                            SwitchListTile.adaptive(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(
-                                l10n.speechPlaybackPrompt,
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              subtitle: Text(
-                                l10n.speechPlaybackPromptSubtitle,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: AppColors.mutedSoftFor(brightness),
-                                  height: 1.35,
-                                ),
-                              ),
-                              value: _speechPlaybackPromptEnabled,
-                              onChanged: (value) {
-                                setState(() {
-                                  _speechPlaybackPromptEnabled = value;
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.stackTight),
-                        _buildSectionCard(
-                          context,
-                          title: l10n.localBridgeModelsSection.toUpperCase(),
-                          children: [
-                            _buildLocalBridgeContent(context),
-                          ],
-                        ),
-                        if (_ttsProvider == TtsProvider.bridgeLocal) ...[
-                          const SizedBox(height: AppSpacing.stackTight),
-                          _buildSectionCard(
-                            context,
-                            title: l10n.localBridgeTtsVoiceLabel.toUpperCase(),
-                            children: [
-                              _buildLocalBridgeTtsVoiceContent(context),
-                            ],
-                          ),
-                        ],
-                        const SizedBox(height: AppSpacing.stackTight),
-                        _buildSectionCard(
-                          context,
-                          title: l10n.callModeSection.toUpperCase(),
-                          children: [
-                            _buildCallModeContent(
-                              context,
-                              formValueTextStyle,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.stackTight),
-                        _buildSectionCard(
-                          context,
-                          title: l10n.whisperApiSection,
-                          children: [
-                            TextField(
-                              controller: _whisperApiKeyController,
-                              obscureText: true,
-                              style: formValueTextStyle,
-                              decoration: InputDecoration(
-                                labelText: l10n.apiKey,
-                              ),
-                            ),
-                            TextField(
-                              controller: _whisperBaseUrlController,
-                              style: formValueTextStyle,
-                              decoration: InputDecoration(
-                                labelText: l10n.baseUrl,
-                                hintText: 'https://api.openai.com/v1',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                constraints: BoxConstraints(
+                  maxWidth: useDesktop ? 1240 : AppSpacing.contentMaxWidth,
+                ),
+                child: useDesktop && useWideDesktop
+                    ? _buildDesktopLayout(context, l10n, formValueTextStyle)
+                    : _buildMobileLayout(context, l10n, formValueTextStyle),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMobileLayout(
+    BuildContext context,
+    AppLocalizations l10n,
+    TextStyle formValueTextStyle,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildHeader(context, l10n),
+        const SizedBox(height: AppSpacing.stackTight),
+        ..._buildSpeechSettingSections(context, l10n, formValueTextStyle),
+      ],
+    );
+  }
+
+  Widget _buildDesktopLayout(
+    BuildContext context,
+    AppLocalizations l10n,
+    TextStyle formValueTextStyle,
+  ) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 1240),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildHeader(context, l10n),
+          const SizedBox(height: AppSpacing.card),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 7,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: _buildSpeechBridgeSections(
+                    context,
+                    l10n,
+                    formValueTextStyle,
                   ),
                 ),
               ),
-            );
-          },
-        ),
+              const SizedBox(width: AppSpacing.card),
+              Expanded(
+                flex: 5,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: _buildSpeechControlSections(
+                    context,
+                    l10n,
+                    formValueTextStyle,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
+  List<Widget> _buildSpeechSettingSections(
+    BuildContext context,
+    AppLocalizations l10n,
+    TextStyle formValueTextStyle,
+  ) {
+    return [
+      ..._buildSpeechBridgeSections(context, l10n, formValueTextStyle),
+      const SizedBox(height: AppSpacing.stackTight),
+      ..._buildSpeechControlSections(context, l10n, formValueTextStyle),
+    ];
+  }
+
+  List<Widget> _buildSpeechBridgeSections(
+    BuildContext context,
+    AppLocalizations l10n,
+    TextStyle formValueTextStyle,
+  ) {
+    return [
+      _buildSectionCard(
+        context,
+        title: l10n.speechSection.toUpperCase(),
+        children: [
+          _buildSpeechProviderContent(context, formValueTextStyle),
+        ],
+      ),
+      const SizedBox(height: AppSpacing.stackTight),
+      _buildSectionCard(
+        context,
+        title: l10n.localBridgeModelsSection.toUpperCase(),
+        children: [_buildLocalBridgeContent(context)],
+      ),
+      if (_ttsProvider == TtsProvider.bridgeLocal) ...[
+        const SizedBox(height: AppSpacing.stackTight),
+        _buildSectionCard(
+          context,
+          title: l10n.localBridgeTtsVoiceLabel.toUpperCase(),
+          children: [_buildLocalBridgeTtsVoiceContent(context)],
+        ),
+      ],
+    ];
+  }
+
+  Widget _buildSpeechProviderContent(
+    BuildContext context,
+    TextStyle formValueTextStyle,
+  ) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    return Container(
+      padding: AppSpacing.tilePadding,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceDeepFor(brightness),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
+        border: Border.all(color: AppColors.outlineFor(brightness)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SpeechProviderDropdown<TtsProvider>(
+            label: l10n.ttsProviderLabel,
+            value: _ttsProvider,
+            values: TtsProvider.values,
+            style: formValueTextStyle,
+            labelForValue: (value) => _ttsProviderLabel(l10n, value),
+            onChanged: (value) {
+              if (value == null) {
+                return;
+              }
+              setState(() {
+                _ttsProvider = value;
+              });
+            },
+          ),
+          const SizedBox(height: AppSpacing.compact),
+          _SpeechProviderDropdown<AsrProvider>(
+            label: l10n.asrProviderLabel,
+            value: _asrProvider,
+            values: AsrProvider.values,
+            style: formValueTextStyle,
+            labelForValue: (value) => _asrProviderLabel(l10n, value),
+            onChanged: (value) {
+              if (value == null) {
+                return;
+              }
+              setState(() {
+                _asrProvider = value;
+              });
+            },
+          ),
+          const SizedBox(height: AppSpacing.compact),
+          _buildSwitchRow(
+            context,
+            title: l10n.speechPlaybackPrompt,
+            subtitle: l10n.speechPlaybackPromptSubtitle,
+            value: _speechPlaybackPromptEnabled,
+            onChanged: (value) {
+              setState(() {
+                _speechPlaybackPromptEnabled = value;
+              });
+            },
+            toggleOnTap: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _ttsProviderLabel(AppLocalizations l10n, TtsProvider provider) {
+    return switch (provider) {
+      TtsProvider.system => 'System',
+      TtsProvider.bridgeLocal => 'Omni Bridge Local',
+    };
+  }
+
+  String _asrProviderLabel(AppLocalizations l10n, AsrProvider provider) {
+    return switch (provider) {
+      AsrProvider.system => 'System',
+      AsrProvider.bridgeLocal => 'Omni Bridge Local',
+      AsrProvider.whisper => l10n.whisperCompatible,
+    };
+  }
+
+  List<Widget> _buildSpeechControlSections(
+    BuildContext context,
+    AppLocalizations l10n,
+    TextStyle formValueTextStyle,
+  ) {
+    return [
+      _buildSectionCard(
+        context,
+        title: l10n.callModeSection.toUpperCase(),
+        children: [
+          _buildCallModeContent(context, formValueTextStyle),
+        ],
+      ),
+      const SizedBox(height: AppSpacing.stackTight),
+      _buildSectionCard(
+        context,
+        title: l10n.whisperApiSection,
+        children: [
+          TextField(
+            controller: _whisperApiKeyController,
+            obscureText: true,
+            style: formValueTextStyle,
+            decoration: InputDecoration(
+              labelText: l10n.apiKey,
+            ),
+          ),
+          TextField(
+            controller: _whisperBaseUrlController,
+            style: formValueTextStyle,
+            decoration: const InputDecoration(
+              labelText: 'Base URL',
+              hintText: 'https://api.openai.com/v1',
+            ),
+          ),
+        ],
+      ),
+    ];
+  }
+
   Widget _buildHeader(BuildContext context, AppLocalizations l10n) {
     final theme = Theme.of(context);
+    final useDesktop =
+        AppResponsiveLayout.isDesktopWidth(MediaQuery.sizeOf(context).width);
     final titleStyle = theme.textTheme.headlineMedium?.copyWith(
       fontSize: 24,
       fontWeight: FontWeight.w800,
@@ -384,22 +487,55 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        AppBackHeader(
-          title: l10n.speechSection.toUpperCase(),
-          titleStyle: titleStyle,
-        ),
-        const Spacer(),
-        const SizedBox(width: AppSpacing.compact),
-        TextButton(
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.accentBlueFor(theme.brightness),
-            textStyle: theme.textTheme.labelLarge?.copyWith(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
+        if (!useDesktop) ...[
+          Builder(
+            builder: (context) => Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.compact),
+              child: SizedBox(
+                width: 34,
+                height: 34,
+                child: IconButton(
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.panelDeepFor(theme.brightness),
+                    side: BorderSide.none,
+                    minimumSize: const Size.square(34),
+                    padding: EdgeInsets.zero,
+                    shape: const CircleBorder(),
+                  ),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                  tooltip: 'Open navigation',
+                  icon: const Icon(Icons.menu_rounded, size: 18),
+                ),
+              ),
             ),
           ),
-          onPressed: _saving ? null : _save,
-          child: Text(_saving ? l10n.saving : l10n.save),
+        ],
+        Expanded(
+          child: AppBackHeader(
+            title: l10n.speechSection.toUpperCase(),
+            titleStyle: titleStyle,
+          ),
+        ),
+        SizedBox(
+          width: 72,
+          height: 32,
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: theme.colorScheme.onPrimary,
+              minimumSize: const Size(72, 32),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.tileX,
+              ),
+              shape: const StadiumBorder(),
+              textStyle: theme.textTheme.labelLarge?.copyWith(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            onPressed: _saving ? null : _save,
+            child: Text(_saving ? l10n.saving : l10n.save),
+          ),
         ),
       ],
     );
@@ -433,6 +569,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     );
   }
 
+  Future<void> _toggleDesktopSidebarCollapsed() {
+    return toggleDesktopNavigationCollapsed();
+  }
+
   Widget _buildProviderHelpText(
     BuildContext context,
     String text, {
@@ -455,6 +595,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final status = _speechStatus;
+    final ttsHelp = _ttsPlatformHelp(l10n);
+    final asrHelp = _asrPlatformHelp(l10n);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -466,6 +608,23 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
             height: 1.45,
           ),
         ),
+        if (ttsHelp != null || asrHelp != null) ...[
+          const SizedBox(height: AppSpacing.compact),
+          if (ttsHelp != null)
+            _buildProviderHelpText(
+              context,
+              ttsHelp,
+              warning: !_ttsProviderSupportedOnCurrentPlatform,
+            ),
+          if (ttsHelp != null && asrHelp != null)
+            const SizedBox(height: AppSpacing.micro),
+          if (asrHelp != null)
+            _buildProviderHelpText(
+              context,
+              asrHelp,
+              warning: !_asrProviderSupportedOnCurrentPlatform,
+            ),
+        ],
         if (_speechStatusError != null) ...[
           const SizedBox(height: AppSpacing.compact),
           _buildSpeechErrorBanner(context, _speechStatusError!),
@@ -1255,10 +1414,11 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     required String subtitle,
     required bool value,
     required ValueChanged<bool>? onChanged,
+    bool toggleOnTap = false,
   }) {
     final theme = Theme.of(context);
     final brightness = theme.brightness;
-    return Row(
+    final content = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
@@ -1285,6 +1445,14 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         const SizedBox(width: AppSpacing.compact),
         Switch(value: value, onChanged: onChanged),
       ],
+    );
+    if (!toggleOnTap || onChanged == null) {
+      return content;
+    }
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
+      onTap: () => onChanged(!value),
+      child: content,
     );
   }
 
@@ -2729,4 +2897,47 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     SpeechProfile.asrBatch,
     SpeechProfile.vadDefault,
   ];
+}
+
+class _SpeechProviderDropdown<T> extends StatelessWidget {
+  const _SpeechProviderDropdown({
+    required this.label,
+    required this.value,
+    required this.values,
+    required this.style,
+    required this.labelForValue,
+    required this.onChanged,
+  });
+
+  final String label;
+  final T value;
+  final List<T> values;
+  final TextStyle style;
+  final String Function(T value) labelForValue;
+  final ValueChanged<T?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return InputDecorator(
+      decoration: InputDecoration(labelText: label),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          isExpanded: true,
+          style: style,
+          dropdownColor: AppColors.panelFor(brightness),
+          items: values
+              .map(
+                (item) => DropdownMenuItem<T>(
+                  value: item,
+                  child: Text(labelForValue(item)),
+                ),
+              )
+              .toList(growable: false),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
 }
