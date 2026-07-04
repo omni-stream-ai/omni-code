@@ -608,6 +608,18 @@ abstract class AppLocalizations {
   /// **'Search project name or path'**
   String get searchProjects;
 
+  /// No description provided for @noSearchResultsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No matches found'**
+  String get noSearchResultsTitle;
+
+  /// No description provided for @noSearchResultsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Try a different project name, path, session title, or summary.'**
+  String get noSearchResultsBody;
+
   /// No description provided for @themeSection.
   ///
   /// In en, this message translates to:

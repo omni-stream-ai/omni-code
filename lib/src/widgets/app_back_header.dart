@@ -14,6 +14,7 @@ class AppBackHeader extends StatelessWidget {
     this.tooltip,
     this.maxTitleLines = 1,
     this.titleOverflow = TextOverflow.ellipsis,
+    this.showLeadingIcon = true,
   });
 
   final String title;
@@ -24,6 +25,7 @@ class AppBackHeader extends StatelessWidget {
   final String? tooltip;
   final int maxTitleLines;
   final TextOverflow titleOverflow;
+  final bool showLeadingIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -91,16 +93,18 @@ class AppBackHeader extends StatelessWidget {
                   mainAxisSize:
                       hasBoundedWidth ? MainAxisSize.max : MainAxisSize.min,
                   children: [
-                    SizedBox(
-                      width: 34,
-                      height: 34,
-                      child: Icon(
-                        Icons.arrow_back_rounded,
-                        size: 20,
-                        color: theme.iconTheme.color,
+                    if (showLeadingIcon) ...[
+                      SizedBox(
+                        width: 34,
+                        height: 34,
+                        child: Icon(
+                          Icons.arrow_back_rounded,
+                          size: 20,
+                          color: theme.iconTheme.color,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: AppSpacing.compact),
+                      const SizedBox(width: AppSpacing.compact),
+                    ],
                     if (hasBoundedWidth)
                       Flexible(child: contentWidget)
                     else

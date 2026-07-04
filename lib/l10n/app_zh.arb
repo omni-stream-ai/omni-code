@@ -162,6 +162,8 @@
   "homeBrowseProjects": "浏览全部",
   "searchSessions": "搜索会话标题或摘要",
   "searchProjects": "搜索项目名或路径",
+  "noSearchResultsTitle": "没有匹配结果",
+  "noSearchResultsBody": "换一个项目名、路径、会话标题或摘要再试试。",
   "themeSection": "主题",
   "themeFollowSystem": "跟随系统",
   "themeLight": "浅色",

@@ -57,6 +57,7 @@ class AppSettings {
     required this.callModeWakeWords,
     required this.lastSelectedAgent,
     required this.lastSelectedProviderByProject,
+    required this.desktopNavigationCollapsed,
     required this.voiceComposerMode,
     required this.videoPreviewMuted,
   });
@@ -91,6 +92,7 @@ class AppSettings {
   final String callModeWakeWords;
   final String lastSelectedAgent;
   final Map<String, String?> lastSelectedProviderByProject;
+  final bool desktopNavigationCollapsed;
   final bool voiceComposerMode;
   final bool videoPreviewMuted;
 
@@ -134,6 +136,7 @@ class AppSettings {
       callModeWakeWords: defaultCallModeWakeWords,
       lastSelectedAgent: '',
       lastSelectedProviderByProject: const {},
+      desktopNavigationCollapsed: false,
       voiceComposerMode: false,
       videoPreviewMuted: true,
     );
@@ -169,6 +172,7 @@ class AppSettings {
     String? callModeWakeWords,
     String? lastSelectedAgent,
     Map<String, String?>? lastSelectedProviderByProject,
+    bool? desktopNavigationCollapsed,
     bool? voiceComposerMode,
     bool? videoPreviewMuted,
   }) {
@@ -219,6 +223,8 @@ class AppSettings {
       lastSelectedProviderByProject: Map<String, String?>.unmodifiable(
         lastSelectedProviderByProject ?? this.lastSelectedProviderByProject,
       ),
+      desktopNavigationCollapsed:
+          desktopNavigationCollapsed ?? this.desktopNavigationCollapsed,
       voiceComposerMode: voiceComposerMode ?? this.voiceComposerMode,
       videoPreviewMuted: videoPreviewMuted ?? this.videoPreviewMuted,
     );
@@ -255,6 +261,7 @@ class AppSettings {
       'call_mode_wake_words': callModeWakeWords,
       'last_selected_agent': lastSelectedAgent,
       'last_selected_provider_by_project': lastSelectedProviderByProject,
+      'desktop_navigation_collapsed': desktopNavigationCollapsed,
       'voice_composer_mode': voiceComposerMode,
       'video_preview_muted': videoPreviewMuted,
     };
@@ -367,6 +374,11 @@ class AppSettings {
           json,
           'last_selected_provider_by_project',
         ),
+      ),
+      desktopNavigationCollapsed: _readBool(
+        json,
+        'desktop_navigation_collapsed',
+        defaults.desktopNavigationCollapsed,
       ),
       voiceComposerMode: _readBool(
         json,
@@ -629,6 +641,9 @@ class AppSettingsController extends ChangeNotifier {
           shouldPersist = true;
         }
         if (json['voice_composer_mode'] == null) {
+          shouldPersist = true;
+        }
+        if (json['desktop_navigation_collapsed'] == null) {
           shouldPersist = true;
         }
         _settings = AppSettings.fromJson(json);

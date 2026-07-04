@@ -299,6 +299,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchProjects => '搜索项目名或路径';
 
   @override
+  String get noSearchResultsTitle => '没有匹配结果';
+
+  @override
+  String get noSearchResultsBody => '换一个项目名、路径、会话标题或摘要再试试。';
+
+  @override
   String get themeSection => '主题';
 
   @override

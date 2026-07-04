@@ -10,16 +10,54 @@ import 'bridge_speech_models.dart';
 import 'models.dart';
 import 'settings/app_settings.dart';
 
+class MessageListPage {
+  const MessageListPage({
+    required this.messages,
+    required this.hasMore,
+    this.nextCursor,
+  });
+
+  factory MessageListPage.fromJson(Map<String, dynamic> json) {
+    final data = json['data'];
+    if (data is List<dynamic>) {
+      return MessageListPage(
+        messages: data
+            .map((item) => ChatMessage.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        hasMore: false,
+      );
+    }
+    if (data is! Map<String, dynamic>) {
+      throw Exception('Invalid message list response: $json');
+    }
+
+    final items = data['messages'];
+    if (items is! List<dynamic>) {
+      throw Exception('Invalid message list response: $json');
+    }
+    return MessageListPage(
+      messages: items
+          .map((item) => ChatMessage.fromJson(item as Map<String, dynamic>))
+          .toList(),
+      hasMore: data['has_more'] == true,
+      nextCursor: data['next_cursor'] as String?,
+    );
+  }
+
+  final List<ChatMessage> messages;
+  final bool hasMore;
+  final String? nextCursor;
+}
+
 class BridgeClient {
   BridgeClient({
     http.Client? httpClient,
   }) : _httpClient = httpClient ?? http.Client();
 
-  static const Duration _listCacheTtl = Duration(seconds: 15);
-
   final http.Client _httpClient;
   _CacheEntry<List<ProjectSummary>>? _projectsCache;
   _CacheEntry<List<SessionSummary>>? _sessionsCache;
+  _CacheEntry<List<AgentSummary>>? _agentsCache;
   final Map<String, _CacheEntry<List<SessionSummary>>> _projectSessionsCache =
       {};
   Map<String, AgentDescriptor> _agentDescriptors = {};
@@ -182,10 +220,6 @@ class BridgeClient {
   }
 
   Future<List<SessionSummary>> listSessions({bool forceRefresh = false}) async {
-    final cache = _sessionsCache;
-    if (!forceRefresh && cache != null && cache.isFresh) {
-      return cache.value;
-    }
     final response = await _httpClient.get(
       Uri.parse('$baseUrl/sessions'),
       headers: _defaultHeaders,
@@ -200,20 +234,18 @@ class BridgeClient {
       items
           .map((item) => SessionSummary.fromJson(item as Map<String, dynamic>)),
     );
-    final syncedSessions = _syncSessions(
-      current: sessions,
-      cached: _sessionsCache?.value ?? const <SessionSummary>[],
-    );
-    _sessionsCache = _CacheEntry(syncedSessions);
-    for (final session in syncedSessions) {
+    _sessionsCache = _CacheEntry(sessions);
+    for (final session in sessions) {
       _upsertProjectSessionCache(session);
     }
-    return syncedSessions;
+    return sessions;
   }
 
   List<ProjectSummary>? peekProjects() => _projectsCache?.value;
 
   List<SessionSummary>? peekSessions() => _sessionsCache?.value;
+
+  List<AgentSummary>? peekAgents() => _agentsCache?.value;
 
   ProjectSummary? peekProject(String projectId) {
     return _projectsCache?.value
@@ -255,7 +287,7 @@ class BridgeClient {
 
   Future<List<ProjectSummary>> listProjects({bool forceRefresh = false}) async {
     final cache = _projectsCache;
-    if (!forceRefresh && cache != null && cache.isFresh) {
+    if (!forceRefresh && cache != null) {
       return cache.value;
     }
     final response = await _httpClient.get(
@@ -273,12 +305,12 @@ class BridgeClient {
         (item) => ProjectSummary.fromJson(item as Map<String, dynamic>),
       ),
     );
-    final mergedProjects = _mergeProjects(
+    final merged = _mergeProjects(
       cached: _projectsCache?.value ?? const <ProjectSummary>[],
       incoming: projects,
     );
-    _projectsCache = _CacheEntry(mergedProjects);
-    return mergedProjects;
+    _projectsCache = _CacheEntry(merged);
+    return merged;
   }
 
   /// Fetches the full session detail (including optional git_status)
@@ -303,12 +335,13 @@ class BridgeClient {
     String projectId, {
     bool forceRefresh = false,
   }) async {
-    final cachedProject = peekProject(projectId);
-    if (cachedProject != null && !forceRefresh) {
-      return cachedProject;
+    if (!forceRefresh) {
+      final cached = peekProject(projectId);
+      if (cached != null) {
+        return cached;
+      }
     }
-
-    final projects = await listProjects(forceRefresh: true);
+    final projects = await listProjects(forceRefresh: forceRefresh);
     final project = projects.where((item) => item.id == projectId).firstOrNull;
     if (project == null) {
       throw StateError('Project not found: $projectId');
@@ -316,16 +349,39 @@ class BridgeClient {
     return project;
   }
 
-  Future<List<ChatMessage>> listMessages(String sessionId) async {
+  static const int defaultMessagePageLimit = 50;
+
+  Future<MessageListPage> listMessagesPage(
+    String sessionId, {
+    int limit = defaultMessagePageLimit,
+    String? beforeId,
+    String? afterId,
+  }) async {
+    if (beforeId != null && afterId != null) {
+      throw ArgumentError('beforeId and afterId cannot both be set.');
+    }
+    final queryParameters = <String, String>{
+      'limit': '$limit',
+      if (beforeId != null) 'before_id': beforeId,
+      if (afterId != null) 'after_id': afterId,
+    };
     final response = await _httpClient.get(
-      Uri.parse('$baseUrl/sessions/$sessionId/messages'),
+      Uri.parse('$baseUrl/sessions/$sessionId/messages').replace(
+        queryParameters: queryParameters,
+      ),
       headers: _defaultHeaders,
     );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = payload['data'] as List<dynamic>;
-    return items
-        .map((item) => ChatMessage.fromJson(item as Map<String, dynamic>))
-        .toList();
+    return MessageListPage.fromJson(payload);
+  }
+
+  Future<List<ChatMessage>> listMessages(String sessionId) async {
+    final page = await listMessagesPage(sessionId);
+    return page.messages;
   }
 
   Future<BridgeFileResponse> readFile(
@@ -402,10 +458,6 @@ class BridgeClient {
     String projectId, {
     bool forceRefresh = false,
   }) async {
-    final cached = _projectSessionsCache[projectId];
-    if (!forceRefresh && cached != null && cached.isFresh) {
-      return cached.value;
-    }
     final response = await _httpClient.get(
       Uri.parse('$baseUrl/projects/$projectId/sessions'),
       headers: _defaultHeaders,
@@ -414,19 +466,16 @@ class BridgeClient {
     final items = payload['data'] as List<dynamic>;
     final sessions = items
         .map((item) => SessionSummary.fromJson(item as Map<String, dynamic>))
-        .toList();
-    final syncedSessions = _syncSessions(
-      current: sessions,
-      cached: cached?.value ?? const <SessionSummary>[],
-    );
-    _projectSessionsCache[projectId] = _CacheEntry(syncedSessions);
+        .toList()
+      ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
+    _projectSessionsCache[projectId] = _CacheEntry(sessions);
     _sessionsCache = _CacheEntry(
       _mergeSessions(
         cached: _sessionsCache?.value ?? const <SessionSummary>[],
-        incoming: syncedSessions,
+        incoming: sessions,
       ),
     );
-    return syncedSessions;
+    return sessions;
   }
 
   Future<SessionSummary> getProjectSession(
@@ -434,11 +483,6 @@ class BridgeClient {
     String sessionId, {
     bool forceRefresh = false,
   }) async {
-    final cachedSession = peekSession(projectId, sessionId);
-    if (cachedSession != null && !forceRefresh) {
-      return cachedSession;
-    }
-
     final sessions = await listProjectSessions(
       projectId,
       forceRefresh: true,
@@ -457,6 +501,7 @@ class BridgeClient {
     String? systemPrompt,
     String? providerId,
     ReasoningEffort? reasoningEffort,
+    String? clientMessageId,
   }) async {
     final body = <String, dynamic>{
       'content': content,
@@ -471,6 +516,9 @@ class BridgeClient {
     }
     if (reasoningEffort != null) {
       body['reasoning_effort'] = reasoningEffort.apiValue;
+    }
+    if (clientMessageId != null && clientMessageId.isNotEmpty) {
+      body['client_message_id'] = clientMessageId;
     }
 
     final response = await _httpClient.post(
@@ -615,7 +663,11 @@ class BridgeClient {
         .toList();
   }
 
-  Future<List<AgentSummary>> listAgents() async {
+  Future<List<AgentSummary>> listAgents({bool forceRefresh = false}) async {
+    final cache = _agentsCache;
+    if (!forceRefresh && cache != null) {
+      return cache.value;
+    }
     final response = await _httpClient.get(
       Uri.parse('$baseUrl/agents'),
       headers: _defaultHeaders,
@@ -628,6 +680,7 @@ class BridgeClient {
         .whereType<Map<String, dynamic>>()
         .map(AgentSummary.fromJson)
         .toList(growable: false);
+    _agentsCache = _CacheEntry(agents);
     _storeAgentDescriptors(agents);
     return agents;
   }
@@ -1152,33 +1205,52 @@ class BridgeClient {
     String? eventName;
     final dataBuffer = <String>[];
 
+    Map<String, dynamic>? flushEvent() {
+      if (dataBuffer.isEmpty) {
+        eventName = null;
+        return null;
+      }
+      final event = {
+        'event': eventName ?? 'message',
+        'data': jsonDecode(dataBuffer.join('\n')) as Map<String, dynamic>,
+      };
+      eventName = null;
+      dataBuffer.clear();
+      return event;
+    }
+
     await for (final line in lines) {
       if (line.isEmpty) {
-        if (eventName != null && dataBuffer.isNotEmpty) {
-          yield {
-            'event': eventName,
-            'data': jsonDecode(dataBuffer.join('\n')) as Map<String, dynamic>,
-          };
+        final event = flushEvent();
+        if (event != null) {
+          yield event;
         }
-        eventName = null;
-        dataBuffer.clear();
         continue;
       }
 
       if (line.startsWith('event:')) {
-        eventName = line.substring(6).trim();
+        eventName = _readSseFieldValue(line.substring(6));
       } else if (line.startsWith('data:')) {
-        dataBuffer.add(line.substring(5).trim());
+        dataBuffer.add(_readSseFieldValue(line.substring(5)));
       }
     }
+
+    final event = flushEvent();
+    if (event != null) {
+      yield event;
+    }
+  }
+
+  static String _readSseFieldValue(String value) {
+    if (value.startsWith(' ')) {
+      return value.substring(1);
+    }
+    return value;
   }
 
   void _upsertProject(ProjectSummary project) {
     final current = _projectsCache?.value ?? const <ProjectSummary>[];
-    final next = sortProjectsForDisplay([
-      ...current.where((item) => item.id != project.id),
-      project,
-    ]);
+    final next = _mergeProjects(cached: current, incoming: [project]);
     _projectsCache = _CacheEntry(next);
   }
 
@@ -1241,43 +1313,6 @@ class BridgeClient {
     }
   }
 
-  static List<ProjectSummary> _mergeProjects({
-    required Iterable<ProjectSummary> cached,
-    required Iterable<ProjectSummary> incoming,
-  }) {
-    final merged = <String, ProjectSummary>{};
-
-    for (final project in cached) {
-      merged[project.id] = project;
-    }
-
-    for (final project in incoming) {
-      final existing = merged[project.id];
-      if (existing == null || project.updatedAt.isAfter(existing.updatedAt)) {
-        merged[project.id] = project;
-        continue;
-      }
-
-      if (project.updatedAt.isAtSameMomentAs(existing.updatedAt)) {
-        merged[project.id] = ProjectSummary(
-          id: project.id,
-          name: project.name,
-          rootPath: project.rootPath,
-          updatedAt: project.updatedAt,
-          sessionCount: max(project.sessionCount, existing.sessionCount),
-          lastSessionPreview: _preferNonEmptyPreview(
-            project.lastSessionPreview,
-            existing.lastSessionPreview,
-          ),
-          gitBranch: project.gitBranch ?? existing.gitBranch,
-          gitStatus: project.gitStatus ?? existing.gitStatus,
-        );
-      }
-    }
-
-    return sortProjectsForDisplay(merged.values);
-  }
-
   static String? _preferNonEmptyPreview(String? primary, String? fallback) {
     if (primary?.trim().isNotEmpty == true) {
       return primary;
@@ -1322,35 +1357,37 @@ class BridgeClient {
     return sorted;
   }
 
-  static List<SessionSummary> _syncSessions({
-    required Iterable<SessionSummary> current,
-    required Iterable<SessionSummary> cached,
+  static List<ProjectSummary> _mergeProjects({
+    required Iterable<ProjectSummary> cached,
+    required Iterable<ProjectSummary> incoming,
   }) {
-    final cachedById = {
-      for (final session in cached) session.id: session,
-    };
-    final synced = current.map((session) {
-      final existing = cachedById[session.id];
-      if (existing == null) {
-        return session;
+    final merged = <String, ProjectSummary>{};
+
+    for (final project in cached) {
+      merged[project.id] = project;
+    }
+
+    for (final project in incoming) {
+      final existing = merged[project.id];
+      if (existing == null || project.updatedAt.isAfter(existing.updatedAt)) {
+        merged[project.id] = project;
+        continue;
       }
-      if (existing.updatedAt.isAfter(session.updatedAt)) {
-        return existing;
-      }
-      if (existing.updatedAt.isAtSameMomentAs(session.updatedAt)) {
-        return session.copyWith(
-          unreadCount: max(session.unreadCount, existing.unreadCount),
-          lastMessagePreview: _preferNonEmptyPreview(
-            session.lastMessagePreview,
-            existing.lastMessagePreview,
+
+      if (project.updatedAt.isAtSameMomentAs(existing.updatedAt)) {
+        merged[project.id] = project.copyWith(
+          sessionCount: max(project.sessionCount, existing.sessionCount),
+          lastSessionPreview: _preferNonEmptyPreview(
+            project.lastSessionPreview,
+            existing.lastSessionPreview,
           ),
-          pendingApproval: session.pendingApproval ?? existing.pendingApproval,
+          gitBranch: project.gitBranch ?? existing.gitBranch,
+          gitStatus: project.gitStatus ?? existing.gitStatus,
         );
       }
-      return session;
-    }).toList(growable: false)
-      ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
-    return synced;
+    }
+
+    return sortProjectsForDisplay(merged.values);
   }
 
   static bool isAbsoluteFilePath(String value) {
@@ -1493,13 +1530,9 @@ class BridgeClient {
 }
 
 class _CacheEntry<T> {
-  _CacheEntry(this.value) : storedAt = DateTime.now();
+  _CacheEntry(this.value);
 
   final T value;
-  final DateTime storedAt;
-
-  bool get isFresh =>
-      DateTime.now().difference(storedAt) < BridgeClient._listCacheTtl;
 }
 
 final bridgeClient = BridgeClient();

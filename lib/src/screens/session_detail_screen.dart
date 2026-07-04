@@ -20,6 +20,7 @@ import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../message_image_paths.dart';
 import '../models.dart';
+import '../responsive/app_responsive_layout.dart';
 import '../services/cloud_speech_service.dart';
 import '../services/notification_service.dart';
 import '../services/audio_recording_service.dart';
@@ -31,7 +32,9 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/anchored_overlay_panel.dart';
 import '../widgets/app_back_header.dart';
+import '../widgets/app_navigation_scaffold.dart';
 import '../widgets/app_skeleton.dart';
+import '../widgets/new_session_flow.dart';
 import '../widgets/session_call_mode_view.dart';
 import '../../l10n/generated/app_localizations.dart';
 
@@ -69,21 +72,24 @@ class SessionDetailScreen extends StatefulWidget {
   State<SessionDetailScreen> createState() => _SessionDetailScreenState();
 }
 
+enum _ComposerSettingsPanelSection { provider, reasoning }
+
 class _SessionDetailScreenState extends State<SessionDetailScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+  static const double _desktopRailWidth = 320;
+  static const double _desktopContentMaxWidth = 860;
+  static const double _desktopComposerMaxWidth = 760;
   static const double _bottomAutoScrollThreshold = 96;
   static const double _topHistoryExpandThreshold = 72;
   static const double _messageBubbleMaxWidth = 320;
   static const double _assistantMessageBubbleWidthFactor = 0.82;
   static const double _bridgeRealtimeEndpointRule2Ratio = 0.7;
   static const double _callModeSpeechHintDelayRatio = 0.55;
-  static const double _composerMaxWidth = 760;
   static const Duration _callModeTtsEchoGracePeriod = Duration(seconds: 6);
   static const Duration _callModeCommandAcceptedSpeechTimeout = Duration(
     seconds: 4,
   );
-  static const int _initialVisibleTurnCount = 10;
-  static const int _historyTurnBatchSize = 10;
+  static const int _messagePageLimit = 6;
   static const String _defaultProviderMenuValue =
       '__session_default_provider__';
   static const String _defaultReasoningEffortMenuValue =
@@ -94,6 +100,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   );
   final _composerTextFieldKey = GlobalKey();
   final _composerSuggestionsOverlayController = OverlayPortalController();
+  final _composerSettingsButtonKey = GlobalKey();
+  final _composerSettingsOverlayController = OverlayPortalController();
   final _imagePickerFocusNode = FocusNode(
     debugLabel: 'session-image-picker-focus',
   );
@@ -117,8 +125,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   late final BridgeRealtimeAsrService _bridgeRealtimeAsrService;
   final Set<String> _autoSpokenAssistantMessageIds = <String>{};
   final Set<String> _notifiedAssistantMessageIds = <String>{};
+  final Set<String> _streamingAssistantMessageIds = <String>{};
   final Map<String, _LocalMessageDraft> _localMessageStates = {};
-  final Map<String, Future<BridgeFileResponse>> _imageFileFutures = {};
   final Map<String, Future<File>> _videoFileFutures = {};
   late SessionSummary _session;
   final List<ChatMessage> _messages = [];
@@ -128,6 +136,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Timer? _speechStatusAutoDismissTimer;
   Timer? _callModeSpeechHintTimer;
   Timer? _refreshSessionSummaryDebounce;
+  Timer? _sessionIdCopiedResetTimer;
   bool _refreshSessionSummaryInFlight = false;
   bool _dispatchingQueuedLocalMessage = false;
   bool _returnFocusToComposerAfterReply = false;
@@ -193,17 +202,25 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _restoringSession = false;
   bool _expandingHistory = false;
   bool _appInForeground = true;
+  int _messageLoadRequestToken = 0;
+  int _sessionDetailRequestToken = 0;
   bool _creatingSession = false;
   bool _submittingApproval = false;
   String? _submittingApprovalChoice;
   String? _submittedApprovalRequestId;
+  bool _sessionIdCopied = false;
   bool _cancellingReply = false;
-  int _visibleTurnCount = 0;
+  bool _showScrollToBottomAction = false;
+  bool _hasMoreOlderMessages = false;
+  bool _autoBackfillHistoryScheduled = false;
+  String? _olderMessagesCursor;
   String? _dismissedErrorBannerMessage;
   String? _overrideProviderId;
   ReasoningEffort? _overrideReasoningEffort;
   List<ModelProviderConfig> _providers = const [];
   GitStatusDetail? _gitStatus;
+  final MenuController _sessionHeaderMenuController = MenuController();
+  _ComposerSettingsPanelSection? _composerSettingsPanelSection;
 
   BridgeClient get _client => widget.client ?? bridgeClient;
 
@@ -488,8 +505,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   void _syncComposerFocusForSessionStatus(SessionStatus status) {
-    if (status == SessionStatus.idle ||
-        status == SessionStatus.interrupted) {
+    if (status == SessionStatus.idle || status == SessionStatus.interrupted) {
       _requestComposerFocusAfterFrame(consumeReturnRequest: true);
       unawaited(_dispatchQueuedLocalMessageIfPossible());
     }
@@ -616,6 +632,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _speechStatusAutoDismissTimer?.cancel();
     _callModeSpeechHintTimer?.cancel();
     _refreshSessionSummaryDebounce?.cancel();
+    _sessionIdCopiedResetTimer?.cancel();
     _completeCallModeCommandAcceptedSpeech();
     unawaited(_audioRecordingService.cancel());
     unawaited(_speechInputService.cancel());
@@ -636,6 +653,48 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _approvalPrimaryFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant SessionDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final previousSession = oldWidget.session;
+    final nextSession = widget.session;
+    if (previousSession.id == nextSession.id &&
+        previousSession.updatedAt.isAtSameMomentAs(nextSession.updatedAt) &&
+        previousSession.title == nextSession.title &&
+        previousSession.status == nextSession.status &&
+        previousSession.lastMessagePreview == nextSession.lastMessagePreview &&
+        previousSession.pendingApproval?.requestId ==
+            nextSession.pendingApproval?.requestId &&
+        previousSession.providerId == nextSession.providerId &&
+        previousSession.reasoningEffort == nextSession.reasoningEffort) {
+      return;
+    }
+
+    final sessionChanged = previousSession.id != nextSession.id;
+    setState(() {
+      _session = nextSession;
+      _overrideProviderId = nextSession.providerId;
+      _overrideReasoningEffort = nextSession.reasoningEffort;
+      _pendingApproval = nextSession.pendingApproval;
+      _reconcileSubmittedApprovalState();
+      if (sessionChanged) {
+        _messages.clear();
+        _localMessageStates.clear();
+        _unreadToolCounts.clear();
+        _hasMoreOlderMessages = false;
+        _olderMessagesCursor = null;
+        _loadingMessages = true;
+        _gitStatus = null;
+      }
+    });
+
+    if (sessionChanged) {
+      _subscribeToEvents();
+      unawaited(_loadMessages());
+    }
+    unawaited(_loadSessionDetail());
   }
 
   @override
@@ -1178,7 +1237,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       color: Colors.transparent,
       child: AnchoredOverlayPanel(
         targetKey: _composerTextFieldKey,
-        maxWidth: _composerMaxWidth,
+        maxWidth: _desktopContentMaxWidth,
         child: panel,
       ),
     );
@@ -1225,9 +1284,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_creatingSession) {
       return;
     }
+    final requestToken = ++_sessionDetailRequestToken;
+    final sessionId = _session.id;
     try {
-      final detail = await _client.getSession(_session.id);
-      if (!mounted || detail.session.id != _session.id) {
+      final detail = await _client.getSession(sessionId);
+      if (!mounted ||
+          requestToken != _sessionDetailRequestToken ||
+          sessionId != _session.id ||
+          detail.session.id != _session.id) {
         return;
       }
       setState(() {
@@ -1257,7 +1321,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _pendingApproval != null;
     final canCancelReply = hasActiveTurn && !_cancellingReply;
     final turns = _turns;
-    final showHistoryLoader = _hasHiddenTurns || _expandingHistory;
+    final showHistoryLoader = _expandingHistory;
     final approvalCardMaxHeight = MediaQuery.of(context).size.height * 0.36;
     final systemSpeechUnavailableMessage = _systemSpeechUnavailableStatus;
     final callModeUnavailableMessage = _callModeUnavailableMessage;
@@ -1266,71 +1330,579 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             !isSessionBusy &&
             !_speechReady &&
             !_isListening;
+    final desktopSidebarCollapsed =
+        appSettingsController.settings.desktopNavigationCollapsed;
 
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        titleSpacing: AppSpacing.compact,
-        title: AppBackHeader(
-          title: _session.title,
-          subtitle: _gitStatusLabel,
-          titleStyle: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w800,
-            height: 1.1,
-          ),
-        ),
-        actions: [
-          _buildProviderSelector(),
-          _buildReasoningEffortSelector(),
-          _buildCallModeAction(unavailableMessage: callModeUnavailableMessage),
-        ],
+    return AppNavigationScaffold(
+      activeRoute: AppRouteKind.session,
+      recentProjects: _client.peekProjects() ?? const <ProjectSummary>[],
+      recentSessions: _client.peekSessions() ?? const <SessionSummary>[],
+      activeProjectId: _session.projectId,
+      activeSessionId: _session.id,
+      onNavigateHome: () => Navigator.of(context).popUntil(
+        (route) => route.settings.name == AppRoutes.home || route.isFirst,
       ),
-      body: Column(
-        children: [
-          if (_session.status == SessionStatus.failed)
-            _buildErrorBanner(
-              _resolveSessionErrorText(context.l10n),
-              dismissable: false,
-            )
-          else if (_shouldShowErrorBanner)
-            _buildErrorBanner(_speechError!.trim()),
-          if (_pendingApproval != null)
-            _buildPendingApprovalCard(approvalCardMaxHeight),
-          Expanded(
-            child: (_creatingSession || _loadingMessages)
-                ? const _SessionMessagesSkeleton(
-                    key: Key('session-chat-skeleton'),
-                  )
-                : NotificationListener<ScrollNotification>(
-                    onNotification: _handleScrollNotification,
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      padding: AppSpacing.blockPadding,
-                      itemCount: turns.length + (showHistoryLoader ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (showHistoryLoader) {
-                          if (index == 0) {
-                            return _buildHistoryLoader();
-                          }
-                          index -= 1;
-                        }
-                        final turn = turns[index];
-                        return _buildTurn(context, turn);
-                      },
-                    ),
-                  ),
-          ),
-          _buildMessageComposer(
+      onNavigateProjects: () =>
+          Navigator.of(context).pushNamed(AppRoutes.projects),
+      onNavigateSettings: () =>
+          Navigator.of(context).pushNamed(AppRoutes.settings),
+      onOpenProject: (project) {
+        Navigator.of(context).pushNamed(
+          AppRoutes.project(project.id),
+          arguments: project,
+        );
+      },
+      onOpenSession: (session) {
+        Navigator.of(context).pushNamed(
+          AppRoutes.session(session.projectId, session.id),
+          arguments: session,
+        );
+      },
+      onNewSession: _startNewSessionFromCurrentProject,
+      desktopBreakpoint: AppResponsiveLayout.desktopBreakpoint,
+      desktopSidebarWidth: AppResponsiveLayout.desktopSidebarWidth,
+      desktopSidebarCollapsedWidth:
+          AppResponsiveLayout.desktopSidebarCollapsedWidth,
+      desktopSidebarCollapsed: desktopSidebarCollapsed,
+      onToggleDesktopSidebar: _toggleDesktopSidebarCollapsed,
+      bodyBuilder: (context, useDesktopSidebar, constraints) {
+        if (useDesktopSidebar) {
+          return _buildDesktopBody(
+            turns: turns,
+            showHistoryLoader: showHistoryLoader,
+            approvalCardMaxHeight: approvalCardMaxHeight,
             canCancelReply: canCancelReply,
             hasActiveTurn: hasActiveTurn,
             isSessionBusy: isSessionBusy,
             isWaitingForBridgeReply: isWaitingForBridgeReply,
             showVoiceInputUnavailableTooltip: showVoiceInputUnavailableTooltip,
             systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
+            callModeUnavailableMessage: callModeUnavailableMessage,
+            theme: theme,
+          );
+        }
+        return _buildMobileBody(
+          turns: turns,
+          showHistoryLoader: showHistoryLoader,
+          approvalCardMaxHeight: approvalCardMaxHeight,
+          canCancelReply: canCancelReply,
+          hasActiveTurn: hasActiveTurn,
+          isSessionBusy: isSessionBusy,
+          isWaitingForBridgeReply: isWaitingForBridgeReply,
+          showVoiceInputUnavailableTooltip: showVoiceInputUnavailableTooltip,
+          systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
+          callModeUnavailableMessage: callModeUnavailableMessage,
+          theme: theme,
+        );
+      },
+    );
+  }
+
+  Widget _buildDesktopSessionTopBar({
+    required ThemeData theme,
+    required String? callModeUnavailableMessage,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.card,
+        AppSpacing.card,
+        AppSpacing.card,
+        AppSpacing.compact,
+      ),
+      child: Row(
+        children: [
+          Expanded(child: _buildDesktopSessionHeader(theme)),
+          const SizedBox(width: AppSpacing.compact),
+          _buildCallModeActionButton(
+            unavailableMessage: callModeUnavailableMessage,
+            closeParentRoute: false,
           ),
+          _buildSessionHeaderMoreButton(),
         ],
       ),
     );
+  }
+
+  Widget _buildMobileSessionTopBar({
+    required ThemeData theme,
+    required String? callModeUnavailableMessage,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.compact,
+        AppSpacing.compact,
+        AppSpacing.compact,
+        AppSpacing.compact,
+      ),
+      child: Row(
+        children: [
+          Builder(
+            builder: (context) => IconButton(
+              tooltip: 'Open navigation',
+              style: _headerIconButtonStyle(),
+              onPressed: () => Scaffold.of(context).openDrawer(),
+              icon: const Icon(Icons.menu_rounded),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.compact),
+          Expanded(
+            child: AppBackHeader(
+              title: _session.title,
+              subtitle: _gitStatusLabel,
+              onTap: _openHomeFromSession,
+              showLeadingIcon: false,
+              titleStyle: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                height: 1.1,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.compact),
+          _buildCallModeActionButton(
+            unavailableMessage: callModeUnavailableMessage,
+            closeParentRoute: false,
+          ),
+          _buildSessionHeaderMoreButton(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopSessionHeader(ThemeData theme) {
+    return AppBackHeader(
+      title: _session.title,
+      subtitle: _gitStatusLabel,
+      onTap: _openHomeFromSession,
+      titleStyle: theme.textTheme.titleLarge?.copyWith(
+        fontWeight: FontWeight.w800,
+        height: 1.08,
+      ),
+    );
+  }
+
+  void _openHomeFromSession() {
+    Navigator.of(context).popUntil(
+      (route) => route.settings.name == AppRoutes.home || route.isFirst,
+    );
+  }
+
+  Future<void> _startNewSessionFromCurrentProject() async {
+    await startNewSessionFlow(
+      context,
+      client: _client,
+      initialProject: _client.peekProject(_session.projectId),
+    );
+  }
+
+  Future<void> _toggleDesktopSidebarCollapsed() async {
+    await toggleDesktopNavigationCollapsed();
+  }
+
+  Widget _buildSessionHeaderMoreButton() {
+    return Padding(
+      padding: const EdgeInsets.only(right: AppSpacing.compact),
+      child: MenuAnchor(
+        controller: _sessionHeaderMenuController,
+        crossAxisUnconstrained: false,
+        alignmentOffset: const Offset(-8, 10),
+        style: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll(
+            AppColors.surfaceFor(Theme.of(context).brightness),
+          ),
+          side: const WidgetStatePropertyAll(BorderSide.none),
+          elevation: const WidgetStatePropertyAll(0),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+            ),
+          ),
+          padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+        ),
+        menuChildren: [
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.compact,
+              vertical: AppSpacing.compact,
+            ),
+            child: SizedBox(
+              width: 172,
+              child: _buildSessionHeaderOptionsPanel(),
+            ),
+          ),
+        ],
+        builder: (context, controller, child) => IconButton(
+          key: const Key('session-header-more-button'),
+          tooltip: 'Session options',
+          style: _headerIconButtonStyle(),
+          onPressed: () {
+            if (controller.isOpen) {
+              controller.close();
+            } else {
+              controller.open();
+            }
+          },
+          icon: const Icon(Icons.more_horiz_rounded),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSessionHeaderOptionsPanel() {
+    final runtimeSessionRef = _session.runtimeSessionRef;
+    final agentLabel = _client.agentLabelFor(_session.agentId);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildSessionHeaderActionTile(
+          key: const Key('session-header-new-session-button'),
+          label: context.l10n.newSession,
+          icon: Icons.add_comment_outlined,
+          onTap: _startNewSessionFromCurrentProject,
+        ),
+        if (runtimeSessionRef != null && runtimeSessionRef.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.micro),
+          _buildSessionHeaderActionTile(
+            key: const Key('session-header-copy-id-button'),
+            label: _sessionIdCopied ? 'Copied' : '复制 $agentLabel ID',
+            icon: _sessionIdCopied
+                ? Icons.check_rounded
+                : Icons.content_copy_rounded,
+            onTap: _copySessionId,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSessionHeaderActionTile({
+    Key? key,
+    required String label,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: key,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.compact,
+            vertical: AppSpacing.compact,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: AppColors.mutedFor(brightness),
+              ),
+              const SizedBox(width: AppSpacing.compact),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _copySessionId() async {
+    final runtimeSessionRef = _session.runtimeSessionRef;
+    if (runtimeSessionRef == null || runtimeSessionRef.isEmpty) {
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: runtimeSessionRef));
+    if (!mounted) {
+      return;
+    }
+    _sessionIdCopiedResetTimer?.cancel();
+    setState(() {
+      _sessionIdCopied = true;
+    });
+    _sessionIdCopiedResetTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _sessionIdCopied = false;
+      });
+    });
+  }
+
+  Widget _buildMobileBody({
+    required List<_ConversationTurn> turns,
+    required bool showHistoryLoader,
+    required double approvalCardMaxHeight,
+    required bool canCancelReply,
+    required bool hasActiveTurn,
+    required bool isSessionBusy,
+    required bool isWaitingForBridgeReply,
+    required bool showVoiceInputUnavailableTooltip,
+    required String? systemSpeechUnavailableMessage,
+    required String? callModeUnavailableMessage,
+    required ThemeData theme,
+  }) {
+    final topBanners = _buildTopBanners(
+      approvalCardMaxHeight: approvalCardMaxHeight,
+      showPendingApprovalInline: true,
+    );
+    return Column(
+      children: [
+        _buildMobileSessionTopBar(
+          theme: theme,
+          callModeUnavailableMessage: callModeUnavailableMessage,
+        ),
+        if (topBanners.isNotEmpty)
+          Flexible(
+            fit: FlexFit.loose,
+            child: SingleChildScrollView(
+              child: Column(children: topBanners),
+            ),
+          ),
+        Expanded(
+          child: _buildConversationPane(
+            turns: turns,
+            showHistoryLoader: showHistoryLoader,
+          ),
+        ),
+        _buildMessageComposer(
+          canCancelReply: canCancelReply,
+          hasActiveTurn: hasActiveTurn,
+          isSessionBusy: isSessionBusy,
+          isWaitingForBridgeReply: isWaitingForBridgeReply,
+          showVoiceInputUnavailableTooltip: showVoiceInputUnavailableTooltip,
+          systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopBody({
+    required List<_ConversationTurn> turns,
+    required bool showHistoryLoader,
+    required double approvalCardMaxHeight,
+    required bool canCancelReply,
+    required bool hasActiveTurn,
+    required bool isSessionBusy,
+    required bool isWaitingForBridgeReply,
+    required bool showVoiceInputUnavailableTooltip,
+    required String? systemSpeechUnavailableMessage,
+    required String? callModeUnavailableMessage,
+    required ThemeData theme,
+  }) {
+    final brightness = Theme.of(context).brightness;
+    final showDesktopRail = AppResponsiveLayout.isWideDesktopWidth(
+        MediaQuery.sizeOf(context).width);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: Column(
+            children: [
+              _buildDesktopSessionTopBar(
+                theme: theme,
+                callModeUnavailableMessage: callModeUnavailableMessage,
+              ),
+              ..._buildTopBanners(
+                approvalCardMaxHeight: approvalCardMaxHeight,
+                showPendingApprovalInline: !showDesktopRail,
+              ),
+              Expanded(
+                child: _buildConversationPane(
+                  turns: turns,
+                  showHistoryLoader: showHistoryLoader,
+                ),
+              ),
+              _buildMessageComposer(
+                canCancelReply: canCancelReply,
+                hasActiveTurn: hasActiveTurn,
+                isSessionBusy: isSessionBusy,
+                isWaitingForBridgeReply: isWaitingForBridgeReply,
+                showVoiceInputUnavailableTooltip:
+                    showVoiceInputUnavailableTooltip,
+                systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
+              ),
+            ],
+          ),
+        ),
+        if (showDesktopRail)
+          Container(
+            width: _desktopRailWidth,
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(color: AppColors.outlineFor(brightness)),
+              ),
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.block,
+                AppSpacing.block,
+                AppSpacing.block,
+                AppSpacing.screenBottom,
+              ),
+              child: _buildDesktopRail(
+                approvalCardMaxHeight: approvalCardMaxHeight,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  List<Widget> _buildTopBanners({
+    required double approvalCardMaxHeight,
+    required bool showPendingApprovalInline,
+  }) {
+    final widgets = <Widget>[];
+    if (_session.status == SessionStatus.failed) {
+      widgets.add(
+        _buildErrorBanner(
+          _resolveSessionErrorText(context.l10n),
+          dismissable: false,
+        ),
+      );
+    } else if (_shouldShowErrorBanner) {
+      widgets.add(_buildErrorBanner(_speechError!.trim()));
+    }
+    if (showPendingApprovalInline && _pendingApproval != null) {
+      widgets.add(_buildPendingApprovalCard(approvalCardMaxHeight));
+    }
+    return widgets;
+  }
+
+  Widget _buildConversationPane({
+    required List<_ConversationTurn> turns,
+    required bool showHistoryLoader,
+  }) {
+    return _SessionConversationPane(
+      creatingSession: _creatingSession,
+      loadingMessages: _loadingMessages,
+      turns: turns,
+      showHistoryLoader: showHistoryLoader,
+      showScrollToBottomAction: _showScrollToBottomAction,
+      scrollController: _scrollController,
+      desktopSidebarBreakpoint: AppResponsiveLayout.desktopBreakpoint,
+      desktopContentMaxWidth: _desktopContentMaxWidth,
+      onScrollNotification: _handleScrollNotification,
+      onScrollToBottom: _handleScrollToBottomPressed,
+      historyLoaderBuilder: _buildHistoryLoader,
+      turnBuilder: _buildTurn,
+    );
+  }
+
+  Widget _buildDesktopRail({
+    required double approvalCardMaxHeight,
+  }) {
+    final project = _client.peekProject(_session.projectId);
+    return _SessionDesktopRail(
+      session: _session,
+      project: project,
+      gitStatus: _gitStatus,
+      gitStatusLabel: _gitStatusLabel,
+      pendingApproval: _pendingApproval,
+      sessionIdCopied: _sessionIdCopied,
+      approvalCardMaxHeight: approvalCardMaxHeight,
+      statusLabel: _sessionStatusLabel(context.l10n),
+      statusSummary: _desktopStatusSummary(context.l10n),
+      statusColor: _sessionStatusColor(Theme.of(context).brightness),
+      providerSummaryLabel: _providerSummaryLabel(context.l10n),
+      reasoningLabel: _overrideReasoningEffort == null
+          ? context.l10n.reasoningEffortDefault
+          : _reasoningEffortLabel(_overrideReasoningEffort!),
+      updatedAtLabel: _formatSessionUpdatedAt(_session.updatedAt),
+      projectPathSummaryBuilder: _projectPathSummary,
+      agentLabel: _client.agentLabelFor(_session.agentId),
+      onCopySessionId: _copySessionId,
+      approvalCardBuilder: (maxHeight) => _buildPendingApprovalCard(
+        maxHeight,
+        margin: EdgeInsets.zero,
+      ),
+    );
+  }
+
+  String _desktopStatusSummary(AppLocalizations l10n) {
+    if (_session.status == SessionStatus.failed) {
+      return _resolveSessionErrorText(l10n);
+    }
+    if (_pendingApproval != null ||
+        _session.status == SessionStatus.awaitingApproval) {
+      return l10n.waitingApprovalProcessing;
+    }
+    return switch (_session.status) {
+      SessionStatus.running => l10n.callModeWorking,
+      SessionStatus.waiting => 'Waiting for a reply from the bridge.',
+      SessionStatus.interrupted => 'The last turn was interrupted.',
+      SessionStatus.idle => 'Ready for the next message.',
+      SessionStatus.failed => _resolveSessionErrorText(l10n),
+      SessionStatus.awaitingApproval => l10n.waitingApprovalProcessing,
+    };
+  }
+
+  String _formatSessionUpdatedAt(DateTime value) {
+    final local = value.toLocal();
+    String pad(int number) => number.toString().padLeft(2, '0');
+    return '${local.year}-${pad(local.month)}-${pad(local.day)} '
+        '${pad(local.hour)}:${pad(local.minute)}';
+  }
+
+  String _sessionStatusLabel(AppLocalizations l10n) {
+    return switch (_session.status) {
+      SessionStatus.idle => l10n.sessionStatusIdle,
+      SessionStatus.running => l10n.sessionStatusRunning,
+      SessionStatus.awaitingApproval => l10n.sessionStatusAwaitingApproval,
+      SessionStatus.interrupted => l10n.sessionStatusInterrupted,
+      SessionStatus.waiting => l10n.sessionStatusWaiting,
+      SessionStatus.failed => l10n.sessionStatusFailed,
+    };
+  }
+
+  Color _sessionStatusColor(Brightness brightness) {
+    return switch (_session.status) {
+      SessionStatus.idle => AppColors.primaryFor(brightness),
+      SessionStatus.running => AppColors.primaryFor(brightness),
+      SessionStatus.awaitingApproval => AppColors.warningTextFor(brightness),
+      SessionStatus.interrupted => AppColors.warningTextFor(brightness),
+      SessionStatus.waiting => AppColors.mutedFor(brightness),
+      SessionStatus.failed => AppColors.errorTextFor(brightness),
+    };
+  }
+
+  String _providerSummaryLabel(AppLocalizations l10n) {
+    if (_overrideProviderId == null) {
+      return l10n.providerDefault;
+    }
+    if (isAutoProviderId(_overrideProviderId)) {
+      return l10n.providerAuto;
+    }
+    final providerName = _providers
+        .where((provider) => provider.id == _overrideProviderId)
+        .map((provider) => provider.name)
+        .firstOrNull;
+    return providerName ?? _overrideProviderId!;
+  }
+
+  String _projectPathSummary(String rootPath) {
+    final normalized = rootPath.trim();
+    if (normalized.isEmpty) {
+      return rootPath;
+    }
+    final segments = normalized.split(RegExp(r'[\\/]'));
+    if (segments.length <= 3) {
+      return normalized;
+    }
+    return '.../${segments.sublist(segments.length - 3).join('/')}';
   }
 
   Widget _buildMessageComposer({
@@ -1359,7 +1931,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           BoxDecoration(border: Border(top: BorderSide(color: outline))),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: _composerMaxWidth),
+          constraints: BoxConstraints(
+            maxWidth: _isMobilePlatform
+                ? _desktopContentMaxWidth
+                : _desktopComposerMaxWidth,
+          ),
           child: _buildIdleComposer(
             isSessionBusy: isSessionBusy,
             isWaitingForBridgeReply: isWaitingForBridgeReply,
@@ -1386,6 +1962,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required bool hasActiveTurn,
   }) {
     final brightness = Theme.of(context).brightness;
+    final isDesktopPlatform = !_isMobilePlatform;
     final voiceButtonDisabled = isSessionBusy ||
         _voiceInputStarting ||
         (_systemAsrUnavailable && !_isListening);
@@ -1396,14 +1973,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final activeVoiceIconColor = brightness == Brightness.dark
         ? AppColors.onPrimaryFor(brightness)
         : AppColors.textFor(brightness);
-    final holdToTalkDisabled = isSessionBusy ||
-        (_voiceInputStarting && !_voiceHoldActive);
+    final holdToTalkDisabled =
+        isSessionBusy || (_voiceInputStarting && !_voiceHoldActive);
     const collapsedComposerHeight = 48.0;
     final hasSendableDraft =
         _controller.text.trim().isNotEmpty || _pendingAttachments.isNotEmpty;
     final showVoiceButton = !hasSendableDraft || _composerDraftFromVoice;
     final showExpandedComposer = !_voiceComposerMode &&
-        (_composerHasInteractiveFocus ||
+        (isDesktopPlatform ||
+            _composerHasInteractiveFocus ||
             hasSendableDraft ||
             _pendingAttachments.isNotEmpty ||
             _voiceInputStarting ||
@@ -1581,6 +2159,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           ),
         ),
     ];
+    final showSessionSettings = !_voiceComposerMode &&
+        (isDesktopPlatform || _composerHasInteractiveFocus);
+    final sessionSettingButtons = showSessionSettings
+        ? <Widget>[_buildComposerSettingsButton()]
+        : const <Widget>[];
     final messageInput = KeyedSubtree(
       key: _composerTextFieldKey,
       child: CallbackShortcuts(
@@ -1641,7 +2224,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           padding: const EdgeInsetsDirectional.fromSTEB(
             0,
             0,
-            AppSpacing.compact,
+            AppSpacing.micro,
             AppSpacing.micro,
           ),
           child: OverlayPortal(
@@ -1656,16 +2239,53 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     children: [
                       messageInput,
                       Padding(
-                        padding: const EdgeInsetsDirectional.only(
-                          start: AppSpacing.card,
+                        padding: const EdgeInsetsDirectional.fromSTEB(
+                          AppSpacing.compact,
+                          AppSpacing.micro,
+                          0,
+                          0,
                         ),
-                        child: FocusTraversalGroup(
-                          policy: OrderedTraversalPolicy(),
-                          child: Row(
-                            children: [
-                              const Spacer(),
-                              ...actionButtons,
-                            ],
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: AppColors.panelFor(brightness).withValues(
+                              alpha: brightness == Brightness.dark ? 0.18 : 0.3,
+                            ),
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.radiusControl,
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsetsDirectional.fromSTEB(
+                              AppSpacing.compact,
+                              AppSpacing.micro,
+                              AppSpacing.micro,
+                              AppSpacing.micro,
+                            ),
+                            child: FocusTraversalGroup(
+                              policy: OrderedTraversalPolicy(),
+                              child: SizedBox(
+                                height: 36,
+                                child: Stack(
+                                  children: [
+                                    if (sessionSettingButtons.isNotEmpty)
+                                      Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: sessionSettingButtons,
+                                        ),
+                                      ),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: actionButtons,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -1784,6 +2404,259 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ],
       ],
     );
+  }
+
+  Widget _buildComposerSettingsButton() {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    return OverlayPortal(
+      controller: _composerSettingsOverlayController,
+      overlayChildBuilder: (context) => _buildComposerSettingsOverlay(),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: const Key('session-composer-settings-button'),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+          onTap: _toggleComposerSettingsOverlay,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 168),
+            child: DecoratedBox(
+              key: _composerSettingsButtonKey,
+              decoration: BoxDecoration(
+                color: AppColors.panelFor(brightness).withValues(
+                  alpha: brightness == Brightness.dark ? 0.44 : 0.58,
+                ),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.compact,
+                  vertical: AppSpacing.textTight,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _composerSettingsSummaryLabel(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: AppColors.mutedFor(brightness),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.micro),
+                    Icon(
+                      _composerSettingsPanelSection == null
+                          ? Icons.keyboard_arrow_down_rounded
+                          : Icons.keyboard_arrow_up_rounded,
+                      size: 16,
+                      color: AppColors.mutedFor(brightness),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _toggleComposerSettingsOverlay() {
+    setState(() {
+      if (_composerSettingsOverlayController.isShowing) {
+        _composerSettingsOverlayController.hide();
+        _composerSettingsPanelSection = null;
+      } else {
+        _composerSettingsOverlayController.show();
+      }
+    });
+  }
+
+  Widget _buildComposerSettingsOverlay() {
+    final brightness = Theme.of(context).brightness;
+    final rect = _targetRectFor(_composerSettingsButtonKey);
+    if (rect == null) {
+      return const SizedBox.shrink();
+    }
+    final mediaQuery = MediaQuery.of(context);
+    final screenSize = mediaQuery.size;
+    final safeLeft = AppSpacing.screenX;
+    final safeRight = screenSize.width - AppSpacing.screenX;
+    final safeTop = mediaQuery.padding.top + AppSpacing.compact;
+    final safeBottom = screenSize.height -
+        mediaQuery.viewInsets.bottom -
+        mediaQuery.padding.bottom;
+    const primaryPanelWidth = 156.0;
+    const secondaryPanelWidth = 240.0;
+    const maxPanelHeight = 360.0;
+    final availableBelow = safeBottom - (rect.bottom + AppSpacing.micro);
+    final availableAbove = (rect.top - AppSpacing.micro) - safeTop;
+    final showBelow =
+        availableBelow >= math.min(maxPanelHeight, availableAbove);
+    final availableHeight =
+        (showBelow ? availableBelow : availableAbove).clamp(0, maxPanelHeight);
+    final primaryMaxLeft = math.max(safeLeft, safeRight - primaryPanelWidth);
+    final primaryLeft = rect.left.clamp(safeLeft, primaryMaxLeft).toDouble();
+    final top = showBelow ? rect.bottom + AppSpacing.micro : null;
+    final bottom =
+        showBelow ? null : screenSize.height - rect.top + AppSpacing.micro;
+    final preferSecondaryRight = primaryLeft +
+            primaryPanelWidth +
+            AppSpacing.micro +
+            secondaryPanelWidth <=
+        safeRight;
+    final secondaryLeft = preferSecondaryRight
+        ? primaryLeft + primaryPanelWidth + AppSpacing.micro
+        : (primaryLeft - AppSpacing.micro - secondaryPanelWidth)
+            .clamp(safeLeft, safeRight - secondaryPanelWidth)
+            .toDouble();
+
+    return Material(
+      color: Colors.transparent,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () {
+                setState(() {
+                  _composerSettingsOverlayController.hide();
+                  _composerSettingsPanelSection = null;
+                });
+              },
+            ),
+          ),
+          Positioned(
+            left: primaryLeft,
+            top: top,
+            bottom: bottom,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: primaryPanelWidth,
+                maxWidth: primaryPanelWidth,
+                maxHeight: availableHeight.toDouble(),
+              ),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceFor(brightness),
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+                  border: Border.all(color: AppColors.outlineFor(brightness)),
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(AppSpacing.compact),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_providers.isNotEmpty ||
+                          isAutoProviderId(_overrideProviderId))
+                        _buildProviderSettingsRow(),
+                      if (_providers.isNotEmpty ||
+                          isAutoProviderId(_overrideProviderId))
+                        const SizedBox(height: AppSpacing.compact),
+                      _buildReasoningSettingsRow(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (_composerSettingsPanelSection != null)
+            Positioned(
+              left: secondaryLeft,
+              top: top,
+              bottom: bottom,
+              child: _buildComposerSecondarySettingsPanel(
+                brightness: brightness,
+                maxHeight: availableHeight.toDouble(),
+                width: secondaryPanelWidth,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComposerSecondarySettingsPanel({
+    required Brightness brightness,
+    required double maxHeight,
+    required double width,
+  }) {
+    final l10n = context.l10n;
+    final children = switch (_composerSettingsPanelSection) {
+      _ComposerSettingsPanelSection.provider => <Widget>[
+          if (_providers.isNotEmpty)
+            _buildComposerOptionTile(
+              key: const Key('session-provider-option-auto'),
+              label: l10n.providerAuto,
+              selected: isAutoProviderId(_overrideProviderId),
+              onTap: () => _applyProviderOverride(autoProviderId),
+            ),
+          ..._providers.map(
+            (provider) => _buildComposerOptionTile(
+              key: Key('session-provider-option-${provider.id}'),
+              label: provider.name,
+              selected: _overrideProviderId == provider.id,
+              onTap: () => _applyProviderOverride(provider.id),
+            ),
+          ),
+          _buildComposerOptionTile(
+            key: const Key('session-provider-option-default'),
+            label: l10n.providerDefault,
+            selected: _overrideProviderId == null,
+            onTap: () => _applyProviderOverride(_defaultProviderMenuValue),
+          ),
+        ],
+      _ComposerSettingsPanelSection.reasoning => <Widget>[
+          _buildComposerOptionTile(
+            key: const Key('session-reasoning-option-default'),
+            label: l10n.reasoningEffortDefault,
+            selected: _overrideReasoningEffort == null,
+            onTap: () =>
+                _applyReasoningOverride(_defaultReasoningEffortMenuValue),
+          ),
+          ...selectableReasoningEfforts.map(
+            (effort) => _buildComposerOptionTile(
+              key: Key('session-reasoning-option-${effort.name}'),
+              label: _reasoningEffortLabel(effort),
+              selected: _overrideReasoningEffort == effort,
+              onTap: () => _applyReasoningOverride(effort),
+            ),
+          ),
+        ],
+      null => const <Widget>[],
+    };
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        minWidth: width,
+        maxWidth: width,
+        maxHeight: maxHeight,
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.surfaceFor(brightness),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+          border: Border.all(color: AppColors.outlineFor(brightness)),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSpacing.compact),
+          child: _buildComposerOptionsPanel(children: children),
+        ),
+      ),
+    );
+  }
+
+  Rect? _targetRectFor(GlobalKey key) {
+    final renderObject = key.currentContext?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return null;
+    }
+    final origin = renderObject.localToGlobal(Offset.zero);
+    return origin & renderObject.size;
   }
 
   Widget _buildPendingAttachmentStrip({
@@ -2342,276 +3215,245 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
-  Widget _buildProviderSelector() {
+  Widget _buildProviderSettingsRow() {
     if (_providers.isEmpty && !isAutoProviderId(_overrideProviderId)) {
       return const SizedBox.shrink();
     }
-    final theme = Theme.of(context);
-    final l10n = context.l10n;
-    final currentName = _overrideProviderId == null
-        ? l10n.providerDefault
-        : isAutoProviderId(_overrideProviderId)
-            ? l10n.providerAuto
-            : _providers
-                    .where((p) => p.id == _overrideProviderId)
-                    .firstOrNull
-                    ?.name ??
-                l10n.providerDefault;
+    return _buildComposerSettingsSectionTile(
+      key: const Key('session-provider-settings-button'),
+      label: 'Provider',
+      section: _ComposerSettingsPanelSection.provider,
+    );
+  }
 
-    return PopupMenuButton<String>(
-      tooltip: l10n.providerOverride,
-      onSelected: (value) {
-        final previous = _overrideProviderId;
-        final nextValue =
-            value == _defaultProviderMenuValue ? null : value;
-        setState(() {
-          _overrideProviderId = nextValue;
-          _session = _session.copyWith(
-            providerId: nextValue,
-            clearProviderId: nextValue == null,
-          );
-        });
-        _syncSessionSummaryCache();
-        unawaited(
-          _client.updateSessionProvider(_session.id, nextValue).catchError((e) {
-            debugPrint('[provider] updateSessionProvider failed: $e');
-            if (!mounted) return;
-            setState(() {
-              _overrideProviderId = previous;
-              _session = _session.copyWith(
-                providerId: previous,
-                clearProviderId: previous == null,
-              );
-            });
-            _syncSessionSummaryCache();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(context.l10n.providerOverrideFailed),
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          }),
-        );
-      },
-      itemBuilder: (context) => [
-        if (_providers.isNotEmpty)
-          PopupMenuItem(
-            value: autoProviderId,
-            child: Row(
-              children: [
-                if (isAutoProviderId(_overrideProviderId))
-                  Icon(
-                    Icons.check_rounded,
-                    size: 18,
-                    color: theme.colorScheme.tertiary,
+  Widget _buildReasoningSettingsRow() {
+    return _buildComposerSettingsSectionTile(
+      key: const Key('session-reasoning-effort-button'),
+      label: 'Reasoning',
+      section: _ComposerSettingsPanelSection.reasoning,
+    );
+  }
+
+  String _composerSettingsSummaryLabel() {
+    final labels = <String>[];
+    if (_overrideProviderId != null && !isAutoProviderId(_overrideProviderId)) {
+      final providerName = _providers
+          .where((p) => p.id == _overrideProviderId)
+          .firstOrNull
+          ?.name;
+      if (providerName != null && providerName.isNotEmpty) {
+        labels.add(providerName);
+      }
+    }
+    if (_overrideReasoningEffort != null) {
+      labels.add(_reasoningEffortLabel(_overrideReasoningEffort!));
+    }
+    if (labels.isEmpty) {
+      return 'Settings';
+    }
+    return labels.join(' • ');
+  }
+
+  Widget _buildComposerSettingsSectionTile({
+    required Key key,
+    required String label,
+    required _ComposerSettingsPanelSection section,
+  }) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final selected = _composerSettingsPanelSection == section;
+    Widget child = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: key,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+        onTap: () {
+          setState(() {
+            _composerSettingsPanelSection =
+                _composerSettingsPanelSection == section ? null : section;
+          });
+        },
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.panelFor(brightness).withValues(
+                    alpha: brightness == Brightness.dark ? 0.62 : 0.78,
                   )
-                else
-                  const SizedBox(width: 18),
-                const SizedBox(width: 8),
-                Text(l10n.providerAuto),
-              ],
-            ),
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
           ),
-        ..._providers.map(
-          (p) => PopupMenuItem(
-            value: p.id,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.compact,
+              vertical: AppSpacing.compact,
+            ),
             child: Row(
               children: [
-                if (_overrideProviderId == p.id)
-                  Icon(
-                    Icons.check_rounded,
-                    size: 18,
-                    color: theme.colorScheme.tertiary,
-                  )
-                else
-                  const SizedBox(width: 18),
-                const SizedBox(width: 8),
-                Expanded(child: Text(p.name)),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 16,
+                  color: AppColors.mutedFor(brightness),
+                ),
               ],
             ),
           ),
         ),
-        PopupMenuItem(
-          value: _defaultProviderMenuValue,
+      ),
+    );
+    if (!_isMobilePlatform) {
+      child = MouseRegion(
+        onEnter: (_) {
+          setState(() {
+            _composerSettingsPanelSection = section;
+          });
+        },
+        child: child,
+      );
+    }
+    return child;
+  }
+
+  Widget _buildComposerOptionsPanel({required List<Widget> children}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
+  }
+
+  Widget _buildComposerOptionTile({
+    required Key key,
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: key,
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.compact,
+            vertical: AppSpacing.compact,
+          ),
           child: Row(
             children: [
-              if (_overrideProviderId == null)
-                Icon(
-                  Icons.check_rounded,
-                  size: 18,
-                  color: theme.colorScheme.tertiary,
-                )
-              else
-                const SizedBox(width: 18),
-              const SizedBox(width: 8),
-              Text(l10n.providerDefault),
+              Expanded(
+                child: Text(
+                  label,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: selected
+                        ? theme.colorScheme.tertiary
+                        : AppColors.textFor(brightness),
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.compact),
+              SizedBox(
+                width: 18,
+                child: selected
+                    ? Icon(
+                        Icons.check_rounded,
+                        size: 18,
+                        color: theme.colorScheme.tertiary,
+                      )
+                    : null,
+              ),
             ],
           ),
-        ),
-      ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.dns_outlined,
-              size: 20,
-              color: _overrideProviderId != null
-                  ? theme.colorScheme.tertiary
-                  : theme.iconTheme.color,
-            ),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                currentName,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: _overrideProviderId != null
-                      ? theme.colorScheme.tertiary
-                      : theme.textTheme.labelSmall?.color,
-                  fontWeight: _overrideProviderId != null
-                      ? FontWeight.w600
-                      : FontWeight.w400,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 2),
-            Icon(
-              Icons.arrow_drop_down_rounded,
-              size: 18,
-              color: theme.iconTheme.color,
-            ),
-          ],
         ),
       ),
     );
   }
 
-  Widget _buildReasoningEffortSelector() {
-    final theme = Theme.of(context);
-    final l10n = context.l10n;
-    final currentLabel = _overrideReasoningEffort == null
-        ? l10n.reasoningEffortDefault
-        : _reasoningEffortLabel(_overrideReasoningEffort!);
-
-    return PopupMenuButton<Object>(
-      key: const Key('session-reasoning-effort-button'),
-      tooltip: l10n.reasoningEffortOverride,
-      onSelected: (value) {
-        final previous = _overrideReasoningEffort;
-        final nextValue = value == _defaultReasoningEffortMenuValue
-            ? null
-            : value as ReasoningEffort;
+  void _applyProviderOverride(String value) {
+    final previous = _overrideProviderId;
+    final nextValue = value == _defaultProviderMenuValue ? null : value;
+    setState(() {
+      _overrideProviderId = nextValue;
+      _session = _session.copyWith(
+        providerId: nextValue,
+        clearProviderId: nextValue == null,
+      );
+      _composerSettingsPanelSection = null;
+      _composerSettingsOverlayController.hide();
+    });
+    _syncSessionSummaryCache();
+    unawaited(
+      _client.updateSessionProvider(_session.id, nextValue).catchError((e) {
+        debugPrint('[provider] updateSessionProvider failed: $e');
+        if (!mounted) return;
         setState(() {
-          _overrideReasoningEffort = nextValue;
+          _overrideProviderId = previous;
           _session = _session.copyWith(
-            reasoningEffort: nextValue,
-            clearReasoningEffort: nextValue == null,
+            providerId: previous,
+            clearProviderId: previous == null,
           );
         });
         _syncSessionSummaryCache();
-        unawaited(
-          _client
-              .updateSessionDefaults(
-                _session.id,
-                reasoningEffort: nextValue,
-                clearReasoningEffort: nextValue == null,
-              )
-              .catchError((e) {
-                debugPrint('[session] updateSessionDefaults failed: $e');
-                if (!mounted) return;
-                setState(() {
-                  _overrideReasoningEffort = previous;
-                  _session = _session.copyWith(
-                    reasoningEffort: previous,
-                    clearReasoningEffort: previous == null,
-                  );
-                });
-                _syncSessionSummaryCache();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(context.l10n.reasoningEffortOverrideFailed),
-                    duration: const Duration(seconds: 3),
-                  ),
-                );
-              }),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.providerOverrideFailed),
+            duration: const Duration(seconds: 3),
+          ),
         );
-      },
-      itemBuilder: (context) => [
-        PopupMenuItem<Object>(
-          value: _defaultReasoningEffortMenuValue,
-          child: Row(
-            children: [
-              if (_overrideReasoningEffort == null)
-                Icon(
-                  Icons.check_rounded,
-                  size: 18,
-                  color: theme.colorScheme.tertiary,
-                )
-              else
-                const SizedBox(width: 18),
-              const SizedBox(width: 8),
-              Text(l10n.reasoningEffortDefault),
-            ],
+      }),
+    );
+  }
+
+  void _applyReasoningOverride(Object value) {
+    final previous = _overrideReasoningEffort;
+    final nextValue = value == _defaultReasoningEffortMenuValue
+        ? null
+        : value as ReasoningEffort;
+    setState(() {
+      _overrideReasoningEffort = nextValue;
+      _session = _session.copyWith(
+        reasoningEffort: nextValue,
+        clearReasoningEffort: nextValue == null,
+      );
+      _composerSettingsPanelSection = null;
+      _composerSettingsOverlayController.hide();
+    });
+    _syncSessionSummaryCache();
+    unawaited(
+      _client
+          .updateSessionDefaults(
+        _session.id,
+        reasoningEffort: nextValue,
+        clearReasoningEffort: nextValue == null,
+      )
+          .catchError((e) {
+        debugPrint('[session] updateSessionDefaults failed: $e');
+        if (!mounted) return;
+        setState(() {
+          _overrideReasoningEffort = previous;
+          _session = _session.copyWith(
+            reasoningEffort: previous,
+            clearReasoningEffort: previous == null,
+          );
+        });
+        _syncSessionSummaryCache();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.reasoningEffortOverrideFailed),
+            duration: const Duration(seconds: 3),
           ),
-        ),
-        ...selectableReasoningEfforts.map(
-          (effort) => PopupMenuItem<Object>(
-            value: effort,
-            child: Row(
-              children: [
-                if (_overrideReasoningEffort == effort)
-                  Icon(
-                    Icons.check_rounded,
-                    size: 18,
-                    color: theme.colorScheme.tertiary,
-                  )
-                else
-                  const SizedBox(width: 18),
-                const SizedBox(width: 8),
-                Text(_reasoningEffortLabel(effort)),
-              ],
-            ),
-          ),
-        ),
-      ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.psychology_alt_outlined,
-              size: 20,
-              color: _overrideReasoningEffort != null
-                  ? theme.colorScheme.tertiary
-                  : theme.iconTheme.color,
-            ),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                currentLabel,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: _overrideReasoningEffort != null
-                      ? theme.colorScheme.tertiary
-                      : theme.textTheme.labelSmall?.color,
-                  fontWeight: _overrideReasoningEffort != null
-                      ? FontWeight.w600
-                      : FontWeight.w400,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 2),
-            Icon(
-              Icons.arrow_drop_down_rounded,
-              size: 18,
-              color: theme.iconTheme.color,
-            ),
-          ],
-        ),
-      ),
+        );
+      }),
     );
   }
 
@@ -2625,40 +3467,64 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     };
   }
 
-  Widget _buildCallModeAction({required String? unavailableMessage}) {
+  Widget _buildCallModeActionButton({
+    required String? unavailableMessage,
+    required bool closeParentRoute,
+  }) {
     final brightness = Theme.of(context).brightness;
     final onPressed = _callModeEnabled
-        ? () => unawaited(_disableCallMode())
+        ? () {
+            if (closeParentRoute) {
+              _sessionHeaderMenuController.close();
+            }
+            unawaited(_disableCallMode());
+          }
         : unavailableMessage == null
-            ? () => unawaited(_enableCallMode())
+            ? () {
+                if (closeParentRoute) {
+                  _sessionHeaderMenuController.close();
+                }
+                unawaited(_enableCallMode());
+              }
             : null;
 
-    return Padding(
-      padding: const EdgeInsets.only(right: AppSpacing.block),
-      child: _withUnavailableTooltip(
-        message: !_callModeEnabled ? unavailableMessage : null,
-        child: IconButton(
-          key: const Key('session-call-mode-button'),
-          tooltip: unavailableMessage == null
-              ? (_callModeEnabled
-                  ? context.l10n.stopCallMode
-                  : context.l10n.startCallMode)
-              : null,
-          onPressed: onPressed,
-          style: _callModeEnabled
-              ? IconButton.styleFrom(
-                  backgroundColor: AppColors.primaryFor(brightness),
-                  foregroundColor: AppColors.onPrimaryFor(brightness),
-                  side: BorderSide(color: AppColors.primaryFor(brightness)),
-                )
-              : null,
-          icon: Icon(
-            _callModeEnabled
-                ? Icons.phone_in_talk_rounded
-                : Icons.call_outlined,
-          ),
+    return _withUnavailableTooltip(
+      message: !_callModeEnabled ? unavailableMessage : null,
+      child: IconButton(
+        key: const Key('session-call-mode-button'),
+        tooltip: unavailableMessage == null
+            ? (_callModeEnabled
+                ? context.l10n.stopCallMode
+                : context.l10n.startCallMode)
+            : null,
+        onPressed: onPressed,
+        style: _headerIconButtonStyle(
+          active: _callModeEnabled,
+          activeColor: AppColors.primaryFor(brightness),
+        ),
+        icon: Icon(
+          _callModeEnabled ? Icons.phone_in_talk_rounded : Icons.call_outlined,
         ),
       ),
+    );
+  }
+
+  ButtonStyle _headerIconButtonStyle({
+    bool active = false,
+    Color? activeColor,
+  }) {
+    final brightness = Theme.of(context).brightness;
+    final foreground = activeColor ?? AppColors.textFor(brightness);
+    return IconButton.styleFrom(
+      backgroundColor: Colors.transparent,
+      foregroundColor: active ? foreground : AppColors.textFor(brightness),
+      disabledForegroundColor: AppColors.mutedFor(brightness),
+      side: BorderSide.none,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      hoverColor: AppColors.textFor(brightness).withValues(alpha: 0.06),
+      focusColor: AppColors.textFor(brightness).withValues(alpha: 0.08),
     );
   }
 
@@ -2666,7 +3532,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return _client.agentLabelFor(agentId);
   }
 
-  Widget _buildPendingApprovalCard(double maxHeight) {
+  Widget _buildPendingApprovalCard(
+    double maxHeight, {
+    EdgeInsetsGeometry margin = const EdgeInsets.fromLTRB(
+      AppSpacing.block,
+      AppSpacing.block,
+      AppSpacing.block,
+      0,
+    ),
+  }) {
     final approval = _pendingApproval!;
     final summary = approval.reason ?? approval.command ?? approval.kind;
     final isSubmitting = _submittingApproval;
@@ -2676,12 +3550,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(
-        AppSpacing.block,
-        AppSpacing.block,
-        AppSpacing.block,
-        0,
-      ),
+      margin: margin,
       padding: AppSpacing.tilePadding,
       decoration: BoxDecoration(
         color: AppColors.warningSurfaceFor(brightness),
@@ -2746,91 +3615,74 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                       ],
                     ),
                   );
-            final actionHeight = actions == null ? 0.0 : 48.0;
-            final reservedHeight =
-                22.0 + AppSpacing.compact + AppSpacing.stack + actionHeight;
-            final detailsMaxHeight = math.max(
-              0.0,
-              constraints.maxHeight - reservedHeight,
-            );
-
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  context.l10n.agentAwaitingPermission(
-                    _agentLabel(_session.agentId),
-                  ),
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: AppColors.warningTextFor(brightness),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.compact),
-                ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: detailsMaxHeight),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          summary,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            height: 1.4,
-                          ),
-                        ),
-                        if (isAwaitingResolution) ...[
-                          const SizedBox(height: AppSpacing.compact),
-                          Text(
-                            context.l10n.waitingApprovalProcessing,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: AppColors.warningTextFor(brightness),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                        if (approval.command != null) ...[
-                          const SizedBox(height: AppSpacing.compact),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(AppSpacing.tileY),
-                            decoration: BoxDecoration(
-                              color: AppColors.panelDeepFor(brightness),
-                              borderRadius: BorderRadius.circular(
-                                AppSpacing.radiusControl,
-                              ),
-                              border: Border.all(
-                                color: AppColors.warningBorderFor(brightness),
-                              ),
-                            ),
-                            child: SelectableText(
-                              approval.command!,
-                              style: TextStyle(
-                                color: AppColors.warningTextFor(brightness),
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-                        ],
-                        if (!approval.resolvable) ...[
-                          const SizedBox(height: AppSpacing.compact),
-                          Text(
-                            context.l10n.desktopOnlyApproval,
-                            style: TextStyle(
-                              color: AppColors.warningTextFor(brightness),
-                            ),
-                          ),
-                        ],
-                      ],
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.l10n.agentAwaitingPermission(
+                      _agentLabel(_session.agentId),
+                    ),
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: AppColors.warningTextFor(brightness),
                     ),
                   ),
-                ),
-                if (actions != null) ...[
-                  const SizedBox(height: AppSpacing.stack),
-                  actions,
+                  const SizedBox(height: AppSpacing.compact),
+                  Text(
+                    summary,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      height: 1.4,
+                    ),
+                  ),
+                  if (isAwaitingResolution) ...[
+                    const SizedBox(height: AppSpacing.compact),
+                    Text(
+                      context.l10n.waitingApprovalProcessing,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: AppColors.warningTextFor(brightness),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                  if (approval.command != null) ...[
+                    const SizedBox(height: AppSpacing.compact),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(AppSpacing.tileY),
+                      decoration: BoxDecoration(
+                        color: AppColors.panelDeepFor(brightness),
+                        borderRadius: BorderRadius.circular(
+                          AppSpacing.radiusControl,
+                        ),
+                        border: Border.all(
+                          color: AppColors.warningBorderFor(brightness),
+                        ),
+                      ),
+                      child: SelectableText(
+                        approval.command!,
+                        style: TextStyle(
+                          color: AppColors.warningTextFor(brightness),
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (!approval.resolvable) ...[
+                    const SizedBox(height: AppSpacing.compact),
+                    Text(
+                      context.l10n.desktopOnlyApproval,
+                      style: TextStyle(
+                        color: AppColors.warningTextFor(brightness),
+                      ),
+                    ),
+                  ],
+                  if (actions != null) ...[
+                    const SizedBox(height: AppSpacing.stack),
+                    actions,
+                  ],
                 ],
-              ],
+              ),
             );
           },
         ),
@@ -2987,17 +3839,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
             border: Border.all(color: AppColors.outlineFor(brightness)),
           ),
-          child: _expandingHistory
-              ? const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(
-                  Icons.expand_less_rounded,
-                  size: 16,
-                  color: AppColors.mutedSoftFor(brightness),
-                ),
+          child: const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
         ),
       ),
     );
@@ -3070,12 +3916,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         bubble: bubble,
         showActions: canRestoreQueued || canRetry,
         hoverKey: ValueKey('user-message-hover-${message.id}'),
-        onTapBubble:
-            canRestoreQueued || canRetry ? () => _retryLocalMessage(message.id) : null,
+        onTapBubble: canRestoreQueued || canRetry
+            ? () => _retryLocalMessage(message.id)
+            : null,
         onWithdraw:
             canRestoreQueued ? () => _withdrawQueuedMessage(message.id) : null,
-        onEdit:
-            canRestoreQueued ? () => _editQueuedMessage(message.id) : null,
+        onEdit: canRestoreQueued ? () => _editQueuedMessage(message.id) : null,
         onRetry: canRetry ? () => _retryLocalMessage(message.id) : null,
       ),
     );
@@ -3136,7 +3982,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     bool compactBottomSpacing = false,
   }) {
     final displayContent = _displayContentForMessage(message);
-    final imageReferences = extractMessageImageReferences(message.content);
     final isLoadingReply = message.content.trim().isEmpty &&
         _session.status == SessionStatus.running;
     final theme = Theme.of(context);
@@ -3148,9 +3993,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       child: Container(
         key: ValueKey('assistant-message-bubble-${message.id}'),
         margin: EdgeInsets.only(
-          bottom: compactBottomSpacing
-              ? AppSpacing.compact / 2
-              : AppSpacing.stack,
+          bottom:
+              compactBottomSpacing ? AppSpacing.compact / 2 : AppSpacing.stack,
         ),
         padding: AppSpacing.cardPadding,
         constraints: BoxConstraints(maxWidth: maxWidth),
@@ -3181,20 +4025,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 ],
               )
             else ...[
-              _buildMarkdownMessageBody(
-                displayContent,
+              _buildAssistantMessageBody(
+                message,
+                displayContent: displayContent,
                 textColor: AppColors.textFor(brightness),
                 maxWidth: maxWidth,
-                imageReferences: imageReferences,
-                imageAlignment: Alignment.centerLeft,
-                imageWrapAlignment: WrapAlignment.start,
-                imageCardBuilder: (reference, index) =>
-                    _buildAssistantImageCard(
-                  reference,
-                  messageId: message.id,
-                  imageReferences: imageReferences,
-                  imageIndex: index,
-                ),
               ),
               if (isSpeakingThisMessage) ...[
                 const SizedBox(height: AppSpacing.tileY),
@@ -3215,6 +4050,29 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildAssistantMessageBody(
+    ChatMessage message, {
+    required String displayContent,
+    required Color textColor,
+    required double maxWidth,
+  }) {
+    final imageReferences = extractMessageImageReferences(message.content);
+    return _buildMarkdownMessageBody(
+      displayContent,
+      textColor: textColor,
+      maxWidth: maxWidth,
+      imageReferences: imageReferences,
+      imageAlignment: Alignment.centerLeft,
+      imageWrapAlignment: WrapAlignment.start,
+      imageCardBuilder: (reference, index) => _buildAssistantImageCard(
+        reference,
+        messageId: message.id,
+        imageReferences: imageReferences,
+        imageIndex: index,
       ),
     );
   }
@@ -3269,7 +4127,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       ),
       blockquoteDecoration: BoxDecoration(
         border: Border(
-          left: BorderSide(color: textColor.withValues(alpha: 0.28), width: 3),
+          left: BorderSide(
+            color: textColor.withValues(alpha: 0.28),
+            width: 3,
+          ),
         ),
       ),
       blockquotePadding: const EdgeInsets.only(left: AppSpacing.compact),
@@ -3277,7 +4138,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       pPadding: const EdgeInsets.symmetric(vertical: 1),
       horizontalRuleDecoration: BoxDecoration(
         border: Border(
-          top: BorderSide(width: 0.6, color: textColor.withValues(alpha: 0.22)),
+          top: BorderSide(
+            width: 0.6,
+            color: textColor.withValues(alpha: 0.22),
+          ),
         ),
       ),
       codeblockPadding: const EdgeInsets.fromLTRB(
@@ -3314,25 +4178,26 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       );
     }
 
+    final markdown = SelectionArea(
+      child: MarkdownBody(
+        data: content,
+        fitContent: true,
+        selectable: false,
+        shrinkWrap: true,
+        softLineBreak: true,
+        styleSheet: styleSheet,
+        syntaxHighlighter: _AssistantCodeSyntaxHighlighter(theme),
+        sizedImageBuilder: (_) => const SizedBox.shrink(),
+        onTapLink: (text, href, title) => _handleAssistantMarkdownLinkTap(href),
+      ),
+    );
+
     if (shrinkToContent && imageReferences.isNotEmpty) {
       return IntrinsicWidth(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SelectionArea(
-              child: MarkdownBody(
-                data: content,
-                fitContent: true,
-                selectable: false,
-                shrinkWrap: true,
-                softLineBreak: true,
-                styleSheet: styleSheet,
-                syntaxHighlighter: _AssistantCodeSyntaxHighlighter(theme),
-                sizedImageBuilder: (_) => const SizedBox.shrink(),
-                onTapLink: (text, href, title) =>
-                    _handleAssistantMarkdownLinkTap(href),
-              ),
-            ),
+            markdown,
             const SizedBox(height: AppSpacing.compact),
             buildImageReferences(),
           ],
@@ -3343,20 +4208,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SelectionArea(
-          child: MarkdownBody(
-            data: content,
-            fitContent: true,
-            selectable: false,
-            shrinkWrap: true,
-            softLineBreak: true,
-            styleSheet: styleSheet,
-            syntaxHighlighter: _AssistantCodeSyntaxHighlighter(theme),
-            sizedImageBuilder: (_) => const SizedBox.shrink(),
-            onTapLink: (text, href, title) =>
-                _handleAssistantMarkdownLinkTap(href),
-          ),
-        ),
+        markdown,
         if (imageReferences.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.compact),
           buildImageReferences(),
@@ -3422,7 +4274,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required Color actionColor,
   }) {
     final cacheKey = _imageFileCacheKey(messageId, reference);
-    final fileFuture = _imageFileFuture(reference, cacheKey: cacheKey);
 
     Widget buildCard(Widget thumbnail) {
       return Material(
@@ -3461,40 +4312,26 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       );
     }
 
-    if (fileFuture != null) {
-      return FutureBuilder<BridgeFileResponse>(
-        future: fileFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return buildCard(
-              const Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            );
-          }
-          if (snapshot.hasError || !snapshot.hasData) {
-            return const SizedBox.shrink();
-          }
-          return buildCard(
-            _buildMediaThumbnail(
-              reference,
-              snapshot.data,
-              cacheKey: cacheKey,
-            ),
-          );
-        },
-      );
-    }
-
-    return buildCard(
-      _buildMediaThumbnail(
+    return _MessageMediaThumbnail(
+      key: ValueKey('$keyPrefix-media-thumbnail-$cacheKey'),
+      reference: reference,
+      cacheKey: cacheKey,
+      readFile: _readImageFile,
+      loadingBuilder: () => buildCard(
+        const Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      ),
+      cardBuilder: buildCard,
+      buildThumbnail: (reference, file, fileFuture) => _buildMediaThumbnail(
         reference,
-        null,
+        file,
         cacheKey: cacheKey,
+        fileFuture: fileFuture,
       ),
     );
   }
@@ -3521,8 +4358,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
-  void _pruneImageFileFutures() {
-    if (_imageFileFutures.isEmpty) return;
+  void _pruneVideoFileFutures() {
+    if (_videoFileFutures.isEmpty) return;
     final activeKeys = <String>{};
     for (final message in _messages) {
       for (final ref in extractMessageImageReferences(message.content)) {
@@ -3531,24 +4368,18 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         }
       }
     }
-    _imageFileFutures.removeWhere((key, _) => !activeKeys.contains(key));
     _videoFileFutures.removeWhere((key, _) => !activeKeys.contains(key));
   }
 
-  Future<BridgeFileResponse>? _imageFileFuture(
-    MessageImageReference reference, {
-    required String cacheKey,
-  }) {
+  Future<BridgeFileResponse>? _readImageFile(MessageImageReference reference) {
     if (reference.isRemoteUrl || reference.isDataUri) {
       return null;
     }
 
-    return _imageFileFutures.putIfAbsent(cacheKey, () {
-      return _client.readFile(
-        reference.path,
-        sessionId: reference.isAbsoluteLocalPath ? null : _session.id,
-      );
-    });
+    return _client.readFile(
+      reference.path,
+      sessionId: reference.isAbsoluteLocalPath ? null : _session.id,
+    );
   }
 
   String _imageFileCacheKey(String messageId, MessageImageReference reference) {
@@ -3559,9 +4390,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     MessageImageReference reference,
     BridgeFileResponse? file, {
     required String cacheKey,
+    Future<BridgeFileResponse>? fileFuture,
   }) {
     if (reference.isVideo) {
-      return _buildVideoThumbnail(reference, cacheKey: cacheKey);
+      return _buildVideoThumbnail(
+        reference,
+        cacheKey: cacheKey,
+        fileFuture: fileFuture,
+      );
     }
 
     if (reference.isDataUri) {
@@ -3614,6 +4450,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Widget _buildVideoThumbnail(
     MessageImageReference reference, {
     required String cacheKey,
+    Future<BridgeFileResponse>? fileFuture,
   }) {
     if (_supportsInlineVideoThumbnails) {
       return _VideoThumbnail(
@@ -3621,9 +4458,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         reference: reference,
         cacheKey: cacheKey,
         resolveLocalVideoFile: _resolveLocalVideoFile,
-        fileFuture: reference.isRemoteUrl
-            ? null
-            : _imageFileFuture(reference, cacheKey: cacheKey),
+        fileFuture: reference.isRemoteUrl ? null : fileFuture,
         fallback: _buildVideoThumbnailFallback(cacheKey: cacheKey),
       );
     }
@@ -3751,10 +4586,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           final currentCacheKey = messageId == null
               ? cacheKey ?? currentReference.cardKey
               : _imageFileCacheKey(messageId, currentReference);
-          final bridgeFileFuture = _imageFileFuture(
-            currentReference,
-            cacheKey: currentCacheKey,
-          );
+          final bridgeFileFuture = _readImageFile(currentReference);
 
           Widget? buildDataUriImage() {
             final bytes = currentReference.dataBytes;
@@ -4237,8 +5069,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     return _videoFileFutures.putIfAbsent(cacheKey, () async {
-      final fileResponse =
-          bridgeFileFuture ?? _imageFileFuture(reference, cacheKey: cacheKey);
+      final fileResponse = bridgeFileFuture ?? _readImageFile(reference);
       if (fileResponse == null) {
         throw StateError('Missing local video file bytes.');
       }
@@ -4279,12 +5110,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               cacheKey: messageId == null
                   ? cacheKey ?? reference.cardKey
                   : _imageFileCacheKey(messageId, reference),
-              bridgeFileFuture: messageId == null
-                  ? null
-                  : _imageFileFuture(
-                      reference,
-                      cacheKey: _imageFileCacheKey(messageId, reference),
-                    ),
+              bridgeFileFuture:
+                  messageId == null ? null : _readImageFile(reference),
             ))
                 .path,
           );
@@ -4367,22 +5194,42 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_creatingSession) {
       return;
     }
+    final requestToken = ++_messageLoadRequestToken;
+    final sessionId = _session.id;
+    final existingMessageIds = _messages.map((message) => message.id).toSet();
+    final hadExistingMessages = _messages.isNotEmpty;
+    final previousHasMoreOlderMessages = _hasMoreOlderMessages;
+    final previousOlderMessagesCursor = _olderMessagesCursor;
     try {
-      final messages = await _client.listMessages(_session.id);
-      if (!mounted) {
+      final page = await _loadInitialMessagePage(sessionId);
+      final filteredMessages = _messagesForSession(
+        sessionId,
+        page.messages,
+      ).toList(growable: false);
+      if (!mounted ||
+          requestToken != _messageLoadRequestToken ||
+          sessionId != _session.id) {
         return;
       }
       setState(() {
-        _messages
-          ..clear()
-          ..addAll(messages);
-        _pruneImageFileFutures();
-        _resetVisibleTurnWindow();
+        _replaceMessagesFromServer(
+          filteredMessages,
+          existingMessageIds: existingMessageIds,
+        );
+        _applyOlderPaginationState(
+          page: page,
+          hadExistingMessages: hadExistingMessages,
+          previousHasMoreOlderMessages: previousHasMoreOlderMessages,
+          previousOlderMessagesCursor: previousOlderMessagesCursor,
+        );
         _loadingMessages = false;
       });
       _jumpToBottom();
+      _scheduleAutoBackfillHistoryIfNeeded();
     } catch (error) {
-      if (!mounted) {
+      if (!mounted ||
+          requestToken != _messageLoadRequestToken ||
+          sessionId != _session.id) {
         return;
       }
       setState(() {
@@ -4390,6 +5237,234 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _speechError = context.l10n.loadMessagesFailed('$error');
       });
     }
+  }
+
+  Future<MessageListPage> _loadInitialMessagePage(String sessionId) async {
+    var page = await _client.listMessagesPage(
+      sessionId,
+      limit: _messagePageLimit,
+    );
+    final messages = _messagesForSession(
+      sessionId,
+      page.messages,
+    ).toList(growable: true);
+    var hasMore = page.hasMore;
+    var cursor = page.nextCursor;
+    var fetchedPages = 1;
+    var olderHistoryAvailable = hasMore;
+    String? olderCursor = cursor;
+
+    if (_hasRenderableMessages(messages) &&
+        hasMore &&
+        cursor != null &&
+        fetchedPages < 8) {
+      final probeCursor = cursor;
+      final probePage = await _client.listMessagesPage(
+        sessionId,
+        limit: _messagePageLimit,
+        afterId: probeCursor,
+      );
+      final probeMessages = _messagesForSession(sessionId, probePage.messages)
+          .toList(growable: false);
+      fetchedPages += 1;
+      if (_containsNewerMessages(messages, probeMessages)) {
+        olderHistoryAvailable = true;
+        olderCursor = messages.isEmpty ? null : messages.first.id;
+        page = probePage;
+        messages
+          ..clear()
+          ..addAll(probeMessages);
+        hasMore = probePage.hasMore;
+        cursor = probePage.nextCursor;
+
+        while (hasMore && cursor != null && fetchedPages < 8) {
+          final previousCursor = cursor;
+          page = await _client.listMessagesPage(
+            sessionId,
+            limit: _messagePageLimit,
+            afterId: cursor,
+          );
+          final nextMessages = _messagesForSession(sessionId, page.messages)
+              .toList(growable: false);
+          fetchedPages += 1;
+          if (page.messages.isEmpty && page.nextCursor == previousCursor) {
+            break;
+          }
+          olderHistoryAvailable = true;
+          olderCursor = messages.isEmpty ? olderCursor : messages.first.id;
+          messages
+            ..clear()
+            ..addAll(nextMessages);
+          hasMore = page.hasMore;
+          cursor = page.nextCursor;
+        }
+      }
+    }
+
+    while (!_hasRenderableMessages(messages) &&
+        olderHistoryAvailable &&
+        olderCursor != null &&
+        fetchedPages < 8) {
+      final previousCursor = olderCursor;
+      page = await _client.listMessagesPage(
+        sessionId,
+        limit: _messagePageLimit,
+        beforeId: olderCursor,
+      );
+      final olderMessages =
+          _messagesForSession(sessionId, page.messages).toList(growable: false);
+      fetchedPages += 1;
+      messages.insertAll(0, olderMessages);
+      olderHistoryAvailable = page.hasMore;
+      olderCursor = page.nextCursor;
+      if (page.messages.isEmpty && olderCursor == previousCursor) {
+        break;
+      }
+    }
+
+    return MessageListPage(
+      messages: messages,
+      hasMore: olderHistoryAvailable,
+      nextCursor: olderCursor,
+    );
+  }
+
+  bool _containsNewerMessages(
+    List<ChatMessage> currentPage,
+    List<ChatMessage> nextPage,
+  ) {
+    if (currentPage.isEmpty || nextPage.isEmpty) {
+      return false;
+    }
+    final currentNewest = currentPage
+        .map((message) => message.createdAt)
+        .reduce((left, right) => left.isAfter(right) ? left : right);
+    final nextNewest = nextPage
+        .map((message) => message.createdAt)
+        .reduce((left, right) => left.isAfter(right) ? left : right);
+    return nextNewest.isAfter(currentNewest);
+  }
+
+  bool _hasRenderableMessages(Iterable<ChatMessage> messages) {
+    return messages.any((message) => message.role != MessageRole.system);
+  }
+
+  Iterable<ChatMessage> _messagesForSession(
+    String sessionId,
+    Iterable<ChatMessage> messages,
+  ) {
+    return messages.where((message) => message.sessionId == sessionId);
+  }
+
+  void _replaceMessagesFromServer(
+    Iterable<ChatMessage> serverMessages, {
+    required Set<String> existingMessageIds,
+  }) {
+    final serverList = serverMessages.map((serverMessage) {
+      final existingIndex = _messages.indexWhere(
+        (message) => message.id == serverMessage.id,
+      );
+      if (existingIndex < 0) {
+        return serverMessage;
+      }
+      return _preserveStreamingAssistantContent(
+        existing: _messages[existingIndex],
+        incoming: serverMessage,
+      );
+    }).toList(growable: false);
+    final preservedLocalMessages = _messages.where((message) {
+      if (_localMessageStates.containsKey(message.id)) {
+        return true;
+      }
+      return !serverList.any((serverMessage) => serverMessage.id == message.id);
+    }).toList(growable: false);
+    _messages
+      ..clear()
+      ..addAll(_mergeMessages([...serverList, ...preservedLocalMessages]));
+    _pruneVideoFileFutures();
+  }
+
+  void _applyOlderPaginationState({
+    required MessageListPage page,
+    required bool hadExistingMessages,
+    required bool previousHasMoreOlderMessages,
+    required String? previousOlderMessagesCursor,
+  }) {
+    if (hadExistingMessages) {
+      _hasMoreOlderMessages = previousHasMoreOlderMessages;
+      _olderMessagesCursor = previousOlderMessagesCursor;
+      return;
+    }
+    _hasMoreOlderMessages = page.hasMore;
+    _olderMessagesCursor = page.nextCursor;
+  }
+
+  void _prependMessages(Iterable<ChatMessage> incoming) {
+    final currentMessages = List<ChatMessage>.of(_messages);
+    _messages
+      ..clear()
+      ..addAll(_mergeMessages([...incoming, ...currentMessages]));
+    _pruneVideoFileFutures();
+  }
+
+  void _appendOrUpdateMessage(ChatMessage message) {
+    final currentMessages = List<ChatMessage>.of(_messages);
+    _messages
+      ..clear()
+      ..addAll(_mergeMessages([...currentMessages, message]));
+    _pruneVideoFileFutures();
+  }
+
+  List<ChatMessage> _mergeMessages(Iterable<ChatMessage> messages) {
+    final dedupedById = <String, ChatMessage>{};
+    for (final message in messages) {
+      final existing = dedupedById[message.id];
+      if (existing == null || _preferIncomingMessage(existing, message)) {
+        dedupedById[message.id] = message;
+      }
+    }
+    final merged = dedupedById.values.toList(growable: false);
+    merged.sort(_compareMessages);
+    return merged;
+  }
+
+  bool _preferIncomingMessage(ChatMessage existing, ChatMessage incoming) {
+    final createdAtComparison =
+        incoming.createdAt.compareTo(existing.createdAt);
+    if (createdAtComparison != 0) {
+      return createdAtComparison > 0;
+    }
+    if (incoming.content.length != existing.content.length) {
+      return incoming.content.length > existing.content.length;
+    }
+    return incoming.id.compareTo(existing.id) >= 0;
+  }
+
+  int _compareMessages(ChatMessage a, ChatMessage b) {
+    final createdAtComparison = a.createdAt.compareTo(b.createdAt);
+    if (createdAtComparison != 0) {
+      return createdAtComparison;
+    }
+    return a.id.compareTo(b.id);
+  }
+
+  ChatMessage? _firstMatchingMessage(bool Function(ChatMessage message) test) {
+    for (final message in _messages) {
+      if (test(message)) {
+        return message;
+      }
+    }
+    return null;
+  }
+
+  ChatMessage? _lastMatchingMessage(bool Function(ChatMessage message) test) {
+    for (var index = _messages.length - 1; index >= 0; index -= 1) {
+      final message = _messages[index];
+      if (test(message)) {
+        return message;
+      }
+    }
+    return null;
   }
 
   void _subscribeToEvents() {
@@ -4428,20 +5503,28 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     _restoringSession = true;
+    final existingMessageIds = _messages.map((message) => message.id).toSet();
+    final hadExistingMessages = _messages.isNotEmpty;
+    final previousHasMoreOlderMessages = _hasMoreOlderMessages;
+    final previousOlderMessagesCursor = _olderMessagesCursor;
     try {
       _subscribeToEvents();
       final shouldAutoScroll = _isNearBottom();
-      final previousTurnCount = _allTurns.length;
+      final sessionId = _session.id;
 
       final results = await Future.wait<Object?>([
-        _client.listMessages(_session.id),
+        _loadInitialMessagePage(sessionId),
         _client.listProjectSessions(_session.projectId, forceRefresh: true),
       ]);
-      if (!mounted) {
+      if (!mounted || sessionId != _session.id) {
         return;
       }
 
-      final messages = results[0] as List<ChatMessage>;
+      final page = results[0] as MessageListPage;
+      final filteredMessages = _messagesForSession(
+        sessionId,
+        page.messages,
+      ).toList(growable: false);
       final sessions = results[1] as List<SessionSummary>;
       final refreshedSession = sessions
           .where((session) => session.id == _session.id)
@@ -4449,10 +5532,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           .firstWhere((_) => true, orElse: () => null);
 
       setState(() {
-        _messages
-          ..clear()
-          ..addAll(messages);
-        _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
+        _replaceMessagesFromServer(
+          filteredMessages,
+          existingMessageIds: existingMessageIds,
+        );
+        _applyOlderPaginationState(
+          page: page,
+          hadExistingMessages: hadExistingMessages,
+          previousHasMoreOlderMessages: previousHasMoreOlderMessages,
+          previousOlderMessagesCursor: previousOlderMessagesCursor,
+        );
         _loadingMessages = false;
         _pendingApproval = refreshedSession?.pendingApproval;
         if (refreshedSession != null) {
@@ -4517,10 +5606,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         });
         _syncComposerFocusForSessionStatus(status);
         _syncSessionSummaryCache();
-        final latestAssistantMessage = _messages
-            .where((item) => item.role == MessageRole.assistant)
-            .cast<ChatMessage?>()
-            .lastWhere((_) => true, orElse: () => null);
+        final latestAssistantMessage = _lastMatchingMessage(
+          (item) => item.role == MessageRole.assistant,
+        );
         var startedPlayback = false;
         if (latestAssistantMessage != null) {
           startedPlayback = _maybeAutoSpeakAssistantMessage(
@@ -4536,8 +5624,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         break;
       case 'message_created':
         final shouldAutoScroll = _isNearBottom();
-        final previousTurnCount = _allTurns.length;
-        final message = ChatMessage.fromJson(payload);
+        var message = ChatMessage.fromJson(payload);
+        if (message.sessionId != _session.id) {
+          return;
+        }
         setState(() {
           _localMessageStates.remove(message.id);
           if (message.role == MessageRole.system) {
@@ -4552,18 +5642,48 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           }
           final index = _messages.indexWhere((item) => item.id == message.id);
           if (index >= 0) {
-            _messages[index] = message;
+            message = _preserveStreamingAssistantContent(
+              existing: _messages[index],
+              incoming: message,
+              allowChunkAppend: true,
+            );
+            _appendOrUpdateMessage(message);
           } else if (message.role == MessageRole.user) {
             final localIndex = _matchingPendingLocalMessageIndex(message);
             if (localIndex >= 0) {
               final localMessageId = _messages[localIndex].id;
               _localMessageStates.remove(localMessageId);
               _messages[localIndex] = message;
+            } else if (message.id.startsWith('local-')) {
+              final duplicateIndex = _matchingLocalPlaceholderMessageIndex(
+                message,
+              );
+              if (duplicateIndex >= 0) {
+                final duplicateMessageId = _messages[duplicateIndex].id;
+                _localMessageStates.remove(duplicateMessageId);
+                _messages[duplicateIndex] = message;
+              } else {
+                _appendOrUpdateMessage(message);
+              }
             } else {
-              _messages.add(message);
+              _appendOrUpdateMessage(message);
             }
           } else {
-            _messages.add(message);
+            final duplicateIndex = _matchingLocalPlaceholderMessageIndex(
+              message,
+            );
+            if (duplicateIndex >= 0) {
+              final existing = _messages[duplicateIndex];
+              _localMessageStates.remove(existing.id);
+              message = _preserveStreamingAssistantContent(
+                existing: existing,
+                incoming: message,
+                allowChunkAppend: true,
+              );
+              _messages[duplicateIndex] = message;
+            } else {
+              _appendOrUpdateMessage(message);
+            }
           }
           if (message.role != MessageRole.system) {
             _session = _session.copyWith(
@@ -4571,7 +5691,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               lastMessagePreview: message.content,
             );
           }
-          _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
         });
         if (message.role != MessageRole.system) {
           _syncSessionSummaryCache();
@@ -4587,17 +5706,30 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         break;
       case 'message_delta':
         final shouldAutoScroll = _isNearBottom();
-        final previousTurnCount = _allTurns.length;
         final messageId = payload['message_id'] as String;
         final delta = payload['delta'] as String;
         setState(() {
+          _streamingAssistantMessageIds.add(messageId);
           final index = _messages.indexWhere((item) => item.id == messageId);
           if (index >= 0) {
+            final existingContent = _messages[index].content;
+            final nextContent = delta.startsWith(existingContent)
+                ? delta
+                : '$existingContent$delta';
+            if (!delta.startsWith(existingContent) &&
+                delta.isNotEmpty &&
+                !existingContent.contains(delta)) {
+              _recordAssistantMessageChunkAppend(
+                messageId: messageId,
+                existingContent: existingContent,
+                appendedChunk: delta,
+              );
+            }
             _messages[index] = _messages[index].copyWith(
-              content: '${_messages[index].content}$delta',
+              content: nextContent,
             );
           } else {
-            _messages.add(
+            _appendOrUpdateMessage(
               ChatMessage(
                 id: messageId,
                 sessionId: _session.id,
@@ -4607,7 +5739,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               ),
             );
           }
-          _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
         });
         _maybeAutoSpeakAssistantMessage(messageId);
         _maybeNotifyAssistantMessage(messageId);
@@ -4627,12 +5758,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _syncSessionSummaryCache();
         break;
       case 'approval_requested':
+        final requestPayload = payload['request'] is Map<String, dynamic>
+            ? payload['request'] as Map<String, dynamic>
+            : payload;
         final approval = ApprovalRequest.fromJson(
-          payload['request'] as Map<String, dynamic>,
-        );
-        debugPrint(
-          '[approval] requested session=${_session.id} request=${approval.requestId} '
-          'kind=${approval.kind} resolvable=${approval.resolvable}',
+          requestPayload,
         );
         setState(() {
           _pendingApproval = approval;
@@ -4660,11 +5790,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         }
         break;
       case 'approval_resolved':
-        final requestId = payload['request_id'] as String? ?? '';
-        debugPrint(
-          '[approval] resolved session=${_session.id} request=$requestId '
-          'choice=${payload["choice"]}',
-        );
         setState(() {
           _pendingApproval = null;
           _session = _session.copyWith(
@@ -4682,6 +5807,41 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
   }
 
+  ChatMessage _preserveStreamingAssistantContent({
+    required ChatMessage existing,
+    required ChatMessage incoming,
+    bool allowChunkAppend = false,
+  }) {
+    if (existing.role != MessageRole.assistant ||
+        incoming.role != MessageRole.assistant ||
+        existing.id != incoming.id) {
+      return incoming;
+    }
+    if (allowChunkAppend &&
+        existing.content.isNotEmpty &&
+        incoming.content.isNotEmpty &&
+        !incoming.content.startsWith(existing.content) &&
+        !existing.content.contains(incoming.content)) {
+      _streamingAssistantMessageIds.add(existing.id);
+      _recordAssistantMessageChunkAppend(
+        messageId: existing.id,
+        existingContent: existing.content,
+        appendedChunk: incoming.content,
+      );
+      return incoming.copyWith(
+        content: '${existing.content}${incoming.content}',
+      );
+    }
+    if (_streamingAssistantMessageIds.contains(existing.id) &&
+        incoming.content.length <= existing.content.length) {
+      return incoming.copyWith(content: existing.content);
+    }
+    if (incoming.content.length >= existing.content.length) {
+      return incoming;
+    }
+    return incoming.copyWith(content: existing.content);
+  }
+
   Future<void> _submitApproval(String choice) async {
     final approval = _pendingApproval;
     if (approval == null || _submittingApproval) {
@@ -4694,10 +5854,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     });
 
     try {
-      debugPrint(
-        '[approval] submit session=${_session.id} request=${approval.requestId} '
-        'choice=$choice',
-      );
       await _client.submitApproval(_session.id, approval.requestId, choice);
       if (!mounted) {
         return;
@@ -5411,12 +6567,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (!_callModeEnabled && !_ttsReady) {
       return false;
     }
-    final message = _messages
-        .where(
-          (item) => item.id == messageId && item.role == MessageRole.assistant,
-        )
-        .cast<ChatMessage?>()
-        .firstWhere((_) => true, orElse: () => null);
+    final message = _firstMatchingMessage(
+      (item) => item.id == messageId && item.role == MessageRole.assistant,
+    );
     if (message == null) {
       return false;
     }
@@ -5442,12 +6595,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_appInForeground) {
       return;
     }
-    final message = _messages
-        .where(
-          (item) => item.id == messageId && item.role == MessageRole.assistant,
-        )
-        .cast<ChatMessage?>()
-        .firstWhere((_) => true, orElse: () => null);
+    final message = _firstMatchingMessage(
+      (item) => item.id == messageId && item.role == MessageRole.assistant,
+    );
     if (message == null) {
       return;
     }
@@ -5529,9 +6679,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           _session.status == SessionStatus.waiting ||
           _session.status == SessionStatus.awaitingApproval ||
           _pendingApproval != null;
-      final nextComposerNode = hasActiveTurn
-          ? _stopReplyFocusNode
-          : _imagePickerFocusNode;
+      final nextComposerNode =
+          hasActiveTurn ? _stopReplyFocusNode : _imagePickerFocusNode;
       nextComposerNode.requestFocus();
       return KeyEventResult.handled;
     }
@@ -5786,10 +6935,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Future<void> _retryLocalMessage(String messageId) async {
     final draft = _localMessageStates[messageId];
-    final message = _messages
-        .where((item) => item.id == messageId)
-        .cast<ChatMessage?>()
-        .firstWhere((_) => true, orElse: () => null);
+    final message = _firstMatchingMessage((item) => item.id == messageId);
     if (draft == null || message == null) {
       return;
     }
@@ -5821,14 +6967,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   void _queueLocalMessage(String content, {required String inputMode}) {
-    final previousTurnCount = _allTurns.length;
-    final messageId = 'local-${DateTime.now().microsecondsSinceEpoch}';
+    final createdAt = DateTime.now();
+    final messageId = 'local-${createdAt.microsecondsSinceEpoch}';
     final localMessage = ChatMessage(
       id: messageId,
       sessionId: _session.id,
       role: MessageRole.user,
       content: content,
-      createdAt: DateTime.now(),
+      createdAt: createdAt,
     );
     setState(() {
       _speechError = null;
@@ -5840,8 +6986,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _localMessageStates[messageId] = _LocalMessageDraft(
         state: _LocalMessageState.queued,
         inputMode: inputMode,
+        createdAt: createdAt,
+        clientMessageId: messageId,
       );
-      _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
     });
     _jumpToBottom();
     _requestComposerFocusAfterFrame(consumeReturnRequest: false);
@@ -5863,10 +7010,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (entry == null) {
       return;
     }
-    final message = _messages
-        .where((item) => item.id == entry.key)
-        .cast<ChatMessage?>()
-        .firstWhere((_) => true, orElse: () => null);
+    final message = _firstMatchingMessage((item) => item.id == entry.key);
     if (message == null) {
       setState(() {
         _localMessageStates.remove(entry.key);
@@ -5905,7 +7049,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _composerDraftFromVoice = draft.inputMode == 'voice';
       _markNextComposerChangeAsVoice = false;
       _speechError = null;
-      _syncVisibleTurnWindow(previousTotalTurns: _allTurns.length + 1);
     });
     _requestComposerFocusAfterFrame(consumeReturnRequest: false);
   }
@@ -5915,7 +7058,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (index < 0) {
       return;
     }
-    final previousTurnCount = _allTurns.length;
     setState(() {
       final removedMessages = _messages.sublist(index).toList(growable: false);
       _messages.removeRange(index, _messages.length);
@@ -5923,7 +7065,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _localMessageStates.remove(removedMessage.id);
       }
       _speechError = null;
-      _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
     });
     _jumpToBottom();
     _requestComposerFocusAfterFrame(consumeReturnRequest: false);
@@ -5934,15 +7075,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required String inputMode,
     String? localMessageId,
   }) async {
-    final previousTurnCount = _allTurns.length;
+    final createdAt = DateTime.now();
     final messageId =
-        localMessageId ?? 'local-${DateTime.now().microsecondsSinceEpoch}';
+        localMessageId ?? 'local-${createdAt.microsecondsSinceEpoch}';
     final localMessage = ChatMessage(
       id: messageId,
       sessionId: _session.id,
       role: MessageRole.user,
       content: content,
-      createdAt: DateTime.now(),
+      createdAt: createdAt,
     );
     setState(() {
       _speechError = null;
@@ -5961,6 +7102,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _localMessageStates[messageId] = _LocalMessageDraft(
         state: _LocalMessageState.pending,
         inputMode: inputMode,
+        createdAt: createdAt,
+        clientMessageId: messageId,
       );
       _session = _session.copyWith(
         status: SessionStatus.waiting,
@@ -5968,14 +7111,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         lastMessagePreview: localMessage.content,
         clearPendingApproval: true,
       );
-      _syncVisibleTurnWindow(previousTotalTurns: previousTurnCount);
     });
     _jumpToBottom();
     _requestComposerFocusWhileActiveTurnAfterFrame();
     _requestComposerFocusAfterFrame(consumeReturnRequest: false);
 
     try {
-      final previousTurnCountAfterLocalInsert = _allTurns.length;
       final result = await _client.sendMessage(
         _session.id,
         content,
@@ -5983,6 +7124,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         systemPrompt: _messageSystemPrompt(inputMode),
         providerId: _overrideProviderId,
         reasoningEffort: _overrideReasoningEffort,
+        clientMessageId: messageId,
       );
       if (!mounted) {
         return false;
@@ -6031,9 +7173,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           clearPendingApproval: true,
         );
         _callModeInterruptedCurrentReply = false;
-        _syncVisibleTurnWindow(
-          previousTotalTurns: previousTurnCountAfterLocalInsert,
-        );
       });
       _returnFocusToComposerAfterReply = true;
       _syncSessionSummaryCache();
@@ -6055,6 +7194,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _localMessageStates[messageId] = _LocalMessageDraft(
           state: _LocalMessageState.failed,
           inputMode: inputMode,
+          createdAt: localMessage.createdAt,
+          clientMessageId: messageId,
         );
         _speechError = context.l10n.sendFailed('$error');
       });
@@ -6160,13 +7301,60 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return -1;
     }
 
-    return _messages.indexWhere((item) {
+    final matchingEntries = <MapEntry<int, _LocalMessageDraft>>[];
+    for (var index = 0; index < _messages.length; index += 1) {
+      final item = _messages[index];
       final draft = _localMessageStates[item.id];
-      return draft != null &&
-          item.role == MessageRole.user &&
-          item.sessionId == serverMessage.sessionId &&
-          item.content == serverMessage.content;
+      if (draft == null ||
+          draft.state != _LocalMessageState.pending ||
+          item.role != MessageRole.user ||
+          item.sessionId != serverMessage.sessionId ||
+          item.content != serverMessage.content) {
+        continue;
+      }
+      matchingEntries.add(MapEntry(index, draft));
+    }
+    if (matchingEntries.isEmpty) {
+      return -1;
+    }
+    matchingEntries.sort((a, b) {
+      final createdAtComparison =
+          a.value.createdAt.compareTo(b.value.createdAt);
+      if (createdAtComparison != 0) {
+        return createdAtComparison;
+      }
+      return a.key.compareTo(b.key);
     });
+    return matchingEntries.first.key;
+  }
+
+  int _matchingLocalPlaceholderMessageIndex(ChatMessage incoming) {
+    if (incoming.role == MessageRole.system) {
+      return -1;
+    }
+
+    if (incoming.id.startsWith('local-')) {
+      return -1;
+    }
+
+    final normalizedIncomingContent = incoming.content.trim();
+    if (normalizedIncomingContent.isEmpty) {
+      return -1;
+    }
+
+    for (var index = _messages.length - 1; index >= 0; index -= 1) {
+      final existing = _messages[index];
+      if (existing.sessionId != incoming.sessionId ||
+          existing.role != incoming.role ||
+          !existing.id.startsWith('local-')) {
+        continue;
+      }
+      if (existing.content.trim() != normalizedIncomingContent) {
+        continue;
+      }
+      return index;
+    }
+    return -1;
   }
 
   Future<void> _cancelReply() async {
@@ -6405,11 +7593,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       math.min(5000, (pauseMillis / _bridgeRealtimeEndpointRule2Ratio).ceil()),
     );
     final vadMinSilenceMs = math.max(200, math.min(5000, pauseMillis));
-    debugPrint(
-      '[call-mode] bridge realtime config wakeWord=disabled '
-      'endpointTrailingSilenceMs=$endpointTrailingSilenceMs '
-      'vadMinSilenceMs=$vadMinSilenceMs',
-    );
     return BridgeRealtimeAsrConfig(
       sampleRateHz: 16000,
       channels: 1,
@@ -6998,46 +8181,18 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   List<_ConversationTurn> get _allTurns => _buildConversationTurns(_messages);
 
-  List<_ConversationTurn> get _turns {
-    final turns = _allTurns;
-    if (turns.isEmpty) {
-      return turns;
-    }
-    final visibleTurnCount = math.min(_visibleTurnCount, turns.length);
-    if (visibleTurnCount <= 0 || visibleTurnCount >= turns.length) {
-      return turns;
-    }
-    return turns.sublist(turns.length - visibleTurnCount);
-  }
+  List<_ConversationTurn> get _turns => _allTurns;
 
-  bool get _hasHiddenTurns => _visibleTurnCount < _allTurns.length;
+  bool get _canLoadOlderMessages =>
+      _hasMoreOlderMessages && _olderMessagesCursor != null;
 
-  void _resetVisibleTurnWindow() {
-    _visibleTurnCount = math.min(_allTurns.length, _initialVisibleTurnCount);
-  }
-
-  void _syncVisibleTurnWindow({required int previousTotalTurns}) {
-    final totalTurns = _allTurns.length;
-    if (totalTurns == 0) {
-      _visibleTurnCount = 0;
+  Future<void> _loadOlderMessages({required bool preserveViewport}) async {
+    final cursor = _olderMessagesCursor;
+    if (_expandingHistory || !_hasMoreOlderMessages || cursor == null) {
       return;
     }
-
-    if (_visibleTurnCount <= 0) {
-      _visibleTurnCount = math.min(totalTurns, _initialVisibleTurnCount);
-      return;
-    }
-
-    final showingAllTurns =
-        previousTotalTurns > 0 && _visibleTurnCount >= previousTotalTurns;
-    _visibleTurnCount =
-        showingAllTurns ? totalTurns : math.min(_visibleTurnCount, totalTurns);
-  }
-
-  void _expandVisibleHistory({required bool preserveViewport}) {
-    if (_expandingHistory || !_hasHiddenTurns) {
-      return;
-    }
+    final sessionId = _session.id;
+    final existingMessageIds = _messages.map((message) => message.id).toSet();
 
     final previousMaxScrollExtent = _scrollController.hasClients
         ? _scrollController.position.maxScrollExtent
@@ -7047,19 +8202,40 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     setState(() {
       _expandingHistory = true;
-      _visibleTurnCount = math.min(
-        _allTurns.length,
-        _visibleTurnCount + _historyTurnBatchSize,
-      );
     });
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
+    try {
+      final page = await _client.listMessagesPage(
+        sessionId,
+        limit: _messagePageLimit,
+        beforeId: cursor,
+      );
+      final filteredMessages = _messagesForSession(
+        sessionId,
+        page.messages,
+      ).toList(growable: false);
+      if (!mounted || sessionId != _session.id) {
         return;
       }
+      final hasNewMessages = filteredMessages.any(
+        (message) => !existingMessageIds.contains(message.id),
+      );
+      final nextCursor = page.nextCursor;
+      final cursorAdvanced = nextCursor != null && nextCursor != cursor;
+      setState(() {
+        if (filteredMessages.isNotEmpty) {
+          _prependMessages(filteredMessages);
+        }
+        _hasMoreOlderMessages =
+            page.hasMore && hasNewMessages && cursorAdvanced;
+        _olderMessagesCursor = _hasMoreOlderMessages ? nextCursor : null;
+      });
 
-      if (_scrollController.hasClients) {
-        if (preserveViewport) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        if (preserveViewport && _scrollController.hasClients) {
           final position = _scrollController.position;
           final extentDelta =
               position.maxScrollExtent - previousMaxScrollExtent;
@@ -7068,17 +8244,64 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             position.maxScrollExtent,
           );
           _scrollController.jumpTo(target);
-        } else {
-          _jumpToBottom();
         }
-      }
-
+      });
+    } catch (error) {
       if (!mounted) {
         return;
       }
       setState(() {
-        _expandingHistory = false;
+        _speechError = context.l10n.loadMessagesFailed('$error');
       });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _expandingHistory = false;
+        });
+      }
+    }
+  }
+
+  void _expandVisibleHistory({required bool preserveViewport}) {
+    unawaited(_loadOlderMessages(preserveViewport: preserveViewport));
+  }
+
+  void _scheduleAutoBackfillHistoryIfNeeded({int remainingPasses = 6}) {
+    if (_autoBackfillHistoryScheduled || remainingPasses <= 0) {
+      return;
+    }
+    _autoBackfillHistoryScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoBackfillHistoryScheduled = false;
+      if (!mounted ||
+          _loadingMessages ||
+          _creatingSession ||
+          _expandingHistory ||
+          !_canLoadOlderMessages) {
+        return;
+      }
+      if (!_scrollController.hasClients) {
+        _scheduleAutoBackfillHistoryIfNeeded(
+          remainingPasses: remainingPasses - 1,
+        );
+        return;
+      }
+
+      final position = _scrollController.position;
+      if (position.maxScrollExtent > _topHistoryExpandThreshold) {
+        return;
+      }
+
+      unawaited(
+        _loadOlderMessages(preserveViewport: false).then((_) {
+          if (!mounted) {
+            return;
+          }
+          _scheduleAutoBackfillHistoryIfNeeded(
+            remainingPasses: remainingPasses - 1,
+          );
+        }),
+      );
     });
   }
 
@@ -7483,13 +8706,36 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return message.content;
   }
 
+  void _recordAssistantMessageChunkAppend({
+    required String messageId,
+    required String existingContent,
+    required String appendedChunk,
+  }) {}
+
   bool _handleScrollNotification(ScrollNotification notification) {
-    if (_hasHiddenTurns &&
+    final showScrollToBottom =
+        (notification.metrics.maxScrollExtent - notification.metrics.pixels) >
+            _bottomAutoScrollThreshold;
+    if (showScrollToBottom != _showScrollToBottomAction) {
+      setState(() {
+        _showScrollToBottomAction = showScrollToBottom;
+      });
+    }
+    if (_canLoadOlderMessages &&
         !_expandingHistory &&
         notification.metrics.pixels <= _topHistoryExpandThreshold) {
       _expandVisibleHistory(preserveViewport: true);
     }
     return false;
+  }
+
+  void _handleScrollToBottomPressed() {
+    if (_showScrollToBottomAction) {
+      setState(() {
+        _showScrollToBottomAction = false;
+      });
+    }
+    _animateToBottom();
   }
 
   bool _isNearBottom() {
@@ -7520,6 +8766,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     int remainingPasses = 4,
     double? lastMaxScrollExtent,
   }) {
+    if (_showScrollToBottomAction && mounted) {
+      setState(() {
+        _showScrollToBottomAction = false;
+      });
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) {
         return;
@@ -7527,10 +8778,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
       final position = _scrollController.position;
       final target = position.maxScrollExtent;
+      final isOutOfRange = position.pixels < position.minScrollExtent - 0.5 ||
+          position.pixels > position.maxScrollExtent + 0.5;
       final shouldMove = (target - position.pixels).abs() > 0.5;
 
       if (shouldMove) {
-        if (animated) {
+        if (animated && !isOutOfRange) {
           unawaited(
             _scrollController.animateTo(
               target,
@@ -7573,40 +8826,83 @@ class _CallModeRealtimeHint {
 }
 
 class _SessionMessagesSkeleton extends StatelessWidget {
-  const _SessionMessagesSkeleton({super.key});
+  const _SessionMessagesSkeleton({
+    super.key,
+    required this.desktopSidebarBreakpoint,
+    required this.desktopContentMaxWidth,
+  });
+
+  final double desktopSidebarBreakpoint;
+  final double desktopContentMaxWidth;
 
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
       child: ListView(
         padding: AppSpacing.blockPadding,
-        children: const [
-          _MessageBubbleSkeleton(
+        children: [
+          _buildFrame(
+            context,
             alignment: Alignment.centerLeft,
-            width: 236,
-            lineWidths: [188, 144],
+            child: const _MessageBubbleSkeleton(
+              alignment: Alignment.centerLeft,
+              width: 236,
+              lineWidths: [188, 144],
+            ),
           ),
-          SizedBox(height: AppSpacing.stack),
-          _MessageBubbleSkeleton(
+          const SizedBox(height: AppSpacing.stack),
+          _buildFrame(
+            context,
             alignment: Alignment.centerRight,
-            width: 204,
-            lineWidths: [132, 164],
-            emphasized: true,
+            child: const _MessageBubbleSkeleton(
+              alignment: Alignment.centerRight,
+              width: 204,
+              lineWidths: [132, 164],
+              emphasized: true,
+            ),
           ),
-          SizedBox(height: AppSpacing.stack),
-          _MessageBubbleSkeleton(
+          const SizedBox(height: AppSpacing.stack),
+          _buildFrame(
+            context,
             alignment: Alignment.centerLeft,
-            width: 262,
-            lineWidths: [214, 190, 124],
+            child: const _MessageBubbleSkeleton(
+              alignment: Alignment.centerLeft,
+              width: 262,
+              lineWidths: [214, 190, 124],
+            ),
           ),
-          SizedBox(height: AppSpacing.stack),
-          _MessageBubbleSkeleton(
+          const SizedBox(height: AppSpacing.stack),
+          _buildFrame(
+            context,
             alignment: Alignment.centerRight,
-            width: 176,
-            lineWidths: [124, 96],
-            emphasized: true,
+            child: const _MessageBubbleSkeleton(
+              alignment: Alignment.centerRight,
+              width: 176,
+              lineWidths: [124, 96],
+              emphasized: true,
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFrame(
+    BuildContext context, {
+    required Alignment alignment,
+    required Widget child,
+  }) {
+    if (MediaQuery.sizeOf(context).width < desktopSidebarBreakpoint) {
+      return child;
+    }
+    return Center(
+      child: ConstrainedBox(
+        key: const Key('session-chat-skeleton-frame'),
+        constraints: BoxConstraints(maxWidth: desktopContentMaxWidth),
+        child: Align(
+          alignment: alignment,
+          child: child,
+        ),
       ),
     );
   }
@@ -7944,6 +9240,623 @@ class _ListeningWaveBar extends StatelessWidget {
   }
 }
 
+class _MessageMediaThumbnail extends StatefulWidget {
+  const _MessageMediaThumbnail({
+    super.key,
+    required this.reference,
+    required this.cacheKey,
+    required this.readFile,
+    required this.loadingBuilder,
+    required this.cardBuilder,
+    required this.buildThumbnail,
+  });
+
+  final MessageImageReference reference;
+  final String cacheKey;
+  final Future<BridgeFileResponse>? Function(MessageImageReference reference)
+      readFile;
+  final Widget Function() loadingBuilder;
+  final Widget Function(Widget thumbnail) cardBuilder;
+  final Widget Function(
+    MessageImageReference reference,
+    BridgeFileResponse? file,
+    Future<BridgeFileResponse>? fileFuture,
+  ) buildThumbnail;
+
+  @override
+  State<_MessageMediaThumbnail> createState() => _MessageMediaThumbnailState();
+}
+
+class _MessageMediaThumbnailState extends State<_MessageMediaThumbnail> {
+  Future<BridgeFileResponse>? _fileFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _fileFuture = widget.readFile(widget.reference);
+  }
+
+  @override
+  void didUpdateWidget(covariant _MessageMediaThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.reference.cardKey != widget.reference.cardKey) {
+      _fileFuture = widget.readFile(widget.reference);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fileFuture = _fileFuture;
+    if (fileFuture == null) {
+      return widget.cardBuilder(
+        widget.buildThumbnail(widget.reference, null, null),
+      );
+    }
+
+    return FutureBuilder<BridgeFileResponse>(
+      future: fileFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return widget.loadingBuilder();
+        }
+        if (snapshot.hasError || !snapshot.hasData) {
+          return const SizedBox.shrink();
+        }
+        return widget.cardBuilder(
+          widget.buildThumbnail(
+            widget.reference,
+            snapshot.data,
+            fileFuture,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SessionConversationPane extends StatelessWidget {
+  const _SessionConversationPane({
+    required this.creatingSession,
+    required this.loadingMessages,
+    required this.turns,
+    required this.showHistoryLoader,
+    required this.showScrollToBottomAction,
+    required this.scrollController,
+    required this.desktopSidebarBreakpoint,
+    required this.desktopContentMaxWidth,
+    required this.onScrollNotification,
+    required this.onScrollToBottom,
+    required this.historyLoaderBuilder,
+    required this.turnBuilder,
+  });
+
+  final bool creatingSession;
+  final bool loadingMessages;
+  final List<_ConversationTurn> turns;
+  final bool showHistoryLoader;
+  final bool showScrollToBottomAction;
+  final ScrollController scrollController;
+  final double desktopSidebarBreakpoint;
+  final double desktopContentMaxWidth;
+  final bool Function(ScrollNotification) onScrollNotification;
+  final VoidCallback onScrollToBottom;
+  final Widget Function() historyLoaderBuilder;
+  final Widget Function(BuildContext, _ConversationTurn) turnBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    if (creatingSession || loadingMessages) {
+      return _SessionMessagesSkeleton(
+        key: const Key('session-chat-skeleton'),
+        desktopSidebarBreakpoint: desktopSidebarBreakpoint,
+        desktopContentMaxWidth: desktopContentMaxWidth,
+      );
+    }
+    final brightness = Theme.of(context).brightness;
+    return Stack(
+      children: [
+        NotificationListener<ScrollNotification>(
+          onNotification: onScrollNotification,
+          child: ListView.builder(
+            controller: scrollController,
+            padding: AppSpacing.blockPadding,
+            itemCount: turns.length + (showHistoryLoader ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (showHistoryLoader) {
+                if (index == 0) {
+                  return _SessionConversationFrame(
+                    desktopSidebarBreakpoint: desktopSidebarBreakpoint,
+                    desktopContentMaxWidth: desktopContentMaxWidth,
+                    child: historyLoaderBuilder(),
+                  );
+                }
+                index -= 1;
+              }
+              return _SessionConversationFrame(
+                desktopSidebarBreakpoint: desktopSidebarBreakpoint,
+                desktopContentMaxWidth: desktopContentMaxWidth,
+                child: turnBuilder(context, turns[index]),
+              );
+            },
+          ),
+        ),
+        Positioned(
+          right: AppSpacing.block,
+          bottom: AppSpacing.block,
+          child: AnimatedScale(
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOut,
+            scale: showScrollToBottomAction ? 1 : 0.86,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 140),
+              opacity: showScrollToBottomAction ? 1 : 0,
+              child: IgnorePointer(
+                ignoring: !showScrollToBottomAction,
+                child: Material(
+                  color: AppColors.surfaceFor(brightness),
+                  shape: const CircleBorder(),
+                  elevation: 0,
+                  child: IconButton(
+                    key: const Key('session-scroll-to-bottom-button'),
+                    tooltip: 'Scroll to latest',
+                    onPressed: onScrollToBottom,
+                    style: IconButton.styleFrom(
+                      fixedSize: const Size(44, 44),
+                      minimumSize: const Size(44, 44),
+                      foregroundColor: AppColors.textFor(brightness),
+                      side: BorderSide(
+                        color: AppColors.outlineStrongFor(brightness),
+                      ),
+                    ),
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SessionConversationFrame extends StatelessWidget {
+  const _SessionConversationFrame({
+    required this.desktopSidebarBreakpoint,
+    required this.desktopContentMaxWidth,
+    required this.child,
+  });
+
+  final double desktopSidebarBreakpoint;
+  final double desktopContentMaxWidth;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width < desktopSidebarBreakpoint) {
+      return child;
+    }
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: desktopContentMaxWidth),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _DesktopSessionRailCard extends StatelessWidget {
+  const _DesktopSessionRailCard({
+    this.title,
+    required this.child,
+  });
+
+  final String? title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.tileX),
+      decoration: BoxDecoration(
+        color: AppColors.panelFor(brightness).withValues(
+          alpha: brightness == Brightness.dark ? 0.68 : 0.90,
+        ),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
+        border: Border.all(color: AppColors.outlineFor(brightness)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title != null) ...[
+            Text(
+              title!,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+            ),
+            const SizedBox(height: AppSpacing.textStack + 2),
+          ],
+          DefaultTextStyle(
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.mutedFor(brightness),
+                      height: 1.45,
+                    ) ??
+                const TextStyle(),
+            child: child,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopSessionRailInfoRow extends StatelessWidget {
+  const _DesktopSessionRailInfoRow({
+    required this.label,
+    required this.value,
+    this.footnote,
+    this.monospace = false,
+  });
+
+  final String label;
+  final String value;
+  final String? footnote;
+  final bool monospace;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final valueStyle = (monospace
+            ? theme.textTheme.bodySmall?.copyWith(
+                fontFamily: 'monospace',
+              )
+            : theme.textTheme.bodySmall)
+        ?.copyWith(
+      color: AppColors.textFor(brightness),
+      height: 1.4,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: AppColors.mutedSoftFor(brightness),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(value, style: valueStyle),
+        if (footnote != null && footnote != value) ...[
+          const SizedBox(height: 2),
+          Text(
+            footnote!,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: AppColors.mutedFor(brightness),
+              fontFamily: monospace ? 'monospace' : null,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _DesktopSessionRailChip extends StatelessWidget {
+  const _DesktopSessionRailChip({
+    required this.label,
+    required this.icon,
+  });
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.compact,
+        vertical: AppSpacing.textTight,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceFor(brightness),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+        border: Border.all(color: AppColors.outlineFor(brightness)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: AppColors.mutedFor(brightness),
+          ),
+          const SizedBox(width: AppSpacing.micro),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.textFor(brightness),
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopSessionRailBadge extends StatelessWidget {
+  const _DesktopSessionRailBadge({
+    required this.label,
+    required this.color,
+  });
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.compact,
+        vertical: AppSpacing.textTight,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w800,
+            ),
+      ),
+    );
+  }
+}
+
+class _SessionDesktopRail extends StatelessWidget {
+  const _SessionDesktopRail({
+    required this.session,
+    required this.project,
+    required this.gitStatus,
+    required this.gitStatusLabel,
+    required this.pendingApproval,
+    required this.sessionIdCopied,
+    required this.approvalCardMaxHeight,
+    required this.statusLabel,
+    required this.statusSummary,
+    required this.statusColor,
+    required this.providerSummaryLabel,
+    required this.reasoningLabel,
+    required this.updatedAtLabel,
+    required this.projectPathSummaryBuilder,
+    required this.agentLabel,
+    required this.onCopySessionId,
+    required this.approvalCardBuilder,
+  });
+
+  final SessionSummary session;
+  final ProjectSummary? project;
+  final GitStatusDetail? gitStatus;
+  final String? gitStatusLabel;
+  final ApprovalRequest? pendingApproval;
+  final bool sessionIdCopied;
+  final double approvalCardMaxHeight;
+  final String statusLabel;
+  final String statusSummary;
+  final Color statusColor;
+  final String providerSummaryLabel;
+  final String reasoningLabel;
+  final String updatedAtLabel;
+  final String Function(String rootPath) projectPathSummaryBuilder;
+  final String agentLabel;
+  final VoidCallback onCopySessionId;
+  final Widget Function(double maxHeight) approvalCardBuilder;
+
+  String get _copyAgentIdLabel => '复制 $agentLabel ID';
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final l10n = context.l10n;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Session overview',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+        const SizedBox(height: AppSpacing.compact),
+        Text(
+          'Keep status, context, and actions visible without leaving the conversation.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.mutedFor(brightness),
+                height: 1.45,
+              ),
+        ),
+        const SizedBox(height: AppSpacing.stack),
+        _DesktopSessionRailCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      session.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            height: 1.15,
+                          ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.compact),
+                  _DesktopSessionRailBadge(
+                    label: statusLabel,
+                    color: statusColor,
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.compact),
+              _DesktopSessionRailInfoRow(
+                label: 'Updated',
+                value: updatedAtLabel,
+              ),
+              const SizedBox(height: AppSpacing.compact),
+              _DesktopSessionRailInfoRow(
+                label: 'Agent',
+                value: agentLabel,
+              ),
+              const SizedBox(height: AppSpacing.compact),
+              _DesktopSessionRailInfoRow(
+                label: 'Status',
+                value: statusSummary,
+              ),
+              const SizedBox(height: AppSpacing.stack),
+              Wrap(
+                spacing: AppSpacing.micro,
+                runSpacing: AppSpacing.micro,
+                children: [
+                  _DesktopSessionRailChip(
+                    label: providerSummaryLabel,
+                    icon: Icons.hub_outlined,
+                  ),
+                  _DesktopSessionRailChip(
+                    label: reasoningLabel,
+                    icon: Icons.psychology_alt_outlined,
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.stack),
+              if ((session.runtimeSessionRef?.isNotEmpty ?? false))
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: const Key('session-rail-copy-id-button'),
+                    onPressed: onCopySessionId,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.compact,
+                        vertical: AppSpacing.textTight,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    icon: Icon(
+                      sessionIdCopied
+                          ? Icons.check_rounded
+                          : Icons.content_copy_rounded,
+                      size: 16,
+                    ),
+                    label: Text(
+                      sessionIdCopied ? 'Copied' : _copyAgentIdLabel,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.compact),
+        _DesktopSessionRailCard(
+          title: 'Project context',
+          child: project == null
+              ? const Text('Project context is unavailable.')
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _DesktopSessionRailInfoRow(
+                      label: 'Project',
+                      value: project!.name,
+                    ),
+                    const SizedBox(height: AppSpacing.compact),
+                    _DesktopSessionRailInfoRow(
+                      label: 'Path',
+                      value: projectPathSummaryBuilder(project!.rootPath),
+                      footnote: project!.rootPath,
+                      monospace: true,
+                    ),
+                    if (project!.gitBranch?.trim().isNotEmpty == true) ...[
+                      const SizedBox(height: AppSpacing.compact),
+                      _DesktopSessionRailInfoRow(
+                        label: 'Branch',
+                        value: project!.gitBranch!,
+                        monospace: true,
+                      ),
+                    ],
+                  ],
+                ),
+        ),
+        if (gitStatusLabel != null) ...[
+          const SizedBox(height: AppSpacing.compact),
+          _DesktopSessionRailCard(
+            title: 'Git snapshot',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: AppSpacing.micro,
+                  runSpacing: AppSpacing.micro,
+                  children: [
+                    if (gitStatus?.ahead case final ahead? when ahead > 0)
+                      _DesktopSessionRailChip(
+                        label: l10n.gitAhead(ahead),
+                        icon: Icons.north_rounded,
+                      ),
+                    if (gitStatus?.behind case final behind? when behind > 0)
+                      _DesktopSessionRailChip(
+                        label: l10n.gitBehind(behind),
+                        icon: Icons.south_rounded,
+                      ),
+                    _DesktopSessionRailChip(
+                      label: (gitStatus?.changedCount ?? 0) > 0
+                          ? l10n.gitChangedCount(gitStatus!.changedCount!)
+                          : (gitStatus?.dirty ?? false)
+                              ? l10n.gitDirty
+                              : l10n.gitClean,
+                      icon: (gitStatus?.dirty ?? false)
+                          ? Icons.circle_rounded
+                          : Icons.check_circle_outline_rounded,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.stack),
+                _DesktopSessionRailInfoRow(
+                  label: 'Summary',
+                  value: gitStatusLabel!,
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (pendingApproval != null) ...[
+          const SizedBox(height: AppSpacing.compact),
+          Text(
+            'Needs attention',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.compact),
+          approvalCardBuilder(approvalCardMaxHeight),
+        ],
+      ],
+    );
+  }
+}
+
 class _AssistantCodeSyntaxHighlighter extends SyntaxHighlighter {
   _AssistantCodeSyntaxHighlighter(this.theme);
 
@@ -8025,10 +9938,17 @@ class _AssistantCodeSyntaxHighlighter extends SyntaxHighlighter {
 enum _LocalMessageState { queued, pending, failed }
 
 class _LocalMessageDraft {
-  const _LocalMessageDraft({required this.state, required this.inputMode});
+  const _LocalMessageDraft({
+    required this.state,
+    required this.inputMode,
+    required this.createdAt,
+    required this.clientMessageId,
+  });
 
   final _LocalMessageState state;
   final String inputMode;
+  final DateTime createdAt;
+  final String clientMessageId;
 
   String label(BuildContext context) {
     return switch (state) {
@@ -8168,29 +10088,32 @@ class _UserMessageBubbleState extends State<_UserMessageBubble> {
                     onEnter: (_) => _showInlineActions(),
                     onExit: (_) => _scheduleHideInlineActions(),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+                      borderRadius:
+                          BorderRadius.circular(AppSpacing.radiusPill),
                       child: BackdropFilter(
                         filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             color: AppColors.userMessageOnSurfaceFor(brightness)
                                 .withValues(
-                                  alpha:
-                                      brightness == Brightness.dark ? 0.74 : 0.80,
-                                ),
+                              alpha:
+                                  brightness == Brightness.dark ? 0.74 : 0.80,
+                            ),
                             borderRadius: BorderRadius.circular(
                               AppSpacing.radiusPill,
                             ),
                             border: Border.all(
                               color: Colors.white.withValues(
-                                alpha: brightness == Brightness.dark ? 0.16 : 0.58,
+                                alpha:
+                                    brightness == Brightness.dark ? 0.16 : 0.58,
                               ),
                             ),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withValues(
-                                  alpha:
-                                      brightness == Brightness.dark ? 0.12 : 0.05,
+                                  alpha: brightness == Brightness.dark
+                                      ? 0.12
+                                      : 0.05,
                                 ),
                                 blurRadius: 10,
                                 offset: const Offset(0, 4),
@@ -8289,11 +10212,11 @@ class _UserMessageBubbleState extends State<_UserMessageBubble> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Container(
-      width: 1,
-      height: 16,
-      color: AppColors.outlineStrongFor(brightness).withValues(
-        alpha: brightness == Brightness.dark ? 0.28 : 0.18,
-      ),
+        width: 1,
+        height: 16,
+        color: AppColors.outlineStrongFor(brightness).withValues(
+          alpha: brightness == Brightness.dark ? 0.28 : 0.18,
+        ),
       ),
     );
   }

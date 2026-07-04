@@ -304,6 +304,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchProjects => 'Search project name or path';
 
   @override
+  String get noSearchResultsTitle => 'No matches found';
+
+  @override
+  String get noSearchResultsBody =>
+      'Try a different project name, path, session title, or summary.';
+
+  @override
   String get themeSection => 'Theme';
 
   @override

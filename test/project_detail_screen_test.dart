@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -760,6 +761,108 @@ void main() {
 
     expect(find.text('OpenCode'), findsOneWidget);
     expect(find.text('Custom Agent'), findsNothing);
+  });
+
+  testWidgets(
+      'create session dialog shows cached agents before background refresh completes',
+      (tester) async {
+    final refreshResponse = Completer<http.Response>();
+    var agentRequests = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/agents') {
+          agentRequests += 1;
+          if (agentRequests == 1) {
+            return http.Response(
+              jsonEncode({
+                'data': [
+                  _agentJson(
+                    id: 'cached_agent',
+                    label: 'Cached Agent',
+                    aliases: const ['cached_agent'],
+                    compatibleFormats: const ['codex'],
+                    defaultSelected: true,
+                    installed: true,
+                    installedPath: '/usr/local/bin/cached-agent',
+                    installHint: 'manual',
+                  ),
+                ],
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return refreshResponse.future;
+        }
+        if (request.method == 'GET' && request.url.path == '/settings') {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'model_providers': [],
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await client.listAgents();
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () {
+                  showDialog<CreateSessionDialogResult>(
+                    context: context,
+                    builder: (_) => CreateSessionDialog(client: client),
+                  );
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('open'));
+    await tester.pump();
+
+    expect(find.text('Cached Agent'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+
+    refreshResponse.complete(
+      http.Response(
+        jsonEncode({
+          'data': [
+            _agentJson(
+              id: 'updated_agent',
+              label: 'Updated Agent',
+              aliases: const ['updated_agent'],
+              compatibleFormats: const ['codex'],
+              defaultSelected: true,
+              installed: true,
+              installedPath: '/usr/local/bin/updated-agent',
+              installHint: 'manual',
+            ),
+          ],
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(agentRequests, 2);
+    expect(find.text('Updated Agent'), findsOneWidget);
+    expect(find.text('Cached Agent'), findsNothing);
   });
 }
 

@@ -54,12 +54,12 @@ class AppTheme {
       bodyMedium: _textStyle(
         fontSize: 12,
         height: 1.45,
-        color: mutedSoft,
+        color: softText,
       ),
       bodySmall: _textStyle(
         fontSize: 11,
         height: 1.35,
-        color: muted,
+        color: mutedSoft,
       ),
       labelLarge: _textStyle(
         fontSize: 13,

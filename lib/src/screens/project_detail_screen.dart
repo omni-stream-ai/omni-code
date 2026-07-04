@@ -6,12 +6,14 @@ import '../app_routes.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
+import '../responsive/app_responsive_layout.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_back_header.dart';
 import '../widgets/app_card.dart';
+import '../widgets/app_navigation_scaffold.dart';
 import '../widgets/app_skeleton.dart';
 import '../widgets/create_session_dialog.dart';
 import '../widgets/copyable_message.dart';
@@ -30,6 +32,7 @@ class ProjectDetailScreen extends StatefulWidget {
 }
 
 class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
+  static const double _desktopRailWidth = 304;
   static const _pageSize = 7;
   static const _autoRefreshInterval = Duration(seconds: 5);
   static const _progressMinHeight = AppSpacing.textStack + AppSpacing.hairline;
@@ -59,8 +62,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   void initState() {
     super.initState();
     _project = widget.project;
-    _sessions = _client.peekProjectSessions(_project.id);
-    _isLoading = _sessions == null;
     unawaited(_loadSessions());
     _autoRefreshTimer = Timer.periodic(_autoRefreshInterval, (_) {
       if (!mounted || _isRefreshing || _isLoading) {
@@ -87,29 +88,24 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       }
     });
     try {
-      final sessions = await _client.listProjectSessions(
-        _project.id,
-        forceRefresh: forceRefresh,
-      );
+      final results = await Future.wait<Object>([
+        _client.listProjectSessions(_project.id, forceRefresh: true),
+        _client.getProject(_project.id, forceRefresh: true),
+      ]);
       if (!mounted) {
         return;
       }
+      final sessions = results[0] as List<SessionSummary>;
+      final project = results[1] as ProjectSummary;
       setState(() {
         _sessions = sessions;
+        _project = project;
         final availableCount = sessions.length;
         _visibleCount = availableCount == 0
             ? 0
             : availableCount < _pageSize
                 ? availableCount
                 : previousVisibleCount;
-        final activeProject = _client
-            .peekProjects()
-            ?.where((project) => project.id == _project.id)
-            .cast<ProjectSummary?>()
-            .firstWhere((_) => true, orElse: () => null);
-        if (activeProject != null) {
-          _project = activeProject;
-        }
       });
     } catch (error) {
       if (!mounted) {
@@ -198,195 +194,185 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         '${pad(local.hour)}:${pad(local.minute)}';
   }
 
+  int _statusCount(List<SessionSummary> sessions, SessionStatus status) {
+    return sessions.where((session) => session.status == status).length;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final l10n = context.l10n;
     final theme = Theme.of(context);
     final brightness = theme.brightness;
     final sessions = _sessions ?? const <SessionSummary>[];
     final filteredSessions = _filteredSessions(sessions);
     final visibleSessions = _visibleSessions(filteredSessions);
-    return Scaffold(
+    final recentProjects = _client.peekProjects() ?? const <ProjectSummary>[];
+    final recentSessions = _client.peekSessions() ?? const <SessionSummary>[];
+    final desktopSidebarCollapsed =
+        appSettingsController.settings.desktopNavigationCollapsed;
+    return AppNavigationScaffold(
       backgroundColor: AppColors.boardFor(brightness),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return Stack(
-              children: [
-                RefreshIndicator(
-                  onRefresh: _reloadSessions,
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.screenX,
-                      AppSpacing.card,
-                      AppSpacing.screenX,
-                      AppSpacing.block,
-                    ),
-                    child: ConstrainedBox(
-                      constraints:
-                          BoxConstraints(minHeight: constraints.maxHeight),
-                      child: Align(
-                        alignment: Alignment.topCenter,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            maxWidth: AppSpacing.contentMaxWidth,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _buildHeader(context),
-                              const SizedBox(height: AppSpacing.card),
-                              AppCard(
-                                padding: AppSpacing.cardPadding,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _project.name,
-                                      style: theme.textTheme.titleLarge
-                                          ?.copyWith(fontSize: 14),
-                                    ),
-                                    const SizedBox(height: AppSpacing.compact),
-                                    Text(
-                                      _project.rootPath,
-                                      style:
-                                          theme.textTheme.bodySmall?.copyWith(
-                                        fontFamily: AppTheme.bodyFontFamily,
-                                        fontFamilyFallback:
-                                            AppTheme.monoFontFamilyFallback,
-                                        color: AppColors.mutedFor(brightness),
-                                      ),
-                                    ),
-                                    if (_project.gitBranch != null) ...[
-                                      const SizedBox(
-                                          height: AppSpacing.compact),
-                                      _buildGitInfoRow(
-                                        _project.gitBranch!,
-                                        _project.gitStatus,
-                                        brightness,
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: AppSpacing.card),
-                              _buildSearchBar(
-                                context,
-                                controller: _searchController,
-                                focusNode: _searchFocusNode,
-                                hintText: l10n.searchSessions,
-                                onChanged: (value) {
-                                  setState(() {
-                                    _searchQuery = value.trim().toLowerCase();
-                                    _visibleCount = _pageSize;
-                                  });
-                                },
-                                onClear: () {
-                                  _searchController.clear();
-                                  setState(() {
-                                    _searchQuery = '';
-                                    _visibleCount = _pageSize;
-                                  });
-                                },
-                              ),
-                              const SizedBox(height: AppSpacing.tileY),
-                              if (_isLoading)
-                                const Padding(
-                                  padding: EdgeInsets.only(
-                                    top: AppSpacing.compact,
-                                  ),
-                                  child: _ProjectSessionListSkeleton(
-                                    key: Key('project-sessions-skeleton'),
-                                  ),
-                                )
-                              else if (_error != null &&
-                                  (_sessions == null || _sessions!.isEmpty))
-                                _ProjectErrorCard(
-                                  message: l10n.loadSessionsFailed('$_error'),
-                                  onRetry: _reloadSessions,
-                                )
-                              else if (_sessions == null || _sessions!.isEmpty)
-                                _ProjectEmptyCard(
-                                  onCreateSession: _createSession,
-                                )
-                              else if (filteredSessions.isEmpty)
-                                const _ProjectSearchEmptyCard()
-                              else ...[
-                                ...visibleSessions.map(
-                                  (session) => Padding(
-                                    padding: const EdgeInsets.only(
-                                      bottom: AppSpacing.compact,
-                                    ),
-                                    child: _SessionSummaryCard(
-                                      session: session,
-                                      statusLabel: _statusLabel(
-                                        session.status,
-                                      ),
-                                      statusColor: _statusColor(
-                                        session.status,
-                                        brightness,
-                                      ),
-                                      forkSourceLabel:
-                                          _forkSourceLabel(session, sessions),
-                                      updatedAtLabel: _formatSessionUpdatedAt(
-                                        session.updatedAt,
-                                      ),
-                                      onTap: () async {
-                                        await Navigator.of(context).pushNamed(
-                                          AppRoutes.session(
-                                            _project.id,
-                                            session.id,
-                                          ),
-                                          arguments: session,
-                                        );
-                                        if (!mounted) {
-                                          return;
-                                        }
-                                        unawaited(_reloadSessions());
-                                      },
-                                    ),
-                                  ),
-                                ),
-                                if (_shouldShowLoadMore(filteredSessions))
-                                  Padding(
-                                    padding: const EdgeInsets.only(
-                                      top: AppSpacing.micro,
-                                    ),
-                                    child: SizedBox(
-                                      width: double.infinity,
-                                      child: OutlinedButton(
-                                        onPressed: () {
-                                          setState(() {
-                                            _visibleCount += _pageSize;
-                                          });
-                                        },
-                                        child: Text(l10n.loadMoreSessionsLabel),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ],
-                          ),
-                        ),
+      activeRoute: AppRouteKind.project,
+      recentProjects: recentProjects,
+      recentSessions: recentSessions,
+      activeProjectId: _project.id,
+      desktopBreakpoint: AppResponsiveLayout.desktopBreakpoint,
+      desktopSidebarWidth: AppResponsiveLayout.desktopSidebarWidth,
+      desktopSidebarCollapsedWidth:
+          AppResponsiveLayout.desktopSidebarCollapsedWidth,
+      desktopSidebarCollapsed: desktopSidebarCollapsed,
+      onToggleDesktopSidebar: _toggleDesktopSidebarCollapsed,
+      onNavigateHome: () => Navigator.of(context).popUntil(
+        (route) => route.settings.name == AppRoutes.home || route.isFirst,
+      ),
+      onNavigateProjects: () =>
+          Navigator.of(context).pushNamed(AppRoutes.projects),
+      onNavigateSettings: () =>
+          Navigator.of(context).pushNamed(AppRoutes.settings),
+      onOpenProject: (project) {
+        Navigator.of(context).pushNamed(
+          AppRoutes.project(project.id),
+          arguments: project,
+        );
+      },
+      onOpenSession: (session) {
+        debugPrint(
+          '[nav] project rail open session id=${session.id} '
+          'project=${session.projectId} title=${session.title}',
+        );
+        Navigator.of(context).pushNamed(
+          AppRoutes.session(session.projectId, session.id),
+          arguments: session,
+        );
+      },
+      onNewSession: _createSession,
+      bodyBuilder: (context, useDesktop, constraints) {
+        return Stack(
+          children: [
+            RefreshIndicator(
+              onRefresh: _reloadSessions,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.screenX,
+                  AppSpacing.card,
+                  AppSpacing.screenX,
+                  AppSpacing.block,
+                ),
+                child: useDesktop
+                    ? _buildDesktopContent(
+                        context,
+                        constraints: constraints,
+                        sessions: sessions,
+                        filteredSessions: filteredSessions,
+                        visibleSessions: visibleSessions,
+                      )
+                    : _buildMobileContent(
+                        context,
+                        constraints: constraints,
+                        sessions: sessions,
+                        filteredSessions: filteredSessions,
+                        visibleSessions: visibleSessions,
                       ),
-                    ),
+              ),
+            ),
+            if (_isRefreshing)
+              const Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: LinearProgressIndicator(
+                    minHeight: _progressMinHeight,
                   ),
                 ),
-                if (_isRefreshing)
-                  const Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: IgnorePointer(
-                      child: LinearProgressIndicator(
-                        minHeight: _progressMinHeight,
-                      ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _toggleDesktopSidebarCollapsed() async {
+    await toggleDesktopNavigationCollapsed();
+  }
+
+  Widget _buildMobileContent(
+    BuildContext context, {
+    required BoxConstraints constraints,
+    required List<SessionSummary> sessions,
+    required List<SessionSummary> filteredSessions,
+    required List<SessionSummary> visibleSessions,
+  }) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: constraints.maxHeight),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: AppSpacing.contentMaxWidth,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(context),
+              const SizedBox(height: AppSpacing.card),
+              _buildProjectSummaryCard(context),
+              const SizedBox(height: AppSpacing.card),
+              _buildSearchSection(context),
+              const SizedBox(height: AppSpacing.tileY),
+              _buildSessionsSection(
+                context,
+                sessions: sessions,
+                filteredSessions: filteredSessions,
+                visibleSessions: visibleSessions,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopContent(
+    BuildContext context, {
+    required BoxConstraints constraints,
+    required List<SessionSummary> sessions,
+    required List<SessionSummary> filteredSessions,
+    required List<SessionSummary> visibleSessions,
+  }) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: constraints.maxHeight),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1240),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildDesktopHero(context, sessions),
+                    const SizedBox(height: AppSpacing.card),
+                    _buildSearchSection(context),
+                    const SizedBox(height: AppSpacing.card),
+                    _buildSessionsCard(
+                      context,
+                      sessions: sessions,
+                      filteredSessions: filteredSessions,
+                      visibleSessions: visibleSessions,
                     ),
-                  ),
-              ],
-            );
-          },
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.card),
+              SizedBox(
+                width: _desktopRailWidth,
+                child: _buildDesktopRail(context, sessions),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -395,6 +381,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   Widget _buildHeader(BuildContext context) {
     final theme = Theme.of(context);
     final brightness = theme.brightness;
+    final useDesktop =
+        AppResponsiveLayout.isDesktopWidth(MediaQuery.sizeOf(context).width);
     final titleStyle = theme.textTheme.headlineMedium?.copyWith(
       fontSize: 24,
       fontWeight: FontWeight.w800,
@@ -404,6 +392,27 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        if (!useDesktop) ...[
+          Builder(
+            builder: (context) => SizedBox(
+              width: 34,
+              height: 34,
+              child: IconButton(
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.panelDeepFor(brightness),
+                  side: BorderSide.none,
+                  minimumSize: const Size.square(34),
+                  padding: EdgeInsets.zero,
+                  shape: const CircleBorder(),
+                ),
+                onPressed: () => Scaffold.of(context).openDrawer(),
+                tooltip: 'Open navigation',
+                icon: const Icon(Icons.menu_rounded, size: 18),
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.compact),
+        ],
         Expanded(
           child: AppBackHeader(
             title: 'SESSIONS',
@@ -427,21 +436,384 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             icon: const Icon(Icons.add_rounded, size: 18),
           ),
         ),
-        const SizedBox(width: AppSpacing.compact),
-        SizedBox(
-          width: 34,
-          height: 34,
-          child: IconButton(
-            style: IconButton.styleFrom(
-              backgroundColor: AppColors.panelDeepFor(brightness),
-              side: BorderSide.none,
-              minimumSize: const Size.square(34),
-              padding: EdgeInsets.zero,
-              shape: const CircleBorder(),
+      ],
+    );
+  }
+
+  Widget _buildDesktopHero(
+      BuildContext context, List<SessionSummary> sessions) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final activeCount = _statusCount(sessions, SessionStatus.running) +
+        _statusCount(sessions, SessionStatus.waiting) +
+        _statusCount(sessions, SessionStatus.awaitingApproval);
+    return AppCard(
+      padding: AppSpacing.blockPadding,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusHero),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'PROJECT DESK',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        letterSpacing: 0.8,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.mutedSoftFor(brightness),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.compact),
+                    Text(
+                      _project.name,
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontSize: 30,
+                        height: 1.04,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.compact),
+                    Text(
+                      _project.rootPath,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontFamily: AppTheme.bodyFontFamily,
+                        fontFamilyFallback: AppTheme.monoFontFamilyFallback,
+                        color: AppColors.mutedFor(brightness),
+                        height: 1.45,
+                      ),
+                    ),
+                    if (_project.gitBranch != null) ...[
+                      const SizedBox(height: AppSpacing.stack),
+                      _buildGitInfoRow(
+                        _project.gitBranch!,
+                        _project.gitStatus,
+                        brightness,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.block),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  FilledButton.icon(
+                    onPressed: _createSession,
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: Text(context.l10n.newSession),
+                  ),
+                  const SizedBox(height: AppSpacing.compact),
+                  OutlinedButton.icon(
+                    onPressed: _reloadSessions,
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: Text(context.l10n.refreshNativeSessions),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.block),
+          Wrap(
+            spacing: AppSpacing.compact,
+            runSpacing: AppSpacing.compact,
+            children: [
+              _DesktopProjectMetricChip(
+                label: 'All sessions',
+                value: '${sessions.length}',
+              ),
+              _DesktopProjectMetricChip(
+                label: 'In motion',
+                value: '$activeCount',
+              ),
+              _DesktopProjectMetricChip(
+                label: 'Awaiting approval',
+                value:
+                    '${_statusCount(sessions, SessionStatus.awaitingApproval)}',
+              ),
+              _DesktopProjectMetricChip(
+                label: 'Idle',
+                value: '${_statusCount(sessions, SessionStatus.idle)}',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProjectSummaryCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    return AppCard(
+      padding: AppSpacing.cardPadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _project.name,
+            style: theme.textTheme.titleLarge?.copyWith(fontSize: 14),
+          ),
+          const SizedBox(height: AppSpacing.compact),
+          Text(
+            _project.rootPath,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontFamily: AppTheme.bodyFontFamily,
+              fontFamilyFallback: AppTheme.monoFontFamilyFallback,
+              color: AppColors.mutedFor(brightness),
             ),
-            onPressed: _reloadSessions,
-            tooltip: context.l10n.refreshNativeSessions,
-            icon: const Icon(Icons.refresh, size: 17),
+          ),
+          if (_project.gitBranch != null) ...[
+            const SizedBox(height: AppSpacing.compact),
+            _buildGitInfoRow(
+              _project.gitBranch!,
+              _project.gitStatus,
+              brightness,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchSection(BuildContext context) {
+    final l10n = context.l10n;
+    return _buildSearchBar(
+      context,
+      controller: _searchController,
+      focusNode: _searchFocusNode,
+      hintText: l10n.searchSessions,
+      onChanged: (value) {
+        setState(() {
+          _searchQuery = value.trim().toLowerCase();
+          _visibleCount = _pageSize;
+        });
+      },
+      onClear: () {
+        _searchController.clear();
+        setState(() {
+          _searchQuery = '';
+          _visibleCount = _pageSize;
+        });
+      },
+    );
+  }
+
+  Widget _buildSessionsCard(
+    BuildContext context, {
+    required List<SessionSummary> sessions,
+    required List<SessionSummary> filteredSessions,
+    required List<SessionSummary> visibleSessions,
+  }) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    return AppCard(
+      padding: AppSpacing.cardPadding,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusHero),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Recent sessions',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.textTight),
+                    Text(
+                      _searchQuery.isEmpty
+                          ? '${sessions.length} sessions in this project'
+                          : '${filteredSessions.length} matching results',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.mutedFor(brightness),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_searchQuery.isNotEmpty)
+                TextButton(
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() {
+                      _searchQuery = '';
+                      _visibleCount = _pageSize;
+                    });
+                  },
+                  child: const Text('Clear search'),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.card),
+          _buildSessionsSection(
+            context,
+            sessions: sessions,
+            filteredSessions: filteredSessions,
+            visibleSessions: visibleSessions,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSessionsSection(
+    BuildContext context, {
+    required List<SessionSummary> sessions,
+    required List<SessionSummary> filteredSessions,
+    required List<SessionSummary> visibleSessions,
+  }) {
+    final l10n = context.l10n;
+    final brightness = Theme.of(context).brightness;
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.only(top: AppSpacing.compact),
+        child: _ProjectSessionListSkeleton(
+          key: Key('project-sessions-skeleton'),
+        ),
+      );
+    }
+    if (_error != null && (_sessions == null || _sessions!.isEmpty)) {
+      return _ProjectErrorCard(
+        message: l10n.loadSessionsFailed('$_error'),
+        onRetry: _reloadSessions,
+      );
+    }
+    if (_sessions == null || _sessions!.isEmpty) {
+      return _ProjectEmptyCard(
+        onCreateSession: _createSession,
+      );
+    }
+    if (filteredSessions.isEmpty) {
+      return const _ProjectSearchEmptyCard();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ...visibleSessions.map(
+          (session) => Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.compact),
+            child: _SessionSummaryCard(
+              session: session,
+              statusLabel: _statusLabel(session.status),
+              statusColor: _statusColor(session.status, brightness),
+              forkSourceLabel: _forkSourceLabel(session, sessions),
+              updatedAtLabel: _formatSessionUpdatedAt(session.updatedAt),
+              onTap: () async {
+                debugPrint(
+                  '[nav] project list open session id=${session.id} '
+                  'project=${session.projectId} title=${session.title}',
+                );
+                await Navigator.of(context).pushNamed(
+                  AppRoutes.session(_project.id, session.id),
+                  arguments: session,
+                );
+                if (!mounted) {
+                  return;
+                }
+                unawaited(_reloadSessions());
+              },
+            ),
+          ),
+        ),
+        if (_shouldShowLoadMore(filteredSessions))
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.micro),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  setState(() {
+                    _visibleCount += _pageSize;
+                  });
+                },
+                child: Text(l10n.loadMoreSessionsLabel),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopRail(
+      BuildContext context, List<SessionSummary> sessions) {
+    final runningCount = _statusCount(sessions, SessionStatus.running);
+    final waitingCount = _statusCount(sessions, SessionStatus.waiting);
+    final approvalCount =
+        _statusCount(sessions, SessionStatus.awaitingApproval);
+    final failedCount = _statusCount(sessions, SessionStatus.failed);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _DesktopProjectRailCard(
+          title: 'Project context',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _DesktopProjectRailRow(
+                label: 'Root path',
+                value: _project.rootPath,
+                mono: true,
+              ),
+              if (_project.gitBranch != null) ...[
+                const SizedBox(height: AppSpacing.stack),
+                _DesktopProjectRailRow(
+                  label: 'Branch',
+                  value: _project.gitBranch!,
+                ),
+              ],
+              if (_project.gitStatus != null) ...[
+                const SizedBox(height: AppSpacing.stack),
+                _DesktopProjectRailRow(
+                  label: 'Git state',
+                  value: _project.gitStatus == ProjectGitStatus.dirty
+                      ? context.l10n.gitDirty
+                      : context.l10n.gitClean,
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.card),
+        _DesktopProjectRailCard(
+          title: 'Status mix',
+          child: Wrap(
+            spacing: AppSpacing.compact,
+            runSpacing: AppSpacing.compact,
+            children: [
+              _DesktopProjectMetricChip(
+                  label: 'Running', value: '$runningCount'),
+              _DesktopProjectMetricChip(
+                  label: 'Waiting', value: '$waitingCount'),
+              _DesktopProjectMetricChip(
+                label: 'Approvals',
+                value: '$approvalCount',
+              ),
+              _DesktopProjectMetricChip(label: 'Failed', value: '$failedCount'),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.card),
+        _DesktopProjectRailCard(
+          title: 'Notes',
+          child: Text(
+            sessions.isEmpty
+                ? 'No active sessions yet. Start a new one to turn this project into a working desk.'
+                : approvalCount > 0
+                    ? 'There are sessions waiting on approval. Review them before starting parallel work.'
+                    : runningCount > 0 || waitingCount > 0
+                        ? 'This project has active work in motion. Keep recent sessions concise and easy to scan.'
+                        : 'The current session mix is quiet. Use this space to restart stalled threads or begin a focused run.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.5),
           ),
         ),
       ],
@@ -679,6 +1051,121 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       return sessionId;
     }
     return '${sessionId.substring(0, 8)}...';
+  }
+}
+
+class _DesktopProjectMetricChip extends StatelessWidget {
+  const _DesktopProjectMetricChip({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.tileX,
+        vertical: AppSpacing.compact,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.panelDeepFor(brightness),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusCapsule),
+        border: Border.all(color: AppColors.outlineFor(brightness)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.textTight),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.mutedSoftFor(brightness),
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopProjectRailCard extends StatelessWidget {
+  const _DesktopProjectRailCard({
+    required this.title,
+    required this.child,
+  });
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: AppSpacing.cardPadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.stack),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopProjectRailRow extends StatelessWidget {
+  const _DesktopProjectRailRow({
+    required this.label,
+    required this.value,
+    this.mono = false,
+  });
+
+  final String label;
+  final String value;
+  final bool mono;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: AppColors.mutedSoftFor(brightness),
+              ),
+        ),
+        const SizedBox(height: AppSpacing.textTight),
+        Text(
+          value,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                height: 1.45,
+                fontFamily: mono ? AppTheme.bodyFontFamily : null,
+                fontFamilyFallback:
+                    mono ? AppTheme.monoFontFamilyFallback : null,
+              ),
+        ),
+      ],
+    );
   }
 }
 

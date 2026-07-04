@@ -513,6 +513,7 @@ class SessionSummary {
     this.providerId,
     this.reasoningEffort,
     this.forkedFromSessionId,
+    this.runtimeSessionRef,
   });
 
   final String id;
@@ -529,6 +530,7 @@ class SessionSummary {
   final String? providerId;
   final ReasoningEffort? reasoningEffort;
   final String? forkedFromSessionId;
+  final String? runtimeSessionRef;
 
   SessionSummary copyWith({
     String? id,
@@ -550,6 +552,8 @@ class SessionSummary {
     bool clearReasoningEffort = false,
     String? forkedFromSessionId,
     bool clearForkedFromSessionId = false,
+    String? runtimeSessionRef,
+    bool clearRuntimeSessionRef = false,
   }) {
     return SessionSummary(
       id: id ?? this.id,
@@ -572,6 +576,9 @@ class SessionSummary {
       forkedFromSessionId: clearForkedFromSessionId
           ? null
           : forkedFromSessionId ?? this.forkedFromSessionId,
+      runtimeSessionRef: clearRuntimeSessionRef
+          ? null
+          : runtimeSessionRef ?? this.runtimeSessionRef,
     );
   }
 
@@ -591,6 +598,7 @@ class SessionSummary {
       reasoningEffort:
           parseReasoningEffort(json['reasoning_effort'] as String?),
       forkedFromSessionId: json['forked_from_session_id'] as String?,
+      runtimeSessionRef: json['runtime_session_ref'] as String?,
       pendingApproval: json['pending_approval'] == null
           ? null
           : ApprovalRequest.fromJson(

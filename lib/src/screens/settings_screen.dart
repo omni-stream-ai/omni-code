@@ -9,13 +9,18 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
+import '../models.dart';
+import '../responsive/app_responsive_layout.dart';
 import '../services/app_update_service.dart';
+import '../app_routes.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_back_header.dart';
 import '../widgets/app_card.dart';
+import '../widgets/app_navigation_scaffold.dart';
 import '../widgets/copyable_message.dart';
+import '../widgets/new_session_flow.dart';
 import 'model_provider_screen.dart';
 import 'speech_settings_screen.dart';
 import '../../l10n/generated/app_localizations.dart';
@@ -30,6 +35,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  static const double _desktopRailWidth = 296;
   final _bridgeUrlController = TextEditingController();
   final _clientIdController = TextEditingController();
   final _updateManifestUrlController = TextEditingController();
@@ -158,239 +164,154 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
   }
 
+  Future<void> _startNewSession() async {
+    await startNewSessionFlow(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final formValueTextStyle = _formValueTextStyle(context);
-    return Scaffold(
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.screenX,
-                AppSpacing.card,
-                AppSpacing.screenX,
-                AppSpacing.block,
-              ),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      maxWidth: AppSpacing.contentMaxWidth,
+    final recentProjects =
+        bridgeClient.peekProjects() ?? const <ProjectSummary>[];
+    final recentSessions =
+        bridgeClient.peekSessions() ?? const <SessionSummary>[];
+    final desktopSidebarCollapsed =
+        appSettingsController.settings.desktopNavigationCollapsed;
+    return AppNavigationScaffold(
+      activeRoute: AppRouteKind.settings,
+      recentProjects: recentProjects,
+      recentSessions: recentSessions,
+      desktopBreakpoint: AppResponsiveLayout.desktopBreakpoint,
+      desktopSidebarWidth: AppResponsiveLayout.desktopSidebarWidth,
+      desktopSidebarCollapsedWidth:
+          AppResponsiveLayout.desktopSidebarCollapsedWidth,
+      desktopSidebarCollapsed: desktopSidebarCollapsed,
+      onToggleDesktopSidebar: _toggleDesktopSidebarCollapsed,
+      onNavigateHome: () => Navigator.of(context).popUntil(
+        (route) => route.settings.name == AppRoutes.home || route.isFirst,
+      ),
+      onNavigateProjects: () =>
+          Navigator.of(context).pushNamed(AppRoutes.projects),
+      onNavigateSettings: () {},
+      onOpenProject: (project) {
+        Navigator.of(context).pushNamed(
+          AppRoutes.project(project.id),
+          arguments: project,
+        );
+      },
+      onOpenSession: (session) {
+        Navigator.of(context).pushNamed(
+          AppRoutes.session(session.projectId, session.id),
+          arguments: session,
+        );
+      },
+      onNewSession: _startNewSession,
+      bodyBuilder: (context, useDesktop, constraints) {
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.screenX,
+            AppSpacing.card,
+            AppSpacing.screenX,
+            AppSpacing.block,
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: useDesktop
+                  ? _buildDesktopLayout(
+                      context,
+                      l10n,
+                      theme,
+                      formValueTextStyle,
+                    )
+                  : _buildMobileLayout(
+                      context,
+                      l10n,
+                      theme,
+                      formValueTextStyle,
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildHeader(context, l10n),
-                        const SizedBox(height: AppSpacing.fieldGap),
-                        _buildSpeechSection(context, l10n),
-                        const SizedBox(height: AppSpacing.fieldGap),
-                        _buildSectionCard(
-                          context,
-                          title: l10n.aiApprovalSection.toUpperCase(),
-                          children: [
-                            SwitchListTile(
-                              value: _aiApprovalEnabled,
-                              onChanged: (value) {
-                                setState(() {
-                                  _aiApprovalEnabled = value;
-                                });
-                              },
-                              title: Text(l10n.enableAiApproval),
-                              dense: true,
-                              visualDensity: VisualDensity.compact,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            const SizedBox(height: AppSpacing.micro),
-                            TextField(
-                              controller: _aiApprovalBaseUrlController,
-                              style: formValueTextStyle,
-                              decoration: InputDecoration(
-                                labelText: l10n.baseUrl,
-                                hintText: 'https://api.openai.com/v1',
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.compact),
-                            TextField(
-                              controller: _aiApprovalApiKeyController,
-                              obscureText: true,
-                              style: formValueTextStyle,
-                              decoration: InputDecoration(
-                                labelText: l10n.apiKey,
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.fieldGap),
-                            TextField(
-                              controller: _aiApprovalModelController,
-                              style: formValueTextStyle,
-                              decoration: const InputDecoration(
-                                labelText: 'Model',
-                                hintText: 'gpt-4.1-mini',
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.compact),
-                            DropdownButtonFormField<String>(
-                              initialValue: _aiApprovalMaxRisk,
-                              style: formValueTextStyle,
-                              decoration: InputDecoration(
-                                labelText: l10n.aiApprovalMaxRisk,
-                              ),
-                              items: [
-                                DropdownMenuItem(
-                                  value: 'low',
-                                  child: Text(l10n.riskLow),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'medium',
-                                  child: Text(l10n.riskMedium),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'high',
-                                  child: Text(l10n.riskHigh),
-                                ),
-                              ],
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() {
-                                    _aiApprovalMaxRisk = value;
-                                  });
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.fieldGap),
-                        _buildModelProvidersSection(context, l10n),
-                        const SizedBox(height: AppSpacing.fieldGap),
-                        _buildSectionCard(
-                          context,
-                          title: 'REPLY BEHAVIOR',
-                          children: [
-                            SwitchListTile(
-                              value: _autoSpeakReplies,
-                              onChanged: _saving
-                                  ? null
-                                  : (value) => _saveLocalToggle(
-                                        applyLocalState: () {
-                                          _autoSpeakReplies = value;
-                                        },
-                                        buildNextSettings: (settings) =>
-                                            settings.copyWith(
-                                          autoSpeakReplies: value,
-                                        ),
-                                      ),
-                              title: Text(l10n.autoSpeakReplies),
-                              dense: true,
-                              visualDensity: VisualDensity.compact,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            const SizedBox(height: AppSpacing.stackTight),
-                            SwitchListTile(
-                              value: _compressAssistantReplies,
-                              onChanged: _saving
-                                  ? null
-                                  : (value) => _saveLocalToggle(
-                                        applyLocalState: () {
-                                          _compressAssistantReplies = value;
-                                        },
-                                        buildNextSettings: (settings) =>
-                                            settings.copyWith(
-                                          compressAssistantReplies: value,
-                                        ),
-                                      ),
-                              title: Text(l10n.compressReplies),
-                              dense: true,
-                              visualDensity: VisualDensity.compact,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            TextField(
-                              controller:
-                                  _compressAssistantReplyMaxCharsController,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              style: formValueTextStyle,
-                              decoration: InputDecoration(
-                                labelText: l10n.compressReplyMaxChars,
-                                hintText: '50',
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.fieldGap),
-                        _buildSystemSection(context, l10n),
-                        const SizedBox(height: AppSpacing.compact),
-                        _buildSectionCard(
-                          context,
-                          title: l10n.appUpdateSection.toUpperCase(),
-                          children: [
-                            _buildLabeledRow(
-                              context,
-                              label: 'Current version',
-                              value: _currentVersion.isEmpty
-                                  ? '...'
-                                  : 'v$_currentVersion',
-                            ),
-                            const SizedBox(height: AppSpacing.micro),
-                            _buildLabeledRow(
-                              context,
-                              label: 'Update manifest',
-                              value: 'GitHub releases',
-                            ),
-                            TextField(
-                              controller: _updateTargetVersionController,
-                              style: formValueTextStyle,
-                              decoration: InputDecoration(
-                                labelText: l10n.updateTargetVersionLabel,
-                                hintText: '0.2.1',
-                                helperText: l10n.updateTargetVersionHelp,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.micro),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(38),
-                              backgroundColor: AppColors.panelFor(
-                                theme.brightness,
-                              ),
-                              foregroundColor: theme.colorScheme.onSurface,
-                              side: BorderSide(
-                                color: AppColors.outlineFor(theme.brightness),
-                              ),
-                              shape: const StadiumBorder(),
-                            ),
-                            onPressed: kIsWeb
-                                ? _openGithubReleases
-                                : (_saving || _checkingUpdate
-                                    ? null
-                                    : _checkAppUpdate),
-                            child: Text(l10n.checkAppUpdate),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMobileLayout(
+    BuildContext context,
+    AppLocalizations l10n,
+    ThemeData theme,
+    TextStyle formValueTextStyle,
+  ) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(
+        maxWidth: AppSpacing.contentMaxWidth,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildHeader(context, l10n),
+          const SizedBox(height: AppSpacing.fieldGap),
+          _buildSpeechSection(context, l10n),
+          const SizedBox(height: AppSpacing.fieldGap),
+          _buildAiApprovalSection(context, l10n, formValueTextStyle),
+          const SizedBox(height: AppSpacing.fieldGap),
+          _buildModelProvidersSection(context, l10n),
+          const SizedBox(height: AppSpacing.fieldGap),
+          _buildReplyBehaviorSection(context, l10n, formValueTextStyle),
+          const SizedBox(height: AppSpacing.fieldGap),
+          _buildSystemSection(context, l10n),
+          const SizedBox(height: AppSpacing.compact),
+          _buildUpdateSection(context, l10n, theme, formValueTextStyle),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout(
+    BuildContext context,
+    AppLocalizations l10n,
+    ThemeData theme,
+    TextStyle formValueTextStyle,
+  ) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 1240),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildDesktopHero(context, l10n),
+                const SizedBox(height: AppSpacing.card),
+                _buildSettingsDeck(
+                  context,
+                  l10n,
+                  theme,
+                  formValueTextStyle,
                 ),
-              ),
-            );
-          },
-        ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.card),
+          SizedBox(
+            width: _desktopRailWidth,
+            child: _buildDesktopRail(context, l10n),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildHeader(BuildContext context, AppLocalizations l10n) {
     final theme = Theme.of(context);
+    final useDesktop =
+        AppResponsiveLayout.isDesktopWidth(MediaQuery.sizeOf(context).width);
     final titleStyle = theme.textTheme.headlineMedium?.copyWith(
       fontSize: 24,
       fontWeight: FontWeight.w800,
@@ -399,11 +320,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        AppBackHeader(
-          title: l10n.settingsTitle.toUpperCase(),
-          titleStyle: titleStyle,
+        if (!useDesktop) ...[
+          Builder(
+            builder: (context) => Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.compact),
+              child: SizedBox(
+                width: 34,
+                height: 34,
+                child: IconButton(
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.panelDeepFor(theme.brightness),
+                    side: BorderSide.none,
+                    minimumSize: const Size.square(34),
+                    padding: EdgeInsets.zero,
+                    shape: const CircleBorder(),
+                  ),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                  tooltip: 'Open navigation',
+                  icon: const Icon(Icons.menu_rounded, size: 18),
+                ),
+              ),
+            ),
+          ),
+        ],
+        Expanded(
+          child: AppBackHeader(
+            title: l10n.settingsTitle.toUpperCase(),
+            titleStyle: titleStyle,
+          ),
         ),
-        const Spacer(),
         SizedBox(
           width: 72,
           height: 32,
@@ -421,6 +366,99 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             onPressed: _saving ? null : _save,
             child: Text(_saving ? l10n.saving : l10n.save),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _toggleDesktopSidebarCollapsed() {
+    return toggleDesktopNavigationCollapsed();
+  }
+
+  Widget _buildDesktopHero(BuildContext context, AppLocalizations l10n) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    return AppCard(
+      padding: AppSpacing.blockPadding,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusHero),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'SETTINGS DESK',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.mutedSoftFor(brightness),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.compact),
+                Text(
+                  l10n.settingsTitle,
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontSize: 30,
+                    height: 1.04,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.compact),
+                Text(
+                  'Tune voice, approval, providers, and system behavior from one structured workspace.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: AppColors.mutedFor(brightness),
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.block),
+          FilledButton(
+            onPressed: _saving ? null : _save,
+            child: Text(_saving ? l10n.saving : l10n.save),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsDeck(
+    BuildContext context,
+    AppLocalizations l10n,
+    ThemeData theme,
+    TextStyle formValueTextStyle,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildSpeechSection(context, l10n),
+              const SizedBox(height: AppSpacing.fieldGap),
+              _buildModelProvidersSection(context, l10n),
+              const SizedBox(height: AppSpacing.fieldGap),
+              _buildReplyBehaviorSection(context, l10n, formValueTextStyle),
+            ],
+          ),
+        ),
+        const SizedBox(width: AppSpacing.card),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildAiApprovalSection(context, l10n, formValueTextStyle),
+              const SizedBox(height: AppSpacing.fieldGap),
+              _buildSystemSection(context, l10n),
+              const SizedBox(height: AppSpacing.fieldGap),
+              _buildUpdateSection(context, l10n, theme, formValueTextStyle),
+            ],
           ),
         ),
       ],
@@ -629,6 +667,290 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: _regenerateClientId,
               icon: const Icon(Icons.refresh_rounded),
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAiApprovalSection(
+    BuildContext context,
+    AppLocalizations l10n,
+    TextStyle formValueTextStyle,
+  ) {
+    return _buildSectionCard(
+      context,
+      title: l10n.aiApprovalSection.toUpperCase(),
+      children: [
+        SwitchListTile(
+          value: _aiApprovalEnabled,
+          onChanged: (value) {
+            setState(() {
+              _aiApprovalEnabled = value;
+            });
+          },
+          title: Text(l10n.enableAiApproval),
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          contentPadding: EdgeInsets.zero,
+        ),
+        const SizedBox(height: AppSpacing.micro),
+        TextField(
+          controller: _aiApprovalBaseUrlController,
+          style: formValueTextStyle,
+          decoration: InputDecoration(
+            labelText: l10n.baseUrl,
+            hintText: 'https://api.openai.com/v1',
+          ),
+        ),
+        const SizedBox(height: AppSpacing.compact),
+        TextField(
+          controller: _aiApprovalApiKeyController,
+          obscureText: true,
+          style: formValueTextStyle,
+          decoration: InputDecoration(
+            labelText: l10n.apiKey,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.fieldGap),
+        TextField(
+          controller: _aiApprovalModelController,
+          style: formValueTextStyle,
+          decoration: const InputDecoration(
+            labelText: 'Model',
+            hintText: 'gpt-4.1-mini',
+          ),
+        ),
+        const SizedBox(height: AppSpacing.compact),
+        DropdownButtonFormField<String>(
+          initialValue: _aiApprovalMaxRisk,
+          style: formValueTextStyle,
+          decoration: InputDecoration(
+            labelText: l10n.aiApprovalMaxRisk,
+          ),
+          items: [
+            DropdownMenuItem(
+              value: 'low',
+              child: Text(l10n.riskLow),
+            ),
+            DropdownMenuItem(
+              value: 'medium',
+              child: Text(l10n.riskMedium),
+            ),
+            DropdownMenuItem(
+              value: 'high',
+              child: Text(l10n.riskHigh),
+            ),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              setState(() {
+                _aiApprovalMaxRisk = value;
+              });
+            }
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReplyBehaviorSection(
+    BuildContext context,
+    AppLocalizations l10n,
+    TextStyle formValueTextStyle,
+  ) {
+    return _buildSectionCard(
+      context,
+      title: 'REPLY BEHAVIOR',
+      children: [
+        SwitchListTile(
+          value: _autoSpeakReplies,
+          onChanged: _saving
+              ? null
+              : (value) => _saveLocalToggle(
+                    applyLocalState: () {
+                      _autoSpeakReplies = value;
+                    },
+                    buildNextSettings: (settings) => settings.copyWith(
+                      autoSpeakReplies: value,
+                    ),
+                  ),
+          title: Text(l10n.autoSpeakReplies),
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          contentPadding: EdgeInsets.zero,
+        ),
+        const SizedBox(height: AppSpacing.stackTight),
+        SwitchListTile(
+          value: _compressAssistantReplies,
+          onChanged: _saving
+              ? null
+              : (value) => _saveLocalToggle(
+                    applyLocalState: () {
+                      _compressAssistantReplies = value;
+                    },
+                    buildNextSettings: (settings) => settings.copyWith(
+                      compressAssistantReplies: value,
+                    ),
+                  ),
+          title: Text(l10n.compressReplies),
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          contentPadding: EdgeInsets.zero,
+        ),
+        TextField(
+          controller: _compressAssistantReplyMaxCharsController,
+          keyboardType: TextInputType.number,
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+          ],
+          style: formValueTextStyle,
+          decoration: InputDecoration(
+            labelText: l10n.compressReplyMaxChars,
+            hintText: '50',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUpdateSection(
+    BuildContext context,
+    AppLocalizations l10n,
+    ThemeData theme,
+    TextStyle formValueTextStyle,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildSectionCard(
+          context,
+          title: l10n.appUpdateSection.toUpperCase(),
+          children: [
+            _buildLabeledRow(
+              context,
+              label: 'Current version',
+              value: _currentVersion.isEmpty ? '...' : 'v$_currentVersion',
+            ),
+            const SizedBox(height: AppSpacing.micro),
+            _buildLabeledRow(
+              context,
+              label: 'Update manifest',
+              value: 'GitHub releases',
+            ),
+            TextField(
+              controller: _updateTargetVersionController,
+              style: formValueTextStyle,
+              decoration: InputDecoration(
+                labelText: l10n.updateTargetVersionLabel,
+                hintText: '0.2.1',
+                helperText: l10n.updateTargetVersionHelp,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.micro),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(38),
+              backgroundColor: AppColors.panelFor(theme.brightness),
+              foregroundColor: theme.colorScheme.onSurface,
+              side: BorderSide(
+                color: AppColors.outlineFor(theme.brightness),
+              ),
+              shape: const StadiumBorder(),
+            ),
+            onPressed: kIsWeb
+                ? _openGithubReleases
+                : (_saving || _checkingUpdate ? null : _checkAppUpdate),
+            child: Text(l10n.checkAppUpdate),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopRail(BuildContext context, AppLocalizations l10n) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _DesktopSettingsRailCard(
+          title: 'At a glance',
+          child: Wrap(
+            spacing: AppSpacing.compact,
+            runSpacing: AppSpacing.compact,
+            children: [
+              _DesktopSettingsPill(
+                label: 'Language',
+                value: switch (_appLanguage) {
+                  'zh' => 'Chinese',
+                  'en' => 'English',
+                  _ => 'System',
+                },
+              ),
+              _DesktopSettingsPill(
+                label: 'Theme',
+                value: switch (_themeMode) {
+                  AppThemeModeSetting.light => 'Light',
+                  AppThemeModeSetting.dark => 'Dark',
+                  AppThemeModeSetting.system => 'System',
+                },
+              ),
+              _DesktopSettingsPill(
+                label: 'AI approval',
+                value: _aiApprovalEnabled ? 'On' : 'Off',
+              ),
+              _DesktopSettingsPill(
+                label: 'Speech',
+                value: _autoSpeakReplies ? 'Auto' : 'Manual',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.card),
+        _DesktopSettingsRailCard(
+          title: 'Workspace note',
+          child: Text(
+            'Keep fast actions on the left and slower infrastructure settings on the right. This reduces scanning fatigue on wide screens.',
+            style: theme.textTheme.bodySmall?.copyWith(height: 1.5),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.card),
+        _DesktopSettingsRailCard(
+          title: 'Bridge',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _bridgeUrlController.text.trim().isEmpty
+                    ? 'Not configured'
+                    : _bridgeUrlController.text.trim(),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  height: 1.45,
+                  fontFamily: 'monospace',
+                ),
+              ),
+              const SizedBox(height: AppSpacing.stack),
+              Text(
+                'Client ID',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.mutedSoftFor(brightness),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.textTight),
+              Text(
+                _clientIdController.text.trim(),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  height: 1.45,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -978,5 +1300,81 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return '${value.toStringAsFixed(0)} ${units[unitIndex]}';
     }
     return '${value.toStringAsFixed(1)} ${units[unitIndex]}';
+  }
+}
+
+class _DesktopSettingsRailCard extends StatelessWidget {
+  const _DesktopSettingsRailCard({
+    required this.title,
+    required this.child,
+  });
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: AppSpacing.cardPadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.stack),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopSettingsPill extends StatelessWidget {
+  const _DesktopSettingsPill({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.tileX,
+        vertical: AppSpacing.compact,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.panelDeepFor(brightness),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusCapsule),
+        border: Border.all(color: AppColors.outlineFor(brightness)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.textTight),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.mutedSoftFor(brightness),
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ],
+      ),
+    );
   }
 }
