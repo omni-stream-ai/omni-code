@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -72,7 +73,7 @@ class SessionDetailScreen extends StatefulWidget {
   State<SessionDetailScreen> createState() => _SessionDetailScreenState();
 }
 
-enum _ComposerSettingsPanelSection { provider, reasoning }
+enum _ComposerSettingsPanelSection { provider, reasoning, model }
 
 class _SessionDetailScreenState extends State<SessionDetailScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
@@ -97,7 +98,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       '__session_default_provider__';
   static const String _defaultReasoningEffortMenuValue =
       '__session_default_reasoning_effort__';
+  static const String _defaultModelMenuValue = '__session_default_model__';
   final _controller = TextEditingController();
+  final _modelCustomController = TextEditingController();
   final _messageInputFocusNode = FocusNode(
     debugLabel: 'session-message-input-focus',
   );
@@ -223,7 +226,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   String? _dismissedErrorBannerMessage;
   String? _overrideProviderId;
   ReasoningEffort? _overrideReasoningEffort;
+  String? _overrideModel;
   List<ModelProviderConfig> _providers = const [];
+  List<String> _fetchedModels = const [];
   GitStatusDetail? _gitStatus;
   final MenuController _sessionHeaderMenuController = MenuController();
   _ComposerSettingsPanelSection? _composerSettingsPanelSection;
@@ -598,6 +603,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _voiceComposerMode = appSettingsController.settings.voiceComposerMode;
     _overrideProviderId = _session.providerId;
     _overrideReasoningEffort = _session.reasoningEffort;
+    _overrideModel = _session.model;
     _pendingApproval = _session.pendingApproval;
     _creatingSession = widget.sessionInitializer != null;
     _scrollController.addListener(_handleMessageScrollChanged);
@@ -685,6 +691,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _session = nextSession;
       _overrideProviderId = nextSession.providerId;
       _overrideReasoningEffort = nextSession.reasoningEffort;
+      _overrideModel = nextSession.model;
       _pendingApproval = nextSession.pendingApproval;
       _reconcileSubmittedApprovalState();
       if (sessionChanged) {
@@ -1276,6 +1283,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _session = detail.session;
         _overrideProviderId = detail.session.providerId;
         _overrideReasoningEffort = detail.session.reasoningEffort;
+        _overrideModel = detail.session.model;
         _pendingApproval = detail.session.pendingApproval;
         _gitStatus = detail.gitStatus;
         _reconcileSubmittedApprovalState();
@@ -2600,6 +2608,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                       if (_providers.isNotEmpty ||
                           isAutoProviderId(_overrideProviderId))
                         const SizedBox(height: AppSpacing.compact),
+                      _buildModelSettingsRow(),
+                      const SizedBox(height: AppSpacing.compact),
                       _buildReasoningSettingsRow(),
                     ],
                   ),
@@ -2667,6 +2677,51 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               label: _reasoningEffortLabel(effort),
               selected: _overrideReasoningEffort == effort,
               onTap: () => _applyReasoningOverride(effort),
+            ),
+          ),
+        ],
+      _ComposerSettingsPanelSection.model => <Widget>[
+          _buildComposerOptionTile(
+            key: const Key('session-model-option-default'),
+            label: l10n.modelDefault,
+            selected: _overrideModel == null,
+            onTap: () => _applyModelOverride(_defaultModelMenuValue),
+          ),
+          ..._modelOptionsForCurrentProvider.map(
+            (model) => _buildComposerOptionTile(
+              key: Key('session-model-option-$model'),
+              label: model,
+              selected: _overrideModel == model,
+              onTap: () => _applyModelOverride(model),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.compact,
+              AppSpacing.stack,
+              AppSpacing.compact,
+              AppSpacing.stack,
+            ),
+            child: TextField(
+              key: const Key('session-model-custom-input'),
+              controller: _modelCustomController,
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Custom model',
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.compact,
+                  vertical: AppSpacing.compact,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+                ),
+              ),
+              onSubmitted: (value) {
+                if (value.trim().isNotEmpty) {
+                  _applyModelOverride(value.trim());
+                }
+              },
+              textInputAction: TextInputAction.done,
             ),
           ),
         ],
@@ -3276,6 +3331,81 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
+  Widget _buildModelSettingsRow() {
+    return _buildComposerSettingsSectionTile(
+      key: const Key('session-model-button'),
+      label: 'Model',
+      section: _ComposerSettingsPanelSection.model,
+      onSectionOpened:
+          _composerSettingsPanelSection != _ComposerSettingsPanelSection.model
+              ? _fetchModelsFromProviderApi
+              : null,
+    );
+  }
+
+  Future<void> _fetchModelsFromProviderApi() async {
+    final providerId = _overrideProviderId;
+    if (providerId == null || isAutoProviderId(providerId)) {
+      return;
+    }
+    final provider = _providers.where((p) => p.id == providerId).firstOrNull;
+    if (provider == null) return;
+
+    final baseUrl = provider.baseUrl;
+    final modelsUrl =
+        baseUrl.endsWith('/') ? '${baseUrl}models' : '$baseUrl/models';
+    final apiKey = provider.apiKey;
+    try {
+      final response = await http.get(
+        Uri.parse(modelsUrl),
+        headers: {
+          if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final models = data['data'] as List<dynamic>?;
+        if (models != null) {
+          final modelIds = models
+              .map((m) => (m as Map<String, dynamic>)['id'] as String?)
+              .where((m) => m != null)
+              .cast<String>()
+              .toList()
+            ..sort();
+          if (modelIds.isNotEmpty && mounted) {
+            setState(() {
+              _fetchedModels = modelIds;
+            });
+          }
+        }
+      }
+    } catch (_) {
+      // Silently ignore — fall back to configured models
+    }
+  }
+
+  List<String> get _modelOptionsForCurrentProvider {
+    final models = <String>{};
+    if (_fetchedModels.isNotEmpty) {
+      models.addAll(_fetchedModels);
+    }
+    if (_overrideProviderId != null && !isAutoProviderId(_overrideProviderId)) {
+      final provider =
+          _providers.where((p) => p.id == _overrideProviderId).firstOrNull;
+      if (provider?.model != null && provider!.model!.isNotEmpty) {
+        models.add(provider.model!);
+      }
+    } else {
+      for (final p in _providers) {
+        if (p.model != null && p.model!.isNotEmpty) {
+          models.add(p.model!);
+        }
+      }
+    }
+    return models.toList()..sort();
+  }
+
   String _composerSettingsSummaryLabel() {
     final labels = <String>[];
     if (_overrideProviderId != null && !isAutoProviderId(_overrideProviderId)) {
@@ -3286,6 +3416,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       if (providerName != null && providerName.isNotEmpty) {
         labels.add(providerName);
       }
+    }
+    if (_overrideModel != null) {
+      labels.add(_overrideModel!);
     }
     if (_overrideReasoningEffort != null) {
       labels.add(_reasoningEffortLabel(_overrideReasoningEffort!));
@@ -3300,6 +3433,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required Key key,
     required String label,
     required _ComposerSettingsPanelSection section,
+    VoidCallback? onSectionOpened,
   }) {
     final theme = Theme.of(context);
     final brightness = theme.brightness;
@@ -3311,8 +3445,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
         onTap: () {
           setState(() {
+            final opening = _composerSettingsPanelSection != section;
             _composerSettingsPanelSection =
                 _composerSettingsPanelSection == section ? null : section;
+            if (opening && onSectionOpened != null) {
+              onSectionOpened();
+            }
           });
         },
         child: DecoratedBox(
@@ -3354,7 +3492,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       child = MouseRegion(
         onEnter: (_) {
           setState(() {
+            final wasDifferent = _composerSettingsPanelSection != section;
             _composerSettingsPanelSection = section;
+            if (wasDifferent && onSectionOpened != null) {
+              onSectionOpened();
+            }
           });
         },
         child: child,
@@ -3492,6 +3634,47 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(context.l10n.reasoningEffortOverrideFailed),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }),
+    );
+  }
+
+  void _applyModelOverride(Object value) {
+    final previous = _overrideModel;
+    final nextValue = value == _defaultModelMenuValue ? null : value as String?;
+    setState(() {
+      _overrideModel = nextValue;
+      _session = _session.copyWith(
+        model: nextValue,
+        clearModel: nextValue == null,
+      );
+      _composerSettingsPanelSection = null;
+      _composerSettingsOverlayController.hide();
+    });
+    _syncSessionSummaryCache();
+    unawaited(
+      _client
+          .updateSessionDefaults(
+        _session.id,
+        model: nextValue,
+        clearModel: nextValue == null,
+      )
+          .catchError((e) {
+        debugPrint('[session] updateSessionDefaults failed: $e');
+        if (!mounted) return;
+        setState(() {
+          _overrideModel = previous;
+          _session = _session.copyWith(
+            model: previous,
+            clearModel: previous == null,
+          );
+        });
+        _syncSessionSummaryCache();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.modelOverrideFailed),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -8810,7 +8993,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - _topHistoryExpandThreshold) {
+        _scrollController.position.maxScrollExtent -
+            _topHistoryExpandThreshold) {
       _expandVisibleHistory();
     }
   }

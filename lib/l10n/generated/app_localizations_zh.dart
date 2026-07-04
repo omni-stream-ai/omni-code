@@ -1435,6 +1435,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reasoningEffortOverrideFailed => '思考强度保存失败';
 
   @override
+  String get modelDefault => '默认';
+
+  @override
+  String get modelSessionLabel => '模型';
+
+  @override
+  String get modelOverrideFailed => '模型选择保存失败';
+
+  @override
   String get confirm => '确认';
 
   @override

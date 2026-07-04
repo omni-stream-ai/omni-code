@@ -2678,6 +2678,24 @@ abstract class AppLocalizations {
   /// **'Failed to save reasoning effort'**
   String get reasoningEffortOverrideFailed;
 
+  /// No description provided for @modelDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get modelDefault;
+
+  /// No description provided for @modelSessionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Model'**
+  String get modelSessionLabel;
+
+  /// No description provided for @modelOverrideFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to save model selection'**
+  String get modelOverrideFailed;
+
   /// No description provided for @confirm.
   ///
   /// In en, this message translates to:
