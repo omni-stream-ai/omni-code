@@ -220,6 +220,12 @@ class BridgeClient {
   }
 
   Future<List<SessionSummary>> listSessions({bool forceRefresh = false}) async {
+    if (!forceRefresh) {
+      final cache = _sessionsCache;
+      if (cache != null && cache.isFresh) {
+        return cache.value;
+      }
+    }
     final response = await _httpClient.get(
       Uri.parse('$baseUrl/sessions'),
       headers: _defaultHeaders,
@@ -286,9 +292,11 @@ class BridgeClient {
   }
 
   Future<List<ProjectSummary>> listProjects({bool forceRefresh = false}) async {
-    final cache = _projectsCache;
-    if (!forceRefresh && cache != null) {
-      return cache.value;
+    if (!forceRefresh) {
+      final cache = _projectsCache;
+      if (cache != null && cache.isFresh) {
+        return cache.value;
+      }
     }
     final response = await _httpClient.get(
       Uri.parse('$baseUrl/projects'),
@@ -380,8 +388,22 @@ class BridgeClient {
   }
 
   Future<List<ChatMessage>> listMessages(String sessionId) async {
-    final page = await listMessagesPage(sessionId);
-    return page.messages;
+    const limit = 100;
+    final all = <ChatMessage>[];
+    String? cursor;
+    bool hasMore = true;
+    while (hasMore) {
+      final page = await listMessagesPage(
+        sessionId,
+        limit: limit,
+        afterId: cursor,
+      );
+      all.addAll(page.messages);
+      hasMore = page.hasMore;
+      cursor = page.nextCursor;
+      if (!hasMore || cursor == null) break;
+    }
+    return all;
   }
 
   Future<BridgeFileResponse> readFile(
@@ -458,6 +480,12 @@ class BridgeClient {
     String projectId, {
     bool forceRefresh = false,
   }) async {
+    if (!forceRefresh) {
+      final cache = _projectSessionsCache[projectId];
+      if (cache != null && cache.isFresh) {
+        return cache.value;
+      }
+    }
     final response = await _httpClient.get(
       Uri.parse('$baseUrl/projects/$projectId/sessions'),
       headers: _defaultHeaders,
@@ -1249,10 +1277,7 @@ class BridgeClient {
   }
 
   static String _readSseFieldValue(String value) {
-    if (value.startsWith(' ')) {
-      return value.substring(1);
-    }
-    return value;
+    return value.trimLeft();
   }
 
   void _upsertProject(ProjectSummary project) {
@@ -1537,9 +1562,14 @@ class BridgeClient {
 }
 
 class _CacheEntry<T> {
-  _CacheEntry(this.value);
+  _CacheEntry(this.value) : _createdAt = DateTime.now();
 
   final T value;
+  final DateTime _createdAt;
+
+  static const _ttl = Duration(seconds: 15);
+
+  bool get isFresh => DateTime.now().difference(_createdAt) < _ttl;
 }
 
 final bridgeClient = BridgeClient();

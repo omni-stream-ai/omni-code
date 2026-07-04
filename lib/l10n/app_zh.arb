@@ -712,6 +712,16 @@
   "modelDefault": "默认",
   "modelSessionLabel": "模型",
   "modelOverrideFailed": "模型选择保存失败",
+  "copySessionId": "复制 {agent} ID",
+  "@copySessionId": {
+    "placeholders": {
+      "agent": {}
+    }
+  },
+  "desktopSessionOverview": "会话概览",
+  "desktopSessionOverviewSubtitle": "保持状态、上下文和操作可见，无需离开对话。",
+  "desktopSessionUpdated": "更新",
+  "desktopSessionStatus": "状态",
   "confirm": "确认",
   "fieldRequired": "此项为必填",
   "gitClean": "干净",
