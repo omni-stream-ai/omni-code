@@ -48,6 +48,13 @@ void main() {
 
   testWidgets('project detail refresh keeps expanded sessions visible',
       (tester) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
     var requestCount = 0;
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
@@ -67,6 +74,24 @@ void main() {
                     updatedAt: '2026-05-05T${10 + i}:00:00.000',
                     preview: 'Preview $i',
                   ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'project-1',
+                  'name': 'Project One',
+                  'root_path': '/tmp/project-1',
+                  'updated_at': '2026-05-05T11:00:00.000',
+                  'session_count': 8,
+                  'last_session_preview': 'Preview 8',
+                },
               ],
             }),
             200,
@@ -97,8 +122,8 @@ void main() {
     )!;
     final loadMore = find.text(l10n.loadMoreSessionsLabel);
 
-    expect(find.text('Session 8'), findsOneWidget);
-    expect(find.text('Session 2'), findsOneWidget);
+    expect(find.text('Session 8'), findsWidgets);
+    expect(find.text('Session 2'), findsWidgets);
     expect(find.text('Session 1'), findsNothing);
     expect(loadMore, findsOneWidget);
 
@@ -106,20 +131,96 @@ void main() {
     await tester.tap(loadMore);
     await tester.pumpAndSettle();
 
-    expect(find.text('Session 2'), findsOneWidget);
-    expect(find.text('Session 1'), findsOneWidget);
+    expect(find.text('Session 2'), findsWidgets);
+    expect(find.text('Session 1'), findsWidgets);
     expect(find.text(l10n.loadMoreSessionsLabel), findsNothing);
 
-    await tester.drag(find.byType(SingleChildScrollView), const Offset(0, 800));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.refresh));
+    final refreshButton = find.text(l10n.refreshNativeSessions);
+    await tester.ensureVisible(refreshButton);
+    await tester.tap(refreshButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(requestCount, 2);
-    expect(find.text('Refreshed Session 2'), findsOneWidget);
-    expect(find.text('Refreshed Session 1'), findsOneWidget);
+    expect(find.text('Refreshed Session 2'), findsWidgets);
+    expect(find.text('Refreshed Session 1'), findsWidgets);
     expect(find.text(l10n.loadMoreSessionsLabel), findsNothing);
+  });
+
+  testWidgets('project detail updates sidebar collapse immediately',
+      (tester) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/projects/project-1/sessions') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _sessionJson(
+                  id: 'session-1',
+                  projectId: 'project-1',
+                  title: 'Session 1',
+                  updatedAt: '2026-05-05T11:00:00.000',
+                  preview: 'Preview 1',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'project-1',
+                  'name': 'Project One',
+                  'root_path': '/tmp/project-1',
+                  'updated_at': '2026-05-05T11:00:00.000',
+                  'session_count': 1,
+                  'last_session_preview': 'Preview 1',
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: ProjectDetailScreen(
+          client: client,
+          project: _project(
+            id: 'project-1',
+            name: 'Project One',
+            updatedAt: DateTime(2026, 5, 5, 11),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.byTooltip('Collapse navigation'), findsOneWidget);
+    expect(appSettingsController.settings.desktopNavigationCollapsed, isFalse);
+
+    await tester.tap(find.byTooltip('Collapse navigation'));
+    await tester.pump();
+
+    expect(appSettingsController.settings.desktopNavigationCollapsed, isTrue);
+    expect(find.byTooltip('Expand navigation'), findsOneWidget);
   });
 
   testWidgets('create session dialog includes provider selection',

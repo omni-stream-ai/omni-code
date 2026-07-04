@@ -90,6 +90,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     seconds: 4,
   );
   static const int _messagePageLimit = 6;
+  static final RegExp _assistantSectionDividerPattern = RegExp(
+    r'\n\s*\n[ \t]*---[ \t]*\n\s*\n|\n[ \t]*---[ \t]*\n',
+  );
   static const String _defaultProviderMenuValue =
       '__session_default_provider__';
   static const String _defaultReasoningEffortMenuValue =
@@ -211,8 +214,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _sessionIdCopied = false;
   bool _cancellingReply = false;
   bool _showScrollToBottomAction = false;
+  bool? _pendingShowScrollToBottomAction;
   bool _hasMoreOlderMessages = false;
   bool _autoBackfillHistoryScheduled = false;
+  final Map<String, GlobalKey> _turnKeys = <String, GlobalKey>{};
+  final Map<String, GlobalKey> _messageAnchorKeys = <String, GlobalKey>{};
   String? _olderMessagesCursor;
   String? _dismissedErrorBannerMessage;
   String? _overrideProviderId;
@@ -594,6 +600,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _overrideReasoningEffort = _session.reasoningEffort;
     _pendingApproval = _session.pendingApproval;
     _creatingSession = widget.sessionInitializer != null;
+    _scrollController.addListener(_handleMessageScrollChanged);
     _controller.addListener(_handleComposerTextChanged);
     _messageInputFocusNode.addListener(_handleComposerFocusChanged);
     _imagePickerFocusNode.addListener(_handleComposerFocusChanged);
@@ -644,6 +651,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _sendButtonFocusNode.removeListener(_handleComposerFocusChanged);
     _stopReplyFocusNode.removeListener(_handleComposerFocusChanged);
     _voiceInputButtonFocusNode.removeListener(_handleComposerFocusChanged);
+    _scrollController.removeListener(_handleMessageScrollChanged);
     _controller.dispose();
     _messageInputFocusNode.dispose();
     _imagePickerFocusNode.dispose();
@@ -1496,6 +1504,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Future<void> _toggleDesktopSidebarCollapsed() async {
     await toggleDesktopNavigationCollapsed();
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
   }
 
   Widget _buildSessionHeaderMoreButton() {
@@ -1786,6 +1798,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required List<_ConversationTurn> turns,
     required bool showHistoryLoader,
   }) {
+    _pruneViewportAnchorKeys(turns);
     return _SessionConversationPane(
       creatingSession: _creatingSession,
       loadingMessages: _loadingMessages,
@@ -1799,6 +1812,35 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       onScrollToBottom: _handleScrollToBottomPressed,
       historyLoaderBuilder: _buildHistoryLoader,
       turnBuilder: _buildTurn,
+      turnKeyBuilder: _turnKeyFor,
+    );
+  }
+
+  GlobalKey _turnKeyFor(_ConversationTurn turn) {
+    return _turnKeys.putIfAbsent(
+      turn.id,
+      () => GlobalKey(debugLabel: 'session-turn-${turn.id}'),
+    );
+  }
+
+  GlobalKey _messageAnchorKeyFor(ChatMessage message) {
+    return _messageAnchorKeys.putIfAbsent(
+      message.id,
+      () => GlobalKey(debugLabel: 'session-message-${message.id}'),
+    );
+  }
+
+  void _pruneViewportAnchorKeys(List<_ConversationTurn> turns) {
+    final visibleTurnIds = turns.map((turn) => turn.id).toSet();
+    _turnKeys.removeWhere((id, _) => !visibleTurnIds.contains(id));
+    final visibleMessageIds = <String>{
+      for (final turn in turns) ...[
+        if (turn.userMessage != null) turn.userMessage!.id,
+        for (final message in turn.assistantMessages) message.id,
+      ],
+    };
+    _messageAnchorKeys.removeWhere(
+      (id, _) => !visibleMessageIds.contains(id),
     );
   }
 
@@ -3867,47 +3909,50 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final brightness = Theme.of(context).brightness;
     final bubbleTextColor = AppColors.userMessageOnSurfaceFor(brightness);
     final imageReferences = extractMessageImageReferences(message.content);
-    final bubble = Container(
-      key: ValueKey('user-message-bubble-${message.id}'),
-      margin: const EdgeInsets.only(bottom: AppSpacing.stack),
-      padding: AppSpacing.cardPadding,
-      constraints: BoxConstraints(maxWidth: maxWidth),
-      decoration: BoxDecoration(
-        color: AppColors.userMessageSurfaceFor(brightness),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildMarkdownMessageBody(
-            message.content,
-            textColor: bubbleTextColor,
-            maxWidth: maxWidth,
-            shrinkToContent: imageReferences.isNotEmpty,
-            imageReferences: imageReferences,
-            imageAlignment: Alignment.centerRight,
-            imageWrapAlignment: WrapAlignment.end,
-            imageCardBuilder: (reference, index) => _buildUserImageCard(
-              reference,
-              messageId: message.id,
-              imageReferences: imageReferences,
-              imageIndex: index,
+    final bubble = KeyedSubtree(
+      key: _messageAnchorKeyFor(message),
+      child: Container(
+        key: ValueKey('user-message-bubble-${message.id}'),
+        margin: const EdgeInsets.only(bottom: AppSpacing.stack),
+        padding: AppSpacing.cardPadding,
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        decoration: BoxDecoration(
+          color: AppColors.userMessageSurfaceFor(brightness),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildMarkdownMessageBody(
+              message.content,
               textColor: bubbleTextColor,
-            ),
-          ),
-          if (localState != null) ...[
-            const SizedBox(height: AppSpacing.compact),
-            Text(
-              localState.label(context),
-              style: TextStyle(
-                fontSize: 11,
-                color: localState.state == _LocalMessageState.failed
-                    ? AppColors.errorTextFor(brightness)
-                    : bubbleTextColor.withValues(alpha: 0.78),
+              maxWidth: maxWidth,
+              shrinkToContent: imageReferences.isNotEmpty,
+              imageReferences: imageReferences,
+              imageAlignment: Alignment.centerRight,
+              imageWrapAlignment: WrapAlignment.end,
+              imageCardBuilder: (reference, index) => _buildUserImageCard(
+                reference,
+                messageId: message.id,
+                imageReferences: imageReferences,
+                imageIndex: index,
+                textColor: bubbleTextColor,
               ),
             ),
+            if (localState != null) ...[
+              const SizedBox(height: AppSpacing.compact),
+              Text(
+                localState.label(context),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: localState.state == _LocalMessageState.failed
+                      ? AppColors.errorTextFor(brightness)
+                      : bubbleTextColor.withValues(alpha: 0.78),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
     return Align(
@@ -3990,65 +4035,69 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _isSpeaking && _speakingMessageId == message.id;
     return Align(
       alignment: Alignment.centerLeft,
-      child: Container(
-        key: ValueKey('assistant-message-bubble-${message.id}'),
-        margin: EdgeInsets.only(
-          bottom:
-              compactBottomSpacing ? AppSpacing.compact / 2 : AppSpacing.stack,
-        ),
-        padding: AppSpacing.cardPadding,
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (isLoadingReply)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  const SizedBox(width: AppSpacing.tileY),
-                  Text(
-                    context.l10n.working,
-                    style: TextStyle(
-                      height: 1.45,
-                      color: AppColors.mutedSoftFor(brightness),
+      child: KeyedSubtree(
+        key: _messageAnchorKeyFor(message),
+        child: Container(
+          key: ValueKey('assistant-message-bubble-${message.id}'),
+          margin: EdgeInsets.only(
+            bottom: compactBottomSpacing
+                ? AppSpacing.compact / 2
+                : AppSpacing.stack,
+          ),
+          padding: AppSpacing.cardPadding,
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (isLoadingReply)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
+                    const SizedBox(width: AppSpacing.tileY),
+                    Text(
+                      context.l10n.working,
+                      style: TextStyle(
+                        height: 1.45,
+                        color: AppColors.mutedSoftFor(brightness),
+                      ),
+                    ),
+                  ],
+                )
+              else ...[
+                _buildAssistantMessageBody(
+                  message,
+                  displayContent: displayContent,
+                  textColor: AppColors.textFor(brightness),
+                  maxWidth: maxWidth,
+                ),
+                if (isSpeakingThisMessage) ...[
+                  const SizedBox(height: AppSpacing.tileY),
+                  OutlinedButton(
+                    onPressed: _stopSpeaking,
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                        color: AppColors.outlineStrongFor(brightness),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.tileX,
+                        vertical: AppSpacing.tileY,
+                      ),
+                    ),
+                    child: Text(context.l10n.stopPlayback),
                   ),
                 ],
-              )
-            else ...[
-              _buildAssistantMessageBody(
-                message,
-                displayContent: displayContent,
-                textColor: AppColors.textFor(brightness),
-                maxWidth: maxWidth,
-              ),
-              if (isSpeakingThisMessage) ...[
-                const SizedBox(height: AppSpacing.tileY),
-                OutlinedButton(
-                  onPressed: _stopSpeaking,
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(
-                      color: AppColors.outlineStrongFor(brightness),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.tileX,
-                      vertical: AppSpacing.tileY,
-                    ),
-                  ),
-                  child: Text(context.l10n.stopPlayback),
-                ),
               ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -4178,19 +4227,56 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       );
     }
 
-    final markdown = SelectionArea(
-      child: MarkdownBody(
-        data: content,
-        fitContent: true,
-        selectable: false,
-        shrinkWrap: true,
-        softLineBreak: true,
-        styleSheet: styleSheet,
-        syntaxHighlighter: _AssistantCodeSyntaxHighlighter(theme),
-        sizedImageBuilder: (_) => const SizedBox.shrink(),
-        onTapLink: (text, href, title) => _handleAssistantMarkdownLinkTap(href),
-      ),
-    );
+    Widget buildMarkdownSection(String sectionContent) {
+      return SelectionArea(
+        child: MarkdownBody(
+          data: sectionContent,
+          fitContent: true,
+          selectable: false,
+          shrinkWrap: true,
+          softLineBreak: true,
+          styleSheet: styleSheet,
+          syntaxHighlighter: _AssistantCodeSyntaxHighlighter(theme),
+          sizedImageBuilder: (_) => const SizedBox.shrink(),
+          onTapLink: (text, href, title) =>
+              _handleAssistantMarkdownLinkTap(href),
+        ),
+      );
+    }
+
+    final markdownSections = _assistantSectionDividerPattern.hasMatch(content)
+        ? content.split(_assistantSectionDividerPattern)
+        : <String>[content];
+    final markdown = markdownSections.length == 1
+        ? buildMarkdownSection(content)
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var index = 0;
+                  index < markdownSections.length;
+                  index += 1) ...[
+                buildMarkdownSection(markdownSections[index]),
+                if (index < markdownSections.length - 1)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.compact / 2,
+                    ),
+                    child: DecoratedBox(
+                      key: const ValueKey('markdown-horizontal-rule'),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          top: BorderSide(
+                            width: 0.6,
+                            color: textColor.withValues(alpha: 0.22),
+                          ),
+                        ),
+                      ),
+                      child: const SizedBox(height: 1),
+                    ),
+                  ),
+              ],
+            ],
+          );
 
     if (shrinkToContent && imageReferences.isNotEmpty) {
       return IntrinsicWidth(
@@ -5832,14 +5918,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         content: '${existing.content}${incoming.content}',
       );
     }
-    if (_streamingAssistantMessageIds.contains(existing.id) &&
-        incoming.content.length <= existing.content.length) {
+    if (incoming.content.isEmpty && existing.content.isNotEmpty) {
       return incoming.copyWith(content: existing.content);
     }
-    if (incoming.content.length >= existing.content.length) {
-      return incoming;
-    }
-    return incoming.copyWith(content: existing.content);
+    return incoming;
   }
 
   Future<void> _submitApproval(String choice) async {
@@ -8194,11 +8276,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final sessionId = _session.id;
     final existingMessageIds = _messages.map((message) => message.id).toSet();
 
-    final previousMaxScrollExtent = _scrollController.hasClients
+    var previousMaxScrollExtent = _scrollController.hasClients
         ? _scrollController.position.maxScrollExtent
         : 0.0;
-    final previousPixels =
+    var previousPixels =
         _scrollController.hasClients ? _scrollController.position.pixels : 0.0;
+    _ViewportAnchor? viewportAnchor;
+    var shouldRestoreViewport = false;
 
     setState(() {
       _expandingHistory = true;
@@ -8222,6 +8306,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       );
       final nextCursor = page.nextCursor;
       final cursorAdvanced = nextCursor != null && nextCursor != cursor;
+      if (preserveViewport && _scrollController.hasClients) {
+        final position = _scrollController.position;
+        previousMaxScrollExtent = position.maxScrollExtent;
+        previousPixels = position.pixels;
+        viewportAnchor = _captureViewportAnchor();
+      }
       setState(() {
         if (filteredMessages.isNotEmpty) {
           _prependMessages(filteredMessages);
@@ -8230,22 +8320,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             page.hasMore && hasNewMessages && cursorAdvanced;
         _olderMessagesCursor = _hasMoreOlderMessages ? nextCursor : null;
       });
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
-        if (preserveViewport && _scrollController.hasClients) {
-          final position = _scrollController.position;
-          final extentDelta =
-              position.maxScrollExtent - previousMaxScrollExtent;
-          final target = (previousPixels + extentDelta).clamp(
-            position.minScrollExtent,
-            position.maxScrollExtent,
-          );
-          _scrollController.jumpTo(target);
-        }
-      });
+      shouldRestoreViewport = preserveViewport;
     } catch (error) {
       if (!mounted) {
         return;
@@ -8258,8 +8333,136 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         setState(() {
           _expandingHistory = false;
         });
+        if (shouldRestoreViewport) {
+          _restoreViewportAfterOlderMessagesLoad(
+            previousMaxScrollExtent: previousMaxScrollExtent,
+            previousPixels: previousPixels,
+            viewportAnchor: viewportAnchor,
+          );
+        }
       }
     }
+  }
+
+  void _restoreViewportAfterOlderMessagesLoad({
+    required double previousMaxScrollExtent,
+    required double previousPixels,
+    required _ViewportAnchor? viewportAnchor,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) {
+        return;
+      }
+      if (viewportAnchor != null &&
+          _restoreViewportFromAnchor(viewportAnchor)) {
+        _scheduleViewportAnchorCorrection(viewportAnchor);
+        return;
+      }
+      final position = _scrollController.position;
+      final extentDelta = position.maxScrollExtent - previousMaxScrollExtent;
+      final target = (previousPixels + extentDelta).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      _scrollController.jumpTo(target);
+    });
+  }
+
+  void _scheduleViewportAnchorCorrection(_ViewportAnchor anchor) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _restoreViewportFromAnchor(anchor);
+    });
+  }
+
+  _ViewportAnchor? _captureViewportAnchor() {
+    if (!_scrollController.hasClients) {
+      return null;
+    }
+    final messageAnchor = _captureMessageViewportAnchor();
+    if (messageAnchor != null) {
+      return messageAnchor;
+    }
+    return _captureTurnViewportAnchor();
+  }
+
+  _ViewportAnchor? _captureMessageViewportAnchor() {
+    final viewportHeight = MediaQuery.sizeOf(context).height;
+    _ViewportAnchor? anchor;
+    for (final message in _messages) {
+      final key = _messageAnchorKeys[message.id];
+      if (key == null) {
+        continue;
+      }
+      final candidate = _viewportAnchorForKey(key, viewportHeight);
+      if (candidate == null) {
+        continue;
+      }
+      if (anchor == null || candidate.top < anchor.top) {
+        anchor = candidate;
+      }
+    }
+    return anchor;
+  }
+
+  _ViewportAnchor? _captureTurnViewportAnchor() {
+    final viewportHeight = MediaQuery.sizeOf(context).height;
+    _ViewportAnchor? anchor;
+    for (final turn in _turns) {
+      final key = _turnKeys[turn.id];
+      if (key == null) {
+        continue;
+      }
+      final candidate = _viewportAnchorForKey(key, viewportHeight);
+      if (candidate == null) {
+        continue;
+      }
+      if (anchor == null || candidate.top < anchor.top) {
+        anchor = candidate;
+      }
+    }
+    return anchor;
+  }
+
+  _ViewportAnchor? _viewportAnchorForKey(GlobalKey key, double viewportHeight) {
+    final context = key.currentContext;
+    if (context == null) {
+      return null;
+    }
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) {
+      return null;
+    }
+    final top = renderObject.localToGlobal(Offset.zero).dy;
+    final bottom = top + renderObject.size.height;
+    if (bottom <= 0 || top >= viewportHeight) {
+      return null;
+    }
+    return _ViewportAnchor(
+      key: key,
+      top: top,
+    );
+  }
+
+  bool _restoreViewportFromAnchor(_ViewportAnchor anchor) {
+    final context = anchor.key.currentContext;
+    if (context == null || !_scrollController.hasClients) {
+      return false;
+    }
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) {
+      return false;
+    }
+    final position = _scrollController.position;
+    final currentTop = renderObject.localToGlobal(Offset.zero).dy;
+    final target = (position.pixels + currentTop - anchor.top).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    _scrollController.jumpTo(target);
+    return true;
   }
 
   void _expandVisibleHistory({required bool preserveViewport}) {
@@ -8712,14 +8915,32 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required String appendedChunk,
   }) {}
 
+  void _scheduleScrollToBottomActionVisibility(bool visible) {
+    if (_pendingShowScrollToBottomAction == visible) {
+      return;
+    }
+    _pendingShowScrollToBottomAction = visible;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pendingVisible = _pendingShowScrollToBottomAction;
+      if (!mounted || pendingVisible == null) {
+        return;
+      }
+      _pendingShowScrollToBottomAction = null;
+      if (pendingVisible == _showScrollToBottomAction) {
+        return;
+      }
+      setState(() {
+        _showScrollToBottomAction = pendingVisible;
+      });
+    });
+  }
+
   bool _handleScrollNotification(ScrollNotification notification) {
     final showScrollToBottom =
         (notification.metrics.maxScrollExtent - notification.metrics.pixels) >
             _bottomAutoScrollThreshold;
     if (showScrollToBottom != _showScrollToBottomAction) {
-      setState(() {
-        _showScrollToBottomAction = showScrollToBottom;
-      });
+      _scheduleScrollToBottomActionVisibility(showScrollToBottom);
     }
     if (_canLoadOlderMessages &&
         !_expandingHistory &&
@@ -8727,6 +8948,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _expandVisibleHistory(preserveViewport: true);
     }
     return false;
+  }
+
+  void _handleMessageScrollChanged() {
+    if (!_scrollController.hasClients ||
+        !_canLoadOlderMessages ||
+        _expandingHistory) {
+      return;
+    }
+    if (_scrollController.position.pixels <= _topHistoryExpandThreshold) {
+      _expandVisibleHistory(preserveViewport: true);
+    }
   }
 
   void _handleScrollToBottomPressed() {
@@ -9328,6 +9560,7 @@ class _SessionConversationPane extends StatelessWidget {
     required this.onScrollToBottom,
     required this.historyLoaderBuilder,
     required this.turnBuilder,
+    required this.turnKeyBuilder,
   });
 
   final bool creatingSession;
@@ -9342,6 +9575,7 @@ class _SessionConversationPane extends StatelessWidget {
   final VoidCallback onScrollToBottom;
   final Widget Function() historyLoaderBuilder;
   final Widget Function(BuildContext, _ConversationTurn) turnBuilder;
+  final Key Function(_ConversationTurn) turnKeyBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -9360,26 +9594,31 @@ class _SessionConversationPane extends StatelessWidget {
           child: ListView.builder(
             controller: scrollController,
             padding: AppSpacing.blockPadding,
-            itemCount: turns.length + (showHistoryLoader ? 1 : 0),
+            itemCount: turns.length,
             itemBuilder: (context, index) {
-              if (showHistoryLoader) {
-                if (index == 0) {
-                  return _SessionConversationFrame(
-                    desktopSidebarBreakpoint: desktopSidebarBreakpoint,
-                    desktopContentMaxWidth: desktopContentMaxWidth,
-                    child: historyLoaderBuilder(),
-                  );
-                }
-                index -= 1;
-              }
+              final turn = turns[index];
               return _SessionConversationFrame(
+                key: turnKeyBuilder(turn),
                 desktopSidebarBreakpoint: desktopSidebarBreakpoint,
                 desktopContentMaxWidth: desktopContentMaxWidth,
-                child: turnBuilder(context, turns[index]),
+                child: turnBuilder(context, turn),
               );
             },
           ),
         ),
+        if (showHistoryLoader)
+          Positioned(
+            top: AppSpacing.block,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: _SessionConversationFrame(
+                desktopSidebarBreakpoint: desktopSidebarBreakpoint,
+                desktopContentMaxWidth: desktopContentMaxWidth,
+                child: historyLoaderBuilder(),
+              ),
+            ),
+          ),
         Positioned(
           right: AppSpacing.block,
           bottom: AppSpacing.block,
@@ -9422,6 +9661,7 @@ class _SessionConversationPane extends StatelessWidget {
 
 class _SessionConversationFrame extends StatelessWidget {
   const _SessionConversationFrame({
+    super.key,
     required this.desktopSidebarBreakpoint,
     required this.desktopContentMaxWidth,
     required this.child,
@@ -10267,6 +10507,16 @@ class _ConversationTurn {
   final ChatMessage? userMessage;
   final List<ChatMessage> assistantMessages = <ChatMessage>[];
   final List<ChatMessage> toolMessages = <ChatMessage>[];
+}
+
+class _ViewportAnchor {
+  const _ViewportAnchor({
+    required this.key,
+    required this.top,
+  });
+
+  final GlobalKey key;
+  final double top;
 }
 
 class _ParsedToolMessage {

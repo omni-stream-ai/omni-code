@@ -373,7 +373,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _toggleDesktopSidebarCollapsed() {
-    return toggleDesktopNavigationCollapsed();
+    return toggleDesktopNavigationCollapsed().then((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {});
+    });
   }
 
   Widget _buildDesktopHero(BuildContext context, AppLocalizations l10n) {
