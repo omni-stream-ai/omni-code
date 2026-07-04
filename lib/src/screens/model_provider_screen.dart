@@ -394,7 +394,12 @@ class _ModelProviderScreenState extends State<ModelProviderScreen> {
   }
 
   Future<void> _toggleDesktopSidebarCollapsed() {
-    return toggleDesktopNavigationCollapsed();
+    return toggleDesktopNavigationCollapsed().then((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {});
+    });
   }
 
   Widget _buildEmptyState(BuildContext context, AppLocalizations l10n) {

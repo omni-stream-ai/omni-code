@@ -498,6 +498,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _toggleDesktopSidebarCollapsed() async {
     await toggleDesktopNavigationCollapsed();
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
   }
 
   _HomeSurfaceState get _surfaceState {
@@ -1523,6 +1527,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
 
   Future<void> _toggleDesktopSidebarCollapsed() async {
     await toggleDesktopNavigationCollapsed();
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
   }
 
   Widget _buildProjectsBody(

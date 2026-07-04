@@ -2,4 +2,4 @@
 
 set -eu
 
-exec "$(dirname "$0")/../scripts/validate-commit-msg.sh" "$1"
+scripts/validate-commit-msg.sh "$1"

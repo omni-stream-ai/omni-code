@@ -5411,6 +5411,91 @@ void main() {
     );
   });
 
+  testWidgets('loading older messages preserves the visible message position',
+      (tester) async {
+    final requests = <http.Request>[];
+    final messages = _conversationMessages(30);
+    final olderPage = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          requests.add(request);
+          final beforeId = request.url.queryParameters['before_id'];
+          if (beforeId == null) {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'messages': messages.sublist(54, 60),
+                  'has_more': true,
+                  'next_cursor': 'user-28',
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return olderPage.future;
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final messageList = find.byType(ListView).first;
+    await tester.drag(messageList, const Offset(0, 1200));
+    await tester.pump();
+
+    final anchor = find.byKey(const ValueKey('user-message-bubble-user-28'));
+    expect(anchor, findsOneWidget);
+    final anchorTopBefore = tester.getTopLeft(anchor).dy;
+    expect(
+        find.byKey(const ValueKey('session-history-loader')), findsOneWidget);
+
+    olderPage.complete(
+      http.Response(
+        jsonEncode({
+          'data': {
+            'messages': messages.sublist(48, 54),
+            'has_more': true,
+            'next_cursor': 'user-25',
+          },
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('session-history-loader')), findsNothing);
+    expect(anchor, findsOneWidget);
+    expect(tester.getTopLeft(anchor).dy, closeTo(anchorTopBefore, 1));
+    expect(find.text('Question 28'), findsOneWidget);
+    expect(requests.last.url.queryParameters['before_id'], 'user-28');
+  });
+
   testWidgets('overlapping history page does not render duplicate messages',
       (tester) async {
     final requests = <http.Request>[];
@@ -5476,6 +5561,14 @@ void main() {
 
     final messageList = find.byType(ListView).first;
     await tester.drag(messageList, const Offset(0, 1200));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+
+    expect(find.text('Question 6'), findsOneWidget);
+    expect(find.text('Answer 6'), findsOneWidget);
+
+    await tester.drag(messageList, const Offset(0, 500));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -5985,6 +6078,110 @@ void main() {
       'Streamed first part and final part',
     );
     expect(find.byKey(const ValueKey('session-history-loader')), findsNothing);
+
+    await events.close();
+  });
+
+  testWidgets(
+      'restore prefers server content over stale streamed assistant content',
+      (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    var messageRequestCount = 0;
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            messageRequestCount += 1;
+            final messages = messageRequestCount == 1
+                ? const <Map<String, dynamic>>[]
+                : <Map<String, dynamic>>[
+                    _messageJson(
+                      id: 'assistant-2',
+                      sessionId: 'session-1',
+                      role: 'assistant',
+                      content: 'Fresh server content',
+                      createdAt: '2026-05-09T10:00:01.000',
+                    ),
+                  ];
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'messages': messages,
+                  'has_more': false,
+                  'next_cursor': null,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          if (request.method == 'GET' &&
+              request.url.path == '/projects/project-1/sessions') {
+            return http.Response(
+              jsonEncode({
+                'data': [_sessionJson()],
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'session': _sessionJson(),
+                  'git_status': null,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_delta',
+            'payload': {
+              'message_id': 'assistant-2',
+              'delta': 'Stale streamed content',
+            },
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Stale streamed content'), findsOneWidget);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('Fresh server content'), findsOneWidget);
+    expect(find.text('Stale streamed content'), findsNothing);
 
     await events.close();
   });
@@ -7070,6 +7267,48 @@ void main() {
       findsOneWidget,
     );
     expect(tester.widget<MarkdownBody>(markdown).selectable, isFalse);
+  });
+
+  testWidgets('markdown horizontal rules remain visible after scrolling',
+      (tester) async {
+    final messages = _conversationMessages(24);
+    messages[messages.length - 1] = _messageJson(
+      id: 'assistant-24',
+      sessionId: 'session-1',
+      role: 'assistant',
+      content: 'Before divider\n\n---\n\nAfter divider',
+      createdAt: '2026-05-09T10:00:49.000',
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(messages),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+        find.byKey(const ValueKey('markdown-horizontal-rule')), findsOneWidget);
+
+    final messageList = find.byType(ListView).first;
+    await tester.drag(messageList, const Offset(0, 900));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+
+    final scrollToBottomButton =
+        find.byKey(const Key('session-scroll-to-bottom-button'));
+    expect(scrollToBottomButton, findsOneWidget);
+    await tester.tap(scrollToBottomButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 220));
+
+    expect(
+        find.byKey(const ValueKey('markdown-horizontal-rule')), findsOneWidget);
   });
 
   testWidgets('assistant reply bubble expands on wider layouts',

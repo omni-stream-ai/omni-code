@@ -294,6 +294,10 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
   Future<void> _toggleDesktopSidebarCollapsed() async {
     await toggleDesktopNavigationCollapsed();
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
   }
 
   Widget _buildMobileContent(
