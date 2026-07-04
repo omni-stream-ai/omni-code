@@ -8263,26 +8263,18 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   List<_ConversationTurn> get _allTurns => _buildConversationTurns(_messages);
 
-  List<_ConversationTurn> get _turns => _allTurns;
+  List<_ConversationTurn> get _turns => _allTurns.reversed.toList();
 
   bool get _canLoadOlderMessages =>
       _hasMoreOlderMessages && _olderMessagesCursor != null;
 
-  Future<void> _loadOlderMessages({required bool preserveViewport}) async {
+  Future<void> _loadOlderMessages() async {
     final cursor = _olderMessagesCursor;
     if (_expandingHistory || !_hasMoreOlderMessages || cursor == null) {
       return;
     }
     final sessionId = _session.id;
     final existingMessageIds = _messages.map((message) => message.id).toSet();
-
-    var previousMaxScrollExtent = _scrollController.hasClients
-        ? _scrollController.position.maxScrollExtent
-        : 0.0;
-    var previousPixels =
-        _scrollController.hasClients ? _scrollController.position.pixels : 0.0;
-    _ViewportAnchor? viewportAnchor;
-    var shouldRestoreViewport = false;
 
     setState(() {
       _expandingHistory = true;
@@ -8306,12 +8298,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       );
       final nextCursor = page.nextCursor;
       final cursorAdvanced = nextCursor != null && nextCursor != cursor;
-      if (preserveViewport && _scrollController.hasClients) {
-        final position = _scrollController.position;
-        previousMaxScrollExtent = position.maxScrollExtent;
-        previousPixels = position.pixels;
-        viewportAnchor = _captureViewportAnchor();
-      }
       setState(() {
         if (filteredMessages.isNotEmpty) {
           _prependMessages(filteredMessages);
@@ -8319,154 +8305,21 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _hasMoreOlderMessages =
             page.hasMore && hasNewMessages && cursorAdvanced;
         _olderMessagesCursor = _hasMoreOlderMessages ? nextCursor : null;
+        _expandingHistory = false;
       });
-      shouldRestoreViewport = preserveViewport;
     } catch (error) {
       if (!mounted) {
         return;
       }
       setState(() {
         _speechError = context.l10n.loadMessagesFailed('$error');
+        _expandingHistory = false;
       });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _expandingHistory = false;
-        });
-        if (shouldRestoreViewport) {
-          _restoreViewportAfterOlderMessagesLoad(
-            previousMaxScrollExtent: previousMaxScrollExtent,
-            previousPixels: previousPixels,
-            viewportAnchor: viewportAnchor,
-          );
-        }
-      }
     }
   }
 
-  void _restoreViewportAfterOlderMessagesLoad({
-    required double previousMaxScrollExtent,
-    required double previousPixels,
-    required _ViewportAnchor? viewportAnchor,
-  }) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) {
-        return;
-      }
-      if (viewportAnchor != null &&
-          _restoreViewportFromAnchor(viewportAnchor)) {
-        _scheduleViewportAnchorCorrection(viewportAnchor);
-        return;
-      }
-      final position = _scrollController.position;
-      final extentDelta = position.maxScrollExtent - previousMaxScrollExtent;
-      final target = (previousPixels + extentDelta).clamp(
-        position.minScrollExtent,
-        position.maxScrollExtent,
-      );
-      _scrollController.jumpTo(target);
-    });
-  }
-
-  void _scheduleViewportAnchorCorrection(_ViewportAnchor anchor) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      _restoreViewportFromAnchor(anchor);
-    });
-  }
-
-  _ViewportAnchor? _captureViewportAnchor() {
-    if (!_scrollController.hasClients) {
-      return null;
-    }
-    final messageAnchor = _captureMessageViewportAnchor();
-    if (messageAnchor != null) {
-      return messageAnchor;
-    }
-    return _captureTurnViewportAnchor();
-  }
-
-  _ViewportAnchor? _captureMessageViewportAnchor() {
-    final viewportHeight = MediaQuery.sizeOf(context).height;
-    _ViewportAnchor? anchor;
-    for (final message in _messages) {
-      final key = _messageAnchorKeys[message.id];
-      if (key == null) {
-        continue;
-      }
-      final candidate = _viewportAnchorForKey(key, viewportHeight);
-      if (candidate == null) {
-        continue;
-      }
-      if (anchor == null || candidate.top < anchor.top) {
-        anchor = candidate;
-      }
-    }
-    return anchor;
-  }
-
-  _ViewportAnchor? _captureTurnViewportAnchor() {
-    final viewportHeight = MediaQuery.sizeOf(context).height;
-    _ViewportAnchor? anchor;
-    for (final turn in _turns) {
-      final key = _turnKeys[turn.id];
-      if (key == null) {
-        continue;
-      }
-      final candidate = _viewportAnchorForKey(key, viewportHeight);
-      if (candidate == null) {
-        continue;
-      }
-      if (anchor == null || candidate.top < anchor.top) {
-        anchor = candidate;
-      }
-    }
-    return anchor;
-  }
-
-  _ViewportAnchor? _viewportAnchorForKey(GlobalKey key, double viewportHeight) {
-    final context = key.currentContext;
-    if (context == null) {
-      return null;
-    }
-    final renderObject = context.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.attached) {
-      return null;
-    }
-    final top = renderObject.localToGlobal(Offset.zero).dy;
-    final bottom = top + renderObject.size.height;
-    if (bottom <= 0 || top >= viewportHeight) {
-      return null;
-    }
-    return _ViewportAnchor(
-      key: key,
-      top: top,
-    );
-  }
-
-  bool _restoreViewportFromAnchor(_ViewportAnchor anchor) {
-    final context = anchor.key.currentContext;
-    if (context == null || !_scrollController.hasClients) {
-      return false;
-    }
-    final renderObject = context.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.attached) {
-      return false;
-    }
-    final position = _scrollController.position;
-    final currentTop = renderObject.localToGlobal(Offset.zero).dy;
-    final target = (position.pixels + currentTop - anchor.top).clamp(
-      position.minScrollExtent,
-      position.maxScrollExtent,
-    );
-    _scrollController.jumpTo(target);
-    return true;
-  }
-
-  void _expandVisibleHistory({required bool preserveViewport}) {
-    unawaited(_loadOlderMessages(preserveViewport: preserveViewport));
+  void _expandVisibleHistory() {
+    unawaited(_loadOlderMessages());
   }
 
   void _scheduleAutoBackfillHistoryIfNeeded({int remainingPasses = 6}) {
@@ -8496,7 +8349,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
 
       unawaited(
-        _loadOlderMessages(preserveViewport: false).then((_) {
+        _loadOlderMessages().then((_) {
           if (!mounted) {
             return;
           }
@@ -8937,15 +8790,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   bool _handleScrollNotification(ScrollNotification notification) {
     final showScrollToBottom =
-        (notification.metrics.maxScrollExtent - notification.metrics.pixels) >
-            _bottomAutoScrollThreshold;
+        notification.metrics.pixels > _bottomAutoScrollThreshold;
     if (showScrollToBottom != _showScrollToBottomAction) {
       _scheduleScrollToBottomActionVisibility(showScrollToBottom);
     }
     if (_canLoadOlderMessages &&
         !_expandingHistory &&
-        notification.metrics.pixels <= _topHistoryExpandThreshold) {
-      _expandVisibleHistory(preserveViewport: true);
+        notification.metrics.pixels >=
+            notification.metrics.maxScrollExtent - _topHistoryExpandThreshold) {
+      _expandVisibleHistory();
     }
     return false;
   }
@@ -8956,8 +8809,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _expandingHistory) {
       return;
     }
-    if (_scrollController.position.pixels <= _topHistoryExpandThreshold) {
-      _expandVisibleHistory(preserveViewport: true);
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - _topHistoryExpandThreshold) {
+      _expandVisibleHistory();
     }
   }
 
@@ -8975,8 +8829,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return true;
     }
     final position = _scrollController.position;
-    return (position.maxScrollExtent - position.pixels) <=
-        _bottomAutoScrollThreshold;
+    return position.pixels <= _bottomAutoScrollThreshold;
   }
 
   void _maybeAutoScrollToBottom() {
@@ -9009,7 +8862,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
 
       final position = _scrollController.position;
-      final target = position.maxScrollExtent;
+      final target = 0.0;
       final isOutOfRange = position.pixels < position.minScrollExtent - 0.5 ||
           position.pixels > position.maxScrollExtent + 0.5;
       final shouldMove = (target - position.pixels).abs() > 0.5;
@@ -9032,14 +8885,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         return;
       }
 
+      final positionNow = _scrollController.position;
       final shouldContinue = lastMaxScrollExtent == null ||
-          (target - lastMaxScrollExtent).abs() > 0.5 ||
+          (positionNow.maxScrollExtent - lastMaxScrollExtent).abs() > 0.5 ||
           !_isNearBottom();
       if (shouldContinue) {
         WidgetsBinding.instance.scheduleFrame();
         _scrollToBottom(
           remainingPasses: remainingPasses - 1,
-          lastMaxScrollExtent: target,
+          lastMaxScrollExtent: positionNow.maxScrollExtent,
         );
       }
     });
@@ -9594,6 +9448,7 @@ class _SessionConversationPane extends StatelessWidget {
           child: ListView.builder(
             controller: scrollController,
             padding: AppSpacing.blockPadding,
+            reverse: true,
             itemCount: turns.length,
             itemBuilder: (context, index) {
               final turn = turns[index];
@@ -10507,16 +10362,6 @@ class _ConversationTurn {
   final ChatMessage? userMessage;
   final List<ChatMessage> assistantMessages = <ChatMessage>[];
   final List<ChatMessage> toolMessages = <ChatMessage>[];
-}
-
-class _ViewportAnchor {
-  const _ViewportAnchor({
-    required this.key,
-    required this.top,
-  });
-
-  final GlobalKey key;
-  final double top;
 }
 
 class _ParsedToolMessage {
