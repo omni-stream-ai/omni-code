@@ -2696,6 +2696,36 @@ abstract class AppLocalizations {
   /// **'Failed to save model selection'**
   String get modelOverrideFailed;
 
+  /// No description provided for @copySessionId.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy {agent} ID'**
+  String copySessionId(String agent);
+
+  /// No description provided for @desktopSessionOverview.
+  ///
+  /// In en, this message translates to:
+  /// **'Session overview'**
+  String get desktopSessionOverview;
+
+  /// No description provided for @desktopSessionOverviewSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep status, context, and actions visible without leaving the conversation.'**
+  String get desktopSessionOverviewSubtitle;
+
+  /// No description provided for @desktopSessionUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated'**
+  String get desktopSessionUpdated;
+
+  /// No description provided for @desktopSessionStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get desktopSessionStatus;
+
   /// No description provided for @confirm.
   ///
   /// In en, this message translates to:

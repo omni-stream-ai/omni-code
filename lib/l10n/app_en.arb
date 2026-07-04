@@ -712,6 +712,16 @@
   "modelDefault": "Default",
   "modelSessionLabel": "Model",
   "modelOverrideFailed": "Failed to save model selection",
+  "copySessionId": "Copy {agent} ID",
+  "@copySessionId": {
+    "placeholders": {
+      "agent": {}
+    }
+  },
+  "desktopSessionOverview": "Session overview",
+  "desktopSessionOverviewSubtitle": "Keep status, context, and actions visible without leaving the conversation.",
+  "desktopSessionUpdated": "Updated",
+  "desktopSessionStatus": "Status",
   "confirm": "Confirm",
   "fieldRequired": "This field is required",
   "gitClean": "clean",

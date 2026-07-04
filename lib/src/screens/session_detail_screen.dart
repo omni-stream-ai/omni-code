@@ -90,7 +90,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   static const Duration _callModeCommandAcceptedSpeechTimeout = Duration(
     seconds: 4,
   );
-  static const int _messagePageLimit = 6;
+  static const int _messagePageLimit = 12;
   static final RegExp _assistantSectionDividerPattern = RegExp(
     r'\n\s*\n[ \t]*---[ \t]*\n\s*\n|\n[ \t]*---[ \t]*\n',
   );
@@ -682,7 +682,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         previousSession.pendingApproval?.requestId ==
             nextSession.pendingApproval?.requestId &&
         previousSession.providerId == nextSession.providerId &&
-        previousSession.reasoningEffort == nextSession.reasoningEffort) {
+        previousSession.reasoningEffort == nextSession.reasoningEffort &&
+        previousSession.model == nextSession.model) {
       return;
     }
 
@@ -1583,7 +1584,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           const SizedBox(height: AppSpacing.micro),
           _buildSessionHeaderActionTile(
             key: const Key('session-header-copy-id-button'),
-            label: _sessionIdCopied ? 'Copied' : '复制 $agentLabel ID',
+             label: _sessionIdCopied ? context.l10n.copied : context.l10n.copySessionId(agentLabel),
             icon: _sessionIdCopied
                 ? Icons.check_rounded
                 : Icons.content_copy_rounded,
@@ -5526,7 +5527,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_hasRenderableMessages(messages) &&
         hasMore &&
         cursor != null &&
-        fetchedPages < 8) {
+        fetchedPages < 3) {
       final probeCursor = cursor;
       final probePage = await _client.listMessagesPage(
         sessionId,
@@ -5546,7 +5547,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         hasMore = probePage.hasMore;
         cursor = probePage.nextCursor;
 
-        while (hasMore && cursor != null && fetchedPages < 8) {
+        while (hasMore && cursor != null && fetchedPages < 3) {
           final previousCursor = cursor;
           page = await _client.listMessagesPage(
             sessionId,
@@ -5573,7 +5574,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     while (!_hasRenderableMessages(messages) &&
         olderHistoryAvailable &&
         olderCursor != null &&
-        fetchedPages < 8) {
+        fetchedPages < 3) {
       final previousCursor = olderCursor;
       page = await _client.listMessagesPage(
         sessionId,
@@ -9940,7 +9941,7 @@ class _SessionDesktopRail extends StatelessWidget {
   final VoidCallback onCopySessionId;
   final Widget Function(double maxHeight) approvalCardBuilder;
 
-  String get _copyAgentIdLabel => '复制 $agentLabel ID';
+  String _copyAgentIdLabel(BuildContext context) => context.l10n.copySessionId(agentLabel);
 
   @override
   Widget build(BuildContext context) {
@@ -9950,14 +9951,14 @@ class _SessionDesktopRail extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Session overview',
+          l10n.desktopSessionOverview,
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
         ),
         const SizedBox(height: AppSpacing.compact),
         Text(
-          'Keep status, context, and actions visible without leaving the conversation.',
+          l10n.desktopSessionOverviewSubtitle,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: AppColors.mutedFor(brightness),
                 height: 1.45,
@@ -9991,17 +9992,17 @@ class _SessionDesktopRail extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.compact),
               _DesktopSessionRailInfoRow(
-                label: 'Updated',
+                label: l10n.desktopSessionUpdated,
                 value: updatedAtLabel,
               ),
               const SizedBox(height: AppSpacing.compact),
               _DesktopSessionRailInfoRow(
-                label: 'Agent',
+                label: l10n.agentLabel,
                 value: agentLabel,
               ),
               const SizedBox(height: AppSpacing.compact),
               _DesktopSessionRailInfoRow(
-                label: 'Status',
+                label: l10n.desktopSessionStatus,
                 value: statusSummary,
               ),
               const SizedBox(height: AppSpacing.stack),
@@ -10041,7 +10042,7 @@ class _SessionDesktopRail extends StatelessWidget {
                       size: 16,
                     ),
                     label: Text(
-                      sessionIdCopied ? 'Copied' : _copyAgentIdLabel,
+                      sessionIdCopied ? context.l10n.copied : _copyAgentIdLabel(context),
                     ),
                   ),
                 ),

@@ -1493,6 +1493,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get modelOverrideFailed => 'Failed to save model selection';
 
   @override
+  String copySessionId(String agent) => 'Copy $agent ID';
+
+  @override
+  String get desktopSessionOverview => 'Session overview';
+
+  @override
+  String get desktopSessionOverviewSubtitle =>
+      'Keep status, context, and actions visible without leaving the conversation.';
+
+  @override
+  String get desktopSessionUpdated => 'Updated';
+
+  @override
+  String get desktopSessionStatus => 'Status';
+
+  @override
   String get confirm => 'Confirm';
 
   @override
