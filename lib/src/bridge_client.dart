@@ -557,6 +557,8 @@ class BridgeClient {
     bool clearProviderId = false,
     ReasoningEffort? reasoningEffort,
     bool clearReasoningEffort = false,
+    String? model,
+    bool clearModel = false,
   }) async {
     final body = <String, dynamic>{};
     if (clearProviderId) {
@@ -568,6 +570,11 @@ class BridgeClient {
       body['reasoning_effort'] = null;
     } else if (reasoningEffort != null) {
       body['reasoning_effort'] = reasoningEffort.apiValue;
+    }
+    if (clearModel) {
+      body['model'] = null;
+    } else if (model != null) {
+      body['model'] = model;
     }
     final response = await _httpClient.patch(
       Uri.parse('$baseUrl/sessions/$sessionId'),

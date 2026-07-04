@@ -1484,6 +1484,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reasoningEffortOverrideFailed => 'Failed to save reasoning effort';
 
   @override
+  String get modelDefault => 'Default';
+
+  @override
+  String get modelSessionLabel => 'Model';
+
+  @override
+  String get modelOverrideFailed => 'Failed to save model selection';
+
+  @override
   String get confirm => 'Confirm';
 
   @override

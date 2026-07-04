@@ -512,6 +512,7 @@ class SessionSummary {
     this.errorMessage,
     this.providerId,
     this.reasoningEffort,
+    this.model,
     this.forkedFromSessionId,
     this.runtimeSessionRef,
   });
@@ -529,6 +530,7 @@ class SessionSummary {
   final String? errorMessage;
   final String? providerId;
   final ReasoningEffort? reasoningEffort;
+  final String? model;
   final String? forkedFromSessionId;
   final String? runtimeSessionRef;
 
@@ -550,6 +552,8 @@ class SessionSummary {
     bool clearProviderId = false,
     ReasoningEffort? reasoningEffort,
     bool clearReasoningEffort = false,
+    String? model,
+    bool clearModel = false,
     String? forkedFromSessionId,
     bool clearForkedFromSessionId = false,
     String? runtimeSessionRef,
@@ -570,9 +574,9 @@ class SessionSummary {
       errorMessage:
           clearErrorMessage ? null : errorMessage ?? this.errorMessage,
       providerId: clearProviderId ? null : providerId ?? this.providerId,
-      reasoningEffort: clearReasoningEffort
-          ? null
-          : reasoningEffort ?? this.reasoningEffort,
+      reasoningEffort:
+          clearReasoningEffort ? null : reasoningEffort ?? this.reasoningEffort,
+      model: clearModel ? null : model ?? this.model,
       forkedFromSessionId: clearForkedFromSessionId
           ? null
           : forkedFromSessionId ?? this.forkedFromSessionId,
@@ -597,6 +601,7 @@ class SessionSummary {
       providerId: json['provider_id'] as String?,
       reasoningEffort:
           parseReasoningEffort(json['reasoning_effort'] as String?),
+      model: json['model'] as String?,
       forkedFromSessionId: json['forked_from_session_id'] as String?,
       runtimeSessionRef: json['runtime_session_ref'] as String?,
       pendingApproval: json['pending_approval'] == null
