@@ -2700,7 +2700,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Copy {agent} ID'**
-  String copySessionId(String agent);
+  String copySessionId(Object agent);
 
   /// No description provided for @desktopSessionOverview.
   ///

@@ -1444,14 +1444,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modelOverrideFailed => '模型选择保存失败';
 
   @override
-  String copySessionId(String agent) => '复制 $agent ID';
+  String copySessionId(Object agent) {
+    return '复制 $agent ID';
+  }
 
   @override
   String get desktopSessionOverview => '会话概览';
 
   @override
-  String get desktopSessionOverviewSubtitle =>
-      '保持状态、上下文和操作可见，无需离开对话。';
+  String get desktopSessionOverviewSubtitle => '保持状态、上下文和操作可见，无需离开对话。';
 
   @override
   String get desktopSessionUpdated => '更新';

@@ -1493,7 +1493,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get modelOverrideFailed => 'Failed to save model selection';
 
   @override
-  String copySessionId(String agent) => 'Copy $agent ID';
+  String copySessionId(Object agent) {
+    return 'Copy $agent ID';
+  }
 
   @override
   String get desktopSessionOverview => 'Session overview';
