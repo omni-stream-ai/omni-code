@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
 import '../bridge_client.dart';
+import '../plugins/speech_plugin_models.dart';
+import '../plugins/speech_plugin_registry.dart';
 import '../settings/app_settings.dart';
 
 class BridgeRealtimeAsrUtterance {
@@ -100,12 +104,15 @@ class BridgeRealtimeAsrService {
   bool _awaitingConfiguredSession = false;
   bool _running = false;
   bool _connected = false;
+  SpeechPluginManifest? _activeRealtimePluginManifest;
+  SpeechPluginCapabilityConfig? _activeRealtimePluginConfig;
 
   /// Cached websocket path from a previous successful descriptor fetch.
   /// Allows skipping the HTTP readiness check on subsequent starts.
   static String? _cachedWebsocketPath;
 
   static const _defaultWebsocketPath = '/speech/realtime/ws';
+  static const _defaultDescriptorPath = '/speech/realtime';
 
   /// Clears the cached websocket path, e.g. when the bridge server address
   /// changes. The next [start] will perform a full readiness check.
@@ -131,12 +138,23 @@ class BridgeRealtimeAsrService {
     _connected = false;
     _awaitingConfiguredSession = config != null;
     _startCompleter = Completer<void>();
+    _activeRealtimePluginManifest = null;
+    _activeRealtimePluginConfig = null;
 
     try {
+      final selectedRealtimePlugin =
+          speechPluginRegistry.selectedPluginForCapability(
+        SpeechPluginCapability.realtimeAsr,
+      );
+      _activeRealtimePluginManifest = selectedRealtimePlugin?.manifest;
+      _activeRealtimePluginConfig = selectedRealtimePlugin == null
+          ? null
+          : _resolvedRealtimePluginConfig(selectedRealtimePlugin.manifest);
+
       // Fast path: if we have a cached websocket path from a previous
       // successful start, try connecting directly without the HTTP
       // readiness check. On failure, fall through to the full flow.
-      if (_cachedWebsocketPath != null) {
+      if (_cachedWebsocketPath != null && selectedRealtimePlugin == null) {
         debugPrint(
           '[bridge-realtime-asr] fast path: connecting with cached path '
           '$_cachedWebsocketPath',
@@ -167,7 +185,7 @@ class BridgeRealtimeAsrService {
       }
 
       // Full flow: HTTP readiness check + WebSocket connect.
-      final descriptor = await _client.getSpeechRealtimeDescriptor();
+      final descriptor = await _getRealtimeDescriptor();
       final sessionDefaults =
           descriptor['session_defaults'] as Map<String, dynamic>? ??
               const <String, dynamic>{};
@@ -227,6 +245,14 @@ class BridgeRealtimeAsrService {
     _socket = socket;
     _socketSubscription = socket.messages.listen(
       (message) {
+        if (_usesVolcengineSaucProtocol) {
+          _handleVolcengineSaucMessage(
+            message,
+            onUtterance: onUtterance,
+            onError: onError,
+          );
+          return;
+        }
         if (message is! String) {
           return;
         }
@@ -258,7 +284,11 @@ class BridgeRealtimeAsrService {
         if (!_running || !_connected) {
           return;
         }
-        _socket?.add(bytes);
+        if (_usesVolcengineSaucProtocol) {
+          _socket?.add(_buildVolcengineSaucAudioRequest(bytes));
+        } else {
+          _socket?.add(bytes);
+        }
       },
       onError: (Object error, StackTrace stackTrace) async {
         debugPrint('[bridge-realtime-asr] audio stream error: $error');
@@ -271,10 +301,26 @@ class BridgeRealtimeAsrService {
       cancelOnError: true,
     );
 
-    if (config != null) {
+    if (_usesVolcengineSaucProtocol) {
+      _socket?.add(_buildVolcengineSaucFullClientRequest(config));
+      _connected = true;
+      if (!_startCompleterCompleted) {
+        _startCompleter?.complete();
+      }
+    } else if (config != null &&
+        _activeRealtimePluginManifest?.transport !=
+            SpeechPluginTransport.realtimeWebsocket) {
       final update = jsonEncode(config.toSessionUpdateJson());
       debugPrint('[bridge-realtime-asr] sending session.update $update');
       _socket?.add(update);
+    }
+    if (_activeRealtimePluginManifest?.transport ==
+            SpeechPluginTransport.realtimeWebsocket &&
+        !_usesVolcengineSaucProtocol) {
+      _connected = true;
+      if (!_startCompleterCompleted) {
+        _startCompleter?.complete();
+      }
     }
     await _startCompleter!.future.timeout(const Duration(seconds: 6));
   }
@@ -294,6 +340,13 @@ class BridgeRealtimeAsrService {
     if (!_running || !_connected) {
       return;
     }
+    if (_usesVolcengineSaucProtocol) {
+      _socket?.add(_buildVolcengineSaucAudioRequest(
+        Uint8List(0),
+        isLast: true,
+      ));
+      return;
+    }
     _socket?.add(jsonEncode(<String, dynamic>{
       'type': 'input_audio_buffer.commit',
     }));
@@ -303,7 +356,212 @@ class BridgeRealtimeAsrService {
     _running = false;
     _connected = false;
     _awaitingConfiguredSession = false;
+    _activeRealtimePluginManifest = null;
+    _activeRealtimePluginConfig = null;
     await _cleanupSocket();
+  }
+
+  bool get _usesVolcengineSaucProtocol {
+    final config = _activeRealtimePluginConfig;
+    if (config == null) {
+      return false;
+    }
+    final protocol = config.eventMap['protocol']?.trim().toLowerCase();
+    return protocol == 'volcengine_sauc';
+  }
+
+  Uint8List _buildVolcengineSaucFullClientRequest(
+    BridgeRealtimeAsrConfig? config,
+  ) {
+    final settings = appSettingsController.settings;
+    final request = <String, dynamic>{
+      'user': <String, dynamic>{
+        'uid': settings.clientId,
+        'platform': 'omni-code',
+      },
+      'audio': <String, dynamic>{
+        'format': 'pcm',
+        'codec': 'raw',
+        'rate': config?.sampleRateHz ?? 16000,
+        'bits': 16,
+        'channel': config?.channels ?? 1,
+      },
+      'request': <String, dynamic>{
+        'model_name': _volcengineSaucModelName(),
+        'enable_itn': true,
+        'enable_punc': true,
+        'show_utterances': true,
+        'result_type': 'full',
+      },
+    };
+    return _buildVolcengineSaucFrame(
+      messageType: 0x1,
+      flags: 0x0,
+      serialization: 0x1,
+      compression: 0x1,
+      payload: gzip.encode(utf8.encode(jsonEncode(request))),
+    );
+  }
+
+  Uint8List _buildVolcengineSaucAudioRequest(
+    Uint8List audioBytes, {
+    bool isLast = false,
+  }) {
+    return _buildVolcengineSaucFrame(
+      messageType: 0x2,
+      flags: isLast ? 0x2 : 0x0,
+      serialization: 0x0,
+      compression: 0x1,
+      payload: gzip.encode(audioBytes),
+    );
+  }
+
+  Uint8List _buildVolcengineSaucFrame({
+    required int messageType,
+    required int flags,
+    required int serialization,
+    required int compression,
+    required List<int> payload,
+  }) {
+    final frame = BytesBuilder(copy: false)
+      ..add([
+        0x11,
+        ((messageType & 0x0f) << 4) | (flags & 0x0f),
+        ((serialization & 0x0f) << 4) | (compression & 0x0f),
+        0x00,
+      ])
+      ..add(_uint32Bytes(payload.length))
+      ..add(payload);
+    return frame.toBytes();
+  }
+
+  void _handleVolcengineSaucMessage(
+    dynamic message, {
+    required void Function(BridgeRealtimeAsrUtterance utterance) onUtterance,
+    void Function(String error)? onError,
+  }) {
+    if (message is! List<int>) {
+      return;
+    }
+    final bytes = Uint8List.fromList(message);
+    if (bytes.length < 8) {
+      return;
+    }
+    final headerSize = (bytes[0] & 0x0f) * 4;
+    if (headerSize < 4 || bytes.length < headerSize + 4) {
+      return;
+    }
+    final messageType = (bytes[1] & 0xf0) >> 4;
+    final flags = bytes[1] & 0x0f;
+    final serialization = (bytes[2] & 0xf0) >> 4;
+    final compression = bytes[2] & 0x0f;
+    var offset = headerSize;
+
+    if (messageType == 0xf) {
+      if (bytes.length < offset + 8) {
+        return;
+      }
+      final code = _readUint32(bytes, offset);
+      offset += 4;
+      final size = _readUint32(bytes, offset);
+      offset += 4;
+      if (bytes.length < offset + size) {
+        return;
+      }
+      final errorPayload = utf8.decode(bytes.sublist(offset, offset + size));
+      final message = 'Volcengine realtime ASR error $code: $errorPayload';
+      if (!_startCompleterCompleted) {
+        _startCompleter?.completeError(Exception(message));
+      }
+      onError?.call(message);
+      return;
+    }
+
+    if (messageType != 0x9) {
+      return;
+    }
+    if (flags == 0x1 || flags == 0x3) {
+      if (bytes.length < offset + 4) {
+        return;
+      }
+      offset += 4;
+    }
+    if (bytes.length < offset + 4) {
+      return;
+    }
+    final payloadSize = _readUint32(bytes, offset);
+    offset += 4;
+    if (bytes.length < offset + payloadSize) {
+      return;
+    }
+    var payload = bytes.sublist(offset, offset + payloadSize);
+    if (compression == 0x1) {
+      payload = Uint8List.fromList(gzip.decode(payload));
+    }
+    if (serialization != 0x1) {
+      return;
+    }
+    final decoded = jsonDecode(utf8.decode(payload));
+    if (decoded is! Map<String, dynamic>) {
+      return;
+    }
+    _handleVolcengineSaucResponse(
+      decoded,
+      isLastFrame: flags == 0x3,
+      onUtterance: onUtterance,
+    );
+  }
+
+  void _handleVolcengineSaucResponse(
+    Map<String, dynamic> decoded, {
+    required bool isLastFrame,
+    required void Function(BridgeRealtimeAsrUtterance utterance) onUtterance,
+  }) {
+    final result = decoded['result'];
+    if (result is! Map<String, dynamic>) {
+      return;
+    }
+    final utterances = result['utterances'];
+    if (utterances is List && utterances.isNotEmpty) {
+      for (final item in utterances) {
+        if (item is! Map<String, dynamic>) {
+          continue;
+        }
+        final text = item['text']?.toString().trim() ?? '';
+        if (text.isEmpty) {
+          continue;
+        }
+        onUtterance(
+          BridgeRealtimeAsrUtterance(
+            text: text,
+            isFinal: item['definite'] as bool? ?? isLastFrame,
+          ),
+        );
+      }
+      return;
+    }
+    final text = result['text']?.toString().trim() ?? '';
+    if (text.isEmpty) {
+      return;
+    }
+    onUtterance(
+      BridgeRealtimeAsrUtterance(
+        text: text,
+        isFinal: isLastFrame,
+      ),
+    );
+  }
+
+  Uint8List _uint32Bytes(int value) {
+    final data = ByteData(4)..setUint32(0, value, Endian.big);
+    return data.buffer.asUint8List();
+  }
+
+  int _readUint32(Uint8List bytes, int offset) {
+    return ByteData.sublistView(bytes, offset, offset + 4).getUint32(
+      0,
+      Endian.big,
+    );
   }
 
   void _handleSocketMessage(
@@ -315,6 +573,18 @@ class BridgeRealtimeAsrService {
   }) {
     final decoded = jsonDecode(message);
     if (decoded is! Map<String, dynamic>) {
+      return;
+    }
+
+    final pluginManifest = _activeRealtimePluginManifest;
+    if (pluginManifest?.transport == SpeechPluginTransport.realtimeWebsocket) {
+      _handleCustomRealtimePluginMessage(
+        decoded,
+        manifest: pluginManifest!,
+        onUtterance: onUtterance,
+        onSpeechStarted: onSpeechStarted,
+        onWakeWordDetected: onWakeWordDetected,
+      );
       return;
     }
 
@@ -467,8 +737,98 @@ class BridgeRealtimeAsrService {
     return completer == null || completer.isCompleted;
   }
 
+  Future<Map<String, dynamic>> _getRealtimeDescriptor() async {
+    final plugin = speechPluginRegistry.selectedPluginForCapability(
+      SpeechPluginCapability.realtimeAsr,
+    );
+    if (plugin == null) {
+      return _client.getSpeechRealtimeDescriptor();
+    }
+    final manifest = plugin.manifest;
+    final config = _resolvedRealtimePluginConfig(manifest);
+    if (config == null) {
+      throw UnsupportedError(
+        'Selected plugin does not support realtime ASR: ${manifest.id}',
+      );
+    }
+    return switch (config.transport) {
+      SpeechPluginTransport.bridgeOpenAiCompatible =>
+        _buildBridgeCompatibleDescriptor(config),
+      SpeechPluginTransport.realtimeWebsocket =>
+        _buildCustomRealtimeDescriptor(config, manifest.id),
+      SpeechPluginTransport.metadataOnly => throw UnsupportedError(
+          'Realtime ASR plugin is installed but not executable yet: ${manifest.id}',
+        ),
+      SpeechPluginTransport.openAiCompatible => throw UnsupportedError(
+          'OpenAI-compatible transport is not supported for realtime ASR: ${manifest.id}',
+        ),
+    };
+  }
+
+  Future<Map<String, dynamic>> _buildBridgeCompatibleDescriptor(
+    SpeechPluginCapabilityConfig config,
+  ) async {
+    final path = _normalizeRealtimePath(config.path);
+    final websocketPath = path.endsWith('/ws') ? path : '$path/ws';
+    return <String, dynamic>{
+      'websocket_path': websocketPath,
+      'session_defaults': const <String, dynamic>{
+        'ready': true,
+        'missing_requirements': <dynamic>[],
+      },
+    };
+  }
+
+  Future<Map<String, dynamic>> _buildCustomRealtimeDescriptor(
+    SpeechPluginCapabilityConfig config,
+    String pluginId,
+  ) async {
+    final websocketUrl = (config.websocketUrl ?? '').trim();
+    if (websocketUrl.isEmpty) {
+      throw UnsupportedError(
+        'Realtime websocket plugin is missing websocket_url / realtime_websocket_url: $pluginId',
+      );
+    }
+    return <String, dynamic>{
+      'websocket_path': Uri.parse(websocketUrl).path,
+      'session_defaults': const <String, dynamic>{
+        'ready': true,
+        'missing_requirements': <dynamic>[],
+      },
+    };
+  }
+
+  String _normalizeRealtimePath(String? raw) {
+    final trimmed = raw?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return _defaultDescriptorPath;
+    }
+    return trimmed.startsWith('/') ? trimmed : '/$trimmed';
+  }
+
   Uri _webSocketUri(String websocketPath) {
-    final baseUri = Uri.parse(_client.baseUrl);
+    final manifest = _activeRealtimePluginManifest;
+    final plugin = manifest == null
+        ? null
+        : speechPluginRegistry.selectedPluginForCapability(
+            SpeechPluginCapability.realtimeAsr,
+          );
+    final resolvedConfig =
+        manifest == null ? null : _resolvedRealtimePluginConfig(manifest);
+    if (resolvedConfig?.transport == SpeechPluginTransport.realtimeWebsocket) {
+      final websocketUrl = (resolvedConfig?.websocketUrl ?? '').trim();
+      if (websocketUrl.isNotEmpty) {
+        return Uri.parse(websocketUrl);
+      }
+    }
+    final baseUrl = switch (plugin?.manifest.transport) {
+      SpeechPluginTransport.bridgeOpenAiCompatible =>
+        resolvedConfig?.baseUrl.trim().isNotEmpty == true
+            ? resolvedConfig!.baseUrl.trim()
+            : _client.baseUrl,
+      _ => _client.baseUrl,
+    };
+    final baseUri = Uri.parse(baseUrl);
     return baseUri.replace(
       scheme: baseUri.scheme == 'https' ? 'wss' : 'ws',
       path: websocketPath,
@@ -477,6 +837,38 @@ class BridgeRealtimeAsrService {
 
   Map<String, dynamic> _headers() {
     final settings = appSettingsController.settings;
+    final manifest = _activeRealtimePluginManifest;
+    final realtimeConfig =
+        manifest == null ? null : _resolvedRealtimePluginConfig(manifest);
+    if (realtimeConfig?.transport == SpeechPluginTransport.realtimeWebsocket) {
+      final headers = <String, dynamic>{};
+      if (_usesVolcengineSaucProtocol && manifest != null) {
+        final apiKey = speechPluginRegistry.effectiveApiKeyForManifest(
+          manifest,
+        );
+        if (apiKey.isNotEmpty) {
+          headers['X-Api-Key'] = apiKey;
+        }
+        final resourceId = _volcengineSaucResourceId(manifest, realtimeConfig);
+        if (resourceId.isNotEmpty) {
+          headers['X-Api-Resource-Id'] = resourceId;
+        }
+        final requestId = _uuidV4();
+        headers['X-Api-Connect-Id'] = requestId;
+        headers['X-Api-Request-Id'] = requestId;
+        headers['X-Api-Sequence'] = '-1';
+        return headers;
+      }
+      final headerName = (realtimeConfig?.authHeader ?? '').trim();
+      final apiKey = manifest == null
+          ? ''
+          : speechPluginRegistry.effectiveApiKeyForManifest(manifest);
+      if (headerName.isNotEmpty && apiKey.isNotEmpty) {
+        final scheme = (realtimeConfig?.authScheme ?? '').trim();
+        headers[headerName] = scheme.isEmpty ? apiKey : '$scheme $apiKey';
+      }
+      return headers;
+    }
     final headers = <String, dynamic>{
       'X-Omni-Code-Client-Id': settings.clientId,
     };
@@ -484,6 +876,126 @@ class BridgeRealtimeAsrService {
       headers['Authorization'] = 'Bearer ${settings.bridgeToken.trim()}';
     }
     return headers;
+  }
+
+  String _volcengineSaucResourceId(
+    SpeechPluginManifest manifest,
+    SpeechPluginCapabilityConfig? config,
+  ) {
+    final overrides =
+        speechPluginRegistry.configuredSettingsForPluginId(manifest.id);
+    return (overrides[SpeechPluginSettingFieldKey.resourceId.id] ??
+            config?.eventMap[SpeechPluginSettingFieldKey.resourceId.id] ??
+            '')
+        .trim();
+  }
+
+  String _volcengineSaucModelName() {
+    final manifest = _activeRealtimePluginManifest;
+    if (manifest == null) {
+      return 'bigmodel';
+    }
+    final overrides =
+        speechPluginRegistry.configuredSettingsForPluginId(manifest.id);
+    final configured = overrides[SpeechPluginSettingFieldKey.model.id]?.trim();
+    return configured?.isNotEmpty == true ? configured! : 'bigmodel';
+  }
+
+  void _handleCustomRealtimePluginMessage(
+    Map<String, dynamic> decoded, {
+    required SpeechPluginManifest manifest,
+    required void Function(BridgeRealtimeAsrUtterance utterance) onUtterance,
+    void Function()? onSpeechStarted,
+    void Function(String keyword)? onWakeWordDetected,
+  }) {
+    final config = _resolvedRealtimePluginConfig(manifest);
+    if (config == null) {
+      return;
+    }
+    final eventField = config.eventMap['field'] ?? 'type';
+    final type = decoded[eventField]?.toString().trim() ?? '';
+    if (type.isEmpty) {
+      return;
+    }
+
+    final speechStartedType =
+        config.eventMap['speech_started'] ?? 'speech_started';
+    final partialType = config.eventMap['partial'] ?? 'partial';
+    final finalType = config.eventMap['final'] ?? 'final';
+    final wakeWordType = config.eventMap['wake_word'] ?? 'wake_word_detected';
+    final textField = config.textFieldMap['text'] ?? 'text';
+    final keywordField = config.textFieldMap['keyword'] ?? 'keyword';
+
+    if (type == speechStartedType) {
+      onSpeechStarted?.call();
+      return;
+    }
+    if (type == wakeWordType) {
+      final keyword = decoded[keywordField]?.toString().trim() ?? '';
+      if (keyword.isNotEmpty) {
+        onWakeWordDetected?.call(keyword);
+      }
+      return;
+    }
+    if (type == partialType || type == finalType) {
+      final text = decoded[textField]?.toString().trim() ?? '';
+      if (text.isEmpty) {
+        return;
+      }
+      onUtterance(
+        BridgeRealtimeAsrUtterance(
+          text: text,
+          isFinal: type == finalType,
+        ),
+      );
+    }
+  }
+
+  SpeechPluginCapabilityConfig? _resolvedRealtimePluginConfig(
+    SpeechPluginManifest manifest,
+  ) {
+    final base = manifest.configFor(SpeechPluginCapability.realtimeAsr);
+    if (base == null) {
+      return null;
+    }
+    final overrides =
+        speechPluginRegistry.configuredSettingsForPluginId(manifest.id);
+    final resolved = base.copyWith(
+      model: overrides[SpeechPluginSettingFieldKey.model.id] ?? base.model,
+      baseUrl:
+          overrides[SpeechPluginSettingFieldKey.baseUrl.id] ?? base.baseUrl,
+      path: overrides[SpeechPluginSettingFieldKey.path.id] ?? base.path,
+      websocketUrl: overrides[SpeechPluginSettingFieldKey.websocketUrl.id] ??
+          base.websocketUrl,
+      authHeader: overrides[SpeechPluginSettingFieldKey.authHeader.id] ??
+          base.authHeader,
+      authScheme: overrides[SpeechPluginSettingFieldKey.authScheme.id] ??
+          base.authScheme,
+    );
+
+    for (final field in manifest.settingFieldsForCapability(
+      SpeechPluginCapability.realtimeAsr,
+    )) {
+      final value = switch (field.key) {
+        SpeechPluginSettingFieldKey.model => resolved.model.trim(),
+        SpeechPluginSettingFieldKey.baseUrl => resolved.baseUrl.trim(),
+        SpeechPluginSettingFieldKey.path => resolved.path?.trim() ?? '',
+        SpeechPluginSettingFieldKey.websocketUrl =>
+          resolved.websocketUrl?.trim() ?? '',
+        SpeechPluginSettingFieldKey.resourceId =>
+          (overrides[field.key.id] ?? resolved.eventMap[field.key.id] ?? '')
+              .trim(),
+        SpeechPluginSettingFieldKey.authHeader =>
+          resolved.authHeader?.trim() ?? '',
+        SpeechPluginSettingFieldKey.authScheme =>
+          resolved.authScheme?.trim() ?? '',
+      };
+      if (field.required && value.isEmpty) {
+        throw Exception('Plugin setting required: ${field.label}');
+      }
+    }
+
+    return resolved;
   }
 
   static Future<BridgeRealtimeSocket> _defaultConnector(
@@ -494,6 +1006,20 @@ class BridgeRealtimeAsrService {
       uri.toString(),
       headers: headers,
     ).then(_IoBridgeRealtimeSocket.new);
+  }
+
+  String _uuidV4() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex = bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0'));
+    final value = hex.join();
+    return '${value.substring(0, 8)}-'
+        '${value.substring(8, 12)}-'
+        '${value.substring(12, 16)}-'
+        '${value.substring(16, 20)}-'
+        '${value.substring(20)}';
   }
 }
 

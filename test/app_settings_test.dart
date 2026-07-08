@@ -213,4 +213,73 @@ void main() {
     final restored = AppSettings.fromJson(settings.toJson());
     expect(restored.desktopSessionRailCollapsed, isFalse);
   });
+
+  test('speech plugin settings round-trip through json', () {
+    final settings = AppSettings.defaults().copyWith(
+      speechPluginSources: const [
+        {
+          'id': 'official',
+          'name': 'Official',
+          'index_url': 'https://example.com/community-plugins.json',
+          'enabled': true,
+        },
+        {
+          'id': 'custom-1',
+          'name': 'Custom',
+          'index_url': 'https://example.com/custom.json',
+          'enabled': true,
+        },
+      ],
+      installedSpeechPlugins: const [
+        {
+          'installed_at': '2026-01-01T00:00:00.000Z',
+          'manifest': {
+            'id': 'plugin-1',
+            'name': 'Plugin 1',
+            'vendor': 'Vendor',
+            'version': '1.0.0',
+            'capabilities': ['tts'],
+            'transport': 'openai_compatible',
+            'base_url': 'https://example.com/v1',
+          },
+        },
+      ],
+      selectedSpeechPluginByCapability: const {
+        'tts': 'plugin-1',
+        'batch_asr': 'plugin-2',
+      },
+      speechPluginApiKeysByPluginId: const {
+        'plugin-1': 'secret-1',
+      },
+      speechPluginSettingsByPluginId: const {
+        'plugin-1': {
+          'model': 'ep-123',
+          'start_command': 'bun run plugin:start',
+          'stop_command': 'bun run plugin:stop',
+        },
+      },
+    );
+
+    final restored = AppSettings.fromJson(settings.toJson());
+
+    expect(
+      restored.speechPluginSources,
+      hasLength(2),
+    );
+    expect(restored.installedSpeechPlugins, hasLength(1));
+    expect(restored.selectedSpeechPluginByCapability, {
+      'tts': 'plugin-1',
+      'batch_asr': 'plugin-2',
+    });
+    expect(restored.speechPluginApiKeysByPluginId, {
+      'plugin-1': 'secret-1',
+    });
+    expect(restored.speechPluginSettingsByPluginId, {
+      'plugin-1': {
+        'model': 'ep-123',
+        'start_command': 'bun run plugin:start',
+        'stop_command': 'bun run plugin:stop',
+      },
+    });
+  });
 }

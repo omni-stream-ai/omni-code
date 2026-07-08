@@ -22,6 +22,8 @@ import '../l10n/app_locale.dart';
 import '../message_image_paths.dart';
 import '../models.dart';
 import '../responsive/app_responsive_layout.dart';
+import '../plugins/speech_plugin_models.dart';
+import '../plugins/speech_plugin_registry.dart';
 import '../services/cloud_speech_service.dart';
 import '../services/notification_service.dart';
 import '../services/audio_recording_service.dart';
@@ -1833,7 +1835,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   isWaitingForBridgeReply: isWaitingForBridgeReply,
                   showVoiceInputUnavailableTooltip:
                       showVoiceInputUnavailableTooltip,
-                  systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
+                  systemSpeechUnavailableMessage:
+                      systemSpeechUnavailableMessage,
                 ),
               ),
             ],
@@ -4215,8 +4218,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   double _messageBubbleMaxWidthFor(double availableWidth) {
-    final isDesktop =
-        MediaQuery.sizeOf(context).width >= AppResponsiveLayout.desktopBreakpoint;
+    final isDesktop = MediaQuery.sizeOf(context).width >=
+        AppResponsiveLayout.desktopBreakpoint;
     final factor = isDesktop ? _assistantMessageBubbleWidthFactor : 1.0;
     final preferredWidth = availableWidth * factor;
     return math.min(
@@ -6993,7 +6996,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _supportsCallModeAsrProvider() {
     final provider = appSettingsController.settings.asrProvider;
     return provider == AsrProvider.system ||
-        provider == AsrProvider.bridgeLocal;
+        provider == AsrProvider.bridgeLocal ||
+        _selectedRealtimeAsrPluginSupportsStreaming();
   }
 
   bool _usesSystemSpeechForCallMode() {
@@ -7002,7 +7006,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   bool _usesBridgeRealtimeSpeechForCallMode() {
     return appSettingsController.settings.asrProvider ==
-        AsrProvider.bridgeLocal;
+            AsrProvider.bridgeLocal ||
+        _selectedRealtimeAsrPluginSupportsStreaming();
   }
 
   bool _usesWakeWordForBridgeCallMode() {
@@ -8232,8 +8237,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return false;
     }
     final provider = appSettingsController.settings.asrProvider;
-    final canStream =
-        provider == AsrProvider.bridgeLocal || provider == AsrProvider.system;
+    final canStream = provider == AsrProvider.bridgeLocal ||
+        provider == AsrProvider.system ||
+        _selectedRealtimeAsrPluginSupportsStreaming();
     if (!canStream) {
       return false;
     }
@@ -8245,6 +8251,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   void _cancelCallModeSpeechHintTimer() {
     _callModeSpeechHintTimer?.cancel();
     _callModeSpeechHintTimer = null;
+  }
+
+  bool _selectedRealtimeAsrPluginSupportsStreaming() {
+    final plugin = speechPluginRegistry.selectedPluginForCapability(
+      SpeechPluginCapability.realtimeAsr,
+    );
+    if (plugin == null) {
+      return false;
+    }
+    return plugin.manifest.transport ==
+        SpeechPluginTransport.bridgeOpenAiCompatible;
   }
 
   void _setCallModeSpeechHintState(_CallModeSpeechHintState? state) {

@@ -10,6 +10,8 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import 'cloud_speech_service.dart';
+import '../plugins/speech_plugin_models.dart';
+import '../plugins/speech_plugin_registry.dart';
 import '../settings/app_settings.dart';
 
 const int _wavHeaderLength = 44;
@@ -98,8 +100,11 @@ class TtsService {
     try {
       await stop(notifyCancel: false);
       _streamingPlaybackStopping = false;
+      final ttsPlugin = speechPluginRegistry.selectedPluginForCapability(
+        SpeechPluginCapability.tts,
+      );
       final provider = appSettingsController.settings.ttsProvider;
-      if (provider == TtsProvider.system) {
+      if (ttsPlugin == null && provider == TtsProvider.system) {
         if (_systemTtsUnavailable) {
           throw Exception(
             'System TTS is unavailable on this device. '
