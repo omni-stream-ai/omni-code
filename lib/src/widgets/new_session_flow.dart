@@ -24,7 +24,7 @@ Future<void> startNewSessionFlow(
 
   ProjectSummary? project = initialProject;
   if (project == null) {
-    var projects = initialProjects;
+    var projects = initialProjects ?? resolvedClient.peekProjects();
     if (projects == null) {
       try {
         projects = await resolvedClient.listProjects(forceRefresh: true);
@@ -70,10 +70,8 @@ Future<void> startNewSessionFlow(
     context: context,
     builder: (context) => CreateSessionDialog(
       client: resolvedClient,
-      initialProviderId:
-          appSettingsController.settings.lastSelectedProviderByProject[
-            project!.id
-          ],
+      initialProviderId: appSettingsController
+          .settings.lastSelectedProviderByProject[project!.id],
     ),
   );
   if (sessionResult == null || !context.mounted) {

@@ -225,6 +225,18 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         );
       },
       onNewSession: _startNewSession,
+      onNewSessionForProject: (project) => startNewSessionFlow(
+        context,
+        client: _client,
+        initialProject: project,
+      ),
+      onNewSessionForSession: (session) => startNewSessionFlow(
+        context,
+        client: _client,
+        initialProjects: recentProjects,
+        initialProject: _client.peekProject(session.projectId),
+      ),
+      agentLabelFor: _client.agentLabelFor,
       bodyBuilder: (context, useDesktop, constraints) {
         return SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),

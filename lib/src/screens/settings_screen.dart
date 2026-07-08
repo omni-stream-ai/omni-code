@@ -208,6 +208,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       },
       onNewSession: _startNewSession,
+      onNewSessionForProject: (project) => startNewSessionFlow(
+        context,
+        initialProject: project,
+      ),
+      onNewSessionForSession: (session) => startNewSessionFlow(
+        context,
+        initialProjects: recentProjects,
+        initialProject: bridgeClient.peekProject(session.projectId),
+      ),
+      agentLabelFor: bridgeClient.agentLabelFor,
       bodyBuilder: (context, useDesktop, constraints) {
         return SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),

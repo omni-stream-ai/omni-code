@@ -567,12 +567,77 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const Key('home-dashboard-skeleton')), findsOneWidget);
-    expect(find.byKey(const Key('home-desktop-rail-skeleton')), findsOneWidget);
+    expect(find.byKey(const Key('home-desktop-rail-skeleton')), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
 
     gate.complete();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('home desktop status rail is collapsed by default and toggles',
+      (tester) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _projectJson(
+                  id: 'alpha',
+                  name: 'Alpha',
+                  updatedAt: '2026-05-05T11:00:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/sessions') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _sessionJson(
+                  id: 'session-1',
+                  projectId: 'alpha',
+                  title: 'Session One',
+                  updatedAt: '2026-05-05T11:30:00.000',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(appSettingsController.settings.desktopHomeRailCollapsed, isTrue);
+    expect(find.byKey(const Key('home-rail-collapse-button')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('home-header-more-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('home-header-toggle-rail-button')));
+    await tester.pumpAndSettle();
+
+    expect(appSettingsController.settings.desktopHomeRailCollapsed, isFalse);
+    expect(find.byKey(const Key('home-rail-collapse-button')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('home-rail-collapse-button')));
+    await tester.pumpAndSettle();
+
+    expect(appSettingsController.settings.desktopHomeRailCollapsed, isTrue);
+    expect(find.byKey(const Key('home-rail-collapse-button')), findsNothing);
   });
 
   testWidgets('projects screen keeps the active project at the top',
@@ -918,6 +983,7 @@ void main() {
     expect(find.text('Session 1'), findsOneWidget);
 
     final refreshButton = find.byIcon(Icons.refresh_rounded);
+    await tester.ensureVisible(refreshButton);
     await tester.tap(refreshButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -983,6 +1049,7 @@ void main() {
 
     now.advance(const Duration(seconds: 16));
     binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.detached);
     binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -1053,7 +1120,9 @@ void main() {
     expect(find.text('Session 1'), findsOneWidget);
     expect(find.text(l10n.loadMoreSessionsLabel), findsNothing);
 
-    await tester.tap(find.byIcon(Icons.refresh_rounded));
+    final refreshButton = find.byIcon(Icons.refresh_rounded);
+    await tester.ensureVisible(refreshButton);
+    await tester.tap(refreshButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -1118,6 +1187,7 @@ void main() {
 
     now.advance(const Duration(seconds: 10));
     binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.detached);
     binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));

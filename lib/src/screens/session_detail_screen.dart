@@ -83,7 +83,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   static const double _bottomAutoScrollThreshold = 96;
   static const double _topHistoryExpandThreshold = 72;
   static const double _messageBubbleMaxWidth = 320;
-  static const double _assistantMessageBubbleWidthFactor = 0.82;
+  static const double _assistantMessageBubbleWidthFactor = 0.92;
   static const double _bridgeRealtimeEndpointRule2Ratio = 0.7;
   static const double _callModeSpeechHintDelayRatio = 0.55;
   static const Duration _callModeTtsEchoGracePeriod = Duration(seconds: 6);
@@ -91,6 +91,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     seconds: 4,
   );
   static const int _messagePageLimit = 12;
+  static const int _initialVisibleMessageLimit = 6;
   static final RegExp _assistantSectionDividerPattern = RegExp(
     r'\n\s*\n[ \t]*---[ \t]*\n\s*\n|\n[ \t]*---[ \t]*\n',
   );
@@ -142,6 +143,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Timer? _speechStatusAutoDismissTimer;
   Timer? _callModeSpeechHintTimer;
   Timer? _refreshSessionSummaryDebounce;
+  Timer? _refreshMessagesAfterIdleDebounce;
   Timer? _sessionIdCopiedResetTimer;
   bool _refreshSessionSummaryInFlight = false;
   bool _dispatchingQueuedLocalMessage = false;
@@ -475,18 +477,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     });
   }
 
-  void _requestStopReplyFocusAfterFrame() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          _callModeEnabled ||
-          _session.status != SessionStatus.running ||
-          _cancellingReply) {
-        return;
-      }
-      _stopReplyFocusNode.requestFocus();
-    });
-  }
-
   void _requestComposerFocusWhileActiveTurnAfterFrame() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
@@ -645,6 +635,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _speechStatusAutoDismissTimer?.cancel();
     _callModeSpeechHintTimer?.cancel();
     _refreshSessionSummaryDebounce?.cancel();
+    _refreshMessagesAfterIdleDebounce?.cancel();
     _sessionIdCopiedResetTimer?.cancel();
     _completeCallModeCommandAcceptedSpeech();
     unawaited(_audioRecordingService.cancel());
@@ -1270,6 +1261,22 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
+  void _scheduleRefreshMessagesAfterIdle() {
+    if (_creatingSession) {
+      return;
+    }
+    _refreshMessagesAfterIdleDebounce?.cancel();
+    _refreshMessagesAfterIdleDebounce = Timer(
+      const Duration(milliseconds: 300),
+      () {
+        if (!mounted || _creatingSession) {
+          return;
+        }
+        unawaited(_loadMessages());
+      },
+    );
+  }
+
   Future<void> _refreshSessionSummaryFromBridge() async {
     if (_creatingSession || _refreshSessionSummaryInFlight) {
       return;
@@ -1375,7 +1382,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           arguments: session,
         );
       },
-      onNewSession: _startNewSessionFromCurrentProject,
+      onNewSession: _startNewSession,
+      onNewSessionForProject: (project) => startNewSessionFlow(
+        context,
+        client: _client,
+        initialProject: project,
+      ),
+      onNewSessionForSession: _startNewSessionFromRecentSession,
+      agentLabelFor: _client.agentLabelFor,
       desktopBreakpoint: AppResponsiveLayout.desktopBreakpoint,
       desktopSidebarWidth: AppResponsiveLayout.desktopSidebarWidth,
       desktopSidebarCollapsedWidth:
@@ -1464,9 +1478,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           const SizedBox(width: AppSpacing.compact),
           Expanded(
             child: AppBackHeader(
+              key: const Key('session-header-back-title'),
               title: _session.title,
               subtitle: _gitStatusLabel,
-              onTap: _openHomeFromSession,
+              onTap: _goBackFromSession,
               showLeadingIcon: false,
               titleStyle: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w800,
@@ -1487,9 +1502,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Widget _buildDesktopSessionHeader(ThemeData theme) {
     return AppBackHeader(
+      key: const Key('session-header-back-title'),
       title: _session.title,
       subtitle: _gitStatusLabel,
-      onTap: _openHomeFromSession,
+      onTap: _goBackFromSession,
       titleStyle: theme.textTheme.titleLarge?.copyWith(
         fontWeight: FontWeight.w800,
         height: 1.08,
@@ -1497,10 +1513,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
-  void _openHomeFromSession() {
-    Navigator.of(context).popUntil(
-      (route) => route.settings.name == AppRoutes.home || route.isFirst,
-    );
+  void _goBackFromSession() {
+    final navigator = Navigator.of(context, rootNavigator: true);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    unawaited(navigator.maybePop());
   }
 
   Future<void> _startNewSessionFromCurrentProject() async {
@@ -1511,8 +1530,35 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
+  Future<void> _startNewSessionFromRecentSession(
+    SessionSummary session,
+  ) async {
+    await startNewSessionFlow(
+      context,
+      client: _client,
+      initialProjects: _client.peekProjects(),
+      initialProject: _client.peekProject(session.projectId),
+    );
+  }
+
+  Future<void> _startNewSession() async {
+    await startNewSessionFlow(
+      context,
+      client: _client,
+      initialProjects: _client.peekProjects(),
+    );
+  }
+
   Future<void> _toggleDesktopSidebarCollapsed() async {
     await toggleDesktopNavigationCollapsed();
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+  }
+
+  Future<void> _toggleDesktopSessionRailCollapsed() async {
+    await toggleDesktopSessionRailCollapsed();
     if (!mounted) {
       return;
     }
@@ -1571,6 +1617,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Widget _buildSessionHeaderOptionsPanel() {
     final runtimeSessionRef = _session.runtimeSessionRef;
     final agentLabel = _client.agentLabelFor(_session.agentId);
+    final showDesktopRailToggle = AppResponsiveLayout.isWideDesktopWidth(
+      MediaQuery.sizeOf(context).width,
+    );
+    final desktopRailCollapsed =
+        appSettingsController.settings.desktopSessionRailCollapsed;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1580,11 +1631,29 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           icon: Icons.add_comment_outlined,
           onTap: _startNewSessionFromCurrentProject,
         ),
+        if (showDesktopRailToggle) ...[
+          const SizedBox(height: AppSpacing.micro),
+          _buildSessionHeaderActionTile(
+            key: const Key('session-header-toggle-rail-button'),
+            label: desktopRailCollapsed
+                ? 'Show session details'
+                : 'Hide session details',
+            icon: desktopRailCollapsed
+                ? Icons.info_outline_rounded
+                : Icons.remove_circle_outline_rounded,
+            onTap: () {
+              _sessionHeaderMenuController.close();
+              unawaited(_toggleDesktopSessionRailCollapsed());
+            },
+          ),
+        ],
         if (runtimeSessionRef != null && runtimeSessionRef.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.micro),
           _buildSessionHeaderActionTile(
             key: const Key('session-header-copy-id-button'),
-             label: _sessionIdCopied ? context.l10n.copied : context.l10n.copySessionId(agentLabel),
+            label: _sessionIdCopied
+                ? context.l10n.copied
+                : context.l10n.copySessionId(agentLabel),
             icon: _sessionIdCopied
                 ? Icons.check_rounded
                 : Icons.content_copy_rounded,
@@ -1677,7 +1746,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }) {
     final topBanners = _buildTopBanners(
       approvalCardMaxHeight: approvalCardMaxHeight,
-      showPendingApprovalInline: true,
+      showPendingApprovalInline: false,
     );
     return Column(
       children: [
@@ -1698,13 +1767,18 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             showHistoryLoader: showHistoryLoader,
           ),
         ),
-        _buildMessageComposer(
-          canCancelReply: canCancelReply,
-          hasActiveTurn: hasActiveTurn,
-          isSessionBusy: isSessionBusy,
-          isWaitingForBridgeReply: isWaitingForBridgeReply,
-          showVoiceInputUnavailableTooltip: showVoiceInputUnavailableTooltip,
-          systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
+        if (_pendingApproval != null)
+          _buildComposerApprovalCard(approvalCardMaxHeight),
+        KeyedSubtree(
+          key: const ValueKey('session-composer'),
+          child: _buildMessageComposer(
+            canCancelReply: canCancelReply,
+            hasActiveTurn: hasActiveTurn,
+            isSessionBusy: isSessionBusy,
+            isWaitingForBridgeReply: isWaitingForBridgeReply,
+            showVoiceInputUnavailableTooltip: showVoiceInputUnavailableTooltip,
+            systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
+          ),
         ),
       ],
     );
@@ -1726,6 +1800,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final brightness = Theme.of(context).brightness;
     final showDesktopRail = AppResponsiveLayout.isWideDesktopWidth(
         MediaQuery.sizeOf(context).width);
+    final desktopRailCollapsed =
+        appSettingsController.settings.desktopSessionRailCollapsed;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1738,7 +1814,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               ),
               ..._buildTopBanners(
                 approvalCardMaxHeight: approvalCardMaxHeight,
-                showPendingApprovalInline: !showDesktopRail,
+                showPendingApprovalInline: false,
               ),
               Expanded(
                 child: _buildConversationPane(
@@ -1746,39 +1822,75 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   showHistoryLoader: showHistoryLoader,
                 ),
               ),
-              _buildMessageComposer(
-                canCancelReply: canCancelReply,
-                hasActiveTurn: hasActiveTurn,
-                isSessionBusy: isSessionBusy,
-                isWaitingForBridgeReply: isWaitingForBridgeReply,
-                showVoiceInputUnavailableTooltip:
-                    showVoiceInputUnavailableTooltip,
-                systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
+              if (_pendingApproval != null)
+                _buildComposerApprovalCard(approvalCardMaxHeight),
+              KeyedSubtree(
+                key: const ValueKey('session-composer'),
+                child: _buildMessageComposer(
+                  canCancelReply: canCancelReply,
+                  hasActiveTurn: hasActiveTurn,
+                  isSessionBusy: isSessionBusy,
+                  isWaitingForBridgeReply: isWaitingForBridgeReply,
+                  showVoiceInputUnavailableTooltip:
+                      showVoiceInputUnavailableTooltip,
+                  systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
+                ),
               ),
             ],
           ),
         ),
-        if (showDesktopRail)
-          Container(
-            width: _desktopRailWidth,
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(color: AppColors.outlineFor(brightness)),
-              ),
-            ),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.block,
-                AppSpacing.block,
-                AppSpacing.block,
-                AppSpacing.screenBottom,
-              ),
-              child: _buildDesktopRail(
-                approvalCardMaxHeight: approvalCardMaxHeight,
-              ),
-            ),
+        if (showDesktopRail && !desktopRailCollapsed)
+          _buildDesktopRailShell(
+            approvalCardMaxHeight: approvalCardMaxHeight,
+            brightness: brightness,
           ),
       ],
+    );
+  }
+
+  Widget _buildDesktopRailShell({
+    required double approvalCardMaxHeight,
+    required Brightness brightness,
+  }) {
+    final outline = AppColors.outlineFor(brightness);
+    final iconButtonStyle = IconButton.styleFrom(
+      backgroundColor: Colors.transparent,
+      foregroundColor: AppColors.textSoftFor(brightness),
+      hoverColor: AppColors.textFor(brightness).withValues(alpha: 0.06),
+      focusColor: AppColors.textFor(brightness).withValues(alpha: 0.08),
+    );
+    return Container(
+      width: _desktopRailWidth,
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: outline)),
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.block,
+          AppSpacing.compact,
+          AppSpacing.block,
+          AppSpacing.screenBottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                key: const Key('session-rail-collapse-button'),
+                tooltip: 'Collapse session details',
+                style: iconButtonStyle,
+                onPressed: _toggleDesktopSessionRailCollapsed,
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.compact),
+            _buildDesktopRail(
+              approvalCardMaxHeight: approvalCardMaxHeight,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1862,7 +1974,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       project: project,
       gitStatus: _gitStatus,
       gitStatusLabel: _gitStatusLabel,
-      pendingApproval: _pendingApproval,
+      pendingApproval: null,
       sessionIdCopied: _sessionIdCopied,
       approvalCardMaxHeight: approvalCardMaxHeight,
       statusLabel: _sessionStatusLabel(context.l10n),
@@ -1996,6 +2108,31 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             outlineStrong: outlineStrong,
             canCancelReply: canCancelReply,
             hasActiveTurn: hasActiveTurn,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildComposerApprovalCard(double approvalCardMaxHeight) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.block,
+        AppSpacing.stack,
+        AppSpacing.block,
+        0,
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: _isMobilePlatform
+                ? _desktopContentMaxWidth
+                : _desktopComposerMaxWidth,
+          ),
+          child: _buildPendingApprovalCard(
+            approvalCardMaxHeight,
+            margin: EdgeInsets.zero,
           ),
         ),
       ),
@@ -4024,18 +4161,20 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   turn.userMessage!,
                   maxWidth: messageBubbleMaxWidth,
                 ),
-              ...turn.assistantMessages.map(
-                (message) {
-                  final isLastAssistantMessage =
-                      identical(message, turn.assistantMessages.last);
-                  return _buildAssistantMessage(
-                    message,
-                    maxWidth: messageBubbleMaxWidth,
-                    compactBottomSpacing:
-                        isLastAssistantMessage && turn.toolMessages.isNotEmpty,
-                  );
-                },
-              ),
+              for (var index = 0;
+                  index < turn.assistantMessages.length;
+                  index += 1) ...[
+                if (index > 0)
+                  _buildAssistantMessageDivider(messageBubbleMaxWidth),
+                _buildAssistantMessage(
+                  turn.assistantMessages[index],
+                  maxWidth: messageBubbleMaxWidth,
+                  compactTopSpacing: index > 0,
+                  compactBottomSpacing:
+                      index < turn.assistantMessages.length - 1 ||
+                          turn.toolMessages.isNotEmpty,
+                ),
+              ],
               if (turn.toolMessages.isNotEmpty)
                 _buildToolEntry(
                   count: turn.toolMessages.length,
@@ -4076,12 +4215,40 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   double _messageBubbleMaxWidthFor(double availableWidth) {
-    final preferredWidth = availableWidth * _assistantMessageBubbleWidthFactor;
+    final isDesktop =
+        MediaQuery.sizeOf(context).width >= AppResponsiveLayout.desktopBreakpoint;
+    final factor = isDesktop ? _assistantMessageBubbleWidthFactor : 1.0;
+    final preferredWidth = availableWidth * factor;
     return math.min(
       availableWidth,
-      math.min(
-        AppSpacing.contentMaxWidth,
-        math.max(_messageBubbleMaxWidth, preferredWidth),
+      math.max(_messageBubbleMaxWidth, preferredWidth),
+    );
+  }
+
+  Widget _buildAssistantMessageDivider(double maxWidth) {
+    final brightness = Theme.of(context).brightness;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.card),
+          child: DecoratedBox(
+            key: const ValueKey('assistant-message-divider'),
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(
+                  width: 0.6,
+                  color: AppColors.outlineFor(brightness),
+                ),
+              ),
+            ),
+            child: const SizedBox(
+              width: double.infinity,
+              height: 1,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -4145,6 +4312,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         bubble: bubble,
         showActions: canRestoreQueued || canRetry,
         hoverKey: ValueKey('user-message-hover-${message.id}'),
+        actionKeySuffix: message.id,
         onTapBubble: canRestoreQueued || canRetry
             ? () => _retryLocalMessage(message.id)
             : null,
@@ -4208,6 +4376,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Widget _buildAssistantMessage(
     ChatMessage message, {
     required double maxWidth,
+    bool compactTopSpacing = false,
     bool compactBottomSpacing = false,
   }) {
     final displayContent = _displayContentForMessage(message);
@@ -4224,11 +4393,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         child: Container(
           key: ValueKey('assistant-message-bubble-${message.id}'),
           margin: EdgeInsets.only(
-            bottom: compactBottomSpacing
-                ? AppSpacing.compact / 2
-                : AppSpacing.stack,
+            bottom: compactBottomSpacing ? 0 : AppSpacing.stack,
           ),
-          padding: AppSpacing.cardPadding,
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.card,
+            compactTopSpacing ? AppSpacing.micro : AppSpacing.card,
+            AppSpacing.card,
+            compactBottomSpacing ? AppSpacing.micro : AppSpacing.card,
+          ),
           constraints: BoxConstraints(maxWidth: maxWidth),
           decoration: BoxDecoration(
             color: Colors.transparent,
@@ -4455,7 +4627,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                           ),
                         ),
                       ),
-                      child: const SizedBox(height: 1),
+                      child: const SizedBox(
+                        width: double.infinity,
+                        height: 1,
+                      ),
                     ),
                   ),
               ],
@@ -5466,7 +5641,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     final requestToken = ++_messageLoadRequestToken;
     final sessionId = _session.id;
-    final existingMessageIds = _messages.map((message) => message.id).toSet();
     final hadExistingMessages = _messages.isNotEmpty;
     final previousHasMoreOlderMessages = _hasMoreOlderMessages;
     final previousOlderMessagesCursor = _olderMessagesCursor;
@@ -5482,10 +5656,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         return;
       }
       setState(() {
-        _replaceMessagesFromServer(
-          filteredMessages,
-          existingMessageIds: existingMessageIds,
-        );
+        _replaceMessagesFromServer(filteredMessages);
         _applyOlderPaginationState(
           page: page,
           hadExistingMessages: hadExistingMessages,
@@ -5592,6 +5763,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
     }
 
+    if (_hasRenderableMessages(messages) &&
+        olderHistoryAvailable &&
+        messages.length > _initialVisibleMessageLimit) {
+      final trimCount = messages.length - _initialVisibleMessageLimit;
+      olderCursor = messages[trimCount].id;
+      messages.removeRange(0, trimCount);
+    }
+
     return MessageListPage(
       messages: messages,
       hasMore: olderHistoryAvailable,
@@ -5626,10 +5805,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return messages.where((message) => message.sessionId == sessionId);
   }
 
-  void _replaceMessagesFromServer(
-    Iterable<ChatMessage> serverMessages, {
-    required Set<String> existingMessageIds,
-  }) {
+  void _replaceMessagesFromServer(Iterable<ChatMessage> serverMessages) {
     final serverList = serverMessages.map((serverMessage) {
       final existingIndex = _messages.indexWhere(
         (message) => message.id == serverMessage.id,
@@ -5641,17 +5817,67 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         existing: _messages[existingIndex],
         incoming: serverMessage,
       );
-    }).toList(growable: false);
-    final preservedLocalMessages = _messages.where((message) {
+    }).toList(growable: true);
+    final preservedLocalMessages = <ChatMessage>[];
+    for (final message in _messages) {
       if (_localMessageStates.containsKey(message.id)) {
-        return true;
+        final serverIndex = _matchingServerUserForPendingLocalMessageIndex(
+          serverList,
+          message,
+        );
+        if (serverIndex >= 0) {
+          final serverMessage = serverList[serverIndex];
+          serverList[serverIndex] = serverMessage.copyWith(
+            createdAt: message.createdAt.isBefore(serverMessage.createdAt)
+                ? message.createdAt
+                : serverMessage.createdAt,
+          );
+          _localMessageStates.remove(message.id);
+          continue;
+        }
+        preservedLocalMessages.add(message);
+        continue;
       }
-      return !serverList.any((serverMessage) => serverMessage.id == message.id);
-    }).toList(growable: false);
+      if (serverList.any((serverMessage) => serverMessage.id == message.id)) {
+        continue;
+      }
+      final equivalentIndex = serverList.indexWhere(
+        (serverMessage) => _messagesAreEquivalentForMerge(
+          serverMessage,
+          message,
+          existingContext: serverList,
+          incomingContext: _messages,
+        ),
+      );
+      if (equivalentIndex >= 0) {
+        serverList[equivalentIndex] = _preferredEquivalentLiveMessage(
+          serverList[equivalentIndex],
+          message,
+        );
+        continue;
+      }
+      preservedLocalMessages.add(message);
+    }
     _messages
       ..clear()
       ..addAll(_mergeMessages([...serverList, ...preservedLocalMessages]));
     _pruneVideoFileFutures();
+  }
+
+  int _matchingServerUserForPendingLocalMessageIndex(
+    List<ChatMessage> serverMessages,
+    ChatMessage localMessage,
+  ) {
+    if (localMessage.role != MessageRole.user ||
+        localMessage.content.trim().isEmpty) {
+      return -1;
+    }
+    return serverMessages.indexWhere(
+      (serverMessage) =>
+          serverMessage.role == MessageRole.user &&
+          serverMessage.sessionId == localMessage.sessionId &&
+          serverMessage.content == localMessage.content,
+    );
   }
 
   void _applyOlderPaginationState({
@@ -5698,7 +5924,86 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return merged;
   }
 
+  bool _messagesAreEquivalentForMerge(
+    ChatMessage existing,
+    ChatMessage incoming, {
+    required List<ChatMessage> existingContext,
+    required List<ChatMessage> incomingContext,
+  }) {
+    if (existing.id == incoming.id ||
+        existing.role == MessageRole.system ||
+        existing.role != incoming.role ||
+        existing.sessionId != incoming.sessionId ||
+        !_messageContentsAreEquivalent(
+          incoming.role,
+          existing.content,
+          incoming.content,
+        )) {
+      return false;
+    }
+    if (existing.role == MessageRole.assistant &&
+        !_messagesShareTurnAnchor(
+          existing,
+          incoming,
+          existingContext: existingContext,
+          incomingContext: incomingContext,
+        )) {
+      return false;
+    }
+    if (existing.id.startsWith('local-') || incoming.id.startsWith('local-')) {
+      return true;
+    }
+    final secondsApart =
+        existing.createdAt.difference(incoming.createdAt).inSeconds.abs();
+    return secondsApart <= 600;
+  }
+
+  bool _messagesShareTurnAnchor(
+    ChatMessage existing,
+    ChatMessage incoming, {
+    required List<ChatMessage> existingContext,
+    required List<ChatMessage> incomingContext,
+  }) {
+    final existingUser = _nearestUserBeforeMessage(existingContext, existing);
+    final incomingUser = _nearestUserBeforeMessage(incomingContext, incoming);
+    if (existingUser == null || incomingUser == null) {
+      return false;
+    }
+    return existingUser.sessionId == incomingUser.sessionId &&
+        _messageContentsAreEquivalent(
+          MessageRole.user,
+          existingUser.content,
+          incomingUser.content,
+        );
+  }
+
+  ChatMessage? _nearestUserBeforeMessage(
+    List<ChatMessage> messages,
+    ChatMessage target,
+  ) {
+    ChatMessage? latestUser;
+    for (final message in messages) {
+      if (message.id == target.id) {
+        return latestUser;
+      }
+      if (message.role == MessageRole.user) {
+        latestUser = message;
+      }
+    }
+    return null;
+  }
+
   bool _preferIncomingMessage(ChatMessage existing, ChatMessage incoming) {
+    if (existing.role == MessageRole.assistant &&
+        incoming.role == MessageRole.assistant &&
+        existing.content.trim().length != incoming.content.trim().length &&
+        _messageContentsAreEquivalent(
+          MessageRole.assistant,
+          existing.content,
+          incoming.content,
+        )) {
+      return incoming.content.trim().length > existing.content.trim().length;
+    }
     final createdAtComparison =
         incoming.createdAt.compareTo(existing.createdAt);
     if (createdAtComparison != 0) {
@@ -5773,7 +6078,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     _restoringSession = true;
-    final existingMessageIds = _messages.map((message) => message.id).toSet();
     final hadExistingMessages = _messages.isNotEmpty;
     final previousHasMoreOlderMessages = _hasMoreOlderMessages;
     final previousOlderMessagesCursor = _olderMessagesCursor;
@@ -5802,10 +6106,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           .firstWhere((_) => true, orElse: () => null);
 
       setState(() {
-        _replaceMessagesFromServer(
-          filteredMessages,
-          existingMessageIds: existingMessageIds,
-        );
+        _replaceMessagesFromServer(filteredMessages);
         _applyOlderPaginationState(
           page: page,
           hadExistingMessages: hadExistingMessages,
@@ -5848,6 +6149,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     switch (type) {
+      case 'sync_required':
+        _scheduleEventReconnect();
+        break;
       case 'session_snapshot':
         setState(() {
           _session = SessionSummary.fromJson(payload);
@@ -5891,6 +6195,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             status != SessionStatus.running) {
           unawaited(_maybeResumeCallModeListening());
         }
+        if (status != SessionStatus.running) {
+          _scheduleRefreshMessagesAfterIdle();
+        }
         break;
       case 'message_created':
         final shouldAutoScroll = _isNearBottom();
@@ -5915,7 +6222,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             message = _preserveStreamingAssistantContent(
               existing: _messages[index],
               incoming: message,
-              allowChunkAppend: true,
             );
             _appendOrUpdateMessage(message);
           } else if (message.role == MessageRole.user) {
@@ -5924,33 +6230,30 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               final localMessageId = _messages[localIndex].id;
               _localMessageStates.remove(localMessageId);
               _messages[localIndex] = message;
-            } else if (message.id.startsWith('local-')) {
-              final duplicateIndex = _matchingLocalPlaceholderMessageIndex(
+            } else {
+              final duplicateIndex = _matchingEquivalentLiveMessageIndex(
                 message,
               );
               if (duplicateIndex >= 0) {
-                final duplicateMessageId = _messages[duplicateIndex].id;
-                _localMessageStates.remove(duplicateMessageId);
-                _messages[duplicateIndex] = message;
+                _messages[duplicateIndex] = _preferredEquivalentLiveMessage(
+                  _messages[duplicateIndex],
+                  message,
+                );
               } else {
                 _appendOrUpdateMessage(message);
               }
-            } else {
-              _appendOrUpdateMessage(message);
             }
           } else {
-            final duplicateIndex = _matchingLocalPlaceholderMessageIndex(
-              message,
-            );
+            final duplicateIndex = _matchingEquivalentLiveMessageIndex(message);
             if (duplicateIndex >= 0) {
-              final existing = _messages[duplicateIndex];
-              _localMessageStates.remove(existing.id);
               message = _preserveStreamingAssistantContent(
-                existing: existing,
+                existing: _messages[duplicateIndex],
                 incoming: message,
-                allowChunkAppend: true,
               );
-              _messages[duplicateIndex] = message;
+              _messages[duplicateIndex] = _preferredEquivalentLiveMessage(
+                _messages[duplicateIndex],
+                message,
+              );
             } else {
               _appendOrUpdateMessage(message);
             }
@@ -5982,19 +6285,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           _streamingAssistantMessageIds.add(messageId);
           final index = _messages.indexWhere((item) => item.id == messageId);
           if (index >= 0) {
-            final existingContent = _messages[index].content;
-            final nextContent = delta.startsWith(existingContent)
-                ? delta
-                : '$existingContent$delta';
-            if (!delta.startsWith(existingContent) &&
-                delta.isNotEmpty &&
-                !existingContent.contains(delta)) {
-              _recordAssistantMessageChunkAppend(
-                messageId: messageId,
-                existingContent: existingContent,
-                appendedChunk: delta,
-              );
-            }
+            final nextContent = _mergeAssistantStreamContent(
+              existing: _messages[index].content,
+              incoming: delta,
+            );
             _messages[index] = _messages[index].copyWith(
               content: nextContent,
             );
@@ -6072,7 +6366,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           _submittingApprovalChoice = null;
         });
         _syncSessionSummaryCache();
-        _requestStopReplyFocusAfterFrame();
+        _requestComposerFocusWhileActiveTurnAfterFrame();
         break;
     }
   }
@@ -6080,32 +6374,44 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   ChatMessage _preserveStreamingAssistantContent({
     required ChatMessage existing,
     required ChatMessage incoming,
-    bool allowChunkAppend = false,
   }) {
     if (existing.role != MessageRole.assistant ||
         incoming.role != MessageRole.assistant ||
         existing.id != incoming.id) {
       return incoming;
     }
-    if (allowChunkAppend &&
-        existing.content.isNotEmpty &&
-        incoming.content.isNotEmpty &&
-        !incoming.content.startsWith(existing.content) &&
-        !existing.content.contains(incoming.content)) {
-      _streamingAssistantMessageIds.add(existing.id);
-      _recordAssistantMessageChunkAppend(
-        messageId: existing.id,
-        existingContent: existing.content,
-        appendedChunk: incoming.content,
-      );
-      return incoming.copyWith(
-        content: '${existing.content}${incoming.content}',
-      );
-    }
     if (incoming.content.isEmpty && existing.content.isNotEmpty) {
       return incoming.copyWith(content: existing.content);
     }
-    return incoming;
+    if (!incoming.content.startsWith(existing.content) &&
+        !existing.content.startsWith(incoming.content)) {
+      return incoming;
+    }
+    return incoming.copyWith(
+      content: _mergeAssistantStreamContent(
+        existing: existing.content,
+        incoming: incoming.content,
+      ),
+    );
+  }
+
+  String _mergeAssistantStreamContent({
+    required String existing,
+    required String incoming,
+  }) {
+    if (incoming.isEmpty) {
+      return existing;
+    }
+    if (existing.isEmpty || incoming == existing) {
+      return incoming;
+    }
+    if (incoming.startsWith(existing)) {
+      return incoming;
+    }
+    if (existing.startsWith(incoming)) {
+      return existing;
+    }
+    return '$existing$incoming';
   }
 
   Future<void> _submitApproval(String choice) async {
@@ -7383,7 +7689,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _requestComposerFocusAfterFrame(consumeReturnRequest: false);
 
     try {
-      final result = await _client.sendMessage(
+      await _client.sendMessage(
         _session.id,
         content,
         inputMode: inputMode,
@@ -7402,40 +7708,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         return false;
       }
       setState(() {
-        _localMessageStates.remove(messageId);
-        final localIndex = _messages.indexWhere((item) => item.id == messageId);
-        if (localIndex >= 0) {
-          final existingUserIndex = _messages.indexWhere(
-            (item) => item.id == result.userMessage.id,
+        final draft = _localMessageStates[messageId];
+        if (draft != null) {
+          _localMessageStates[messageId] = _LocalMessageDraft(
+            state: _LocalMessageState.submitted,
+            inputMode: draft.inputMode,
+            createdAt: draft.createdAt,
+            clientMessageId: draft.clientMessageId,
           );
-          if (existingUserIndex >= 0 && existingUserIndex != localIndex) {
-            _messages.removeAt(localIndex);
-          } else {
-            _messages[localIndex] = result.userMessage;
-          }
-        } else {
-          final existingUserIndex = _messages.indexWhere(
-            (item) => item.id == result.userMessage.id,
-          );
-          if (existingUserIndex >= 0) {
-            _messages[existingUserIndex] = result.userMessage;
-          } else {
-            _messages.add(result.userMessage);
-          }
-        }
-
-        final replyIndex = _messages.indexWhere(
-          (item) => item.id == result.reply.id,
-        );
-        if (replyIndex >= 0) {
-          _messages[replyIndex] = result.reply;
-        } else {
-          _messages.add(result.reply);
         }
         _session = _session.copyWith(
           status: SessionStatus.running,
-          updatedAt: result.userMessage.createdAt,
-          lastMessagePreview: result.userMessage.content,
           clearPendingApproval: true,
         );
         _callModeInterruptedCurrentReply = false;
@@ -7572,7 +7855,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       final item = _messages[index];
       final draft = _localMessageStates[item.id];
       if (draft == null ||
-          draft.state != _LocalMessageState.pending ||
+          (draft.state != _LocalMessageState.pending &&
+              draft.state != _LocalMessageState.submitted) ||
           item.role != MessageRole.user ||
           item.sessionId != serverMessage.sessionId ||
           item.content != serverMessage.content) {
@@ -7594,33 +7878,105 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return matchingEntries.first.key;
   }
 
-  int _matchingLocalPlaceholderMessageIndex(ChatMessage incoming) {
-    if (incoming.role == MessageRole.system) {
-      return -1;
-    }
-
-    if (incoming.id.startsWith('local-')) {
-      return -1;
-    }
-
-    final normalizedIncomingContent = incoming.content.trim();
-    if (normalizedIncomingContent.isEmpty) {
+  int _matchingEquivalentLiveMessageIndex(ChatMessage incoming) {
+    if (incoming.role == MessageRole.system ||
+        incoming.content.trim().isEmpty) {
       return -1;
     }
 
     for (var index = _messages.length - 1; index >= 0; index -= 1) {
       final existing = _messages[index];
-      if (existing.sessionId != incoming.sessionId ||
+      if (existing.id == incoming.id ||
           existing.role != incoming.role ||
-          !existing.id.startsWith('local-')) {
+          existing.sessionId != incoming.sessionId ||
+          !_messageContentsAreEquivalent(
+            incoming.role,
+            existing.content,
+            incoming.content,
+          )) {
         continue;
       }
-      if (existing.content.trim() != normalizedIncomingContent) {
+      if (_localMessageStates.containsKey(existing.id)) {
         continue;
       }
-      return index;
+      if (incoming.role == MessageRole.assistant &&
+          !_messagesShareTurnAnchor(
+            existing,
+            incoming,
+            existingContext: _messages,
+            incomingContext: [..._messages, incoming],
+          )) {
+        continue;
+      }
+      if (existing.id.startsWith('local-')) {
+        return index;
+      }
+      final secondsApart =
+          existing.createdAt.difference(incoming.createdAt).inSeconds.abs();
+      if (secondsApart <= 600) {
+        return index;
+      }
     }
     return -1;
+  }
+
+  bool _messageContentsAreEquivalent(
+    MessageRole role,
+    String existing,
+    String incoming,
+  ) {
+    final existingContent = existing.trim();
+    final incomingContent = incoming.trim();
+    if (existingContent.isEmpty || incomingContent.isEmpty) {
+      return false;
+    }
+    if (existingContent == incomingContent) {
+      return true;
+    }
+    if (role != MessageRole.assistant) {
+      return false;
+    }
+    final shorter = existingContent.length <= incomingContent.length
+        ? existingContent
+        : incomingContent;
+    final longer = existingContent.length <= incomingContent.length
+        ? incomingContent
+        : existingContent;
+    return shorter.length >= 16 &&
+        longer.startsWith(shorter) &&
+        shorter.length * 100 >= longer.length * 35;
+  }
+
+  ChatMessage _preferredEquivalentLiveMessage(
+    ChatMessage existing,
+    ChatMessage incoming,
+  ) {
+    if (existing.role == MessageRole.user &&
+        incoming.role == MessageRole.user &&
+        existing.content.trim() == incoming.content.trim()) {
+      final preferred = incoming.id.startsWith('local-') ? existing : incoming;
+      final earlierCreatedAt = existing.createdAt.isBefore(incoming.createdAt)
+          ? existing.createdAt
+          : incoming.createdAt;
+      return preferred.copyWith(createdAt: earlierCreatedAt);
+    }
+    if (existing.role == MessageRole.assistant &&
+        incoming.role == MessageRole.assistant) {
+      final preferred =
+          incoming.content.trim().length > existing.content.trim().length
+              ? incoming
+              : existing;
+      final laterCreatedAt = existing.createdAt.isAfter(incoming.createdAt)
+          ? existing.createdAt
+          : incoming.createdAt;
+      return preferred.copyWith(createdAt: laterCreatedAt);
+    }
+    if (incoming.content.trim().length != existing.content.trim().length) {
+      return incoming.content.trim().length > existing.content.trim().length
+          ? incoming
+          : existing;
+    }
+    return incoming.createdAt.isAfter(existing.createdAt) ? incoming : existing;
   }
 
   Future<void> _cancelReply() async {
@@ -8946,12 +9302,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return message.content;
   }
 
-  void _recordAssistantMessageChunkAppend({
-    required String messageId,
-    required String existingContent,
-    required String appendedChunk,
-  }) {}
-
   void _scheduleScrollToBottomActionVisibility(bool visible) {
     if (_pendingShowScrollToBottomAction == visible) {
       return;
@@ -9006,7 +9356,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _showScrollToBottomAction = false;
       });
     }
-    _animateToBottom();
+    _jumpToBottom();
   }
 
   bool _isNearBottom() {
@@ -9941,7 +10291,8 @@ class _SessionDesktopRail extends StatelessWidget {
   final VoidCallback onCopySessionId;
   final Widget Function(double maxHeight) approvalCardBuilder;
 
-  String _copyAgentIdLabel(BuildContext context) => context.l10n.copySessionId(agentLabel);
+  String _copyAgentIdLabel(BuildContext context) =>
+      context.l10n.copySessionId(agentLabel);
 
   @override
   Widget build(BuildContext context) {
@@ -10042,7 +10393,9 @@ class _SessionDesktopRail extends StatelessWidget {
                       size: 16,
                     ),
                     label: Text(
-                      sessionIdCopied ? context.l10n.copied : _copyAgentIdLabel(context),
+                      sessionIdCopied
+                          ? context.l10n.copied
+                          : _copyAgentIdLabel(context),
                     ),
                   ),
                 ),
@@ -10215,7 +10568,7 @@ class _AssistantCodeSyntaxHighlighter extends SyntaxHighlighter {
   }
 }
 
-enum _LocalMessageState { queued, pending, failed }
+enum _LocalMessageState { queued, pending, submitted, failed }
 
 class _LocalMessageDraft {
   const _LocalMessageDraft({
@@ -10234,6 +10587,7 @@ class _LocalMessageDraft {
     return switch (state) {
       _LocalMessageState.queued => context.l10n.draftPending,
       _LocalMessageState.pending => context.l10n.draftPending,
+      _LocalMessageState.submitted => context.l10n.draftPending,
       _LocalMessageState.failed => context.l10n.draftFailed,
     };
   }
@@ -10243,6 +10597,7 @@ class _UserMessageBubble extends StatefulWidget {
   const _UserMessageBubble({
     required this.bubble,
     required this.showActions,
+    required this.actionKeySuffix,
     this.hoverKey,
     this.onTapBubble,
     this.onWithdraw,
@@ -10252,6 +10607,7 @@ class _UserMessageBubble extends StatefulWidget {
 
   final Widget bubble;
   final bool showActions;
+  final String actionKeySuffix;
   final Key? hoverKey;
   final VoidCallback? onTapBubble;
   final VoidCallback? onWithdraw;
@@ -10409,14 +10765,19 @@ class _UserMessageBubbleState extends State<_UserMessageBubble> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (widget.onWithdraw != null)
-                                  _buildMessageActionButton(
-                                    key: const Key(
-                                      'user-message-withdraw-action',
+                                  KeyedSubtree(
+                                    key: ValueKey(
+                                      'user-message-withdraw-action-${widget.actionKeySuffix}',
                                     ),
-                                    tooltip: context.l10n.withdrawMessage,
-                                    icon: Icons.undo_rounded,
-                                    color: AppColors.textSoftFor(brightness),
-                                    onPressed: widget.onWithdraw,
+                                    child: _buildMessageActionButton(
+                                      key: const Key(
+                                        'user-message-withdraw-action',
+                                      ),
+                                      tooltip: context.l10n.withdrawMessage,
+                                      icon: Icons.undo_rounded,
+                                      color: AppColors.textSoftFor(brightness),
+                                      onPressed: widget.onWithdraw,
+                                    ),
                                   ),
                                 if (widget.onWithdraw != null &&
                                     (widget.onEdit != null ||

@@ -218,7 +218,6 @@
   "installAgent": "安装 Agent",
   "installingAgent": "安装中...",
   "create": "创建",
-  "refreshNativeSessions": "刷新原生会话",
   "creatingSession": "正在创建会话...",
   "waitingApprovalProcessing": "正在等待审批处理...",
   "waitingApprovalListening": "正在等待批准...",

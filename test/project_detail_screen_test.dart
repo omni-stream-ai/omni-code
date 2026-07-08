@@ -46,8 +46,7 @@ void main() {
     appSettingsController.debugReplaceSettings(AppSettings.defaults());
   });
 
-  testWidgets('project detail refresh keeps expanded sessions visible',
-      (tester) async {
+  testWidgets('project detail load more shows all sessions', (tester) async {
     tester.view.physicalSize = const Size(1600, 1200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -68,9 +67,7 @@ void main() {
                   _sessionJson(
                     id: 'session-$i',
                     projectId: 'project-1',
-                    title: requestCount == 1
-                        ? 'Session $i'
-                        : 'Refreshed Session $i',
+                    title: 'Session $i',
                     updatedAt: '2026-05-05T${10 + i}:00:00.000',
                     preview: 'Preview $i',
                   ),
@@ -135,15 +132,7 @@ void main() {
     expect(find.text('Session 1'), findsWidgets);
     expect(find.text(l10n.loadMoreSessionsLabel), findsNothing);
 
-    final refreshButton = find.text(l10n.refreshNativeSessions);
-    await tester.ensureVisible(refreshButton);
-    await tester.tap(refreshButton);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
-    expect(requestCount, 2);
-    expect(find.text('Refreshed Session 2'), findsWidgets);
-    expect(find.text('Refreshed Session 1'), findsWidgets);
+    expect(requestCount, 1);
     expect(find.text(l10n.loadMoreSessionsLabel), findsNothing);
   });
 

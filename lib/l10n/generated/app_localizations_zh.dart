@@ -397,9 +397,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get create => '创建';
 
   @override
-  String get refreshNativeSessions => '刷新原生会话';
-
-  @override
   String get creatingSession => '正在创建会话...';
 
   @override

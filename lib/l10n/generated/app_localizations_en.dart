@@ -405,9 +405,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get create => 'Create';
 
   @override
-  String get refreshNativeSessions => 'Refresh native sessions';
-
-  @override
   String get creatingSession => 'Creating session...';
 
   @override

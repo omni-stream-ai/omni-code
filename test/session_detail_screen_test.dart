@@ -114,6 +114,57 @@ void main() {
     expect(find.text('Test Session'), findsOneWidget);
   });
 
+  testWidgets('session header title pops to previous route', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => SessionDetailScreen(
+                      session: _session(),
+                      client: _clientForMessages(const []),
+                      enableSpeechServices: false,
+                    ),
+                  ),
+                ),
+                child: const Text('Project page'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Project page'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('Test Session'), findsOneWidget);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('session-header-back-title')),
+        matching: find.byType(InkWell),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.text('Project page'), findsOneWidget);
+    expect(find.text('Test Session'), findsNothing);
+  });
+
   testWidgets('loads current session title from bridge on first open',
       (tester) async {
     final client = BridgeClient(
@@ -150,7 +201,6 @@ void main() {
         return http.Response('not found', 404);
       }),
     );
-
     await tester.pumpWidget(
       _TestApp(
         home: SessionDetailScreen(
@@ -264,7 +314,6 @@ void main() {
         return http.Response('not found', 404);
       }),
     );
-
     await tester.pumpWidget(
       _TestApp(
         home: SessionDetailScreen(
@@ -442,6 +491,9 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(desktopSessionRailCollapsed: false),
+    );
 
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
@@ -528,6 +580,66 @@ void main() {
         find.byKey(const Key('session-rail-copy-id-button')), findsOneWidget);
   });
 
+  testWidgets(
+      'desktop session rail is collapsed by default and persists toggle',
+      (tester) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const []),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(appSettingsController.settings.desktopSessionRailCollapsed, isTrue);
+    expect(find.byKey(const Key('session-rail-expand-button')), findsNothing);
+    expect(
+      find.byKey(const Key('session-rail-collapse-button')),
+      findsNothing,
+    );
+    expect(find.text('Session overview'), findsNothing);
+
+    await _openSessionHeaderMenu(tester);
+    expect(
+      find.byKey(const Key('session-header-toggle-rail-button')),
+      findsOneWidget,
+    );
+    expect(find.text('Show session details'), findsOneWidget);
+
+    await tester
+        .tap(find.byKey(const Key('session-header-toggle-rail-button')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(appSettingsController.settings.desktopSessionRailCollapsed, isFalse);
+    expect(
+      find.byKey(const Key('session-rail-collapse-button')),
+      findsOneWidget,
+    );
+    expect(find.text('Session overview'), findsOneWidget);
+
+    await _openSessionHeaderMenu(tester);
+    expect(find.text('Hide session details'), findsOneWidget);
+
+    await tester
+        .tap(find.byKey(const Key('session-header-toggle-rail-button')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(appSettingsController.settings.desktopSessionRailCollapsed, isTrue);
+    expect(find.byKey(const Key('session-rail-expand-button')), findsNothing);
+    expect(find.text('Session overview'), findsNothing);
+  });
+
   testWidgets('hides copy agent id actions when runtime session ref is absent',
       (tester) async {
     tester.view.physicalSize = const Size(1600, 1200);
@@ -558,6 +670,88 @@ void main() {
       find.byKey(const Key('session-header-copy-id-button')),
       findsNothing,
     );
+  });
+
+  testWidgets('navigation new session asks for project on session page',
+      (tester) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    var projectRequests = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          projectRequests += 1;
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'project-1',
+                  'name': 'Current Project',
+                  'root_path': '/workspace/current',
+                  'updated_at': '2026-05-09T10:00:00.000',
+                  'session_count': 1,
+                  'last_session_preview': null,
+                },
+                {
+                  'id': 'project-2',
+                  'name': 'Other Project',
+                  'root_path': '/workspace/other',
+                  'updated_at': '2026-05-09T10:01:00.000',
+                  'session_count': 0,
+                  'last_session_preview': null,
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+    await client.listProjects();
+    projectRequests = 0;
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('navigation-new-session-button')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(projectRequests, 0);
+    expect(find.text('Select project'), findsOneWidget);
+    expect(find.text('Current Project'), findsAtLeastNWidgets(1));
+    expect(find.text('Other Project'), findsAtLeastNWidgets(1));
+    expect(find.text('Session title (optional)'), findsNothing);
   });
 
   testWidgets('pressing enter sends the current draft on desktop',
@@ -2558,7 +2752,85 @@ void main() {
     await events.close();
   });
 
-  testWidgets('same assistant message_created chunks append instead of replace',
+  testWidgets('stale assistant snapshot does not remove newer streamed text',
+      (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'messages': const [],
+                  'has_more': false,
+                  'next_cursor': null,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_delta',
+            'payload': {
+              'message_id': 'assistant-1',
+              'delta': 'First segment. Second',
+            },
+          },
+          {
+            'type': 'message_delta',
+            'payload': {
+              'message_id': 'assistant-1',
+              'delta': 'First segment.',
+            },
+          },
+          {
+            'type': 'message_delta',
+            'payload': {
+              'message_id': 'assistant-1',
+              'delta': 'First segment. Second segment. Third segment.',
+            },
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.text('First segment. Second segment. Third segment.'),
+      findsOneWidget,
+    );
+    expect(find.text('First segment.'), findsNothing);
+
+    await events.close();
+  });
+
+  testWidgets(
+      'same assistant message_created snapshot replaces existing content',
       (tester) async {
     final events = StreamController<List<int>>.broadcast();
     final client = BridgeClient(
@@ -2615,7 +2887,7 @@ void main() {
               id: 'assistant-1',
               sessionId: 'session-1',
               role: 'assistant',
-              content: ' and second part',
+              content: 'First part and second part',
               createdAt: '2026-05-09T10:00:01.000',
             ),
           },
@@ -2633,6 +2905,240 @@ void main() {
     expect(markdown, findsOneWidget);
     expect(tester.widget<MarkdownBody>(markdown).data,
         'First part and second part');
+
+    await events.close();
+  });
+
+  testWidgets(
+      'same assistant message_created canonical markdown renders divider',
+      (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'messages': const [],
+                  'has_more': false,
+                  'next_cursor': null,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'First block',
+              createdAt: '2026-05-09T10:00:01.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'First block\n\n---\n\nSecond block',
+              createdAt: '2026-05-09T10:00:01.000',
+            ),
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('First block'), findsOneWidget);
+    expect(find.text('Second block'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('assistant-message-bubble-assistant-1')),
+        matching: find.byKey(const ValueKey('markdown-horizontal-rule')),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('markdown-horizontal-rule')))
+          .width,
+      greaterThan(0),
+    );
+
+    await events.close();
+  });
+
+  testWidgets('assistant message_delta blocks render divider', (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'messages': const [],
+                  'has_more': false,
+                  'next_cursor': null,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_delta',
+            'payload': {
+              'message_id': 'assistant-1',
+              'delta': 'First block',
+            },
+          },
+          {
+            'type': 'message_delta',
+            'payload': {
+              'message_id': 'assistant-1',
+              'delta': '\n\n---\n\nSecond block',
+            },
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('First block'), findsOneWidget);
+    expect(find.text('Second block'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('assistant-message-bubble-assistant-1')),
+        matching: find.byKey(const ValueKey('markdown-horizontal-rule')),
+      ),
+      findsOneWidget,
+    );
+
+    await events.close();
+  });
+
+  testWidgets('cumulative assistant message_delta blocks render divider',
+      (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'messages': const [],
+                  'has_more': false,
+                  'next_cursor': null,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_delta',
+            'payload': {
+              'message_id': 'assistant-1',
+              'delta': 'First block',
+            },
+          },
+          {
+            'type': 'message_delta',
+            'payload': {
+              'message_id': 'assistant-1',
+              'delta': 'First block\n\n---\n\nSecond block',
+            },
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('First block'), findsOneWidget);
+    expect(find.text('Second block'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('assistant-message-bubble-assistant-1')),
+        matching: find.byKey(const ValueKey('markdown-horizontal-rule')),
+      ),
+      findsOneWidget,
+    );
 
     await events.close();
   });
@@ -2754,6 +3260,288 @@ void main() {
     await events.close();
   });
 
+  testWidgets('post response does not insert timeline messages before sse',
+      (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'messages': const [],
+                  'has_more': false,
+                  'next_cursor': null,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          if (request.method == 'POST' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'user_message': _messageJson(
+                    id: 'bridge-user-1',
+                    sessionId: 'session-1',
+                    role: 'user',
+                    content: 'Repeat me once',
+                    createdAt: '2026-05-09T10:00:00.000',
+                  ),
+                  'reply': _messageJson(
+                    id: 'bridge-reply-1',
+                    sessionId: 'session-1',
+                    role: 'assistant',
+                    content: 'Only one assistant bubble',
+                    createdAt: '2026-05-09T10:00:01.000',
+                  ),
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.enterText(
+      find.byKey(const Key('session-message-input')),
+      'Repeat me once',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Repeat me once'), findsOneWidget);
+    expect(find.text('Only one assistant bubble'), findsNothing);
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'provider-user-1',
+              sessionId: 'session-1',
+              role: 'user',
+              content: 'Repeat me once',
+              createdAt: '2026-05-09T10:00:02.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'provider-reply-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'Only one assistant bubble',
+              createdAt: '2026-05-09T10:00:03.000',
+            ),
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Repeat me once'), findsOneWidget);
+    expect(find.text('Only one assistant bubble'), findsOneWidget);
+
+    await events.close();
+  });
+
+  testWidgets('live duplicate prefix assistant keeps longer reply',
+      (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'messages': const [],
+                  'has_more': false,
+                  'next_cursor': null,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'local-user-1',
+              sessionId: 'session-1',
+              role: 'user',
+              content: '提交推送',
+              createdAt: '2026-05-09T10:00:00.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'local-assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: '我先检查当前工作区状态和分支，确认要提交的改动范围，然后再提交并推送。',
+              createdAt: '2026-05-09T10:00:01.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'local-user-1',
+              sessionId: 'session-1',
+              role: 'user',
+              content: '提交推送',
+              createdAt: '2026-05-09T10:00:00.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'local-assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: '我先检查当前工作区状态和分支，确认要提交的改动范围，然后再提交并推送。当前分支是 feat/desktop。',
+              createdAt: '2026-05-09T10:00:03.000',
+            ),
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('提交推送'), findsOneWidget);
+    expect(
+      find.text('我先检查当前工作区状态和分支，确认要提交的改动范围，然后再提交并推送。'),
+      findsNothing,
+    );
+    expect(
+      find.text('我先检查当前工作区状态和分支，确认要提交的改动范围，然后再提交并推送。当前分支是 feat/desktop。'),
+      findsOneWidget,
+    );
+
+    await events.close();
+  });
+
+  testWidgets('live prefix user messages stay distinct', (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'messages': const [],
+                  'has_more': false,
+                  'next_cursor': null,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'user-1',
+              sessionId: 'session-1',
+              role: 'user',
+              content: 'please inspect the workspace',
+              createdAt: '2026-05-09T10:00:00.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'user-2',
+              sessionId: 'session-1',
+              role: 'user',
+              content: 'please inspect the workspace and push',
+              createdAt: '2026-05-09T10:00:03.000',
+            ),
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('please inspect the workspace'), findsOneWidget);
+    expect(find.text('please inspect the workspace and push'), findsOneWidget);
+
+    await events.close();
+  });
+
   testWidgets('reload prefers server page over stale local message content',
       (tester) async {
     final initialMessages = [
@@ -2861,7 +3649,381 @@ void main() {
     expect(find.text('Stale local content'), findsNothing);
   });
 
-  testWidgets('approval focus moves to primary action then back to stop',
+  testWidgets('resume refresh deduplicates in-flight final turn',
+      (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final messageResponses = <http.Response>[
+      http.Response(
+        jsonEncode({
+          'data': {
+            'messages': const [],
+            'has_more': false,
+            'next_cursor': null,
+          },
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      ),
+      http.Response(
+        jsonEncode({
+          'data': {
+            'messages': [
+              _messageJson(
+                id: 'local-user-1',
+                sessionId: 'session-1',
+                role: 'user',
+                content: '提交推送',
+                createdAt: '2026-05-09T10:00:00.000',
+              ),
+              _messageJson(
+                id: 'local-assistant-1',
+                sessionId: 'session-1',
+                role: 'assistant',
+                content: '我先检查当前工作区状态和分支，然后提交并推送。当前分支是 feat/desktop。',
+                createdAt: '2026-05-09T09:59:59.000',
+              ),
+            ],
+            'has_more': false,
+            'next_cursor': null,
+          },
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      ),
+    ];
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return messageResponses.removeAt(0);
+          }
+          if (request.method == 'GET' &&
+              request.url.path == '/projects/project-1/sessions') {
+            return http.Response(
+              jsonEncode({
+                'data': [_sessionJson()],
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'local-user-1',
+              sessionId: 'session-1',
+              role: 'user',
+              content: '提交推送',
+              createdAt: '2026-05-09T10:00:00.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'local-assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: '我先检查当前工作区状态和分支，然后提交并推送。',
+              createdAt: '2026-05-09T10:00:01.000',
+            ),
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('提交推送'), findsOneWidget);
+    expect(
+      find.text('我先检查当前工作区状态和分支，然后提交并推送。'),
+      findsNothing,
+    );
+    expect(
+      find.text('我先检查当前工作区状态和分支，然后提交并推送。当前分支是 feat/desktop。'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .getTopLeft(find.text('我先检查当前工作区状态和分支，然后提交并推送。当前分支是 feat/desktop。'))
+          .dy,
+      lessThan(tester.getTopLeft(find.text('提交推送')).dy),
+    );
+
+    await events.close();
+  });
+
+  testWidgets('resume refresh does not merge assistant across user turns',
+      (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final messageResponses = <http.Response>[
+      http.Response(
+        jsonEncode({
+          'data': {
+            'messages': const [],
+            'has_more': false,
+            'next_cursor': null,
+          },
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      ),
+      http.Response(
+        jsonEncode({
+          'data': {
+            'messages': [
+              _messageJson(
+                id: 'local-user-2',
+                sessionId: 'session-1',
+                role: 'user',
+                content: 'Second prompt',
+                createdAt: '2026-05-09T10:00:04.000',
+              ),
+              _messageJson(
+                id: 'provider-assistant-2',
+                sessionId: 'session-1',
+                role: 'assistant',
+                content: 'I will check repo. Pushed latest changes.',
+                createdAt: '2026-05-09T10:00:05.000',
+              ),
+            ],
+            'has_more': false,
+            'next_cursor': null,
+          },
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      ),
+    ];
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return messageResponses.removeAt(0);
+          }
+          if (request.method == 'GET' &&
+              request.url.path == '/projects/project-1/sessions') {
+            return http.Response(
+              jsonEncode({
+                'data': [_sessionJson()],
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'user-1',
+              sessionId: 'session-1',
+              role: 'user',
+              content: 'First prompt',
+              createdAt: '2026-05-09T10:00:00.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'I will check repo.',
+              createdAt: '2026-05-09T10:00:01.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'local-user-2',
+              sessionId: 'session-1',
+              role: 'user',
+              content: 'Second prompt',
+              createdAt: '2026-05-09T10:00:03.000',
+            ),
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('First prompt'), findsOneWidget);
+    expect(find.text('Second prompt'), findsOneWidget);
+    expect(find.text('I will check repo.'), findsOneWidget);
+    expect(
+      find.text('I will check repo. Pushed latest changes.'),
+      findsOneWidget,
+    );
+
+    await events.close();
+  });
+
+  testWidgets('resume refresh does not merge assistant snapshots across ids',
+      (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final messageResponses = <http.Response>[
+      http.Response(
+        jsonEncode({
+          'data': {
+            'messages': const [],
+            'has_more': false,
+            'next_cursor': null,
+          },
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      ),
+      http.Response(
+        jsonEncode({
+          'data': {
+            'messages': [
+              _messageJson(
+                id: 'provider-assistant-1',
+                sessionId: 'session-1',
+                role: 'assistant',
+                content:
+                    'I checked the resource id and found the latest setting.',
+                createdAt: '2026-05-09T10:00:04.000',
+              ),
+            ],
+            'has_more': false,
+            'next_cursor': 'provider-assistant-1',
+          },
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      ),
+    ];
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return messageResponses.removeAt(0);
+          }
+          if (request.method == 'GET' &&
+              request.url.path == '/projects/project-1/sessions') {
+            return http.Response(
+              jsonEncode({
+                'data': [_sessionJson()],
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'local-user-1',
+              sessionId: 'session-1',
+              role: 'user',
+              content: 'Resource ID 应该填什么',
+              createdAt: '2026-05-09T10:00:00.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'local-assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'I checked the resource id',
+              createdAt: '2026-05-09T10:00:01.000',
+            ),
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Resource ID 应该填什么'), findsOneWidget);
+    expect(find.text('I checked the resource id'), findsOneWidget);
+    expect(
+      find.text('I checked the resource id and found the latest setting.'),
+      findsOneWidget,
+    );
+
+    await events.close();
+  });
+
+  testWidgets('approval focus moves to primary action then back to input',
       (tester) async {
     var approvalSubmitCalls = 0;
     final approval = _approvalRequest(
@@ -2953,7 +4115,7 @@ void main() {
 
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
-      'session-stop-reply-focus',
+      'session-message-input-focus',
     );
 
     await events.close();
@@ -3603,11 +4765,30 @@ void main() {
     await mouse.moveTo(tester.getCenter(queuedHoverRegion));
     await tester.pump();
 
-    final withdrawAction = find.byKey(
-      const Key('user-message-withdraw-action'),
+    final queuedMessageBubble = tester.widget<Container>(
+      find
+          .ancestor(
+            of: find.text('Queued one'),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Container &&
+                  widget.key is ValueKey<String> &&
+                  (widget.key! as ValueKey<String>).value.startsWith(
+                        'user-message-bubble-local-',
+                      ),
+            ),
+          )
+          .first,
     );
-    expect(withdrawAction.first, findsOneWidget);
-    await tester.tap(withdrawAction.first);
+    final queuedMessageId =
+        (queuedMessageBubble.key! as ValueKey<String>).value.substring(
+              'user-message-bubble-'.length,
+            );
+    final withdrawAction = find.byKey(
+      ValueKey('user-message-withdraw-action-$queuedMessageId'),
+    );
+    expect(withdrawAction, findsOneWidget);
+    await tester.tap(withdrawAction);
     await tester.pump();
 
     expect(find.text('First message'), findsOneWidget);
@@ -5019,7 +6200,7 @@ void main() {
     expect(find.text('Question 1'), findsNothing);
     expect(find.text('Answer 1'), findsNothing);
     expect(find.text('Answer 30'), findsOneWidget);
-    expect(requests.first.url.queryParameters['limit'], '6');
+    expect(requests.first.url.queryParameters['limit'], '12');
   });
 
   testWidgets('initial page backfills when latest messages are only tools',
@@ -5039,13 +6220,14 @@ void main() {
         content: 'Answer before tools',
         createdAt: '2026-05-09T10:00:01.000',
       ),
-      for (var index = 1; index <= 6; index += 1)
+      for (var index = 1; index <= 12; index += 1)
         _messageJson(
           id: 'system-$index',
           sessionId: 'session-1',
           role: 'system',
           content: 'Tool event $index',
-          createdAt: '2026-05-09T10:00:0${index + 1}.000',
+          createdAt:
+              '2026-05-09T10:00:${(index + 1).toString().padLeft(2, '0')}.000',
         ),
     ];
     final requests = <http.Request>[];
@@ -5070,7 +6252,7 @@ void main() {
     expect(find.text('Question before tools'), findsOneWidget);
     expect(find.text('Answer before tools'), findsOneWidget);
     expect(requests, hasLength(2));
-    expect(requests.first.url.queryParameters['limit'], '6');
+    expect(requests.first.url.queryParameters['limit'], '12');
     expect(requests.last.url.queryParameters['before_id'], 'system-1');
   });
 
@@ -5078,7 +6260,7 @@ void main() {
       'initial page advances to newer messages when API defaults oldest-first',
       (tester) async {
     final requests = <http.Request>[];
-    final messages = _conversationMessages(12);
+    final messages = _conversationMessages(18);
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
         if (request.method == 'GET' &&
@@ -5089,9 +6271,9 @@ void main() {
             return http.Response(
               jsonEncode({
                 'data': {
-                  'messages': messages.sublist(0, 6),
+                  'messages': messages.sublist(0, 12),
                   'has_more': true,
-                  'next_cursor': 'assistant-3',
+                  'next_cursor': 'assistant-6',
                 },
               }),
               200,
@@ -5100,7 +6282,7 @@ void main() {
           }
           final start =
               messages.indexWhere((message) => message['id'] == afterId) + 1;
-          final end = math.min(start + 6, messages.length);
+          final end = math.min(start + 12, messages.length);
           final pageMessages = messages.sublist(start, end);
           return http.Response(
             jsonEncode({
@@ -5140,11 +6322,11 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.text('Answer 12'), findsOneWidget);
-    expect(find.text('Answer 3'), findsNothing);
+    expect(find.text('Answer 18'), findsOneWidget);
+    expect(find.text('Answer 6'), findsNothing);
     expect(
       requests.any((request) =>
-          request.url.queryParameters['after_id'] == 'assistant-3'),
+          request.url.queryParameters['after_id'] == 'assistant-6'),
       isTrue,
     );
   });
@@ -7271,13 +8453,13 @@ void main() {
 
   testWidgets('markdown horizontal rules remain visible after scrolling',
       (tester) async {
-    final messages = _conversationMessages(24);
+    final messages = _conversationMessages(11);
     messages[messages.length - 1] = _messageJson(
-      id: 'assistant-24',
+      id: 'assistant-11',
       sessionId: 'session-1',
       role: 'assistant',
       content: 'Before divider\n\n---\n\nAfter divider',
-      createdAt: '2026-05-09T10:00:49.000',
+      createdAt: '2026-05-09T10:00:23.000',
     );
 
     await tester.pumpWidget(
@@ -7309,6 +8491,105 @@ void main() {
 
     expect(
         find.byKey(const ValueKey('markdown-horizontal-rule')), findsOneWidget);
+  });
+
+  testWidgets('consecutive assistant messages render divider between bubbles',
+      (tester) async {
+    final client = _clientForMessages([
+      _messageJson(
+        id: 'user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'Start',
+        createdAt: '2026-05-09T10:00:00.000',
+      ),
+      _messageJson(
+        id: 'assistant-1',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'First assistant block',
+        createdAt: '2026-05-09T10:00:01.000',
+      ),
+      _messageJson(
+        id: 'assistant-2',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'Second assistant block',
+        createdAt: '2026-05-09T10:00:02.000',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('First assistant block'), findsOneWidget);
+    expect(find.text('Second assistant block'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('assistant-message-divider')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('assistant messages separated by user do not share divider',
+      (tester) async {
+    final client = _clientForMessages([
+      _messageJson(
+        id: 'user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'First prompt',
+        createdAt: '2026-05-09T10:00:00.000',
+      ),
+      _messageJson(
+        id: 'assistant-1',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'First reply',
+        createdAt: '2026-05-09T10:00:01.000',
+      ),
+      _messageJson(
+        id: 'user-2',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'Second prompt',
+        createdAt: '2026-05-09T10:00:02.000',
+      ),
+      _messageJson(
+        id: 'assistant-2',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'Second reply',
+        createdAt: '2026-05-09T10:00:03.000',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('First reply'), findsOneWidget);
+    expect(find.text('Second reply'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('assistant-message-divider')),
+      findsNothing,
+    );
   });
 
   testWidgets('assistant reply bubble expands on wider layouts',

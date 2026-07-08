@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_routes.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+
+typedef AgentLabelResolver = String Function(String agentId);
 
 class NavigationPanel extends StatelessWidget {
   const NavigationPanel({
@@ -20,6 +23,9 @@ class NavigationPanel extends StatelessWidget {
     this.onOpenProject,
     this.onOpenSession,
     this.onNewSession,
+    this.onNewSessionForProject,
+    this.onNewSessionForSession,
+    this.agentLabelFor,
     this.collapsed = false,
     this.showRecentContent = false,
     this.onBeforeNavigate,
@@ -38,6 +44,9 @@ class NavigationPanel extends StatelessWidget {
   final ValueChanged<ProjectSummary>? onOpenProject;
   final ValueChanged<SessionSummary>? onOpenSession;
   final VoidCallback? onNewSession;
+  final ValueChanged<ProjectSummary>? onNewSessionForProject;
+  final ValueChanged<SessionSummary>? onNewSessionForSession;
+  final AgentLabelResolver? agentLabelFor;
   final bool collapsed;
   final bool showRecentContent;
   final VoidCallback? onBeforeNavigate;
@@ -49,8 +58,8 @@ class NavigationPanel extends StatelessWidget {
     final brightness = Theme.of(context).brightness;
     final muted = AppColors.mutedFor(brightness);
     final text = AppColors.textFor(brightness);
-    final hasRecentContent =
-        showRecentContent && (recentSessions.isNotEmpty || recentProjects.isNotEmpty);
+    final hasRecentContent = showRecentContent &&
+        (recentSessions.isNotEmpty || recentProjects.isNotEmpty);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -70,7 +79,8 @@ class NavigationPanel extends StatelessWidget {
               ),
             if (onToggleCollapsed != null)
               IconButton(
-                tooltip: collapsed ? 'Expand navigation' : 'Collapse navigation',
+                tooltip:
+                    collapsed ? 'Expand navigation' : 'Collapse navigation',
                 onPressed: onToggleCollapsed,
                 style: IconButton.styleFrom(
                   backgroundColor: AppColors.panelDeepFor(brightness),
@@ -140,22 +150,26 @@ class NavigationPanel extends StatelessWidget {
                       icon: Icons.schedule_rounded,
                     ),
                     const SizedBox(height: AppSpacing.compact),
-                    ...recentSessions.take(4).map(
-                      (session) => Padding(
-                        padding: const EdgeInsets.only(
-                          bottom: AppSpacing.compact,
+                    ...recentSessions.take(5).map(
+                          (session) => Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.compact,
+                            ),
+                            child: NavigationRecentItem(
+                              label: session.title,
+                              active: session.id == activeSessionId,
+                              collapsed: collapsed,
+                              icon: Icons.chat_bubble_outline_rounded,
+                              menuChildren: _recentSessionMenuChildren(
+                                context,
+                                session,
+                              ),
+                              onTap: onOpenSession == null
+                                  ? null
+                                  : _wrapAction(() => onOpenSession!(session)),
+                            ),
+                          ),
                         ),
-                        child: NavigationRecentItem(
-                          label: session.title,
-                          active: session.id == activeSessionId,
-                          collapsed: collapsed,
-                          icon: Icons.chat_bubble_outline_rounded,
-                          onTap: onOpenSession == null
-                              ? null
-                              : _wrapAction(() => onOpenSession!(session)),
-                        ),
-                      ),
-                    ),
                   ],
                   if (recentProjects.isNotEmpty) ...[
                     if (recentSessions.isNotEmpty)
@@ -177,22 +191,26 @@ class NavigationPanel extends StatelessWidget {
                       icon: Icons.folder_open_outlined,
                     ),
                     const SizedBox(height: AppSpacing.compact),
-                    ...recentProjects.take(4).map(
-                      (project) => Padding(
-                        padding: const EdgeInsets.only(
-                          bottom: AppSpacing.compact,
+                    ...recentProjects.take(5).map(
+                          (project) => Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.compact,
+                            ),
+                            child: NavigationRecentItem(
+                              label: project.name,
+                              active: project.id == activeProjectId,
+                              collapsed: collapsed,
+                              icon: Icons.folder_outlined,
+                              menuChildren: _recentProjectMenuChildren(
+                                context,
+                                project,
+                              ),
+                              onTap: onOpenProject == null
+                                  ? null
+                                  : _wrapAction(() => onOpenProject!(project)),
+                            ),
+                          ),
                         ),
-                        child: NavigationRecentItem(
-                          label: project.name,
-                          active: project.id == activeProjectId,
-                          collapsed: collapsed,
-                          icon: Icons.folder_outlined,
-                          onTap: onOpenProject == null
-                              ? null
-                              : _wrapAction(() => onOpenProject!(project)),
-                        ),
-                      ),
-                    ),
                   ],
                 ],
               ),
@@ -202,6 +220,7 @@ class NavigationPanel extends StatelessWidget {
           const Spacer(),
         if (onNewSession != null)
           FilledButton(
+            key: const Key('navigation-new-session-button'),
             onPressed: _wrapAction(onNewSession!),
             style: FilledButton.styleFrom(
               minimumSize: Size.fromHeight(collapsed ? 46 : 48),
@@ -242,6 +261,51 @@ class NavigationPanel extends StatelessWidget {
       onBeforeNavigate?.call();
       action();
     };
+  }
+
+  List<Widget> _recentSessionMenuChildren(
+    BuildContext context,
+    SessionSummary session,
+  ) {
+    final runtimeSessionRef = session.runtimeSessionRef;
+    final children = <Widget>[
+      NavigationMenuAction(
+        label: context.l10n.newSession,
+        icon: Icons.add_comment_outlined,
+        onTap: onNewSessionForSession == null
+            ? null
+            : _wrapAction(() => onNewSessionForSession!(session)),
+      ),
+    ];
+    if (runtimeSessionRef != null && runtimeSessionRef.isNotEmpty) {
+      final agentLabel =
+          agentLabelFor?.call(session.agentId) ?? session.agentId;
+      children.add(
+        NavigationMenuAction(
+          label: context.l10n.copySessionId(agentLabel),
+          icon: Icons.content_copy_rounded,
+          onTap: () {
+            Clipboard.setData(ClipboardData(text: runtimeSessionRef));
+          },
+        ),
+      );
+    }
+    return children;
+  }
+
+  List<Widget> _recentProjectMenuChildren(
+    BuildContext context,
+    ProjectSummary project,
+  ) {
+    return [
+      NavigationMenuAction(
+        label: context.l10n.newSession,
+        icon: Icons.add_comment_outlined,
+        onTap: onNewSessionForProject == null
+            ? null
+            : _wrapAction(() => onNewSessionForProject!(project)),
+      ),
+    ];
   }
 }
 
@@ -295,6 +359,7 @@ class NavigationRecentItem extends StatefulWidget {
     required this.active,
     this.collapsed = false,
     this.icon,
+    this.menuChildren = const [],
     required this.onTap,
   });
 
@@ -302,6 +367,7 @@ class NavigationRecentItem extends StatefulWidget {
   final bool active;
   final bool collapsed;
   final IconData? icon;
+  final List<Widget> menuChildren;
   final VoidCallback? onTap;
 
   @override
@@ -309,7 +375,9 @@ class NavigationRecentItem extends StatefulWidget {
 }
 
 class _NavigationRecentItemState extends State<NavigationRecentItem> {
+  final MenuController _menuController = MenuController();
   bool _hovered = false;
+  bool _menuOpen = false;
 
   @override
   Widget build(BuildContext context) {
@@ -355,23 +423,185 @@ class _NavigationRecentItemState extends State<NavigationRecentItem> {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                             color: textColor,
-                            fontWeight:
-                                widget.active ? FontWeight.w800 : FontWeight.w600,
+                            fontWeight: widget.active
+                                ? FontWeight.w800
+                                : FontWeight.w600,
                             height: 1.05,
                             fontSize: 10,
                           ),
                     ),
                   )
-                : Text(
-                    widget.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: textColor,
-                          fontWeight:
-                              widget.active ? FontWeight.w700 : FontWeight.w500,
+                : Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: textColor,
+                                    fontWeight: widget.active
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                  ),
                         ),
+                      ),
+                      if (widget.menuChildren.isNotEmpty) ...[
+                        const SizedBox(width: AppSpacing.micro),
+                        _NavigationRecentMoreButton(
+                          controller: _menuController,
+                          visible: _hovered || _menuOpen,
+                          menuChildren: widget.menuChildren,
+                          onOpenChanged: (isOpen) {
+                            if (mounted) {
+                              setState(() => _menuOpen = isOpen);
+                            }
+                          },
+                        ),
+                      ],
+                    ],
                   ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavigationRecentMoreButton extends StatelessWidget {
+  const _NavigationRecentMoreButton({
+    required this.controller,
+    required this.visible,
+    required this.menuChildren,
+    required this.onOpenChanged,
+  });
+
+  final MenuController controller;
+  final bool visible;
+  final List<Widget> menuChildren;
+  final ValueChanged<bool> onOpenChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return MenuAnchor(
+      controller: controller,
+      onOpen: () => onOpenChanged(true),
+      onClose: () => onOpenChanged(false),
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(
+          AppColors.panelFor(brightness),
+        ),
+        side: const WidgetStatePropertyAll(BorderSide.none),
+        elevation: const WidgetStatePropertyAll(0),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+          ),
+        ),
+        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+      ),
+      menuChildren: [
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.compact,
+            vertical: AppSpacing.compact,
+          ),
+          child: SizedBox(
+            width: 188,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < menuChildren.length; i++) ...[
+                  if (i > 0) const SizedBox(height: AppSpacing.micro),
+                  menuChildren[i],
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+      builder: (context, controller, child) => AnimatedOpacity(
+        opacity: visible ? 1 : 0,
+        duration: const Duration(milliseconds: 100),
+        child: IgnorePointer(
+          ignoring: !visible,
+          child: IconButton(
+            tooltip: 'More',
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints.tightFor(
+              width: 28,
+              height: 28,
+            ),
+            padding: EdgeInsets.zero,
+            style: IconButton.styleFrom(
+              foregroundColor: Colors.black,
+              backgroundColor: Colors.transparent,
+              hoverColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+              shape: const CircleBorder(),
+            ),
+            onPressed: () {
+              if (controller.isOpen) {
+                controller.close();
+              } else {
+                controller.open();
+              }
+            },
+            icon: const Icon(Icons.more_horiz_rounded, size: 17),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class NavigationMenuAction extends StatelessWidget {
+  const NavigationMenuAction({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.compact,
+            vertical: AppSpacing.compact,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: AppColors.mutedFor(brightness),
+              ),
+              const SizedBox(width: AppSpacing.compact),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

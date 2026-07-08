@@ -788,12 +788,6 @@ abstract class AppLocalizations {
   /// **'Create'**
   String get create;
 
-  /// No description provided for @refreshNativeSessions.
-  ///
-  /// In en, this message translates to:
-  /// **'Refresh native sessions'**
-  String get refreshNativeSessions;
-
   /// No description provided for @creatingSession.
   ///
   /// In en, this message translates to:

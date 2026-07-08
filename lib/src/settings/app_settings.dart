@@ -58,6 +58,8 @@ class AppSettings {
     required this.lastSelectedAgent,
     required this.lastSelectedProviderByProject,
     required this.desktopNavigationCollapsed,
+    required this.desktopHomeRailCollapsed,
+    required this.desktopSessionRailCollapsed,
     required this.voiceComposerMode,
     required this.videoPreviewMuted,
   });
@@ -93,6 +95,8 @@ class AppSettings {
   final String lastSelectedAgent;
   final Map<String, String?> lastSelectedProviderByProject;
   final bool desktopNavigationCollapsed;
+  final bool desktopHomeRailCollapsed;
+  final bool desktopSessionRailCollapsed;
   final bool voiceComposerMode;
   final bool videoPreviewMuted;
 
@@ -137,6 +141,8 @@ class AppSettings {
       lastSelectedAgent: '',
       lastSelectedProviderByProject: const {},
       desktopNavigationCollapsed: false,
+      desktopHomeRailCollapsed: true,
+      desktopSessionRailCollapsed: true,
       voiceComposerMode: false,
       videoPreviewMuted: true,
     );
@@ -173,6 +179,8 @@ class AppSettings {
     String? lastSelectedAgent,
     Map<String, String?>? lastSelectedProviderByProject,
     bool? desktopNavigationCollapsed,
+    bool? desktopHomeRailCollapsed,
+    bool? desktopSessionRailCollapsed,
     bool? voiceComposerMode,
     bool? videoPreviewMuted,
   }) {
@@ -225,6 +233,10 @@ class AppSettings {
       ),
       desktopNavigationCollapsed:
           desktopNavigationCollapsed ?? this.desktopNavigationCollapsed,
+      desktopHomeRailCollapsed:
+          desktopHomeRailCollapsed ?? this.desktopHomeRailCollapsed,
+      desktopSessionRailCollapsed:
+          desktopSessionRailCollapsed ?? this.desktopSessionRailCollapsed,
       voiceComposerMode: voiceComposerMode ?? this.voiceComposerMode,
       videoPreviewMuted: videoPreviewMuted ?? this.videoPreviewMuted,
     );
@@ -262,6 +274,8 @@ class AppSettings {
       'last_selected_agent': lastSelectedAgent,
       'last_selected_provider_by_project': lastSelectedProviderByProject,
       'desktop_navigation_collapsed': desktopNavigationCollapsed,
+      'desktop_home_rail_collapsed': desktopHomeRailCollapsed,
+      'desktop_session_rail_collapsed': desktopSessionRailCollapsed,
       'voice_composer_mode': voiceComposerMode,
       'video_preview_muted': videoPreviewMuted,
     };
@@ -379,6 +393,16 @@ class AppSettings {
         json,
         'desktop_navigation_collapsed',
         defaults.desktopNavigationCollapsed,
+      ),
+      desktopHomeRailCollapsed: _readBool(
+        json,
+        'desktop_home_rail_collapsed',
+        defaults.desktopHomeRailCollapsed,
+      ),
+      desktopSessionRailCollapsed: _readBool(
+        json,
+        'desktop_session_rail_collapsed',
+        defaults.desktopSessionRailCollapsed,
       ),
       voiceComposerMode: _readBool(
         json,
@@ -644,6 +668,12 @@ class AppSettingsController extends ChangeNotifier {
           shouldPersist = true;
         }
         if (json['desktop_navigation_collapsed'] == null) {
+          shouldPersist = true;
+        }
+        if (json['desktop_home_rail_collapsed'] == null) {
+          shouldPersist = true;
+        }
+        if (json['desktop_session_rail_collapsed'] == null) {
           shouldPersist = true;
         }
         _settings = AppSettings.fromJson(json);

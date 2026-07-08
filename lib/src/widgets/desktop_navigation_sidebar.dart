@@ -20,6 +20,9 @@ class DesktopNavigationSidebar extends StatelessWidget {
     this.onOpenProject,
     this.onOpenSession,
     this.onNewSession,
+    this.onNewSessionForProject,
+    this.onNewSessionForSession,
+    this.agentLabelFor,
     this.collapsed = false,
     this.onToggleCollapsed,
   });
@@ -35,6 +38,9 @@ class DesktopNavigationSidebar extends StatelessWidget {
   final ValueChanged<ProjectSummary>? onOpenProject;
   final ValueChanged<SessionSummary>? onOpenSession;
   final VoidCallback? onNewSession;
+  final ValueChanged<ProjectSummary>? onNewSessionForProject;
+  final ValueChanged<SessionSummary>? onNewSessionForSession;
+  final AgentLabelResolver? agentLabelFor;
   final bool collapsed;
   final VoidCallback? onToggleCollapsed;
 
@@ -66,6 +72,9 @@ class DesktopNavigationSidebar extends StatelessWidget {
         onOpenProject: onOpenProject,
         onOpenSession: onOpenSession,
         onNewSession: onNewSession,
+        onNewSessionForProject: onNewSessionForProject,
+        onNewSessionForSession: onNewSessionForSession,
+        agentLabelFor: agentLabelFor,
         collapsed: collapsed,
         onToggleCollapsed: onToggleCollapsed,
         showRecentContent: activeRoute != AppRouteKind.home,

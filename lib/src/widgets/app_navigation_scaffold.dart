@@ -4,13 +4,13 @@ import '../app_routes.dart';
 import '../models.dart';
 import 'desktop_navigation_sidebar.dart';
 import 'mobile_navigation_drawer.dart';
+import 'navigation_panel.dart';
 
-typedef NavigationBodyBuilder =
-    Widget Function(
-      BuildContext context,
-      bool useDesktop,
-      BoxConstraints constraints,
-    );
+typedef NavigationBodyBuilder = Widget Function(
+  BuildContext context,
+  bool useDesktop,
+  BoxConstraints constraints,
+);
 
 class AppNavigationScaffold extends StatelessWidget {
   const AppNavigationScaffold({
@@ -27,6 +27,9 @@ class AppNavigationScaffold extends StatelessWidget {
     this.onOpenProject,
     this.onOpenSession,
     this.onNewSession,
+    this.onNewSessionForProject,
+    this.onNewSessionForSession,
+    this.agentLabelFor,
     this.backgroundColor,
     this.floatingActionButton,
     this.appBar,
@@ -49,6 +52,9 @@ class AppNavigationScaffold extends StatelessWidget {
   final ValueChanged<ProjectSummary>? onOpenProject;
   final ValueChanged<SessionSummary>? onOpenSession;
   final VoidCallback? onNewSession;
+  final ValueChanged<ProjectSummary>? onNewSessionForProject;
+  final ValueChanged<SessionSummary>? onNewSessionForSession;
+  final AgentLabelResolver? agentLabelFor;
   final Color? backgroundColor;
   final Widget? floatingActionButton;
   final PreferredSizeWidget? appBar;
@@ -64,8 +70,8 @@ class AppNavigationScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final sidebarWidth =
         desktopSidebarCollapsedWidth != null && desktopSidebarCollapsed
-        ? desktopSidebarCollapsedWidth!
-        : desktopSidebarWidth;
+            ? desktopSidebarCollapsedWidth!
+            : desktopSidebarWidth;
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -83,6 +89,9 @@ class AppNavigationScaffold extends StatelessWidget {
         onOpenProject: onOpenProject,
         onOpenSession: onOpenSession,
         onNewSession: onNewSession,
+        onNewSessionForProject: onNewSessionForProject,
+        onNewSessionForSession: onNewSessionForSession,
+        agentLabelFor: agentLabelFor,
       ),
       body: SafeArea(
         child: LayoutBuilder(
@@ -107,6 +116,9 @@ class AppNavigationScaffold extends StatelessWidget {
                       onOpenProject: onOpenProject,
                       onOpenSession: onOpenSession,
                       onNewSession: onNewSession,
+                      onNewSessionForProject: onNewSessionForProject,
+                      onNewSessionForSession: onNewSessionForSession,
+                      agentLabelFor: agentLabelFor,
                       collapsed: desktopSidebarCollapsed,
                       onToggleCollapsed: onToggleDesktopSidebar,
                     ),

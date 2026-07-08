@@ -17,6 +17,7 @@ import '../widgets/app_navigation_scaffold.dart';
 import '../widgets/app_skeleton.dart';
 import '../widgets/create_session_dialog.dart';
 import '../widgets/copyable_message.dart';
+import '../widgets/new_session_flow.dart';
 import 'session_detail_screen.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
@@ -245,6 +246,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         );
       },
       onNewSession: _createSession,
+      onNewSessionForProject: _createSessionForRecentProject,
+      onNewSessionForSession: _createSessionForRecentSession,
+      agentLabelFor: _client.agentLabelFor,
       bodyBuilder: (context, useDesktop, constraints) {
         return Stack(
           children: [
@@ -503,21 +507,10 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 ),
               ),
               const SizedBox(width: AppSpacing.block),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  FilledButton.icon(
-                    onPressed: _createSession,
-                    icon: const Icon(Icons.add_rounded, size: 18),
-                    label: Text(context.l10n.newSession),
-                  ),
-                  const SizedBox(height: AppSpacing.compact),
-                  OutlinedButton.icon(
-                    onPressed: _reloadSessions,
-                    icon: const Icon(Icons.refresh, size: 16),
-                    label: Text(context.l10n.refreshNativeSessions),
-                  ),
-                ],
+              FilledButton.icon(
+                onPressed: _createSession,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text(context.l10n.newSession),
               ),
             ],
           ),
@@ -971,6 +964,31 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       return;
     }
     unawaited(_reloadSessions());
+  }
+
+  Future<void> _createSessionForRecentProject(ProjectSummary project) async {
+    if (project.id == _project.id) {
+      await _createSession();
+      return;
+    }
+    await startNewSessionFlow(
+      context,
+      client: _client,
+      initialProject: project,
+    );
+  }
+
+  Future<void> _createSessionForRecentSession(SessionSummary session) async {
+    if (session.projectId == _project.id) {
+      await _createSession();
+      return;
+    }
+    await startNewSessionFlow(
+      context,
+      client: _client,
+      initialProjects: _client.peekProjects(),
+      initialProject: _client.peekProject(session.projectId),
+    );
   }
 
   String _statusLabel(SessionStatus status) {
