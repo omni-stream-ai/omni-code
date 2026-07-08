@@ -67,6 +67,7 @@ class SpeechSettingsScreen extends StatefulWidget {
   const SpeechSettingsScreen({
     super.key,
     this.client,
+    this.speechPluginRegistry,
     this.debugPlatformOverride,
     this.debugIsWebOverride,
   });
@@ -74,6 +75,7 @@ class SpeechSettingsScreen extends StatefulWidget {
   static const routeName = '/settings/speech';
 
   final BridgeClient? client;
+  final SpeechPluginRegistry? speechPluginRegistry;
   final TargetPlatform? debugPlatformOverride;
   final bool? debugIsWebOverride;
 
@@ -127,7 +129,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   late Map<String, Map<String, String>> _speechPluginSettingsByPluginId;
   bool _saving = false;
   bool _speechLoading = false;
-  bool _speechPluginLoading = false;
   bool _updatingSpeakerFilter = false;
   bool _speakerEnrollmentRecording = false;
   bool _speakerEnrollmentSaving = false;
@@ -143,6 +144,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   Timer? _speechPollingTimer;
 
   BridgeClient get _client => widget.client ?? bridgeClient;
+  SpeechPluginRegistry get _speechPluginRegistry =>
+      widget.speechPluginRegistry ?? speechPluginRegistry;
 
   bool get _isWebPlatform => widget.debugIsWebOverride ?? kIsWeb;
   TargetPlatform get _platform =>
@@ -191,6 +194,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       AsrProvider.whisper || AsrProvider.bridgeLocal => true,
     };
   }
+
+  bool get _showLocalBridgeModelSettings => false;
 
   List<_CapabilityPluginOption> _pluginOptionsForCapability(
     SpeechPluginCapability capability,
@@ -572,12 +577,14 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         title: 'SPEECH PLUGINS',
         children: [_buildSpeechPluginContent(context)],
       ),
-      const SizedBox(height: AppSpacing.stackTight),
-      _buildSectionCard(
-        context,
-        title: l10n.localBridgeModelsSection.toUpperCase(),
-        children: [_buildLocalBridgeContent(context)],
-      ),
+      if (_showLocalBridgeModelSettings) ...[
+        const SizedBox(height: AppSpacing.stackTight),
+        _buildSectionCard(
+          context,
+          title: l10n.localBridgeModelsSection.toUpperCase(),
+          children: [_buildLocalBridgeContent(context)],
+        ),
+      ],
       if (_ttsProvider == TtsProvider.bridgeLocal) ...[
         const SizedBox(height: AppSpacing.stackTight),
         _buildSectionCard(
@@ -972,7 +979,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   Widget _buildSpeechPluginContent(BuildContext context) {
     final theme = Theme.of(context);
     final brightness = theme.brightness;
-    final availablePluginCount = _speechPluginIndex?.plugins.length ?? 0;
     final installedPluginCount = _installedSpeechPlugins.length;
 
     return Column(
@@ -1002,12 +1008,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                 children: [
                   _buildPluginStatChip(
                     context,
-                    icon: Icons.extension_outlined,
-                    label: 'Available',
-                    value: '$availablePluginCount',
-                  ),
-                  _buildPluginStatChip(
-                    context,
                     icon: Icons.key_outlined,
                     label: 'Installed',
                     value: '$installedPluginCount',
@@ -1021,42 +1021,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
           const SizedBox(height: AppSpacing.stack),
           _buildSpeechErrorBanner(context, _speechPluginError!),
         ],
-        const SizedBox(height: AppSpacing.stack),
-        _buildPluginSubsection(
-          context,
-          icon: Icons.widgets_outlined,
-          title: 'Find plugins',
-          description:
-              'Install only the plugins you actually need. They will appear in the capability cards above automatically.',
-          child: _speechPluginLoading && _speechPluginIndex == null
-              ? _buildPluginLoadingState(
-                  context,
-                  message: 'Loading plugin catalog...',
-                )
-              : (_speechPluginIndex == null ||
-                      _speechPluginIndex!.plugins.isEmpty)
-                  ? _buildPluginEmptyState(
-                      context,
-                      icon: Icons.search_off_rounded,
-                      message: 'No speech plugins found.',
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: _speechPluginIndex!.plugins
-                          .map(
-                            (plugin) => Padding(
-                              padding: const EdgeInsets.only(
-                                bottom: AppSpacing.compact,
-                              ),
-                              child: _buildSpeechPluginRepositoryCard(
-                                context,
-                                plugin,
-                              ),
-                            ),
-                          )
-                          .toList(growable: false),
-                    ),
-        ),
         const SizedBox(height: AppSpacing.stack),
         _buildPluginSubsection(
           context,
@@ -1236,139 +1200,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     );
   }
 
-  Widget _buildPluginLoadingState(
-    BuildContext context, {
-    required String message,
-  }) {
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    return Container(
-      padding: AppSpacing.tilePadding,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceDeepFor(brightness),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
-        border: Border.all(color: AppColors.outlineFor(brightness)),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.sync_rounded,
-            size: 16,
-            color: AppColors.accentBlueFor(brightness),
-          ),
-          const SizedBox(width: AppSpacing.compact),
-          Expanded(
-            child: Text(
-              message,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.mutedSoftFor(brightness),
-                height: 1.4,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSpeechPluginRepositoryCard(
-    BuildContext context,
-    SpeechPluginRepositoryEntry plugin,
-  ) {
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    final installed = _installedSpeechPlugins.any(
-      (item) => item.manifest.id == plugin.id,
-    );
-    final installedPlugin = _installedSpeechPlugins
-        .where((item) => item.manifest.id == plugin.id)
-        .firstOrNull;
-    final registrationUrl = plugin.registrationUrl.trim().isNotEmpty
-        ? plugin.registrationUrl.trim()
-        : (installedPlugin?.manifest.registrationUrl.trim() ?? '');
-
-    return Container(
-      padding: AppSpacing.tilePadding,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceDeepFor(brightness),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
-        border: Border.all(color: AppColors.outlineFor(brightness)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  plugin.name,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              FilledButton(
-                style: installed
-                    ? _pluginSecondaryButtonStyle(context)
-                    : _pluginPrimaryButtonStyle(context),
-                onPressed: () => installed
-                    ? _uninstallSpeechPlugin(plugin.id)
-                    : _installSpeechPlugin(plugin),
-                child: Text(installed ? 'Uninstall' : 'Install'),
-              ),
-            ],
-          ),
-          if (plugin.version.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.micro),
-            Text(
-              plugin.version,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.mutedSoftFor(brightness),
-                height: 1.35,
-              ),
-            ),
-          ],
-          if (registrationUrl.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.compact),
-            _buildPluginRegistrationLink(
-              context,
-              registrationUrl,
-              label: 'Register',
-            ),
-          ],
-          const SizedBox(height: AppSpacing.micro),
-          Wrap(
-            spacing: AppSpacing.micro,
-            runSpacing: AppSpacing.micro,
-            children: plugin.capabilities
-                .map(
-                  (capability) => _buildCapabilityChip(
-                    context,
-                    label: _speechPluginCapabilityLabel(capability),
-                  ),
-                )
-                .toList(growable: false),
-          ),
-          if (installedPlugin != null) ...[
-            const SizedBox(height: AppSpacing.compact),
-            ...SpeechPluginCapability.values
-                .where(installedPlugin.manifest.supports)
-                .map(
-                  (capability) => Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.micro),
-                    child: _buildSpeechPluginCapabilityLine(
-                      context,
-                      installedPlugin.manifest,
-                      capability,
-                    ),
-                  ),
-                ),
-          ],
-        ],
-      ),
-    );
-  }
-
   Future<void> _openCapabilitySelection(
     BuildContext context,
     SpeechPluginCapability capability,
@@ -1397,8 +1228,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         return;
       }
       try {
-        await speechPluginRegistry.installManifest(manifest);
-        final installed = await speechPluginRegistry.listInstalled();
+        await _speechPluginRegistry.installManifest(manifest);
+        final installed = await _speechPluginRegistry.listInstalled();
         if (!mounted) {
           return;
         }
@@ -3333,54 +3164,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     );
   }
 
-  Widget _buildSpeechPluginCapabilityLine(
-    BuildContext context,
-    SpeechPluginManifest manifest,
-    SpeechPluginCapability capability,
-  ) {
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    final config = manifest.configFor(capability);
-    final transportLabel = config == null
-        ? 'unknown'
-        : _speechPluginTransportLabel(config.transport);
-    final endpointLabel = switch (config?.transport) {
-      SpeechPluginTransport.realtimeWebsocket =>
-        (config?.websocketUrl?.trim().isNotEmpty ?? false)
-            ? 'websocket'
-            : 'websocket',
-      SpeechPluginTransport.openAiCompatible ||
-      SpeechPluginTransport.bridgeOpenAiCompatible =>
-        (config?.path?.trim().isNotEmpty ?? false)
-            ? config!.path!.trim()
-            : 'http',
-      SpeechPluginTransport.metadataOnly => 'metadata only',
-      null => 'unknown',
-    };
-
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            '${_speechPluginCapabilityLabel(capability)} · $transportLabel',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurface,
-              height: 1.35,
-            ),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.compact),
-        Text(
-          endpointLabel,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: AppColors.mutedSoftFor(brightness),
-            height: 1.35,
-          ),
-        ),
-      ],
-    );
-  }
-
   List<Widget> _buildPluginSettingFields(
     BuildContext context,
     InstalledSpeechPlugin plugin, {
@@ -3668,27 +3451,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     );
   }
 
-  ButtonStyle _pluginSecondaryButtonStyle(BuildContext context) {
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    return FilledButton.styleFrom(
-      minimumSize: const Size(0, 38),
-      backgroundColor: AppColors.panelAltFor(brightness),
-      foregroundColor: theme.colorScheme.onSurface,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.tileX,
-        vertical: AppSpacing.controlTight,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-      ),
-      side: BorderSide(color: AppColors.outlineFor(brightness)),
-      textStyle: theme.textTheme.labelLarge?.copyWith(
-        fontWeight: FontWeight.w800,
-      ),
-    );
-  }
-
   Future<void> _openPluginRegistrationUrl(String url) async {
     final uri = Uri.tryParse(url.trim());
     if (uri == null) {
@@ -3702,15 +3464,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       SpeechPluginCapability.realtimeAsr => 'Realtime ASR',
       SpeechPluginCapability.batchAsr => 'Batch ASR',
       SpeechPluginCapability.tts => 'TTS',
-    };
-  }
-
-  String _speechPluginTransportLabel(SpeechPluginTransport transport) {
-    return switch (transport) {
-      SpeechPluginTransport.openAiCompatible => 'OpenAI-compatible HTTP',
-      SpeechPluginTransport.bridgeOpenAiCompatible => 'Bridge-compatible WS',
-      SpeechPluginTransport.realtimeWebsocket => 'Custom realtime WS',
-      SpeechPluginTransport.metadataOnly => 'Metadata only',
     };
   }
 
@@ -5427,12 +5180,11 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
 
   Future<void> _refreshSpeechPlugins() async {
     setState(() {
-      _speechPluginLoading = true;
       _speechPluginError = null;
     });
     try {
-      final indexes = await speechPluginRegistry.fetchRepositoryIndexes();
-      final installed = await speechPluginRegistry.listInstalled();
+      final indexes = await _speechPluginRegistry.fetchRepositoryIndexes();
+      final installed = await _speechPluginRegistry.listInstalled();
       if (!mounted) {
         return;
       }
@@ -5456,12 +5208,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       setState(() {
         _speechPluginError = error.toString();
       });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _speechPluginLoading = false;
-        });
-      }
     }
   }
 
@@ -5472,8 +5218,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       _speechPluginError = null;
     });
     try {
-      await speechPluginRegistry.installFromRepositoryEntry(entry);
-      final installed = await speechPluginRegistry.listInstalled();
+      await _speechPluginRegistry.installFromRepositoryEntry(entry);
+      final installed = await _speechPluginRegistry.listInstalled();
       if (!mounted) {
         return;
       }
@@ -5495,8 +5241,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       _speechPluginError = null;
     });
     try {
-      await speechPluginRegistry.uninstall(pluginId);
-      final installed = await speechPluginRegistry.listInstalled();
+      await _speechPluginRegistry.uninstall(pluginId);
+      final installed = await _speechPluginRegistry.listInstalled();
       if (!mounted) {
         return;
       }

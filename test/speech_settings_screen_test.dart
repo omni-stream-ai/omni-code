@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:omni_code/l10n/generated/app_localizations.dart';
+import 'package:omni_code/src/plugins/speech_plugin_registry.dart';
 import 'package:omni_code/src/screens/speech_settings_screen.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 import 'package:omni_code/src/settings/app_settings_store.dart';
@@ -17,8 +19,8 @@ void main() {
 
   testWidgets('shows Linux system speech availability hints', (tester) async {
     await tester.pumpWidget(
-      const _TestApp(
-        home: SpeechSettingsScreen(
+      _TestApp(
+        home: _speechSettingsScreen(
           debugPlatformOverride: TargetPlatform.linux,
           debugIsWebOverride: false,
         ),
@@ -43,18 +45,26 @@ void main() {
   testWidgets('speech settings use system defaults without route pickers',
       (tester) async {
     await tester.pumpWidget(
-      const _TestApp(
-        home: SpeechSettingsScreen(),
+      _TestApp(
+        home: _speechSettingsScreen(),
       ),
     );
     await tester.pump();
 
     expect(find.text('System default'), findsWidgets);
     expect(find.text('Route'), findsNothing);
+    expect(find.text('Find plugins'), findsNothing);
+    expect(find.text('Available'), findsNothing);
     expect(find.byIcon(Icons.chevron_right_rounded), findsNWidgets(3));
+
+    await tester.tap(find.text('Realtime ASR').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Catalog Realtime ASR'), findsOneWidget);
+    expect(find.text('Install'), findsOneWidget);
   });
 
-  testWidgets('shows bridge local speech sections', (tester) async {
+  testWidgets('does not show bridge local model settings', (tester) async {
     appSettingsController.debugReplaceSettings(
       AppSettings.defaults().copyWith(
         ttsProvider: TtsProvider.bridgeLocal,
@@ -63,13 +73,13 @@ void main() {
     );
 
     await tester.pumpWidget(
-      const _TestApp(
-        home: SpeechSettingsScreen(),
+      _TestApp(
+        home: _speechSettingsScreen(),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('LOCAL BRIDGE MODELS'), findsOneWidget);
+    expect(find.text('LOCAL BRIDGE MODELS'), findsNothing);
     expect(find.text('TTS VOICE'), findsNothing);
   });
 
@@ -111,8 +121,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      const _TestApp(
-        home: SpeechSettingsScreen(),
+      _TestApp(
+        home: _speechSettingsScreen(),
       ),
     );
     await tester.pumpAndSettle();
@@ -149,8 +159,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      const _TestApp(
-        home: SpeechSettingsScreen(),
+      _TestApp(
+        home: _speechSettingsScreen(),
       ),
     );
     await tester.pumpAndSettle();
@@ -197,8 +207,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      const _TestApp(
-        home: SpeechSettingsScreen(),
+      _TestApp(
+        home: _speechSettingsScreen(),
       ),
     );
     await tester.pumpAndSettle();
@@ -260,8 +270,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      const _TestApp(
-        home: SpeechSettingsScreen(),
+      _TestApp(
+        home: _speechSettingsScreen(),
       ),
     );
     await tester.pumpAndSettle();
@@ -327,8 +337,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      const _TestApp(
-        home: SpeechSettingsScreen(),
+      _TestApp(
+        home: _speechSettingsScreen(),
       ),
     );
     await tester.pumpAndSettle();
@@ -361,8 +371,8 @@ void main() {
       ),
     );
     await tester.pumpWidget(
-      const _TestApp(
-        home: SpeechSettingsScreen(),
+      _TestApp(
+        home: _speechSettingsScreen(),
       ),
     );
     await tester.pumpAndSettle();
@@ -376,6 +386,38 @@ void main() {
     expect(appSettingsController.settings.callModeWakeWordEnabled, isFalse);
     expect(appSettingsController.settings.callModeWakeWords, 'hey omni');
   });
+}
+
+SpeechSettingsScreen _speechSettingsScreen({
+  TargetPlatform? debugPlatformOverride,
+  bool? debugIsWebOverride,
+}) {
+  return SpeechSettingsScreen(
+    speechPluginRegistry: _testSpeechPluginRegistry(),
+    debugPlatformOverride: debugPlatformOverride,
+    debugIsWebOverride: debugIsWebOverride,
+  );
+}
+
+SpeechPluginRegistry _testSpeechPluginRegistry() {
+  return SpeechPluginRegistry(
+    httpClient: _FakeHttpClient((request) async {
+      return http.Response(
+        jsonEncode([
+          {
+            'id': 'catalog-realtime-asr',
+            'name': 'Catalog Realtime ASR',
+            'author': 'Catalog',
+            'description': 'Realtime ASR from catalog',
+            'manifest_url': 'https://example.com/catalog-realtime-asr.json',
+            'capabilities': ['realtime_asr'],
+          },
+        ]),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    }),
+  );
 }
 
 class _MemoryAppSettingsStore implements AppSettingsStore {
@@ -392,6 +434,30 @@ class _MemoryAppSettingsStore implements AppSettingsStore {
   @override
   Future<void> write(String value) async {
     _json = Map<String, Object?>.from(jsonDecode(value) as Map);
+  }
+}
+
+class _FakeHttpClient extends http.BaseClient {
+  _FakeHttpClient(this._handler);
+
+  final Future<http.Response> Function(http.Request request) _handler;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final nextRequest = http.Request(request.method, request.url)
+      ..headers.addAll(request.headers);
+    if (request is http.Request) {
+      nextRequest.body = request.body;
+      nextRequest.encoding = request.encoding;
+    }
+    final response = await _handler(nextRequest);
+    return http.StreamedResponse(
+      Stream.value(response.bodyBytes),
+      response.statusCode,
+      headers: response.headers,
+      reasonPhrase: response.reasonPhrase,
+      request: request,
+    );
   }
 }
 
