@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omni_code/l10n/generated/app_localizations.dart';
+import 'package:omni_code/src/bridge_client.dart';
+import 'package:omni_code/src/models.dart';
 import 'package:omni_code/src/screens/settings_screen.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
+import 'package:omni_code/src/settings/app_settings_store.dart';
 import 'package:omni_code/src/theme/app_theme.dart';
 
 void main() {
   setUp(() {
+    appSettingsController.debugReplaceStore(_MemoryAppSettingsStore());
     appSettingsController.debugReplaceSettings(AppSettings.defaults());
   });
 
@@ -81,6 +85,43 @@ void main() {
       isTrue,
     );
   });
+
+  testWidgets('desktop settings form does not overflow at narrow widths',
+      (tester) async {
+    tester.view.physicalSize = const Size(1000, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      const _TestApp(
+        home: SettingsScreen(),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('SETTINGS DESK'), findsOneWidget);
+  });
+
+  testWidgets('shows an error instead of throwing when bridge sync fails',
+      (tester) async {
+    await tester.pumpWidget(
+      _TestApp(
+        home: SettingsScreen(client: _FailingSettingsBridgeClient()),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Save'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('Failed to save settings'), findsOneWidget);
+  });
 }
 
 class _TestApp extends StatelessWidget {
@@ -104,5 +145,27 @@ class _TestApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
     );
+  }
+}
+
+class _FailingSettingsBridgeClient extends BridgeClient {
+  @override
+  Future<void> updateBridgeSettings(
+    AppSettings settings, {
+    List<ModelProviderConfig>? modelProviders,
+  }) async {
+    throw Exception('bridge unavailable');
+  }
+}
+
+class _MemoryAppSettingsStore implements AppSettingsStore {
+  String? _body;
+
+  @override
+  Future<String?> read() async => _body;
+
+  @override
+  Future<void> write(String body) async {
+    _body = body;
   }
 }

@@ -26,9 +26,11 @@ import 'speech_settings_screen.dart';
 import '../../l10n/generated/app_localizations.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.client});
 
   static const routeName = '/settings';
+
+  final BridgeClient? client;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -54,6 +56,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _currentVersion = '';
   bool _saving = false;
   bool _checkingUpdate = false;
+
+  BridgeClient get _client => widget.client ?? bridgeClient;
 
   @override
   void initState() {
@@ -448,34 +452,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ThemeData theme,
     TextStyle formValueTextStyle,
   ) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildSpeechSection(context, l10n),
-              const SizedBox(height: AppSpacing.fieldGap),
-              _buildModelProvidersSection(context, l10n),
-              const SizedBox(height: AppSpacing.fieldGap),
-              _buildReplyBehaviorSection(context, l10n, formValueTextStyle),
-            ],
-          ),
-        ),
-        const SizedBox(width: AppSpacing.card),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildAiApprovalSection(context, l10n, formValueTextStyle),
-              const SizedBox(height: AppSpacing.fieldGap),
-              _buildSystemSection(context, l10n),
-              const SizedBox(height: AppSpacing.fieldGap),
-              _buildUpdateSection(context, l10n, theme, formValueTextStyle),
-            ],
-          ),
-        ),
+        _buildSpeechSection(context, l10n),
+        const SizedBox(height: AppSpacing.fieldGap),
+        _buildModelProvidersSection(context, l10n),
+        const SizedBox(height: AppSpacing.fieldGap),
+        _buildReplyBehaviorSection(context, l10n, formValueTextStyle),
+        const SizedBox(height: AppSpacing.fieldGap),
+        _buildAiApprovalSection(context, l10n, formValueTextStyle),
+        const SizedBox(height: AppSpacing.fieldGap),
+        _buildSystemSection(context, l10n),
+        const SizedBox(height: AppSpacing.fieldGap),
+        _buildUpdateSection(context, l10n, theme, formValueTextStyle),
       ],
     );
   }
@@ -1061,7 +1051,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       );
       await appSettingsController.save(next);
-      await bridgeClient.updateBridgeSettings(next);
+      await _client.updateBridgeSettings(next);
       if (!mounted) {
         return;
       }
@@ -1069,6 +1059,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         SnackBar(content: Text(context.l10n.settingsSaved)),
       );
       Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showCopyableErrorSnackBar(context.l10n.settingsSaveFailed('$error'));
     } finally {
       if (mounted) {
         setState(() {
