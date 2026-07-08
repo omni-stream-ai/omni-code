@@ -189,4 +189,28 @@ void main() {
     final restored = AppSettings.fromJson(settings.toJson());
     expect(restored.voiceComposerMode, isTrue);
   });
+
+  test('desktop session rail defaults to collapsed', () {
+    expect(AppSettings.defaults().desktopSessionRailCollapsed, isTrue);
+  });
+
+  test('desktop home rail defaults to collapsed', () {
+    expect(AppSettings.defaults().desktopHomeRailCollapsed, isTrue);
+  });
+
+  test('desktop home rail collapsed state round-trips through json', () {
+    final settings = AppSettings.defaults().copyWith(
+      desktopHomeRailCollapsed: false,
+    );
+    final restored = AppSettings.fromJson(settings.toJson());
+    expect(restored.desktopHomeRailCollapsed, isFalse);
+  });
+
+  test('desktop session rail collapsed state round-trips through json', () {
+    final settings = AppSettings.defaults().copyWith(
+      desktopSessionRailCollapsed: false,
+    );
+    final restored = AppSettings.fromJson(settings.toJson());
+    expect(restored.desktopSessionRailCollapsed, isFalse);
+  });
 }

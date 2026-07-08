@@ -218,7 +218,6 @@
   "installAgent": "Install agent",
   "installingAgent": "Installing...",
   "create": "Create",
-  "refreshNativeSessions": "Refresh native sessions",
   "creatingSession": "Creating session...",
   "waitingApprovalProcessing": "Waiting for approval processing...",
   "waitingApprovalListening": "Listening for approval...",

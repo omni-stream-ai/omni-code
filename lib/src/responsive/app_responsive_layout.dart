@@ -20,3 +20,21 @@ Future<void> toggleDesktopNavigationCollapsed() {
     ),
   );
 }
+
+Future<void> toggleDesktopHomeRailCollapsed() {
+  final next = !appSettingsController.settings.desktopHomeRailCollapsed;
+  return appSettingsController.save(
+    appSettingsController.settings.copyWith(
+      desktopHomeRailCollapsed: next,
+    ),
+  );
+}
+
+Future<void> toggleDesktopSessionRailCollapsed() {
+  final next = !appSettingsController.settings.desktopSessionRailCollapsed;
+  return appSettingsController.save(
+    appSettingsController.settings.copyWith(
+      desktopSessionRailCollapsed: next,
+    ),
+  );
+}

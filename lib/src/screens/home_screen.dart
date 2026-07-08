@@ -496,8 +496,39 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _newSessionForSession(SessionSummary session) async {
+    await startNewSessionFlow(
+      context,
+      client: _client,
+      initialProjects: _projects,
+      initialProject: _projectForSession(session),
+      onSessionClosed: () => _loadHomeData(forceRefresh: true),
+    );
+  }
+
+  ProjectSummary? _projectForSession(SessionSummary session) {
+    final cached = _client.peekProject(session.projectId);
+    if (cached != null) {
+      return cached;
+    }
+    for (final project in _projects ?? const <ProjectSummary>[]) {
+      if (project.id == session.projectId) {
+        return project;
+      }
+    }
+    return null;
+  }
+
   Future<void> _toggleDesktopSidebarCollapsed() async {
     await toggleDesktopNavigationCollapsed();
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+  }
+
+  Future<void> _toggleDesktopHomeRailCollapsed() async {
+    await toggleDesktopHomeRailCollapsed();
     if (!mounted) {
       return;
     }
@@ -535,6 +566,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       onNavigateProjects: _openProjects,
       onNavigateSettings: _openSettings,
       onNewSession: _newSession,
+      onNewSessionForProject: _newSessionForProject,
+      onNewSessionForSession: _newSessionForSession,
+      agentLabelFor: _client.agentLabelFor,
       desktopBreakpoint: AppResponsiveLayout.desktopBreakpoint,
       desktopSidebarWidth: AppResponsiveLayout.desktopSidebarWidth,
       desktopSidebarCollapsedWidth:
@@ -568,10 +602,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final useWideDesktopLayout = AppResponsiveLayout.isWideDesktopWidth(
       MediaQuery.sizeOf(context).width,
     );
+    final desktopHomeRailCollapsed =
+        appSettingsController.settings.desktopHomeRailCollapsed;
     if (useDesktopLayout) {
       return _DesktopHomeLoadingSkeleton(
         key: const Key('home-desktop-loading-skeleton'),
-        useWideRail: useWideDesktopLayout,
+        useWideRail: useWideDesktopLayout && !desktopHomeRailCollapsed,
         brightness: brightness,
       );
     }
@@ -1019,6 +1055,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final runningCount = sessions
         .where((session) => session.status == SessionStatus.running)
         .length;
+    final desktopHomeRailCollapsed =
+        appSettingsController.settings.desktopHomeRailCollapsed;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -1039,6 +1077,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 children: [
                   _HomeDesktopInboxHeader(
                     onReload: _reloadHomeData,
+                    statusRailCollapsed: desktopHomeRailCollapsed,
+                    canToggleStatusRail: useWideRail,
+                    onToggleStatusRail: _toggleDesktopHomeRailCollapsed,
                     approvalCount: approvalCount,
                     runningCount: runningCount,
                     searchBar: _buildDashboardSearchBar(),
@@ -1071,7 +1112,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ),
           ),
-          if (useWideRail) ...[
+          if (useWideRail && !desktopHomeRailCollapsed) ...[
             const SizedBox(width: AppSpacing.card),
             SizedBox(
               width: _homeDesktopRailWidth,
@@ -1086,6 +1127,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 runningCount: runningCount,
                 onOpenProjects: _openProjects,
                 onOpenSettings: _openSettings,
+                onCollapse: _toggleDesktopHomeRailCollapsed,
               ),
             ),
           ],
@@ -1383,6 +1425,38 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     unawaited(_loadProjects(forceRefresh: true));
   }
 
+  Future<void> _newSessionForProject(ProjectSummary project) async {
+    await startNewSessionFlow(
+      context,
+      client: _client,
+      initialProject: project,
+      onSessionClosed: () => _loadProjects(forceRefresh: true),
+    );
+  }
+
+  Future<void> _newSessionForSession(SessionSummary session) async {
+    await startNewSessionFlow(
+      context,
+      client: _client,
+      initialProjects: _projects,
+      initialProject: _projectForSession(session),
+      onSessionClosed: () => _loadProjects(forceRefresh: true),
+    );
+  }
+
+  ProjectSummary? _projectForSession(SessionSummary session) {
+    final cached = _client.peekProject(session.projectId);
+    if (cached != null) {
+      return cached;
+    }
+    for (final project in _projects ?? const <ProjectSummary>[]) {
+      if (project.id == session.projectId) {
+        return project;
+      }
+    }
+    return null;
+  }
+
   Future<void> _createProject() async {
     final result = await showDialog<(String, String)>(
       context: context,
@@ -1495,6 +1569,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         );
       },
       onNewSession: null,
+      onNewSessionForProject: _newSessionForProject,
+      onNewSessionForSession: _newSessionForSession,
+      agentLabelFor: _client.agentLabelFor,
       bodyBuilder: (context, useDesktop, constraints) => DecoratedBox(
         decoration: BoxDecoration(
           gradient: AppColors.boardGradientFor(brightness),
@@ -1788,6 +1865,7 @@ class _ShellHeader extends StatelessWidget {
 
 class _CircleActionButton extends StatelessWidget {
   const _CircleActionButton({
+    super.key,
     required this.icon,
     required this.onPressed,
     this.filled = false,
@@ -2157,12 +2235,18 @@ class _ActionCardSkeleton extends StatelessWidget {
 class _HomeDesktopInboxHeader extends StatelessWidget {
   const _HomeDesktopInboxHeader({
     required this.onReload,
+    required this.statusRailCollapsed,
+    required this.canToggleStatusRail,
+    required this.onToggleStatusRail,
     required this.approvalCount,
     required this.runningCount,
     required this.searchBar,
   });
 
   final VoidCallback onReload;
+  final bool statusRailCollapsed;
+  final bool canToggleStatusRail;
+  final VoidCallback onToggleStatusRail;
   final int approvalCount;
   final int runningCount;
   final Widget searchBar;
@@ -2213,11 +2297,144 @@ class _HomeDesktopInboxHeader extends StatelessWidget {
                 icon: Icons.refresh_rounded,
                 onPressed: onReload,
               ),
+              const SizedBox(width: AppSpacing.compact),
+              _HomeDesktopHeaderMoreButton(
+                statusRailCollapsed: statusRailCollapsed,
+                canToggleStatusRail: canToggleStatusRail,
+                onToggleStatusRail: onToggleStatusRail,
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.card),
           searchBar,
         ],
+      ),
+    );
+  }
+}
+
+class _HomeDesktopHeaderMoreButton extends StatelessWidget {
+  const _HomeDesktopHeaderMoreButton({
+    required this.statusRailCollapsed,
+    required this.canToggleStatusRail,
+    required this.onToggleStatusRail,
+  });
+
+  final bool statusRailCollapsed;
+  final bool canToggleStatusRail;
+  final VoidCallback onToggleStatusRail;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final controller = MenuController();
+    return MenuAnchor(
+      controller: controller,
+      crossAxisUnconstrained: false,
+      alignmentOffset: const Offset(-8, 10),
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(
+          AppColors.surfaceFor(brightness),
+        ),
+        side: const WidgetStatePropertyAll(BorderSide.none),
+        elevation: const WidgetStatePropertyAll(0),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+          ),
+        ),
+        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+      ),
+      menuChildren: [
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.compact,
+            vertical: AppSpacing.compact,
+          ),
+          child: SizedBox(
+            width: 172,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (canToggleStatusRail)
+                  _HomeHeaderActionTile(
+                    key: const Key('home-header-toggle-rail-button'),
+                    label: statusRailCollapsed ? 'Show status' : 'Hide status',
+                    icon: statusRailCollapsed
+                        ? Icons.info_outline_rounded
+                        : Icons.remove_circle_outline_rounded,
+                    onTap: () {
+                      controller.close();
+                      onToggleStatusRail();
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+      builder: (context, controller, child) => _CircleActionButton(
+        key: const Key('home-header-more-button'),
+        icon: Icons.more_horiz_rounded,
+        onPressed: () {
+          if (controller.isOpen) {
+            controller.close();
+          } else {
+            controller.open();
+          }
+        },
+      ),
+    );
+  }
+}
+
+class _HomeHeaderActionTile extends StatelessWidget {
+  const _HomeHeaderActionTile({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.compact,
+            vertical: AppSpacing.compact,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: AppColors.mutedFor(brightness),
+              ),
+              const SizedBox(width: AppSpacing.compact),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2859,6 +3076,7 @@ class _HomeDesktopRail extends StatelessWidget {
     required this.runningCount,
     required this.onOpenProjects,
     required this.onOpenSettings,
+    required this.onCollapse,
   });
 
   final Brightness brightness;
@@ -2871,6 +3089,7 @@ class _HomeDesktopRail extends StatelessWidget {
   final int runningCount;
   final VoidCallback onOpenProjects;
   final VoidCallback onOpenSettings;
+  final VoidCallback onCollapse;
 
   @override
   Widget build(BuildContext context) {
@@ -2897,11 +3116,31 @@ class _HomeDesktopRail extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Status',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Status',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
                 ),
+              ),
+              IconButton(
+                key: const Key('home-rail-collapse-button'),
+                tooltip: 'Collapse status',
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: AppColors.textSoftFor(brightness),
+                  hoverColor:
+                      AppColors.textFor(brightness).withValues(alpha: 0.06),
+                  focusColor:
+                      AppColors.textFor(brightness).withValues(alpha: 0.08),
+                ),
+                onPressed: onCollapse,
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.stack),
           _HomeRailCard(

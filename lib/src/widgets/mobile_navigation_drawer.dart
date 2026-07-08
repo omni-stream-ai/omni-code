@@ -19,6 +19,9 @@ class MobileNavigationDrawer extends StatelessWidget {
     this.onOpenProject,
     this.onOpenSession,
     this.onNewSession,
+    this.onNewSessionForProject,
+    this.onNewSessionForSession,
+    this.agentLabelFor,
   });
 
   final AppRouteKind activeRoute;
@@ -32,6 +35,9 @@ class MobileNavigationDrawer extends StatelessWidget {
   final ValueChanged<ProjectSummary>? onOpenProject;
   final ValueChanged<SessionSummary>? onOpenSession;
   final VoidCallback? onNewSession;
+  final ValueChanged<ProjectSummary>? onNewSessionForProject;
+  final ValueChanged<SessionSummary>? onNewSessionForSession;
+  final AgentLabelResolver? agentLabelFor;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +66,9 @@ class MobileNavigationDrawer extends StatelessWidget {
                   onOpenProject: onOpenProject,
                   onOpenSession: onOpenSession,
                   onNewSession: onNewSession,
+                  onNewSessionForProject: onNewSessionForProject,
+                  onNewSessionForSession: onNewSessionForSession,
+                  agentLabelFor: agentLabelFor,
                   showRecentContent: activeRoute != AppRouteKind.home,
                   onBeforeNavigate: () => Navigator.of(context).pop(),
                   headerStyle: NavigationHeaderStyle.prominent,
