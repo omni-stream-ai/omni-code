@@ -209,6 +209,7 @@ class AppSettings {
     String? aiApprovalApiKey,
     String? aiApprovalModel,
     String? aiApprovalMaxRisk,
+    int? notificationMaxChars,
     bool? autoSpeakReplies,
     bool? speechPlaybackPromptEnabled,
     bool? compressAssistantReplies,
@@ -258,7 +259,7 @@ class AppSettings {
       aiApprovalApiKey: aiApprovalApiKey ?? this.aiApprovalApiKey,
       aiApprovalModel: aiApprovalModel ?? this.aiApprovalModel,
       aiApprovalMaxRisk: aiApprovalMaxRisk ?? this.aiApprovalMaxRisk,
-      notificationMaxChars: notificationMaxChars,
+      notificationMaxChars: notificationMaxChars ?? this.notificationMaxChars,
       autoSpeakReplies: autoSpeakReplies ?? this.autoSpeakReplies,
       speechPlaybackPromptEnabled:
           speechPlaybackPromptEnabled ?? this.speechPlaybackPromptEnabled,
@@ -940,6 +941,9 @@ class AppSettingsController extends ChangeNotifier {
           shouldPersist = true;
         }
         if (json['call_mode_speech_pause_millis'] == null) {
+          shouldPersist = true;
+        }
+        if (json.containsKey('call_mode_vad_silence_millis')) {
           shouldPersist = true;
         }
         if (json['bridge_local_tts_streaming'] == null) {

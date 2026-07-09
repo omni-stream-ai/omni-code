@@ -414,7 +414,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   shape: const CircleBorder(),
                 ),
                 onPressed: () => Scaffold.of(context).openDrawer(),
-                tooltip: 'Open navigation',
+                tooltip: context.l10n.openNavigation,
                 icon: const Icon(Icons.menu_rounded, size: 18),
               ),
             ),
@@ -423,7 +423,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         ],
         Expanded(
           child: AppBackHeader(
-            title: 'SESSIONS',
+            title: context.l10n.sessionsTitle.toUpperCase(),
             titleStyle: titleStyle,
           ),
         ),
@@ -469,7 +469,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'PROJECT DESK',
+                      context.l10n.projectDesk.toUpperCase(),
                       style: theme.textTheme.labelSmall?.copyWith(
                         letterSpacing: 0.8,
                         fontWeight: FontWeight.w800,
@@ -520,20 +520,20 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             runSpacing: AppSpacing.compact,
             children: [
               _DesktopProjectMetricChip(
-                label: 'All sessions',
+                label: context.l10n.allSessions,
                 value: '${sessions.length}',
               ),
               _DesktopProjectMetricChip(
-                label: 'In motion',
+                label: context.l10n.inMotion,
                 value: '$activeCount',
               ),
               _DesktopProjectMetricChip(
-                label: 'Awaiting approval',
+                label: context.l10n.sessionStatusAwaitingApproval,
                 value:
                     '${_statusCount(sessions, SessionStatus.awaitingApproval)}',
               ),
               _DesktopProjectMetricChip(
-                label: 'Idle',
+                label: context.l10n.sessionStatusIdle,
                 value: '${_statusCount(sessions, SessionStatus.idle)}',
               ),
             ],
@@ -647,7 +647,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                       _visibleCount = _pageSize;
                     });
                   },
-                  child: const Text('Clear search'),
+                  child: Text(context.l10n.clearSearch),
                 ),
             ],
           ),
@@ -752,26 +752,26 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _DesktopProjectRailCard(
-          title: 'Project context',
+          title: context.l10n.projectContext,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _DesktopProjectRailRow(
-                label: 'Root path',
+                label: context.l10n.rootPath,
                 value: _project.rootPath,
                 mono: true,
               ),
               if (_project.gitBranch != null) ...[
                 const SizedBox(height: AppSpacing.stack),
                 _DesktopProjectRailRow(
-                  label: 'Branch',
+                  label: context.l10n.branch,
                   value: _project.gitBranch!,
                 ),
               ],
               if (_project.gitStatus != null) ...[
                 const SizedBox(height: AppSpacing.stack),
                 _DesktopProjectRailRow(
-                  label: 'Git state',
+                  label: context.l10n.gitState,
                   value: _project.gitStatus == ProjectGitStatus.dirty
                       ? context.l10n.gitDirty
                       : context.l10n.gitClean,
@@ -782,34 +782,39 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         ),
         const SizedBox(height: AppSpacing.card),
         _DesktopProjectRailCard(
-          title: 'Status mix',
+          title: context.l10n.statusMix,
           child: Wrap(
             spacing: AppSpacing.compact,
             runSpacing: AppSpacing.compact,
             children: [
               _DesktopProjectMetricChip(
-                  label: 'Running', value: '$runningCount'),
+                  label: context.l10n.sessionStatusRunning,
+                  value: '$runningCount'),
               _DesktopProjectMetricChip(
-                  label: 'Waiting', value: '$waitingCount'),
+                  label: context.l10n.sessionStatusWaiting,
+                  value: '$waitingCount'),
               _DesktopProjectMetricChip(
-                label: 'Approvals',
+                label: context.l10n.approvals,
                 value: '$approvalCount',
               ),
-              _DesktopProjectMetricChip(label: 'Failed', value: '$failedCount'),
+              _DesktopProjectMetricChip(
+                label: context.l10n.sessionStatusFailed,
+                value: '$failedCount',
+              ),
             ],
           ),
         ),
         const SizedBox(height: AppSpacing.card),
         _DesktopProjectRailCard(
-          title: 'Notes',
+          title: context.l10n.notes,
           child: Text(
             sessions.isEmpty
-                ? 'No active sessions yet. Start a new one to turn this project into a working desk.'
+                ? context.l10n.projectNotesNoActiveSessions
                 : approvalCount > 0
-                    ? 'There are sessions waiting on approval. Review them before starting parallel work.'
+                    ? context.l10n.projectNotesWaitingApproval
                     : runningCount > 0 || waitingCount > 0
-                        ? 'This project has active work in motion. Keep recent sessions concise and easy to scan.'
-                        : 'The current session mix is quiet. Use this space to restart stalled threads or begin a focused run.',
+                        ? context.l10n.projectNotesActiveWork
+                        : context.l10n.projectNotesQuiet,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.5),
           ),
         ),

@@ -336,7 +336,7 @@ class _ModelProviderScreenState extends State<ModelProviderScreen> {
                     shape: const CircleBorder(),
                   ),
                   onPressed: () => Scaffold.of(context).openDrawer(),
-                  tooltip: 'Open navigation',
+                  tooltip: l10n.openNavigation,
                   icon: const Icon(Icons.menu_rounded, size: 18),
                 ),
               ),
@@ -480,6 +480,7 @@ class _ModelProviderDesktopRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final theme = Theme.of(context);
     final brightness = theme.brightness;
     final enabledCount = providers.where((provider) => provider.enabled).length;
@@ -494,23 +495,23 @@ class _ModelProviderDesktopRail extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Provider order',
+                l10n.providerOrder,
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: AppSpacing.stackTight),
               _ProviderRailRow(
-                label: 'Configured',
+                label: l10n.configured,
                 value: loading ? '...' : '${providers.length}',
               ),
               _ProviderRailRow(
-                label: 'Enabled',
+                label: l10n.enabled,
                 value: loading ? '...' : '$enabledCount',
               ),
               _ProviderRailRow(
-                label: 'Default',
-                value: defaultProvider?.name ?? 'None',
+                label: l10n.defaultLabel,
+                value: defaultProvider?.name ?? l10n.none,
               ),
             ],
           ),

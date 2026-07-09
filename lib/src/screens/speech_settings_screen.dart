@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -98,7 +99,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   final _bridgeRealtimeAsrService = BridgeRealtimeAsrService();
   final Set<String> _downloadingModelIds = <String>{};
   final Map<String, String> _downloadErrorsByModelId = <String, String>{};
-  final Set<String> _updatingProfileKeys = <String>{};
   final Set<String> _updatingVoiceModelIds = <String>{};
   final Set<String> _deletingModelIds = <String>{};
   final Set<String> _savingPluginConfigurationIds = <String>{};
@@ -116,8 +116,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   final Map<String, FocusNode> _pluginConfigurationFieldFocusNodes =
       <String, FocusNode>{};
   final Set<String> _hoveredPluginRegistrationUrls = <String>{};
-  final ValueNotifier<int> _modelPickerRevision = ValueNotifier<int>(0);
-  SpeechProfile? _openModelPickerProfile;
 
   late TtsProvider _ttsProvider;
   late bool _bridgeLocalTtsStreaming;
@@ -125,6 +123,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   late bool _speechPlaybackPromptEnabled;
   late bool _callModeAllowInterruptions;
   late int _callModeSpeechPauseMillis;
+  final TextEditingController _callModeSpeechPauseController =
+      TextEditingController();
+  String? _callModeSpeechPauseError;
   late Map<String, String?> _selectedSpeechPluginByCapability;
   late Map<String, String> _speechPluginApiKeysByPluginId;
   late Map<String, Map<String, String>> _speechPluginSettingsByPluginId;
@@ -281,8 +282,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     for (final focusNode in _pluginConfigurationFieldFocusNodes.values) {
       focusNode.dispose();
     }
+    _callModeSpeechPauseController.dispose();
     _speakerNameController.dispose();
-    _modelPickerRevision.dispose();
     super.dispose();
   }
 
@@ -323,6 +324,11 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     _speechPlaybackPromptEnabled = settings.speechPlaybackPromptEnabled;
     _callModeAllowInterruptions = settings.callModeAllowInterruptions;
     _callModeSpeechPauseMillis = settings.callModeSpeechPauseMillis;
+    final speechPauseText = settings.callModeSpeechPauseMillis.toString();
+    if (_callModeSpeechPauseController.text != speechPauseText) {
+      _callModeSpeechPauseController.text = speechPauseText;
+    }
+    _callModeSpeechPauseError = null;
     _selectedSpeechPluginByCapability =
         Map<String, String?>.from(settings.selectedSpeechPluginByCapability);
     _speechPluginApiKeysByPluginId =
@@ -640,7 +646,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                     shape: const CircleBorder(),
                   ),
                   onPressed: () => Scaffold.of(context).openDrawer(),
-                  tooltip: 'Open navigation',
+                  tooltip: l10n.openNavigation,
                   icon: const Icon(Icons.menu_rounded, size: 18),
                 ),
               ),
@@ -739,6 +745,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     required String? ttsHelpText,
     required String? asrHelpText,
   }) {
+    final l10n = context.l10n;
     final theme = Theme.of(context);
     final brightness = theme.brightness;
 
@@ -746,7 +753,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Speech uses the system by default. Install a plugin only for the capabilities that need a custom service.',
+          l10n.speechRoutingSystemDefaultIntro,
           style: theme.textTheme.bodySmall?.copyWith(
             color: AppColors.mutedSoftFor(brightness),
             height: 1.4,
@@ -759,9 +766,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
             _buildSpeechRouteCard(
               context,
               capability: SpeechPluginCapability.realtimeAsr,
-              title: 'Realtime ASR',
-              subtitle:
-                  'Mic streaming, live transcripts, and interrupt detection.',
+              title: context.l10n.speechProfileRealtimeAsrTitle,
+              subtitle: l10n.realtimeAsrRouteSubtitle,
               activeRouteLabel:
                   _activeRouteLabel(SpeechPluginCapability.realtimeAsr),
               builtInHelpText: asrHelpText,
@@ -770,15 +776,13 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                   (!_isWebPlatform &&
                       _platform == TargetPlatform.macOS &&
                       _asrProvider == AsrProvider.system),
-              footer:
-                  'Good default for on-device dictation and interruption handling.',
+              footer: l10n.realtimeAsrRouteFooter,
             ),
             _buildSpeechRouteCard(
               context,
               capability: SpeechPluginCapability.batchAsr,
-              title: 'Batch ASR',
-              subtitle:
-                  'Recorded clips, uploads, and non-realtime recognition.',
+              title: context.l10n.speechProfileBatchAsrTitle,
+              subtitle: l10n.batchAsrRouteSubtitle,
               activeRouteLabel:
                   _activeRouteLabel(SpeechPluginCapability.batchAsr),
               builtInHelpText: null,
@@ -787,21 +791,18 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                   (!_isWebPlatform &&
                       _platform == TargetPlatform.macOS &&
                       _asrProvider == AsrProvider.system),
-              footer:
-                  'Useful for cloud transcription providers or higher-accuracy offline jobs.',
+              footer: l10n.batchAsrRouteFooter,
             ),
             _buildSpeechRouteCard(
               context,
               capability: SpeechPluginCapability.tts,
-              title: 'TTS',
-              subtitle:
-                  'Reply playback, voice output, and spoken call-mode responses.',
+              title: context.l10n.speechProfileTtsTitle,
+              subtitle: l10n.ttsRouteSubtitle,
               activeRouteLabel: _activeRouteLabel(SpeechPluginCapability.tts),
               builtInHelpText: ttsHelpText,
               showBuiltInWarning: !_systemTtsSupportedOnPlatform &&
                   _ttsProvider == TtsProvider.system,
-              footer:
-                  'Use a plugin when you want a cloud voice or a local TTS service.',
+              footer: l10n.ttsRouteFooter,
             ),
           ]),
         ),
@@ -946,10 +947,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       return plugin.manifest.localizedName(_pluginLocaleTag());
     }
     return switch (capability) {
-      SpeechPluginCapability.tts => 'System default',
+      SpeechPluginCapability.tts => context.l10n.systemDefault,
       SpeechPluginCapability.realtimeAsr ||
       SpeechPluginCapability.batchAsr =>
-        'System default',
+        context.l10n.systemDefault,
     };
   }
 
@@ -960,11 +961,11 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     final title = _speechPluginCapabilityLabel(capability);
 
     Future<void> importAndRefresh(StateSetter routeSetState) async {
-      const typeGroup = XTypeGroup(
-        label: 'Plugin manifest',
+      final typeGroup = XTypeGroup(
+        label: context.l10n.pluginManifest,
         extensions: <String>['json'],
       );
-      final files = await openFiles(acceptedTypeGroups: const [typeGroup]);
+      final files = await openFiles(acceptedTypeGroups: [typeGroup]);
       if (files.isEmpty) {
         return;
       }
@@ -1013,7 +1014,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                       ),
                     ),
                     icon: const Icon(Icons.file_open_outlined, size: 18),
-                    label: const Text('Import'),
+                    label: Text(context.l10n.importLabel),
                   ),
                 ],
               ),
@@ -1029,7 +1030,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'Choose system default or pick a plugin for this capability.',
+                        context.l10n.chooseSpeechCapabilityProvider,
                         style: Theme.of(routeContext)
                             .textTheme
                             .bodySmall
@@ -1043,9 +1044,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                       const SizedBox(height: AppSpacing.compact),
                       _buildCapabilityChoiceTile(
                         routeContext,
-                        title: 'System default',
-                        subtitle:
-                            'Use the built-in behavior for this capability.',
+                        title: context.l10n.systemDefault,
+                        subtitle: context.l10n.systemDefaultCapabilitySubtitle,
                         selected: selectedPluginId == null,
                         onTap: () {
                           setState(() {
@@ -1101,23 +1101,25 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     if (selectedPluginId == null || selectedPluginId.trim().isEmpty) {
       return switch (capability) {
         SpeechPluginCapability.tts when !_systemTtsSupportedOnPlatform =>
-          'System default TTS cannot be tested on this platform. Choose a TTS plugin to test playback here.',
+          context.l10n.systemTtsTestUnavailable,
         SpeechPluginCapability.realtimeAsr
             when !_systemAsrSupportedOnPlatform =>
-          'System realtime ASR cannot be tested on this platform. Choose a realtime ASR plugin to test here.',
+          context.l10n.systemRealtimeAsrTestUnavailable,
         SpeechPluginCapability.batchAsr =>
-          'System default does not provide batch ASR testing. Choose a batch ASR plugin to test transcription here.',
+          context.l10n.systemBatchAsrTestUnavailable,
         _ => null,
       };
     }
 
     final plugin = testPlugin ?? _selectedInstalledSpeechPlugin(capability);
     if (plugin == null) {
-      return 'The selected plugin is not installed, so it cannot be tested.';
+      return context.l10n.selectedPluginNotInstalled;
     }
     final config = plugin.manifest.configFor(capability);
     if (config == null) {
-      return 'The selected plugin does not expose ${_speechPluginCapabilityLabel(capability)} configuration, so it cannot be tested.';
+      return context.l10n.selectedPluginMissingCapabilityConfig(
+        _speechPluginCapabilityLabel(capability),
+      );
     }
     final resolvedConfig = _capabilityTestConfigWithOverrides(
       plugin.manifest,
@@ -1134,12 +1136,13 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     };
     if (!supported) {
       final expected = switch (capability) {
-        SpeechPluginCapability.tts => 'an OpenAI-compatible TTS endpoint',
+        SpeechPluginCapability.tts => context.l10n.expectedTtsEndpoint,
         SpeechPluginCapability.batchAsr =>
-          'an OpenAI-compatible transcription endpoint',
-        SpeechPluginCapability.realtimeAsr => 'a realtime websocket endpoint',
+          context.l10n.expectedTranscriptionEndpoint,
+        SpeechPluginCapability.realtimeAsr =>
+          context.l10n.expectedRealtimeWebsocketEndpoint,
       };
-      return 'The current selection does not expose $expected, so testing is unavailable.';
+      return context.l10n.currentSelectionMissingExpectedEndpoint(expected);
     }
 
     final requiredMissing = _missingRequiredPluginSetting(
@@ -1148,21 +1151,23 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       resolvedConfig,
     );
     if (requiredMissing != null) {
-      return 'The current selection is missing ${requiredMissing.localizedLabel(_pluginLocaleTag())}, so testing is unavailable.';
+      return context.l10n.currentSelectionMissingRequiredSetting(
+        requiredMissing.localizedLabel(_pluginLocaleTag()),
+      );
     }
     if (capability == SpeechPluginCapability.realtimeAsr) {
       final websocketUrl = resolvedConfig.websocketUrl?.trim() ?? '';
       if (websocketUrl.isEmpty) {
-        return 'The current selection is missing a realtime websocket URL, so testing is unavailable.';
+        return context.l10n.currentSelectionMissingRealtimeWebsocketUrl;
       }
       final uri = Uri.tryParse(websocketUrl);
       if (uri == null ||
           (uri.scheme != 'ws' && uri.scheme != 'wss') ||
           (uri.host.isEmpty)) {
-        return 'The current selection has an invalid realtime websocket URL, so testing is unavailable.';
+        return context.l10n.currentSelectionInvalidRealtimeWebsocketUrl;
       }
       if (uri.path.toLowerCase().contains('nostream')) {
-        return 'The current selection points to a non-streaming endpoint, so testing is unavailable. Configure a realtime websocket URL first.';
+        return context.l10n.currentSelectionNonStreamingEndpoint;
       }
     }
     return null;
@@ -1329,11 +1334,15 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   }
 
   Future<void> _savePluginConfiguration(String pluginId) async {
+    final l10n = context.l10n;
+    if (!_applyCallModeSpeechPauseInput(l10n)) {
+      return;
+    }
     setState(() {
       _savingPluginConfigurationIds.add(pluginId);
-      _pluginSaveFeedbackById[pluginId] = const _CapabilityTestFeedback(
+      _pluginSaveFeedbackById[pluginId] = _CapabilityTestFeedback(
         kind: _CapabilityTestFeedbackKind.info,
-        message: 'Saving plugin settings...',
+        message: l10n.savingPluginSettings,
       );
     });
     try {
@@ -1355,9 +1364,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         return;
       }
       setState(() {
-        _pluginSaveFeedbackById[pluginId] = const _CapabilityTestFeedback(
+        _pluginSaveFeedbackById[pluginId] = _CapabilityTestFeedback(
           kind: _CapabilityTestFeedbackKind.success,
-          message: 'Saved to settings.',
+          message: l10n.savedToSettings,
         );
       });
     } catch (err) {
@@ -1367,7 +1376,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       setState(() {
         _pluginSaveFeedbackById[pluginId] = _CapabilityTestFeedback(
           kind: _CapabilityTestFeedbackKind.error,
-          message: 'Failed to save plugin settings.\n\nRaw error:\n$err',
+          message: l10n.pluginSettingsSaveFailed(err),
         );
       });
     } finally {
@@ -1396,7 +1405,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       }
       setState(() {
         _pluginConfigurationErrorsById[plugin.manifest.id] =
-            'Fill in the required settings below before using this plugin.';
+            context.l10n.fillRequiredPluginSettings;
       });
       onStateChanged?.call(() {});
       return false;
@@ -1428,8 +1437,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     BuildContext context, {
     String? pluginId,
   }) async {
+    final l10n = context.l10n;
     final controller = TextEditingController(
-      text: 'Hello from Omni Code speech settings.',
+      text: l10n.defaultTtsTestText,
     );
     final usesSystemDefault = pluginId == null &&
         _selectedSpeechPluginByCapability[SpeechPluginCapability.tts.id] ==
@@ -1457,10 +1467,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         },
       );
     } else {
-      feedback = const _CapabilityTestFeedback(
+      feedback = _CapabilityTestFeedback(
         kind: _CapabilityTestFeedbackKind.error,
-        message:
-            'System TTS test is not available on this platform. Choose a TTS plugin to test playback here.',
+        message: l10n.systemTtsTestUnavailable,
       );
     }
     if (!context.mounted) {
@@ -1475,10 +1484,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
             Future<void> play() async {
               if (systemUnavailable) {
                 setSheetState(() {
-                  feedback = const _CapabilityTestFeedback(
+                  feedback = _CapabilityTestFeedback(
                     kind: _CapabilityTestFeedbackKind.error,
-                    message:
-                        'System TTS test is not available on this platform. Choose a TTS plugin to test playback here.',
+                    message: l10n.systemTtsTestUnavailable,
                   );
                 });
                 _setCapabilityTestFeedback(
@@ -1488,9 +1496,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                 return;
               }
               setSheetState(() {
-                feedback = const _CapabilityTestFeedback(
+                feedback = _CapabilityTestFeedback(
                   kind: _CapabilityTestFeedbackKind.info,
-                  message: 'Starting playback test...',
+                  message: l10n.startingPlaybackTest,
                 );
               });
               try {
@@ -1539,9 +1547,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                   return;
                 }
                 setSheetState(() {
-                  feedback = const _CapabilityTestFeedback(
+                  feedback = _CapabilityTestFeedback(
                     kind: _CapabilityTestFeedbackKind.success,
-                    message: 'Playback started successfully.',
+                    message: l10n.playbackStartedSuccessfully,
                   );
                 });
                 _setCapabilityTestFeedback(
@@ -1567,7 +1575,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
             }
 
             return AlertDialog(
-              title: const Text('Test TTS'),
+              title: Text(l10n.testTts),
               content: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 520),
                 child: SingleChildScrollView(
@@ -1577,8 +1585,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                     children: [
                       Text(
                         systemUnavailable
-                            ? 'System default TTS cannot be tested on this platform.'
-                            : 'TTS test uses your current saved speech configuration.',
+                            ? l10n.systemDefaultTtsCannotBeTested
+                            : l10n.ttsTestUsesCurrentConfiguration,
                         style: Theme.of(sheetContext).textTheme.bodySmall,
                       ),
                       const SizedBox(height: AppSpacing.compact),
@@ -1586,8 +1594,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                         controller: controller,
                         minLines: 2,
                         maxLines: 4,
-                        decoration: const InputDecoration(
-                          labelText: 'Test text',
+                        decoration: InputDecoration(
+                          labelText: l10n.testText,
                         ),
                       ),
                       if (feedback != null) ...[
@@ -1604,7 +1612,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(sheetContext).pop(),
-                  child: const Text('Close'),
+                  child: Text(l10n.close),
                 ),
                 TextButton(
                   onPressed: speaking
@@ -1618,11 +1626,11 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                           });
                         }
                       : null,
-                  child: const Text('Stop'),
+                  child: Text(l10n.stop),
                 ),
                 FilledButton(
                   onPressed: speaking || systemUnavailable ? null : play,
-                  child: Text(speaking ? 'Playing...' : 'Play'),
+                  child: Text(speaking ? l10n.playing : l10n.play),
                 ),
               ],
             );
@@ -1637,6 +1645,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     BuildContext context, {
     String? pluginId,
   }) async {
+    final l10n = context.l10n;
     final recorder = AudioRecordingService();
     String? recordingPath;
     var recording = false;
@@ -1651,17 +1660,13 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
             String normalizeBatchAsrTestError(Object err) {
               final message = '$err';
               if (message.contains('1001') || message.contains('1002')) {
-                return 'Authentication or parameter error. '
-                    'Check that APPID and API Key (Access Token) are correct.\n\n'
-                    'Raw error:\n$message';
+                return l10n.batchAsrAuthOrParameterError(message);
               }
               if (message.contains('401') || message.contains('Unauthorized')) {
-                return 'Authentication failed. Check that the API Key is correct and enabled for this service.\n\n'
-                    'Raw error:\n$message';
+                return l10n.batchAsrAuthenticationFailed(message);
               }
               if (message.contains('403') || message.contains('Forbidden')) {
-                return 'Access denied. Check that the API Key has permission for the selected Resource ID.\n\n'
-                    'Raw error:\n$message';
+                return l10n.batchAsrAccessDenied(message);
               }
               return message;
             }
@@ -1670,9 +1675,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
               final hasPermission = await recorder.hasPermission();
               if (!hasPermission) {
                 setSheetState(() {
-                  feedback = const _CapabilityTestFeedback(
+                  feedback = _CapabilityTestFeedback(
                     kind: _CapabilityTestFeedbackKind.error,
-                    message: 'Microphone permission is required.',
+                    message: l10n.microphonePermissionRequired,
                   );
                 });
                 return;
@@ -1680,10 +1685,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
               try {
                 final path = await recorder.start();
                 setSheetState(() {
-                  feedback = const _CapabilityTestFeedback(
+                  feedback = _CapabilityTestFeedback(
                     kind: _CapabilityTestFeedbackKind.info,
-                    message:
-                        'Recording started. Speak a short sentence, then stop.',
+                    message: l10n.recordingStartedSpeakThenStop,
                   );
                   transcript = '';
                   recordingPath = path;
@@ -1706,9 +1710,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                   recording = false;
                   transcribing = true;
                   recordingPath = path ?? recordingPath;
-                  feedback = const _CapabilityTestFeedback(
+                  feedback = _CapabilityTestFeedback(
                     kind: _CapabilityTestFeedbackKind.info,
-                    message: 'Transcribing recorded audio...',
+                    message: l10n.transcribingRecordedAudio,
                   );
                 });
                 final finalPath = recordingPath;
@@ -1728,7 +1732,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                   transcript = text;
                   feedback = _CapabilityTestFeedback(
                     kind: _CapabilityTestFeedbackKind.success,
-                    message: 'Transcription succeeded.',
+                    message: l10n.transcriptionSucceeded,
                   );
                 });
                 _setCapabilityTestFeedback(
@@ -1736,8 +1740,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                   _CapabilityTestFeedback(
                     kind: _CapabilityTestFeedbackKind.success,
                     message: text.trim().isEmpty
-                        ? 'Transcription succeeded.'
-                        : 'Transcription succeeded: ${text.trim()}',
+                        ? l10n.transcriptionSucceeded
+                        : l10n.transcriptionSucceededWithText(text.trim()),
                   ),
                 );
               } catch (err) {
@@ -1762,7 +1766,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
             }
 
             return AlertDialog(
-              title: const Text('Test Batch ASR'),
+              title: Text(l10n.testBatchAsr),
               content: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 520),
                 child: SingleChildScrollView(
@@ -1771,7 +1775,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'Batch ASR test records a short clip, then transcribes it with your current saved speech configuration.',
+                        l10n.batchAsrTestDescription,
                         style: Theme.of(sheetContext).textTheme.bodySmall,
                       ),
                       const SizedBox(height: AppSpacing.compact),
@@ -1781,23 +1785,23 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                             onPressed: recording || transcribing
                                 ? null
                                 : startRecording,
-                            child: const Text('Record'),
+                            child: Text(l10n.record),
                           ),
                           const SizedBox(width: AppSpacing.compact),
                           TextButton(
                             onPressed: recording ? stopAndTranscribe : null,
                             child: Text(
                               transcribing
-                                  ? 'Transcribing...'
-                                  : 'Stop & Transcribe',
+                                  ? l10n.transcribing
+                                  : l10n.stopAndTranscribe,
                             ),
                           ),
                         ],
                       ),
                       if (recording) ...[
                         const SizedBox(height: AppSpacing.compact),
-                        const Text(
-                          'Recording... speak a short sentence, then stop.',
+                        Text(
+                          l10n.recordingSpeakThenStop,
                         ),
                       ],
                       if (transcript.trim().isNotEmpty) ...[
@@ -1818,7 +1822,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(sheetContext).pop(),
-                  child: const Text('Close'),
+                  child: Text(l10n.close),
                 ),
               ],
             );
@@ -1833,6 +1837,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     BuildContext context, {
     String? pluginId,
   }) async {
+    final l10n = context.l10n;
     final recorder = AudioRecordingService();
     var listening = false;
     var starting = false;
@@ -1871,21 +1876,14 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
             String normalizeRealtimeTestError(Object err) {
               final message = '$err';
               if (message.contains('HTTP status code: 401')) {
-                return 'The current service rejected realtime speech authentication. '
-                    'Check the selected plugin credentials, especially API Key and Resource ID.\n\n'
-                    'Raw error:\n$message';
+                return l10n.realtimeAsrAuthenticationRejected(message);
               }
               if (message.contains('HTTP status code: 403')) {
-                return 'The current service refused realtime speech access. '
-                    'Check that the API Key is enabled for the selected Volcengine speech resource, '
-                    'and that Resource ID exactly matches the purchased duration or concurrent edition.\n\n'
-                    'Raw error:\n$message';
+                return l10n.realtimeAsrAccessRefused(message);
               }
               if (message.contains('was not upgraded to websocket') ||
                   message.contains('HTTP status code: 400')) {
-                return 'The current service could not start realtime speech. '
-                    'This usually means the selected plugin is not exposing a valid realtime websocket endpoint.\n\n'
-                    'Raw error:\n$message';
+                return l10n.realtimeAsrStartFailed(message);
               }
               return message;
             }
@@ -1907,17 +1905,17 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
               final hasPermission = await recorder.hasPermission();
               if (!hasPermission) {
                 setSheetState(() {
-                  feedback = const _CapabilityTestFeedback(
+                  feedback = _CapabilityTestFeedback(
                     kind: _CapabilityTestFeedbackKind.error,
-                    message: 'Microphone permission is required.',
+                    message: l10n.microphonePermissionRequired,
                   );
                 });
                 return;
               }
               setSheetState(() {
-                feedback = const _CapabilityTestFeedback(
+                feedback = _CapabilityTestFeedback(
                   kind: _CapabilityTestFeedbackKind.info,
-                  message: 'Starting realtime speech test...',
+                  message: l10n.startingRealtimeSpeechTest,
                 );
                 transcript = '';
                 partial = null;
@@ -1955,15 +1953,15 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                         if (isFinal) {
                           transcript = words;
                           partial = null;
-                          feedback = const _CapabilityTestFeedback(
+                          feedback = _CapabilityTestFeedback(
                             kind: _CapabilityTestFeedbackKind.success,
-                            message: 'Realtime transcript received.',
+                            message: l10n.realtimeTranscriptReceived,
                           );
                         } else {
                           partial = words;
-                          feedback = const _CapabilityTestFeedback(
+                          feedback = _CapabilityTestFeedback(
                             kind: _CapabilityTestFeedbackKind.success,
-                            message: 'Realtime speech is coming through.',
+                            message: l10n.realtimeSpeechComingThrough,
                           );
                         }
                       });
@@ -1972,8 +1970,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                         _CapabilityTestFeedback(
                           kind: _CapabilityTestFeedbackKind.success,
                           message: words.trim().isEmpty
-                              ? 'Realtime speech is coming through.'
-                              : 'Realtime speech is coming through: ${words.trim()}',
+                              ? l10n.realtimeSpeechComingThrough
+                              : l10n.realtimeSpeechComingThroughWithText(
+                                  words.trim(),
+                                ),
                         ),
                       );
                     },
@@ -1992,15 +1992,15 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                           if (utterance.isFinal) {
                             transcript = utterance.text;
                             partial = null;
-                            feedback = const _CapabilityTestFeedback(
+                            feedback = _CapabilityTestFeedback(
                               kind: _CapabilityTestFeedbackKind.success,
-                              message: 'Realtime transcript received.',
+                              message: l10n.realtimeTranscriptReceived,
                             );
                           } else {
                             partial = utterance.text;
-                            feedback = const _CapabilityTestFeedback(
+                            feedback = _CapabilityTestFeedback(
                               kind: _CapabilityTestFeedbackKind.success,
-                              message: 'Realtime speech is coming through.',
+                              message: l10n.realtimeSpeechComingThrough,
                             );
                           }
                         });
@@ -2009,8 +2009,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                           _CapabilityTestFeedback(
                             kind: _CapabilityTestFeedbackKind.success,
                             message: utterance.text.trim().isEmpty
-                                ? 'Realtime speech is coming through.'
-                                : 'Realtime speech is coming through: ${utterance.text.trim()}',
+                                ? l10n.realtimeSpeechComingThrough
+                                : l10n.realtimeSpeechComingThroughWithText(
+                                    utterance.text.trim(),
+                                  ),
                           ),
                         );
                       },
@@ -2037,9 +2039,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                 setSheetState(() {
                   starting = false;
                   listening = true;
-                  feedback = const _CapabilityTestFeedback(
+                  feedback = _CapabilityTestFeedback(
                     kind: _CapabilityTestFeedbackKind.info,
-                    message: 'Listening now. Speak a short sentence.',
+                    message: l10n.listeningSpeakShortSentence,
                   );
                 });
               } catch (err) {
@@ -2079,7 +2081,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
             }
 
             return AlertDialog(
-              title: const Text('Test Realtime ASR'),
+              title: Text(l10n.testRealtimeAsr),
               content: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 520),
                 child: SingleChildScrollView(
@@ -2090,8 +2092,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                       Text(
                         testUnavailableReason ??
                             (useSystem
-                                ? 'Realtime ASR test uses the current saved system speech input.'
-                                : 'Realtime ASR test uses the current saved plugin configuration.'),
+                                ? l10n.realtimeAsrSystemTestDescription
+                                : l10n.realtimeAsrPluginTestDescription),
                         style: Theme.of(sheetContext).textTheme.bodySmall,
                       ),
                       if ((partial ?? '').trim().isNotEmpty) ...[
@@ -2119,7 +2121,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(sheetContext).pop(),
-                  child: const Text('Close'),
+                  child: Text(l10n.close),
                 ),
                 FilledButton(
                   onPressed: starting || testUnavailableReason != null
@@ -2129,10 +2131,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                           : startRealtimeTest,
                   child: Text(
                     starting
-                        ? 'Starting...'
+                        ? l10n.starting
                         : listening
-                            ? 'Stop'
-                            : 'Start',
+                            ? l10n.stop
+                            : l10n.start,
                   ),
                 ),
               ],
@@ -2256,8 +2258,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                         optionDescription.isNotEmpty
                             ? optionDescription
                             : option.isInstalled
-                                ? 'Installed and ready to use.'
-                                : 'Install first before selecting this plugin.',
+                                ? context.l10n.installedAndReady
+                                : context.l10n.installBeforeSelectingPlugin,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -2304,7 +2306,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                                   ));
                                   setState(() {
                                     _pluginConfigurationErrorsById[option.id] =
-                                        'Fill in the required settings below before using this plugin.';
+                                        context.l10n.fillRequiredPluginSettings;
                                   });
                                   onStateChanged(() {});
                                   return;
@@ -2330,10 +2332,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
-                              child: const Text('Use'),
+                              child: Text(context.l10n.use),
                             ),
                             PopupMenuButton<String>(
-                              tooltip: 'More',
+                              tooltip: context.l10n.more,
                               padding: EdgeInsets.zero,
                               icon: Icon(
                                 Icons.more_horiz_rounded,
@@ -2358,8 +2360,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                                     ));
                                     setState(() {
                                       _pluginConfigurationErrorsById[
-                                              option.id] =
-                                          'Fill in the required settings before testing.';
+                                          option
+                                              .id] = context.l10n
+                                          .fillRequiredPluginSettingsBeforeTesting;
                                     });
                                     onStateChanged(() {});
                                     return;
@@ -2379,22 +2382,24 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                                 }
                               },
                               itemBuilder: (context) => [
-                                const PopupMenuItem<String>(
+                                PopupMenuItem<String>(
                                   value: 'test',
                                   child: ListTile(
-                                    leading: Icon(Icons.play_arrow_rounded,
+                                    leading: const Icon(
+                                        Icons.play_arrow_rounded,
                                         size: 20),
-                                    title: Text('Test'),
+                                    title: Text(context.l10n.test),
                                     contentPadding: EdgeInsets.zero,
                                     visualDensity: VisualDensity.compact,
                                   ),
                                 ),
-                                const PopupMenuItem<String>(
+                                PopupMenuItem<String>(
                                   value: 'uninstall',
                                   child: ListTile(
-                                    leading: Icon(Icons.delete_outline_rounded,
+                                    leading: const Icon(
+                                        Icons.delete_outline_rounded,
                                         size: 20),
-                                    title: Text('Uninstall'),
+                                    title: Text(context.l10n.uninstall),
                                     contentPadding: EdgeInsets.zero,
                                     visualDensity: VisualDensity.compact,
                                   ),
@@ -2421,7 +2426,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                       onStateChanged(() {});
                     },
                     style: _pluginPrimaryButtonStyle(context),
-                    child: const Text('Install'),
+                    child: Text(context.l10n.install),
                   ),
               ],
             ),
@@ -2430,7 +2435,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
               children: [
                 if (!option.isInstalled) ...[
                   Text(
-                    'Not installed',
+                    context.l10n.speechNotInstalled,
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: AppColors.mutedSoftFor(brightness),
                       fontWeight: FontWeight.w600,
@@ -2565,8 +2570,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
               ? _CapabilityTestFeedbackKind.success
               : _CapabilityTestFeedbackKind.error,
           message: result.exitCode == 0
-              ? 'Command succeeded: $command'
-              : 'Command failed (${result.exitCode}): ${result.stderr}',
+              ? context.l10n.commandSucceeded(command)
+              : context.l10n.commandFailed(result.exitCode, result.stderr),
         );
       });
     } catch (e) {
@@ -2594,7 +2599,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     final savedKey =
         _speechPluginApiKeysByPluginId[plugin.manifest.id]?.trim() ?? '';
     final expanded = _expandedPluginCredentialIds.contains(plugin.manifest.id);
-    final statusLabel = savedKey.isEmpty ? 'Missing key' : 'Key saved';
+    final statusLabel =
+        savedKey.isEmpty ? context.l10n.missingKey : context.l10n.keySaved;
     final saveFeedback = _pluginSaveFeedbackById[plugin.manifest.id];
     final savingPluginConfig =
         _savingPluginConfigurationIds.contains(plugin.manifest.id);
@@ -2668,7 +2674,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '$pluginName · API Key',
+                              context.l10n.pluginApiKeyTitle(pluginName),
                               style: theme.textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w800,
                               ),
@@ -2780,7 +2786,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                   _buildPluginRegistrationLink(
                     context,
                     plugin.manifest.registrationUrl.trim(),
-                    label: 'Get API key',
+                    label: context.l10n.getApiKey,
                   ),
                 ],
                 ..._buildPluginSettingFields(
@@ -2801,7 +2807,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                             start,
                           ),
                           icon: const Icon(Icons.play_arrow_rounded, size: 16),
-                          label: const Text('Start Service'),
+                          label: Text(context.l10n.startService),
                         ),
                         const SizedBox(width: AppSpacing.compact),
                       ],
@@ -2812,7 +2818,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                             plugin.manifest.id,
                             stop,
                           ),
-                          child: const Text('Stop Service'),
+                          child: Text(context.l10n.stopService),
                         ),
                       ],
                     ],
@@ -2838,10 +2844,12 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                       controller: controller,
                       obscureText: true,
                       decoration: InputDecoration(
-                        labelText:
-                            apiKeyLabel.isNotEmpty ? apiKeyLabel : 'API Key',
-                        helperText: 'Sent as X-Api-Key.',
-                        errorText: highlightApiKey ? 'Required' : null,
+                        labelText: apiKeyLabel.isNotEmpty
+                            ? apiKeyLabel
+                            : context.l10n.apiKey,
+                        helperText: context.l10n.sentAsXApiKey,
+                        errorText:
+                            highlightApiKey ? context.l10n.fieldRequired : null,
                         filled: true,
                         fillColor: highlightApiKey
                             ? AppColors.errorBgFor(brightness)
@@ -2889,8 +2897,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                       ),
                       child: Text(
                         savingPluginConfig
-                            ? 'Saving...'
-                            : 'Save plugin settings',
+                            ? context.l10n.saving
+                            : context.l10n.savePluginSettings,
                       ),
                     ),
                     if (onInstalledSelected != null) ...[
@@ -2906,7 +2914,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                                 );
                               },
                         child: Text(
-                          savingPluginConfig ? 'Saving...' : 'Save and use',
+                          savingPluginConfig
+                              ? context.l10n.saving
+                              : context.l10n.saveAndUse,
                         ),
                       ),
                     ],
@@ -2933,7 +2943,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     final widgets = <Widget>[
       const SizedBox(height: AppSpacing.compact),
       Text(
-        'Additional plugin settings',
+        context.l10n.additionalPluginSettings,
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
               fontWeight: FontWeight.w800,
             ),
@@ -3074,7 +3084,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       labelText: field.required ? '$label *' : label,
       hintText: placeholder.isNotEmpty ? placeholder : null,
       helperText: help.isNotEmpty ? help : null,
-      errorText: highlighted ? 'Required' : null,
+      errorText: highlighted ? context.l10n.fieldRequired : null,
       filled: true,
       fillColor: highlighted
           ? AppColors.errorBgFor(Theme.of(context).brightness)
@@ -3225,9 +3235,11 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
 
   String _speechPluginCapabilityLabel(SpeechPluginCapability capability) {
     return switch (capability) {
-      SpeechPluginCapability.realtimeAsr => 'Realtime ASR',
-      SpeechPluginCapability.batchAsr => 'Batch ASR',
-      SpeechPluginCapability.tts => 'TTS',
+      SpeechPluginCapability.realtimeAsr =>
+        context.l10n.speechProfileRealtimeAsrTitle,
+      SpeechPluginCapability.batchAsr =>
+        context.l10n.speechProfileBatchAsrTitle,
+      SpeechPluginCapability.tts => context.l10n.speechProfileTtsTitle,
     };
   }
 
@@ -3450,12 +3462,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         children: [
           _buildBridgeDetailsTile(context, status),
           const SizedBox(height: AppSpacing.stack),
-          ..._localBridgeProfileOrder.map(
-            (profile) => Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.compact),
-              child: _buildProfileSummaryTile(context, status, profile),
-            ),
-          ),
           _buildInstalledModelsManagement(context, status),
           const SizedBox(height: AppSpacing.compact),
           _buildSpeakerFilterTile(context),
@@ -3662,12 +3668,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final brightness = theme.brightness;
-    final selectedProfiles = _selectedProfilesForModel(status, model.id);
-    final selected = selectedProfiles.isNotEmpty;
     final deleting = _deletingModelIds.contains(model.id);
-    final selectedLabel = selectedProfiles
-        .map((profile) => _profileLabel(l10n, profile))
-        .join(', ');
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -3684,9 +3685,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
               ),
               const SizedBox(height: AppSpacing.micro),
               Text(
-                selected
-                    ? '${_profileSummaryLine(l10n, model)} · $selectedLabel'
-                    : _profileSummaryLine(l10n, model),
+                _profileSummaryLine(l10n, model),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: AppColors.mutedSoftFor(brightness),
                   height: 1.35,
@@ -3696,26 +3695,17 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
           ),
         ),
         const SizedBox(width: AppSpacing.compact),
-        if (selected)
-          Text(
-            l10n.speechSelected,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: AppColors.mutedSoftFor(brightness),
-              fontWeight: FontWeight.w700,
-            ),
-          )
-        else
-          IconButton.outlined(
-            key: ValueKey<String>('delete-installed-model-${model.id}'),
-            tooltip: l10n.speechDelete,
-            onPressed: deleting ? null : () => _deleteSpeechModel(model.id),
-            icon: deleting
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.delete_outline_rounded),
-          ),
+        IconButton.outlined(
+          key: ValueKey<String>('delete-installed-model-${model.id}'),
+          tooltip: l10n.speechDelete,
+          onPressed: deleting ? null : () => _deleteSpeechModel(model.id),
+          icon: deleting
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.delete_outline_rounded),
+        ),
       ],
     );
   }
@@ -3753,10 +3743,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         children: [
           _buildSwitchRow(
             context,
-            title: 'Target speaker only',
+            title: l10n.targetSpeakerOnly,
             subtitle: _speakers.isEmpty
-                ? 'Enroll a speaker on the bridge before enabling filtering.'
-                : 'Batch ASR will ignore speech that does not match the selected voiceprint.',
+                ? l10n.enrollSpeakerBeforeFiltering
+                : l10n.batchAsrIgnoresUnmatchedSpeaker,
             value: enabled,
             onChanged: _speakers.isEmpty || _updatingSpeakerFilter
                 ? null
@@ -3773,8 +3763,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                 Expanded(
                   child: Text(
                     speakerModel.installed
-                        ? 'Voiceprint model installed'
-                        : 'Voiceprint model is required',
+                        ? l10n.voiceprintModelInstalled
+                        : l10n.voiceprintModelRequired,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: AppColors.mutedSoftFor(brightness),
                       height: 1.35,
@@ -3800,8 +3790,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                     child: Text(
                       speakerModelDownload != null ||
                               _downloadingModelIds.contains(speakerModel.id)
-                          ? 'Downloading'
-                          : 'Download',
+                          ? l10n.speechDownloading
+                          : l10n.speechDownload,
                     ),
                   ),
               ],
@@ -3813,9 +3803,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
               controller: _speakerNameController,
               enabled:
                   !_speakerEnrollmentRecording && !_speakerEnrollmentSaving,
-              decoration: const InputDecoration(
-                labelText: 'Speaker name',
-                hintText: 'My voice',
+              decoration: InputDecoration(
+                labelText: l10n.speakerName,
+                hintText: l10n.myVoice,
               ),
             ),
             const SizedBox(height: AppSpacing.compact),
@@ -3827,10 +3817,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                     : () => _toggleSpeakerEnrollmentRecording(),
                 child: Text(
                   _speakerEnrollmentSaving
-                      ? 'Saving speaker'
+                      ? l10n.savingSpeaker
                       : _speakerEnrollmentRecording
-                          ? 'Finish enrollment'
-                          : 'Record enrollment sample',
+                          ? l10n.finishEnrollment
+                          : l10n.recordEnrollmentSample,
                 ),
               ),
             ),
@@ -3843,7 +3833,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: selectedSpeakerId ?? _speakers.first.id,
-                    decoration: const InputDecoration(labelText: 'Speaker'),
+                    decoration: InputDecoration(labelText: l10n.speaker),
                     items: _speakers
                         .map(
                           (speaker) => DropdownMenuItem<String>(
@@ -3942,207 +3932,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     );
   }
 
-  Widget _buildProfileSummaryTile(
-    BuildContext context,
-    SpeechStatus status,
-    SpeechProfile profile,
-  ) {
-    final l10n = context.l10n;
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    final models = _modelsForProfile(status, profile);
-    final selectedModel =
-        _modelById(status, status.profiles.modelForProfile(profile));
-    final displayModel =
-        selectedModel ?? (models.isEmpty ? null : models.first);
-    final downloadTask = _activeDownloadForModels(status, models);
-    final downloadError = _openModelPickerProfile == profile
-        ? null
-        : _downloadErrorForModels(models);
-    final updatingProfile = _isUpdatingSpeechProfile(profile);
-    final actionLabel = _profileSummaryActionLabel(
-      l10n,
-      models: models,
-      selectedModel: selectedModel,
-      downloadTask: downloadTask,
-    );
-    final highlighted = selectedModel?.installed ?? false;
-    final canOpenSheet =
-        models.isNotEmpty && downloadTask == null && !updatingProfile;
-    final accent = downloadTask != null
-        ? AppColors.accentBlueFor(brightness)
-        : highlighted
-            ? AppColors.successTextFor(brightness)
-            : (displayModel?.installed ?? false)
-                ? AppColors.warningTextFor(brightness)
-                : AppColors.warningTextFor(brightness);
-
-    return Container(
-      padding: AppSpacing.tilePadding,
-      decoration: BoxDecoration(
-        color: AppColors.panelAltFor(brightness),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
-        border: Border.all(
-          color: AppColors.outlineFor(brightness),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 9,
-                height: 9,
-                margin: const EdgeInsets.only(top: 5),
-                decoration: BoxDecoration(
-                  color: accent,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.compact),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _profileLabel(l10n, profile),
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.micro),
-                    Text(
-                      displayModel == null
-                          ? l10n.localBridgeNoCompatibleModels
-                          : _profileSummaryLine(l10n, displayModel),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.mutedSoftFor(brightness),
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AppSpacing.compact),
-              _buildProfileSummaryActionButton(
-                context,
-                label: actionLabel,
-                highlighted: highlighted,
-                loading: downloadTask != null || updatingProfile,
-                onPressed: canOpenSheet
-                    ? () => _showModelPickerSheet(status, profile)
-                    : null,
-              ),
-            ],
-          ),
-          if (downloadTask?.progress != null) ...[
-            const SizedBox(height: AppSpacing.compact),
-            LinearProgressIndicator(value: downloadTask!.progress),
-            const SizedBox(height: AppSpacing.micro),
-            Text(
-              '${_downloadStatusLabel(l10n, downloadTask.status)} · ${l10n.speechDownloadProgressPercent((downloadTask.progress! * 100).round())}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.mutedSoftFor(brightness),
-              ),
-            ),
-          ] else if (downloadTask != null) ...[
-            const SizedBox(height: AppSpacing.compact),
-            Text(
-              _downloadStatusLabel(l10n, downloadTask.status),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.accentBlueFor(brightness),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-          if (downloadError != null) ...[
-            const SizedBox(height: AppSpacing.compact),
-            Container(
-              padding: AppSpacing.tilePadding,
-              decoration: BoxDecoration(
-                color: AppColors.errorBgFor(brightness),
-                borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
-                border: Border.all(
-                  color: AppColors.errorBorderFor(brightness),
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: SelectableText(
-                      downloadError,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.errorTextFor(brightness),
-                        height: 1.35,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.micro),
-                  IconButton(
-                    tooltip: l10n.close,
-                    onPressed: () {
-                      setState(() {
-                        for (final model in models) {
-                          _downloadErrorsByModelId.remove(model.id);
-                        }
-                      });
-                    },
-                    icon: const Icon(Icons.close),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProfileSummaryActionButton(
-    BuildContext context, {
-    required String label,
-    required bool highlighted,
-    required bool loading,
-    required VoidCallback? onPressed,
-  }) {
-    const minSize = Size(0, 38);
-    if (loading) {
-      return FilledButton(
-        onPressed: null,
-        style: FilledButton.styleFrom(minimumSize: minSize),
-        child: _buildButtonLoadingChild(context, label),
-      );
-    }
-    if (highlighted) {
-      return FilledButton.tonal(
-        onPressed: onPressed,
-        style: FilledButton.styleFrom(minimumSize: minSize),
-        child: Text(label),
-      );
-    }
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(minimumSize: minSize),
-      child: Text(label),
-    );
-  }
-
-  ButtonStyle _sheetActionButtonStyle({
-    required bool filled,
-  }) {
-    return (filled ? FilledButton.styleFrom : OutlinedButton.styleFrom)(
-      minimumSize: const Size(84, 42),
-      maximumSize: const Size(140, 42),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.tileX),
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      visualDensity: VisualDensity.compact,
-    );
-  }
-
   Widget _buildSwitchRow(
     BuildContext context, {
     required String title,
@@ -4191,355 +3980,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     );
   }
 
-  Future<void> _showModelPickerSheet(
-    SpeechStatus status,
-    SpeechProfile profile,
-  ) async {
-    final l10n = context.l10n;
-    final brightness = Theme.of(context).brightness;
-    final models = _modelsForProfile(status, profile);
-    if (models.isEmpty || !mounted) {
-      return;
-    }
-
-    setState(() {
-      _openModelPickerProfile = profile;
-    });
-
-    try {
-      await showModalBottomSheet<void>(
-        context: context,
-        backgroundColor: AppColors.panelFor(brightness),
-        isScrollControlled: true,
-        builder: (sheetContext) {
-          final sheetTheme = Theme.of(sheetContext);
-          final height = MediaQuery.of(sheetContext).size.height * 0.72;
-          return StatefulBuilder(
-            builder: (sheetContext, setSheetState) {
-              return ValueListenableBuilder<int>(
-                valueListenable: _modelPickerRevision,
-                builder: (sheetContext, _, __) {
-                  final currentStatus = _speechStatus ?? status;
-                  final currentModels =
-                      _modelsForProfile(currentStatus, profile);
-                  final selectedModelId =
-                      currentStatus.profiles.modelForProfile(profile);
-
-                  return SafeArea(
-                    child: SizedBox(
-                      height: height,
-                      child: Column(
-                        children: [
-                          _buildModelPickerHeader(
-                            sheetContext,
-                            l10n,
-                            profile,
-                            brightness,
-                            sheetTheme,
-                          ),
-                          Expanded(
-                            child: ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(
-                                AppSpacing.block,
-                                0,
-                                AppSpacing.block,
-                                AppSpacing.block,
-                              ),
-                              itemCount: currentModels.length,
-                              itemBuilder: (context, index) {
-                                final model = currentModels[index];
-                                final selected = selectedModelId == model.id;
-                                final downloadTask = _downloadTaskForModel(
-                                  currentStatus,
-                                  model.id,
-                                );
-                                return _buildModelPickerItem(
-                                  sheetContext,
-                                  setSheetState,
-                                  l10n,
-                                  profile,
-                                  model,
-                                  selected: selected,
-                                  downloadTask: downloadTask,
-                                  brightness: brightness,
-                                  sheetTheme: sheetTheme,
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          );
-        },
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          if (_openModelPickerProfile == profile) {
-            _openModelPickerProfile = null;
-          }
-        });
-      }
-    }
-  }
-
-  Widget _buildModelPickerHeader(
-    BuildContext sheetContext,
-    AppLocalizations l10n,
-    SpeechProfile profile,
-    Brightness brightness,
-    ThemeData sheetTheme,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.block,
-        AppSpacing.block,
-        AppSpacing.block,
-        AppSpacing.compact,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _profileLabel(l10n, profile),
-                  style: sheetTheme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.micro),
-                Text(
-                  _profileSubtitle(l10n, profile),
-                  style: sheetTheme.textTheme.bodySmall?.copyWith(
-                    color: AppColors.mutedSoftFor(brightness),
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: () => Navigator.of(sheetContext).pop(),
-            icon: const Icon(Icons.close_rounded),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildModelPickerItem(
-    BuildContext sheetContext,
-    StateSetter setSheetState,
-    AppLocalizations l10n,
-    SpeechProfile profile,
-    SpeechModelSummary model, {
-    required bool selected,
-    required SpeechDownloadTask? downloadTask,
-    required Brightness brightness,
-    required ThemeData sheetTheme,
-  }) {
-    final downloadError = _downloadErrorsByModelId[model.id];
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.compact),
-      child: Container(
-        padding: AppSpacing.tilePadding,
-        decoration: BoxDecoration(
-          color: AppColors.surfaceDeepFor(brightness),
-          borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
-          border: Border.all(
-            color: selected
-                ? AppColors.outlineStrongFor(brightness)
-                : AppColors.outlineFor(brightness),
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    model.displayName,
-                    style: sheetTheme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.micro),
-                  Text(
-                    _profileSummaryLine(l10n, model),
-                    style: sheetTheme.textTheme.bodySmall?.copyWith(
-                      color: AppColors.mutedSoftFor(brightness),
-                      height: 1.35,
-                    ),
-                  ),
-                  if (downloadTask != null) ...[
-                    const SizedBox(height: AppSpacing.compact),
-                    _buildDownloadProgress(sheetContext, downloadTask),
-                  ],
-                  if (downloadError != null) ...[
-                    const SizedBox(height: AppSpacing.compact),
-                    Text(
-                      downloadError,
-                      style: sheetTheme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.errorTextFor(brightness),
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(width: AppSpacing.compact),
-            _buildModelPickerAction(
-              sheetContext,
-              setSheetState,
-              l10n,
-              profile,
-              model,
-              selected: selected,
-              downloadTask: downloadTask,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildModelPickerAction(
-    BuildContext sheetContext,
-    StateSetter setSheetState,
-    AppLocalizations l10n,
-    SpeechProfile profile,
-    SpeechModelSummary model, {
-    required bool selected,
-    required SpeechDownloadTask? downloadTask,
-  }) {
-    final updateKey = _speechProfileUpdateKey(profile, model.id);
-    final selecting = _updatingProfileKeys.contains(updateKey);
-    final downloadFailed = downloadTask?.status == SpeechDownloadStatus.failed;
-    final downloading = _downloadingModelIds.contains(model.id) ||
-        (downloadTask != null && !downloadTask.isTerminal);
-
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 42),
-      child: downloading
-          ? FilledButton(
-              onPressed: null,
-              style: _sheetActionButtonStyle(filled: true),
-              child: _buildButtonLoadingChild(
-                sheetContext,
-                l10n.speechDownloading,
-              ),
-            )
-          : selecting
-              ? OutlinedButton(
-                  onPressed: null,
-                  style: _sheetActionButtonStyle(filled: false),
-                  child: _buildButtonLoadingChild(
-                    sheetContext,
-                    l10n.speechSelect,
-                  ),
-                )
-              : !model.installed || downloadFailed
-                  ? FilledButton(
-                      onPressed: () async {
-                        await _downloadSpeechModel(model.id);
-                      },
-                      style: _sheetActionButtonStyle(filled: true),
-                      child: Text(l10n.speechDownload),
-                    )
-                  : FilledButton.tonal(
-                      onPressed: selected
-                          ? null
-                          : () async {
-                              setSheetState(() {});
-                              final updated = await _updateSpeechProfile(
-                                profile,
-                                model.id,
-                              );
-                              if (!sheetContext.mounted) {
-                                return;
-                              }
-                              if (updated) {
-                                Navigator.of(sheetContext).pop();
-                              } else {
-                                setSheetState(() {});
-                              }
-                            },
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(84, 42),
-                        maximumSize: const Size(140, 42),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.tileX,
-                        ),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      child: Text(
-                        selected ? l10n.speechSelected : l10n.speechSelect,
-                      ),
-                    ),
-    );
-  }
-
-  Widget _buildButtonLoadingChild(BuildContext context, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox.square(
-          dimension: 14,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: Theme.of(context).colorScheme.onSurface.withValues(
-                  alpha: 0.72,
-                ),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.micro),
-        Flexible(
-          child: Text(
-            label,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDownloadProgress(
-    BuildContext context,
-    SpeechDownloadTask task,
-  ) {
-    final l10n = context.l10n;
-    final progress = task.progress;
-    final statusLabel = _downloadStatusLabel(l10n, task.status);
-    final detail = progress == null
-        ? statusLabel
-        : '$statusLabel · '
-            '${l10n.speechDownloadProgressPercent((progress * 100).round())}';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        LinearProgressIndicator(value: progress),
-        const SizedBox(height: AppSpacing.micro),
-        Text(
-          detail,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.mutedSoftFor(Theme.of(context).brightness),
-              ),
-        ),
-      ],
-    );
-  }
-
   String _profileSummaryLine(
     AppLocalizations l10n,
     SpeechModelSummary model,
@@ -4564,15 +4004,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         .fold<SpeechDownloadTask?>(null, _latestDownloadTask);
   }
 
-  SpeechDownloadTask? _downloadTaskForModel(
-    SpeechStatus status,
-    String modelId,
-  ) {
-    return status.downloads
-        .where((task) => task.modelId == modelId)
-        .fold<SpeechDownloadTask?>(null, _latestDownloadTask);
-  }
-
   SpeechDownloadTask? _latestDownloadTask(
     SpeechDownloadTask? current,
     SpeechDownloadTask candidate,
@@ -4581,63 +4012,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       return candidate;
     }
     return current;
-  }
-
-  List<SpeechProfile> _selectedProfilesForModel(
-    SpeechStatus status,
-    String modelId,
-  ) {
-    final profiles = <SpeechProfile>[];
-    for (final profile in _localBridgeProfileOrder) {
-      if (status.profiles.modelForProfile(profile) == modelId) {
-        profiles.add(profile);
-      }
-    }
-    return profiles;
-  }
-
-  String? _downloadErrorForModels(List<SpeechModelSummary> models) {
-    for (final model in models) {
-      final error = _downloadErrorsByModelId[model.id];
-      if (error != null) {
-        return error;
-      }
-      final task = _speechStatus == null
-          ? null
-          : _downloadTaskForModel(_speechStatus!, model.id);
-      if (task?.status == SpeechDownloadStatus.failed) {
-        return task?.error?.trim().isNotEmpty == true
-            ? task!.error!
-            : context.l10n.speechModelDownloadFailed(
-                model.id,
-                _downloadStatusLabel(context.l10n, SpeechDownloadStatus.failed),
-              );
-      }
-    }
-    return null;
-  }
-
-  String _profileSummaryActionLabel(
-    AppLocalizations l10n, {
-    required List<SpeechModelSummary> models,
-    required SpeechModelSummary? selectedModel,
-    required SpeechDownloadTask? downloadTask,
-  }) {
-    if (downloadTask != null) {
-      if (downloadTask.status == SpeechDownloadStatus.failed) {
-        return l10n.speechDownload;
-      }
-      return _downloadStatusLabel(l10n, downloadTask.status);
-    }
-    if (selectedModel != null && selectedModel.installed) {
-      return models.any((model) => model.id != selectedModel.id)
-          ? l10n.speechChange
-          : l10n.speechSelected;
-    }
-    if (models.any((model) => model.installed)) {
-      return l10n.speechSelect;
-    }
-    return l10n.speechDownload;
   }
 
   Widget _buildLocalBridgeTtsVoiceContent(BuildContext context) {
@@ -4780,73 +4154,146 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.callModeAllowInterruptionsLabel,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.micro),
-                    Text(
-                      l10n.callModeAllowInterruptionsHelp,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.mutedSoftFor(brightness),
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
+          _buildCallModeSettingRow(
+            context,
+            title: l10n.callModeAllowInterruptionsLabel,
+            subtitle: l10n.callModeAllowInterruptionsHelp,
+            control: Switch(
+              value: _callModeAllowInterruptions,
+              onChanged: (value) {
+                setState(() {
+                  _callModeAllowInterruptions = value;
+                });
+              },
+            ),
+          ),
+          const SizedBox(height: AppSpacing.compact),
+          _buildCallModeSettingRow(
+            context,
+            title: l10n.callModeSpeechPauseLabel,
+            subtitle: l10n.callModeSpeechPauseHelp,
+            control: SizedBox(
+              width: 148,
+              child: TextFormField(
+                controller: _callModeSpeechPauseController,
+                style: formValueTextStyle,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.end,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                ],
+                decoration: InputDecoration(
+                  suffixText: 'ms',
+                  errorText: _callModeSpeechPauseError,
+                  isDense: true,
                 ),
-              ),
-              const SizedBox(width: AppSpacing.compact),
-              Switch(
-                value: _callModeAllowInterruptions,
                 onChanged: (value) {
                   setState(() {
-                    _callModeAllowInterruptions = value;
+                    _callModeSpeechPauseError =
+                        _callModeSpeechPauseInputError(l10n, value);
+                    final parsed = int.tryParse(value);
+                    if (_callModeSpeechPauseError == null && parsed != null) {
+                      _callModeSpeechPauseMillis = parsed;
+                    }
                   });
                 },
               ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.compact),
-          DropdownButtonFormField<int>(
-            initialValue: _callModeSpeechPauseMillis,
-            style: formValueTextStyle,
-            decoration: InputDecoration(
-              labelText: l10n.callModeSpeechPauseLabel,
-              helperText: l10n.callModeSpeechPauseHelp,
             ),
-            items: _callModeSpeechPauseOptions
-                .map(
-                  (value) => DropdownMenuItem<int>(
-                    value: value,
-                    child: Text(
-                      l10n.callModeSpeechPauseOption(
-                        (value / 1000).toStringAsFixed(1),
-                      ),
-                    ),
-                  ),
-                )
-                .toList(growable: false),
-            onChanged: (value) {
-              if (value == null) {
-                return;
-              }
-              setState(() {
-                _callModeSpeechPauseMillis = value;
-              });
-            },
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildCallModeSettingRow(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required Widget control,
+  }) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final label = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.micro),
+        Text(
+          subtitle,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: AppColors.mutedSoftFor(brightness),
+            height: 1.35,
+          ),
+        ),
+      ],
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 520) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              label,
+              const SizedBox(height: AppSpacing.compact),
+              Align(
+                alignment: Alignment.centerRight,
+                child: control,
+              ),
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: label),
+            const SizedBox(width: AppSpacing.tileX),
+            control,
+          ],
+        );
+      },
+    );
+  }
+
+  String? _callModeSpeechPauseInputError(
+    AppLocalizations l10n,
+    String value,
+  ) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return l10n.fieldRequired;
+    }
+    final parsed = int.tryParse(trimmed);
+    if (parsed == null ||
+        parsed < minCallModeSpeechPauseMillis ||
+        parsed > maxCallModeSpeechPauseMillis) {
+      return l10n.callModeSpeechPauseRangeError(
+        minCallModeSpeechPauseMillis,
+        maxCallModeSpeechPauseMillis,
+      );
+    }
+    return null;
+  }
+
+  bool _applyCallModeSpeechPauseInput(AppLocalizations l10n) {
+    final text = _callModeSpeechPauseController.text;
+    final error = _callModeSpeechPauseInputError(l10n, text);
+    if (error != null) {
+      setState(() {
+        _callModeSpeechPauseError = error;
+      });
+      return false;
+    }
+    setState(() {
+      _callModeSpeechPauseMillis = int.parse(text.trim());
+      _callModeSpeechPauseError = null;
+    });
+    return true;
   }
 
   String? _ttsPlatformHelp(AppLocalizations l10n) {
@@ -4914,7 +4361,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         _speakerFilter = speakerFilter;
         _speechStatusError = null;
       });
-      _modelPickerRevision.value++;
       _cachedSpeechStatus = status;
       _syncSpeechPolling(status);
     } catch (error) {
@@ -5004,7 +4450,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       _downloadErrorsByModelId.remove(modelId);
       _speechStatusError = null;
     });
-    _modelPickerRevision.value++;
     try {
       final task = await _client.createSpeechDownload(modelId);
       if (mounted && task.status == SpeechDownloadStatus.failed) {
@@ -5034,7 +4479,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         setState(() {
           _downloadingModelIds.remove(modelId);
         });
-        _modelPickerRevision.value++;
       }
     }
   }
@@ -5046,7 +4490,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       return raw;
     }
     if (statusMatch != null) {
-      return 'Bridge error (${statusMatch.group(1)}): $raw';
+      return context.l10n.bridgeErrorWithStatus(statusMatch.group(1)!, raw);
     }
     return raw;
   }
@@ -5072,7 +4516,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         setState(() {
           _deletingModelIds.remove(modelId);
         });
-        _modelPickerRevision.value++;
       }
     }
   }
@@ -5154,7 +4597,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
           return;
         }
         setState(() {
-          _speechStatusError = 'Microphone permission is required.';
+          _speechStatusError = context.l10n.microphonePermissionRequired;
         });
         return;
       }
@@ -5191,10 +4634,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         _speakerEnrollmentRecording = false;
       });
       if (path == null || path.trim().isEmpty) {
-        throw Exception('No enrollment audio was recorded.');
+        throw Exception(context.l10n.noEnrollmentAudioRecorded);
       }
       final name = _speakerNameController.text.trim().isEmpty
-          ? 'Speaker ${_speakers.length + 1}'
+          ? context.l10n.defaultSpeakerName(_speakers.length + 1)
           : _speakerNameController.text.trim();
       final result = await _client.enrollSpeaker(File(path), name: name);
       final speakers = await _client.listSpeakers();
@@ -5231,123 +4674,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     }
   }
 
-  String _speechProfileUpdateKey(SpeechProfile profile, String? modelId) {
-    return '${profile.name}:${modelId ?? 'clear'}';
-  }
-
-  bool _isUpdatingSpeechProfile(SpeechProfile profile) {
-    final prefix = '${profile.name}:';
-    return _updatingProfileKeys.any((key) => key.startsWith(prefix));
-  }
-
-  Future<bool> _updateSpeechProfile(
-    SpeechProfile profile,
-    String? modelId,
-  ) async {
-    final updateKey = _speechProfileUpdateKey(profile, modelId);
-    setState(() {
-      _updatingProfileKeys.add(updateKey);
-      _speechStatusError = null;
-    });
-    try {
-      await _client.updateSpeechProfileModel(profile, modelId: modelId);
-      await _refreshSpeechStatus(silent: true);
-      return true;
-    } catch (error) {
-      if (!mounted) {
-        return false;
-      }
-      final l10n = context.l10n;
-      setState(() {
-        _speechStatusError = l10n.speechProfileUpdateFailed(
-          _profileLabel(l10n, profile),
-          error.toString(),
-        );
-      });
-      return false;
-    } finally {
-      if (mounted) {
-        setState(() {
-          _updatingProfileKeys.remove(updateKey);
-        });
-      }
-    }
-  }
-
-  List<SpeechModelSummary> _modelsForProfile(
-    SpeechStatus status,
-    SpeechProfile profile,
-  ) {
-    final selectedId = status.profiles.modelForProfile(profile);
-    final models = status.models
-        .where((model) => _profilesForModel(model).contains(profile))
-        .toList(growable: false)
-      ..sort((left, right) {
-        final selectedComparison = (selectedId == right.id ? 1 : 0)
-            .compareTo(selectedId == left.id ? 1 : 0);
-        if (selectedComparison != 0) {
-          return selectedComparison;
-        }
-        final installedComparison =
-            (right.installed ? 1 : 0).compareTo(left.installed ? 1 : 0);
-        if (installedComparison != 0) {
-          return installedComparison;
-        }
-        final recommendedComparison =
-            (_isRecommendedForProfile(right, profile) ? 1 : 0)
-                .compareTo(_isRecommendedForProfile(left, profile) ? 1 : 0);
-        if (recommendedComparison != 0) {
-          return recommendedComparison;
-        }
-        return left.displayName.compareTo(right.displayName);
-      });
-    return models;
-  }
-
-  List<SpeechProfile> _profilesForModel(SpeechModelSummary model) {
-    final profiles = <SpeechProfile>{
-      ...model.supportsProfiles,
-      ...model.recommendedProfiles,
-      ...model.selectedBy,
-    }..remove(SpeechProfile.wakeWordDefault);
-    if (profiles.isNotEmpty) {
-      final sorted = profiles.toList(growable: false)
-        ..sort((left, right) => left.index.compareTo(right.index));
-      return sorted;
-    }
-    return _inferProfilesForModel(model);
-  }
-
   bool _isWakeWordModel(SpeechModelSummary model) {
     return model.kind == SpeechModelKind.wakeWord ||
         model.capabilities.wakeWord;
-  }
-
-  List<SpeechProfile> _inferProfilesForModel(SpeechModelSummary model) {
-    final profiles = <SpeechProfile>[];
-    if (model.kind == SpeechModelKind.asr && model.capabilities.batchAsr) {
-      profiles.add(SpeechProfile.asrBatch);
-    }
-    if ((model.kind == SpeechModelKind.asr &&
-            (model.capabilities.realtimeAsr || model.capabilities.streaming)) ||
-        model.runtime == SpeechRuntime.streaming) {
-      profiles.add(SpeechProfile.asrRealtime);
-    }
-    if (model.kind == SpeechModelKind.tts &&
-        model.capabilities.speechSynthesis) {
-      profiles.add(SpeechProfile.ttsDefault);
-    }
-    if (model.kind == SpeechModelKind.vad || model.capabilities.vad) {
-      profiles.add(SpeechProfile.vadDefault);
-    }
-    return profiles;
-  }
-
-  bool _isRecommendedForProfile(
-    SpeechModelSummary model,
-    SpeechProfile profile,
-  ) {
-    return model.recommendedProfiles.contains(profile);
   }
 
   List<String> _ttsVoiceOptions(SpeechModelSummary? model) {
@@ -5587,26 +4916,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     return null;
   }
 
-  String _profileLabel(AppLocalizations l10n, SpeechProfile profile) {
-    return switch (profile) {
-      SpeechProfile.asrBatch => l10n.speechProfileBatchAsrTitle,
-      SpeechProfile.asrRealtime => l10n.speechProfileRealtimeAsrTitle,
-      SpeechProfile.ttsDefault => l10n.speechProfileTtsTitle,
-      SpeechProfile.vadDefault => l10n.speechProfileVadTitle,
-      SpeechProfile.wakeWordDefault => l10n.speechProfileWakeWordTitle,
-    };
-  }
-
-  String _profileSubtitle(AppLocalizations l10n, SpeechProfile profile) {
-    return switch (profile) {
-      SpeechProfile.asrBatch => l10n.speechProfileBatchAsrHelp,
-      SpeechProfile.asrRealtime => l10n.speechProfileRealtimeAsrHelp,
-      SpeechProfile.ttsDefault => l10n.speechProfileTtsHelp,
-      SpeechProfile.vadDefault => l10n.speechProfileVadHelp,
-      SpeechProfile.wakeWordDefault => l10n.speechProfileWakeWordHelp,
-    };
-  }
-
   String _downloadStatusLabel(
     AppLocalizations l10n,
     SpeechDownloadStatus status,
@@ -5622,6 +4931,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   }
 
   Future<void> _save() async {
+    final l10n = context.l10n;
+    if (!_applyCallModeSpeechPauseInput(l10n)) {
+      return;
+    }
     setState(() {
       _saving = true;
     });
@@ -5685,20 +4998,4 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       }
     }
   }
-
-  static const List<int> _callModeSpeechPauseOptions = <int>[
-    600,
-    900,
-    1200,
-    1500,
-    1800,
-    2400,
-  ];
-
-  static const List<SpeechProfile> _localBridgeProfileOrder = <SpeechProfile>[
-    SpeechProfile.asrRealtime,
-    SpeechProfile.ttsDefault,
-    SpeechProfile.asrBatch,
-    SpeechProfile.vadDefault,
-  ];
 }

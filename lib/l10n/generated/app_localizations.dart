@@ -1163,14 +1163,14 @@ abstract class AppLocalizations {
   /// No description provided for @callModeSpeechPauseHelp.
   ///
   /// In en, this message translates to:
-  /// **'How long to wait after you stop speaking before the current utterance is sent automatically.'**
+  /// **'How many milliseconds of silence to wait before sending the current utterance. Recommended range: 600-2400 ms.'**
   String get callModeSpeechPauseHelp;
 
-  /// No description provided for @callModeSpeechPauseOption.
+  /// No description provided for @callModeSpeechPauseRangeError.
   ///
   /// In en, this message translates to:
-  /// **'Pause {seconds}s'**
-  String callModeSpeechPauseOption(Object seconds);
+  /// **'Enter a value from {min} to {max} ms.'**
+  String callModeSpeechPauseRangeError(int min, int max);
 
   /// No description provided for @callModeSpeechPauseBridgeOnlyHint.
   ///
@@ -1994,12 +1994,6 @@ abstract class AppLocalizations {
   /// **'Download tasks'**
   String get localBridgeDownloadTasksSection;
 
-  /// No description provided for @localBridgeNoCompatibleModels.
-  ///
-  /// In en, this message translates to:
-  /// **'No compatible models are available for this type yet.'**
-  String get localBridgeNoCompatibleModels;
-
   /// No description provided for @localBridgeTtsVoiceLabel.
   ///
   /// In en, this message translates to:
@@ -2204,24 +2198,6 @@ abstract class AppLocalizations {
   /// **'No installed models yet.'**
   String get speechNoInstalledModels;
 
-  /// No description provided for @speechSelect.
-  ///
-  /// In en, this message translates to:
-  /// **'Select'**
-  String get speechSelect;
-
-  /// No description provided for @speechChange.
-  ///
-  /// In en, this message translates to:
-  /// **'Change'**
-  String get speechChange;
-
-  /// No description provided for @speechSelected.
-  ///
-  /// In en, this message translates to:
-  /// **'Selected'**
-  String get speechSelected;
-
   /// No description provided for @speechModelKindAsr.
   ///
   /// In en, this message translates to:
@@ -2258,89 +2234,17 @@ abstract class AppLocalizations {
   /// **'Batch ASR'**
   String get speechProfileBatchAsrTitle;
 
-  /// No description provided for @speechProfileBatchAsrHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Used for recorded voice transcription. Pick this when you want accurate transcription after the user finishes speaking.'**
-  String get speechProfileBatchAsrHelp;
-
-  /// No description provided for @speechProfileBatchAsrAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Use for Batch ASR'**
-  String get speechProfileBatchAsrAction;
-
   /// No description provided for @speechProfileRealtimeAsrTitle.
   ///
   /// In en, this message translates to:
   /// **'Realtime ASR'**
   String get speechProfileRealtimeAsrTitle;
 
-  /// No description provided for @speechProfileRealtimeAsrHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Used by call mode and realtime websocket transcription. Pick this when you need partial transcripts while the user is still speaking.'**
-  String get speechProfileRealtimeAsrHelp;
-
-  /// No description provided for @speechProfileRealtimeAsrAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Use for Realtime ASR'**
-  String get speechProfileRealtimeAsrAction;
-
   /// No description provided for @speechProfileTtsTitle.
   ///
   /// In en, this message translates to:
   /// **'TTS'**
   String get speechProfileTtsTitle;
-
-  /// No description provided for @speechProfileTtsHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Used for spoken reply playback from the local Bridge. Pick this when you want the assistant to speak through a local model.'**
-  String get speechProfileTtsHelp;
-
-  /// No description provided for @speechProfileTtsAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Use for TTS'**
-  String get speechProfileTtsAction;
-
-  /// No description provided for @speechProfileVadTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'VAD'**
-  String get speechProfileVadTitle;
-
-  /// No description provided for @speechProfileVadHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Used to detect when speech starts and ends in realtime mode. Pick this when you want faster turn-taking and cleaner cutoffs.'**
-  String get speechProfileVadHelp;
-
-  /// No description provided for @speechProfileVadAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Use for VAD'**
-  String get speechProfileVadAction;
-
-  /// No description provided for @speechProfileWakeWordTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Wake word'**
-  String get speechProfileWakeWordTitle;
-
-  /// No description provided for @speechProfileWakeWordHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Used by Omni Bridge Local to detect the wake word before accepting realtime call-mode speech.'**
-  String get speechProfileWakeWordHelp;
-
-  /// No description provided for @speechProfileWakeWordAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Use for Wake word'**
-  String get speechProfileWakeWordAction;
 
   /// No description provided for @speechDownloadStatusQueued.
   ///
@@ -2401,12 +2305,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Download failed for {modelId}: {error}'**
   String speechModelDownloadFailed(Object modelId, Object error);
-
-  /// No description provided for @speechProfileUpdateFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to update {profile}: {error}'**
-  String speechProfileUpdateFailed(Object profile, Object error);
 
   /// No description provided for @appDownloadSection.
   ///
@@ -2713,6 +2611,1008 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This field is required'**
   String get fieldRequired;
+
+  /// No description provided for @unknownRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown route: {route}'**
+  String unknownRoute(Object route);
+
+  /// No description provided for @recentProjectsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent projects'**
+  String get recentProjectsTitle;
+
+  /// No description provided for @more.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get more;
+
+  /// No description provided for @subtitles.
+  ///
+  /// In en, this message translates to:
+  /// **'Subtitles'**
+  String get subtitles;
+
+  /// No description provided for @stop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get stop;
+
+  /// No description provided for @hold.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold'**
+  String get hold;
+
+  /// No description provided for @microphone.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone'**
+  String get microphone;
+
+  /// No description provided for @end.
+  ///
+  /// In en, this message translates to:
+  /// **'End'**
+  String get end;
+
+  /// No description provided for @openNavigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Open navigation'**
+  String get openNavigation;
+
+  /// No description provided for @providerOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider order'**
+  String get providerOrder;
+
+  /// No description provided for @configured.
+  ///
+  /// In en, this message translates to:
+  /// **'Configured'**
+  String get configured;
+
+  /// No description provided for @enabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
+  String get enabled;
+
+  /// No description provided for @defaultLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get defaultLabel;
+
+  /// No description provided for @none.
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get none;
+
+  /// No description provided for @projectDesk.
+  ///
+  /// In en, this message translates to:
+  /// **'Project desk'**
+  String get projectDesk;
+
+  /// No description provided for @allSessions.
+  ///
+  /// In en, this message translates to:
+  /// **'All sessions'**
+  String get allSessions;
+
+  /// No description provided for @inMotion.
+  ///
+  /// In en, this message translates to:
+  /// **'In motion'**
+  String get inMotion;
+
+  /// No description provided for @clearSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear search'**
+  String get clearSearch;
+
+  /// No description provided for @projectContext.
+  ///
+  /// In en, this message translates to:
+  /// **'Project context'**
+  String get projectContext;
+
+  /// No description provided for @rootPath.
+  ///
+  /// In en, this message translates to:
+  /// **'Root path'**
+  String get rootPath;
+
+  /// No description provided for @branch.
+  ///
+  /// In en, this message translates to:
+  /// **'Branch'**
+  String get branch;
+
+  /// No description provided for @gitState.
+  ///
+  /// In en, this message translates to:
+  /// **'Git state'**
+  String get gitState;
+
+  /// No description provided for @statusMix.
+  ///
+  /// In en, this message translates to:
+  /// **'Status mix'**
+  String get statusMix;
+
+  /// No description provided for @approvals.
+  ///
+  /// In en, this message translates to:
+  /// **'Approvals'**
+  String get approvals;
+
+  /// No description provided for @notes.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes'**
+  String get notes;
+
+  /// No description provided for @projectNotesNoActiveSessions.
+  ///
+  /// In en, this message translates to:
+  /// **'No active sessions yet. Start a new one to turn this project into a working desk.'**
+  String get projectNotesNoActiveSessions;
+
+  /// No description provided for @projectNotesWaitingApproval.
+  ///
+  /// In en, this message translates to:
+  /// **'There are sessions waiting on approval. Review them before starting parallel work.'**
+  String get projectNotesWaitingApproval;
+
+  /// No description provided for @projectNotesActiveWork.
+  ///
+  /// In en, this message translates to:
+  /// **'This project has active work in motion. Keep recent sessions concise and easy to scan.'**
+  String get projectNotesActiveWork;
+
+  /// No description provided for @projectNotesQuiet.
+  ///
+  /// In en, this message translates to:
+  /// **'The current session mix is quiet. Use this space to restart stalled threads or begin a focused run.'**
+  String get projectNotesQuiet;
+
+  /// No description provided for @sessionOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Session options'**
+  String get sessionOptions;
+
+  /// No description provided for @collapseSessionDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse session details'**
+  String get collapseSessionDetails;
+
+  /// No description provided for @customModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom model'**
+  String get customModel;
+
+  /// No description provided for @files.
+  ///
+  /// In en, this message translates to:
+  /// **'files'**
+  String get files;
+
+  /// No description provided for @scrollToLatest.
+  ///
+  /// In en, this message translates to:
+  /// **'Scroll to latest'**
+  String get scrollToLatest;
+
+  /// No description provided for @project.
+  ///
+  /// In en, this message translates to:
+  /// **'Project'**
+  String get project;
+
+  /// No description provided for @path.
+  ///
+  /// In en, this message translates to:
+  /// **'Path'**
+  String get path;
+
+  /// No description provided for @gitSnapshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Git snapshot'**
+  String get gitSnapshot;
+
+  /// No description provided for @summary.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary'**
+  String get summary;
+
+  /// No description provided for @projectContextUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Project context is unavailable.'**
+  String get projectContextUnavailable;
+
+  /// No description provided for @clientId.
+  ///
+  /// In en, this message translates to:
+  /// **'Client ID'**
+  String get clientId;
+
+  /// No description provided for @replyBehaviorSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply behavior'**
+  String get replyBehaviorSection;
+
+  /// No description provided for @currentVersionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Current version'**
+  String get currentVersionLabel;
+
+  /// No description provided for @updateManifest.
+  ///
+  /// In en, this message translates to:
+  /// **'Update manifest'**
+  String get updateManifest;
+
+  /// No description provided for @atAGlance.
+  ///
+  /// In en, this message translates to:
+  /// **'At a glance'**
+  String get atAGlance;
+
+  /// No description provided for @workspaceNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspace note'**
+  String get workspaceNote;
+
+  /// No description provided for @threads.
+  ///
+  /// In en, this message translates to:
+  /// **'Threads'**
+  String get threads;
+
+  /// No description provided for @active.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get active;
+
+  /// No description provided for @review.
+  ///
+  /// In en, this message translates to:
+  /// **'Review'**
+  String get review;
+
+  /// No description provided for @newLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get newLabel;
+
+  /// No description provided for @inFocus.
+  ///
+  /// In en, this message translates to:
+  /// **'In focus'**
+  String get inFocus;
+
+  /// No description provided for @upNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Up next'**
+  String get upNext;
+
+  /// No description provided for @threadsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} threads'**
+  String threadsCount(int count);
+
+  /// No description provided for @nothingUrgentWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing urgent is waiting right now.'**
+  String get nothingUrgentWaiting;
+
+  /// No description provided for @visibleProjectsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} visible'**
+  String visibleProjectsCount(int count);
+
+  /// No description provided for @authorizationNeeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorization needed'**
+  String get authorizationNeeded;
+
+  /// No description provided for @connectedBridge.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected • {address}'**
+  String connectedBridge(Object address);
+
+  /// No description provided for @status.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get status;
+
+  /// No description provided for @collapseStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse status'**
+  String get collapseStatus;
+
+  /// No description provided for @pendingApprovals.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending approvals'**
+  String get pendingApprovals;
+
+  /// No description provided for @waitingActionsNeedReview.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} waiting actions need review'**
+  String waitingActionsNeedReview(int count);
+
+  /// No description provided for @noApprovalsWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'No approvals are waiting right now'**
+  String get noApprovalsWaiting;
+
+  /// No description provided for @bridgeStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Bridge status'**
+  String get bridgeStatus;
+
+  /// No description provided for @voiceDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice / device'**
+  String get voiceDevice;
+
+  /// No description provided for @activeSessionsMicrophoneReady.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} active sessions • microphone ready'**
+  String activeSessionsMicrophoneReady(int count);
+
+  /// No description provided for @microphoneReadySystemSpeechAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone ready • system speech available'**
+  String get microphoneReadySystemSpeechAvailable;
+
+  /// No description provided for @projectsOverview.
+  ///
+  /// In en, this message translates to:
+  /// **'Projects overview'**
+  String get projectsOverview;
+
+  /// No description provided for @activeProjectsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} active projects'**
+  String activeProjectsCount(int count);
+
+  /// No description provided for @quickActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick actions'**
+  String get quickActions;
+
+  /// No description provided for @quickActionsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Open projects or adjust settings'**
+  String get quickActionsBody;
+
+  /// No description provided for @pluginManifest.
+  ///
+  /// In en, this message translates to:
+  /// **'Plugin manifest'**
+  String get pluginManifest;
+
+  /// No description provided for @importLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get importLabel;
+
+  /// No description provided for @systemDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'System default'**
+  String get systemDefault;
+
+  /// No description provided for @systemDefaultCapabilitySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the built-in behavior for this capability.'**
+  String get systemDefaultCapabilitySubtitle;
+
+  /// No description provided for @chooseSpeechCapabilityProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose system default or pick a plugin for this capability.'**
+  String get chooseSpeechCapabilityProvider;
+
+  /// No description provided for @savingPluginSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving plugin settings...'**
+  String get savingPluginSettings;
+
+  /// No description provided for @savedToSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to settings.'**
+  String get savedToSettings;
+
+  /// No description provided for @pluginSettingsSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to save plugin settings.\n\nRaw error:\n{error}'**
+  String pluginSettingsSaveFailed(Object error);
+
+  /// No description provided for @fillRequiredPluginSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill in the required settings below before using this plugin.'**
+  String get fillRequiredPluginSettings;
+
+  /// No description provided for @defaultTtsTestText.
+  ///
+  /// In en, this message translates to:
+  /// **'Hello from Omni Code speech settings.'**
+  String get defaultTtsTestText;
+
+  /// No description provided for @systemTtsTestUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'System TTS test is not available on this platform. Choose a TTS plugin to test playback here.'**
+  String get systemTtsTestUnavailable;
+
+  /// No description provided for @startingPlaybackTest.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting playback test...'**
+  String get startingPlaybackTest;
+
+  /// No description provided for @playbackStartedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback started successfully.'**
+  String get playbackStartedSuccessfully;
+
+  /// No description provided for @testTts.
+  ///
+  /// In en, this message translates to:
+  /// **'Test TTS'**
+  String get testTts;
+
+  /// No description provided for @systemDefaultTtsCannotBeTested.
+  ///
+  /// In en, this message translates to:
+  /// **'System default TTS cannot be tested on this platform.'**
+  String get systemDefaultTtsCannotBeTested;
+
+  /// No description provided for @ttsTestUsesCurrentConfiguration.
+  ///
+  /// In en, this message translates to:
+  /// **'TTS test uses your current saved speech configuration.'**
+  String get ttsTestUsesCurrentConfiguration;
+
+  /// No description provided for @testText.
+  ///
+  /// In en, this message translates to:
+  /// **'Test text'**
+  String get testText;
+
+  /// No description provided for @playing.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing...'**
+  String get playing;
+
+  /// No description provided for @play.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get play;
+
+  /// No description provided for @batchAsrAuthOrParameterError.
+  ///
+  /// In en, this message translates to:
+  /// **'Authentication or parameter error. Check that APPID and API Key (Access Token) are correct.\n\nRaw error:\n{error}'**
+  String batchAsrAuthOrParameterError(Object error);
+
+  /// No description provided for @batchAsrAuthenticationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Authentication failed. Check that the API Key is correct and enabled for this service.\n\nRaw error:\n{error}'**
+  String batchAsrAuthenticationFailed(Object error);
+
+  /// No description provided for @batchAsrAccessDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Access denied. Check that the API Key has permission for the selected Resource ID.\n\nRaw error:\n{error}'**
+  String batchAsrAccessDenied(Object error);
+
+  /// No description provided for @microphonePermissionRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone permission is required.'**
+  String get microphonePermissionRequired;
+
+  /// No description provided for @recordingStartedSpeakThenStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording started. Speak a short sentence, then stop.'**
+  String get recordingStartedSpeakThenStop;
+
+  /// No description provided for @transcribingRecordedAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing recorded audio...'**
+  String get transcribingRecordedAudio;
+
+  /// No description provided for @transcriptionSucceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription succeeded.'**
+  String get transcriptionSucceeded;
+
+  /// No description provided for @transcriptionSucceededWithText.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription succeeded: {text}'**
+  String transcriptionSucceededWithText(Object text);
+
+  /// No description provided for @testBatchAsr.
+  ///
+  /// In en, this message translates to:
+  /// **'Test Batch ASR'**
+  String get testBatchAsr;
+
+  /// No description provided for @batchAsrTestDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch ASR test records a short clip, then transcribes it with your current saved speech configuration.'**
+  String get batchAsrTestDescription;
+
+  /// No description provided for @record.
+  ///
+  /// In en, this message translates to:
+  /// **'Record'**
+  String get record;
+
+  /// No description provided for @transcribing.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing...'**
+  String get transcribing;
+
+  /// No description provided for @stopAndTranscribe.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop & Transcribe'**
+  String get stopAndTranscribe;
+
+  /// No description provided for @recordingSpeakThenStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording... speak a short sentence, then stop.'**
+  String get recordingSpeakThenStop;
+
+  /// No description provided for @realtimeAsrAuthenticationRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'The current service rejected realtime speech authentication. Check the selected plugin credentials, especially API Key and Resource ID.\n\nRaw error:\n{error}'**
+  String realtimeAsrAuthenticationRejected(Object error);
+
+  /// No description provided for @realtimeAsrAccessRefused.
+  ///
+  /// In en, this message translates to:
+  /// **'The current service refused realtime speech access. Check that the API Key is enabled for the selected Volcengine speech resource, and that Resource ID exactly matches the purchased duration or concurrent edition.\n\nRaw error:\n{error}'**
+  String realtimeAsrAccessRefused(Object error);
+
+  /// No description provided for @realtimeAsrStartFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The current service could not start realtime speech. This usually means the selected plugin is not exposing a valid realtime websocket endpoint.\n\nRaw error:\n{error}'**
+  String realtimeAsrStartFailed(Object error);
+
+  /// No description provided for @startingRealtimeSpeechTest.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting realtime speech test...'**
+  String get startingRealtimeSpeechTest;
+
+  /// No description provided for @realtimeTranscriptReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Realtime transcript received.'**
+  String get realtimeTranscriptReceived;
+
+  /// No description provided for @realtimeSpeechComingThrough.
+  ///
+  /// In en, this message translates to:
+  /// **'Realtime speech is coming through.'**
+  String get realtimeSpeechComingThrough;
+
+  /// No description provided for @realtimeSpeechComingThroughWithText.
+  ///
+  /// In en, this message translates to:
+  /// **'Realtime speech is coming through: {text}'**
+  String realtimeSpeechComingThroughWithText(Object text);
+
+  /// No description provided for @listeningSpeakShortSentence.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening now. Speak a short sentence.'**
+  String get listeningSpeakShortSentence;
+
+  /// No description provided for @testRealtimeAsr.
+  ///
+  /// In en, this message translates to:
+  /// **'Test Realtime ASR'**
+  String get testRealtimeAsr;
+
+  /// No description provided for @realtimeAsrSystemTestDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Realtime ASR test uses the current saved system speech input.'**
+  String get realtimeAsrSystemTestDescription;
+
+  /// No description provided for @realtimeAsrPluginTestDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Realtime ASR test uses the current saved plugin configuration.'**
+  String get realtimeAsrPluginTestDescription;
+
+  /// No description provided for @starting.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting...'**
+  String get starting;
+
+  /// No description provided for @start.
+  ///
+  /// In en, this message translates to:
+  /// **'Start'**
+  String get start;
+
+  /// No description provided for @use.
+  ///
+  /// In en, this message translates to:
+  /// **'Use'**
+  String get use;
+
+  /// No description provided for @test.
+  ///
+  /// In en, this message translates to:
+  /// **'Test'**
+  String get test;
+
+  /// No description provided for @uninstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Uninstall'**
+  String get uninstall;
+
+  /// No description provided for @install.
+  ///
+  /// In en, this message translates to:
+  /// **'Install'**
+  String get install;
+
+  /// No description provided for @getApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Get API key'**
+  String get getApiKey;
+
+  /// No description provided for @startService.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Service'**
+  String get startService;
+
+  /// No description provided for @stopService.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Service'**
+  String get stopService;
+
+  /// No description provided for @sentAsXApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent as X-Api-Key.'**
+  String get sentAsXApiKey;
+
+  /// No description provided for @targetSpeakerOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Target speaker only'**
+  String get targetSpeakerOnly;
+
+  /// No description provided for @speakerName.
+  ///
+  /// In en, this message translates to:
+  /// **'Speaker name'**
+  String get speakerName;
+
+  /// No description provided for @myVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'My voice'**
+  String get myVoice;
+
+  /// No description provided for @speaker.
+  ///
+  /// In en, this message translates to:
+  /// **'Speaker'**
+  String get speaker;
+
+  /// No description provided for @enrollSpeakerBeforeFiltering.
+  ///
+  /// In en, this message translates to:
+  /// **'Enroll a speaker on the bridge before enabling filtering.'**
+  String get enrollSpeakerBeforeFiltering;
+
+  /// No description provided for @batchAsrIgnoresUnmatchedSpeaker.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch ASR will ignore speech that does not match the selected voiceprint.'**
+  String get batchAsrIgnoresUnmatchedSpeaker;
+
+  /// No description provided for @voiceprintModelInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Voiceprint model installed'**
+  String get voiceprintModelInstalled;
+
+  /// No description provided for @voiceprintModelRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Voiceprint model is required'**
+  String get voiceprintModelRequired;
+
+  /// No description provided for @savingSpeaker.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving speaker'**
+  String get savingSpeaker;
+
+  /// No description provided for @finishEnrollment.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish enrollment'**
+  String get finishEnrollment;
+
+  /// No description provided for @recordEnrollmentSample.
+  ///
+  /// In en, this message translates to:
+  /// **'Record enrollment sample'**
+  String get recordEnrollmentSample;
+
+  /// No description provided for @speechRoutingSystemDefaultIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech uses the system by default. Install a plugin only for the capabilities that need a custom service.'**
+  String get speechRoutingSystemDefaultIntro;
+
+  /// No description provided for @realtimeAsrRouteSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Mic streaming, live transcripts, and interrupt detection.'**
+  String get realtimeAsrRouteSubtitle;
+
+  /// No description provided for @realtimeAsrRouteFooter.
+  ///
+  /// In en, this message translates to:
+  /// **'Good default for on-device dictation and interruption handling.'**
+  String get realtimeAsrRouteFooter;
+
+  /// No description provided for @batchAsrRouteSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recorded clips, uploads, and non-realtime recognition.'**
+  String get batchAsrRouteSubtitle;
+
+  /// No description provided for @batchAsrRouteFooter.
+  ///
+  /// In en, this message translates to:
+  /// **'Useful for cloud transcription providers or higher-accuracy offline jobs.'**
+  String get batchAsrRouteFooter;
+
+  /// No description provided for @ttsRouteSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply playback, voice output, and spoken call-mode responses.'**
+  String get ttsRouteSubtitle;
+
+  /// No description provided for @ttsRouteFooter.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a plugin when you want a cloud voice or a local TTS service.'**
+  String get ttsRouteFooter;
+
+  /// No description provided for @systemRealtimeAsrTestUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'System realtime ASR cannot be tested on this platform. Choose a realtime ASR plugin to test here.'**
+  String get systemRealtimeAsrTestUnavailable;
+
+  /// No description provided for @systemBatchAsrTestUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'System default does not provide batch ASR testing. Choose a batch ASR plugin to test transcription here.'**
+  String get systemBatchAsrTestUnavailable;
+
+  /// No description provided for @selectedPluginNotInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected plugin is not installed, so it cannot be tested.'**
+  String get selectedPluginNotInstalled;
+
+  /// No description provided for @selectedPluginMissingCapabilityConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected plugin does not expose {capability} configuration, so it cannot be tested.'**
+  String selectedPluginMissingCapabilityConfig(Object capability);
+
+  /// No description provided for @expectedTtsEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'an OpenAI-compatible TTS endpoint'**
+  String get expectedTtsEndpoint;
+
+  /// No description provided for @expectedTranscriptionEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'an OpenAI-compatible transcription endpoint'**
+  String get expectedTranscriptionEndpoint;
+
+  /// No description provided for @expectedRealtimeWebsocketEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'a realtime websocket endpoint'**
+  String get expectedRealtimeWebsocketEndpoint;
+
+  /// No description provided for @currentSelectionMissingExpectedEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'The current selection does not expose {expected}, so testing is unavailable.'**
+  String currentSelectionMissingExpectedEndpoint(Object expected);
+
+  /// No description provided for @currentSelectionMissingRequiredSetting.
+  ///
+  /// In en, this message translates to:
+  /// **'The current selection is missing {setting}, so testing is unavailable.'**
+  String currentSelectionMissingRequiredSetting(Object setting);
+
+  /// No description provided for @currentSelectionMissingRealtimeWebsocketUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'The current selection is missing a realtime websocket URL, so testing is unavailable.'**
+  String get currentSelectionMissingRealtimeWebsocketUrl;
+
+  /// No description provided for @currentSelectionInvalidRealtimeWebsocketUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'The current selection has an invalid realtime websocket URL, so testing is unavailable.'**
+  String get currentSelectionInvalidRealtimeWebsocketUrl;
+
+  /// No description provided for @currentSelectionNonStreamingEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'The current selection points to a non-streaming endpoint, so testing is unavailable. Configure a realtime websocket URL first.'**
+  String get currentSelectionNonStreamingEndpoint;
+
+  /// No description provided for @installedAndReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed and ready to use.'**
+  String get installedAndReady;
+
+  /// No description provided for @installBeforeSelectingPlugin.
+  ///
+  /// In en, this message translates to:
+  /// **'Install first before selecting this plugin.'**
+  String get installBeforeSelectingPlugin;
+
+  /// No description provided for @fillRequiredPluginSettingsBeforeTesting.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill in the required settings before testing.'**
+  String get fillRequiredPluginSettingsBeforeTesting;
+
+  /// No description provided for @commandSucceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Command succeeded: {command}'**
+  String commandSucceeded(Object command);
+
+  /// No description provided for @commandFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Command failed ({exitCode}): {stderr}'**
+  String commandFailed(int exitCode, Object stderr);
+
+  /// No description provided for @missingKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing key'**
+  String get missingKey;
+
+  /// No description provided for @keySaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Key saved'**
+  String get keySaved;
+
+  /// No description provided for @pluginApiKeyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{pluginName} · API Key'**
+  String pluginApiKeyTitle(Object pluginName);
+
+  /// No description provided for @savePluginSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Save plugin settings'**
+  String get savePluginSettings;
+
+  /// No description provided for @saveAndUse.
+  ///
+  /// In en, this message translates to:
+  /// **'Save and use'**
+  String get saveAndUse;
+
+  /// No description provided for @additionalPluginSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Additional plugin settings'**
+  String get additionalPluginSettings;
+
+  /// No description provided for @bridgeErrorWithStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Bridge error ({status}): {error}'**
+  String bridgeErrorWithStatus(Object status, Object error);
+
+  /// No description provided for @noEnrollmentAudioRecorded.
+  ///
+  /// In en, this message translates to:
+  /// **'No enrollment audio was recorded.'**
+  String get noEnrollmentAudioRecorded;
+
+  /// No description provided for @defaultSpeakerName.
+  ///
+  /// In en, this message translates to:
+  /// **'Speaker {index}'**
+  String defaultSpeakerName(int index);
 
   /// No description provided for @gitClean.
   ///

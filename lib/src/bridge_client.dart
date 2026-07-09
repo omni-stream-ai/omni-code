@@ -959,40 +959,6 @@ class BridgeClient {
     }
   }
 
-  Future<SpeechProfileBinding> getSpeechProfileModel(
-      SpeechProfile profile) async {
-    final response = await _httpClient.get(
-      Uri.parse(
-          '$baseUrl/speech/profiles/${_speechProfileSlug(profile)}/model'),
-      headers: _defaultHeaders,
-    );
-    if (_isUnauthorized(response)) {
-      throw ClientUnauthorizedException(response.body);
-    }
-    _assertJsonResponse(response);
-    return SpeechProfileBinding.fromJson(_decodeApiData(response.body));
-  }
-
-  Future<SpeechProfileSelection> updateSpeechProfileModel(
-    SpeechProfile profile, {
-    String? modelId,
-  }) async {
-    final response = await _httpClient.put(
-      Uri.parse(
-          '$baseUrl/speech/profiles/${_speechProfileSlug(profile)}/model'),
-      headers: {
-        ..._defaultHeaders,
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({'model_id': modelId}),
-    );
-    if (_isUnauthorized(response)) {
-      throw ClientUnauthorizedException(response.body);
-    }
-    _assertJsonResponse(response);
-    return SpeechProfileSelection.fromJson(_decodeApiData(response.body));
-  }
-
   Future<SpeechModelVoiceBinding> getSpeechModelVoice(String modelId) async {
     final response = await _httpClient.get(
       Uri.parse('$baseUrl/speech/models/$modelId/voice'),
@@ -1485,16 +1451,6 @@ class BridgeClient {
       return 'video/mp4';
     }
     return 'application/octet-stream';
-  }
-
-  static String _speechProfileSlug(SpeechProfile profile) {
-    return switch (profile) {
-      SpeechProfile.asrBatch => 'asr.batch',
-      SpeechProfile.asrRealtime => 'asr.realtime',
-      SpeechProfile.ttsDefault => 'tts.default',
-      SpeechProfile.vadDefault => 'vad.default',
-      SpeechProfile.wakeWordDefault => 'wake_word.default',
-    };
   }
 
   static String _sanitizeSpeechInput(String value) {

@@ -326,23 +326,6 @@ class SpeechStatus {
   }
 }
 
-class SpeechProfileBinding {
-  const SpeechProfileBinding({
-    required this.profile,
-    required this.modelId,
-  });
-
-  final SpeechProfile profile;
-  final String? modelId;
-
-  factory SpeechProfileBinding.fromJson(Map<String, dynamic> json) {
-    return SpeechProfileBinding(
-      profile: _parseSpeechProfile(json['profile'] as String?),
-      modelId: _readNullableString(json['model_id']),
-    );
-  }
-}
-
 class SpeechModelVoiceBinding {
   const SpeechModelVoiceBinding({
     required this.modelId,

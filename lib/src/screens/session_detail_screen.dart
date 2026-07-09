@@ -1478,7 +1478,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         children: [
           Builder(
             builder: (context) => IconButton(
-              tooltip: 'Open navigation',
+              tooltip: context.l10n.openNavigation,
               style: _headerIconButtonStyle(),
               onPressed: () => Scaffold.of(context).openDrawer(),
               icon: const Icon(Icons.menu_rounded),
@@ -1608,7 +1608,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ],
         builder: (context, controller, child) => IconButton(
           key: const Key('session-header-more-button'),
-          tooltip: 'Session options',
+          tooltip: context.l10n.sessionOptions,
           style: _headerIconButtonStyle(),
           onPressed: () {
             if (controller.isOpen) {
@@ -1888,7 +1888,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               alignment: Alignment.centerRight,
               child: IconButton(
                 key: const Key('session-rail-collapse-button'),
-                tooltip: 'Collapse session details',
+                tooltip: context.l10n.collapseSessionDetails,
                 style: iconButtonStyle,
                 onPressed: _toggleDesktopSessionRailCollapsed,
                 icon: const Icon(Icons.chevron_right_rounded),
@@ -2855,7 +2855,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               controller: _modelCustomController,
               decoration: InputDecoration(
                 isDense: true,
-                hintText: 'Custom model',
+                hintText: l10n.customModel,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.compact,
                   vertical: AppSpacing.compact,
@@ -3040,9 +3040,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Future<List<String>> _pickAttachmentsWithSelector() async {
     final files = await openFiles(
-      acceptedTypeGroups: const [
+      acceptedTypeGroups: [
         XTypeGroup(
-          label: 'files',
+          label: context.l10n.files,
         ),
       ],
     );
@@ -3466,7 +3466,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     return _buildComposerSettingsSectionTile(
       key: const Key('session-provider-settings-button'),
-      label: 'Provider',
+      label: context.l10n.providerSessionLabel,
       section: _ComposerSettingsPanelSection.provider,
     );
   }
@@ -3474,7 +3474,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Widget _buildReasoningSettingsRow() {
     return _buildComposerSettingsSectionTile(
       key: const Key('session-reasoning-effort-button'),
-      label: 'Reasoning',
+      label: context.l10n.reasoningEffortSessionLabel,
       section: _ComposerSettingsPanelSection.reasoning,
     );
   }
@@ -3482,7 +3482,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Widget _buildModelSettingsRow() {
     return _buildComposerSettingsSectionTile(
       key: const Key('session-model-button'),
-      label: 'Model',
+      label: context.l10n.modelSessionLabel,
       section: _ComposerSettingsPanelSection.model,
       onSectionOpened:
           _composerSettingsPanelSection != _ComposerSettingsPanelSection.model
@@ -10082,7 +10082,7 @@ class _SessionConversationPane extends StatelessWidget {
                   elevation: 0,
                   child: IconButton(
                     key: const Key('session-scroll-to-bottom-button'),
-                    tooltip: 'Scroll to latest',
+                    tooltip: context.l10n.scrollToLatest,
                     onPressed: onScrollToBottom,
                     style: IconButton.styleFrom(
                       fixedSize: const Size(44, 44),
@@ -10459,19 +10459,19 @@ class _SessionDesktopRail extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.compact),
         _DesktopSessionRailCard(
-          title: 'Project context',
+          title: context.l10n.projectContext,
           child: project == null
-              ? const Text('Project context is unavailable.')
+              ? Text(context.l10n.projectContextUnavailable)
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _DesktopSessionRailInfoRow(
-                      label: 'Project',
+                      label: context.l10n.project,
                       value: project!.name,
                     ),
                     const SizedBox(height: AppSpacing.compact),
                     _DesktopSessionRailInfoRow(
-                      label: 'Path',
+                      label: context.l10n.path,
                       value: projectPathSummaryBuilder(project!.rootPath),
                       footnote: project!.rootPath,
                       monospace: true,
@@ -10479,7 +10479,7 @@ class _SessionDesktopRail extends StatelessWidget {
                     if (project!.gitBranch?.trim().isNotEmpty == true) ...[
                       const SizedBox(height: AppSpacing.compact),
                       _DesktopSessionRailInfoRow(
-                        label: 'Branch',
+                        label: context.l10n.branch,
                         value: project!.gitBranch!,
                         monospace: true,
                       ),
@@ -10490,7 +10490,7 @@ class _SessionDesktopRail extends StatelessWidget {
         if (gitStatusLabel != null) ...[
           const SizedBox(height: AppSpacing.compact),
           _DesktopSessionRailCard(
-            title: 'Git snapshot',
+            title: context.l10n.gitSnapshot,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -10522,7 +10522,7 @@ class _SessionDesktopRail extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.stack),
                 _DesktopSessionRailInfoRow(
-                  label: 'Summary',
+                  label: context.l10n.summary,
                   value: gitStatusLabel!,
                 ),
               ],

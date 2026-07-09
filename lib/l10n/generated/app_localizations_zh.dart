@@ -590,11 +590,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get callModeSpeechPauseLabel => '停顿判定时长';
 
   @override
-  String get callModeSpeechPauseHelp => '你停止说话后，等待多久自动发送当前这句。';
+  String get callModeSpeechPauseHelp =>
+      '检测到静音后，等待多少毫秒自动发送当前这句。建议范围：600-2400 ms。';
 
   @override
-  String callModeSpeechPauseOption(Object seconds) {
-    return '停顿 $seconds 秒';
+  String callModeSpeechPauseRangeError(int min, int max) {
+    return '请输入 $min-$max ms 之间的数值。';
   }
 
   @override
@@ -1061,9 +1062,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get localBridgeDownloadTasksSection => '下载任务';
 
   @override
-  String get localBridgeNoCompatibleModels => '当前这个类型还没有可用的兼容模型。';
-
-  @override
   String get localBridgeTtsVoiceLabel => 'TTS 音色';
 
   @override
@@ -1177,15 +1175,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speechNoInstalledModels => '还没有已安装模型。';
 
   @override
-  String get speechSelect => '选择';
-
-  @override
-  String get speechChange => '更换';
-
-  @override
-  String get speechSelected => '已选中';
-
-  @override
   String get speechModelKindAsr => 'ASR';
 
   @override
@@ -1204,50 +1193,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speechProfileBatchAsrTitle => '批量 ASR';
 
   @override
-  String get speechProfileBatchAsrHelp =>
-      '用于录音结束后的语音转写。适合更看重最终识别准确度，而不是边说边出字的场景。';
-
-  @override
-  String get speechProfileBatchAsrAction => '设为批量 ASR';
-
-  @override
   String get speechProfileRealtimeAsrTitle => '实时 ASR';
 
   @override
-  String get speechProfileRealtimeAsrHelp =>
-      '用于通话模式和 websocket 实时转写。适合说话过程中就需要持续返回中间结果的场景。';
-
-  @override
-  String get speechProfileRealtimeAsrAction => '设为实时 ASR';
-
-  @override
   String get speechProfileTtsTitle => 'TTS';
-
-  @override
-  String get speechProfileTtsHelp =>
-      '用于本地 Bridge 的语音播报回复。适合希望助手用本地模型直接念出回答的场景。';
-
-  @override
-  String get speechProfileTtsAction => '设为 TTS';
-
-  @override
-  String get speechProfileVadTitle => 'VAD';
-
-  @override
-  String get speechProfileVadHelp => '用于实时模式下检测说话开始和结束。适合希望抢话更灵敏、断句更干净的场景。';
-
-  @override
-  String get speechProfileVadAction => '设为 VAD';
-
-  @override
-  String get speechProfileWakeWordTitle => '唤醒词';
-
-  @override
-  String get speechProfileWakeWordHelp =>
-      '用于 Omni Bridge Local 在接受实时通话语音前先检测唤醒词。';
-
-  @override
-  String get speechProfileWakeWordAction => '设为唤醒词';
 
   @override
   String get speechDownloadStatusQueued => '排队中';
@@ -1291,11 +1240,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String speechModelDownloadFailed(Object modelId, Object error) {
     return '下载模型 $modelId 失败：$error';
-  }
-
-  @override
-  String speechProfileUpdateFailed(Object profile, Object error) {
-    return '更新 $profile 失败：$error';
   }
 
   @override
@@ -1453,6 +1397,561 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fieldRequired => '此项为必填';
+
+  @override
+  String unknownRoute(Object route) {
+    return '未知路由：$route';
+  }
+
+  @override
+  String get recentProjectsTitle => '最近项目';
+
+  @override
+  String get more => '更多';
+
+  @override
+  String get subtitles => '字幕';
+
+  @override
+  String get stop => '停止';
+
+  @override
+  String get hold => '按住';
+
+  @override
+  String get microphone => '麦克风';
+
+  @override
+  String get end => '结束';
+
+  @override
+  String get openNavigation => '打开导航';
+
+  @override
+  String get providerOrder => '供应商顺序';
+
+  @override
+  String get configured => '已配置';
+
+  @override
+  String get enabled => '已启用';
+
+  @override
+  String get defaultLabel => '默认';
+
+  @override
+  String get none => '无';
+
+  @override
+  String get projectDesk => '项目工作台';
+
+  @override
+  String get allSessions => '全部会话';
+
+  @override
+  String get inMotion => '进行中';
+
+  @override
+  String get clearSearch => '清空搜索';
+
+  @override
+  String get projectContext => '项目上下文';
+
+  @override
+  String get rootPath => '根路径';
+
+  @override
+  String get branch => '分支';
+
+  @override
+  String get gitState => 'Git 状态';
+
+  @override
+  String get statusMix => '状态分布';
+
+  @override
+  String get approvals => '审批';
+
+  @override
+  String get notes => '备注';
+
+  @override
+  String get projectNotesNoActiveSessions => '当前还没有活跃会话。新建一个会话后，这个项目就会成为工作台。';
+
+  @override
+  String get projectNotesWaitingApproval => '有会话正在等待审批。建议先处理它们，再开始并行工作。';
+
+  @override
+  String get projectNotesActiveWork => '这个项目有正在进行的工作。保持最近会话简洁，方便快速浏览。';
+
+  @override
+  String get projectNotesQuiet => '当前会话状态较安静。可以在这里重启停滞的线程，或开始一次聚焦执行。';
+
+  @override
+  String get sessionOptions => '会话选项';
+
+  @override
+  String get collapseSessionDetails => '收起会话详情';
+
+  @override
+  String get customModel => '自定义模型';
+
+  @override
+  String get files => '文件';
+
+  @override
+  String get scrollToLatest => '滚动到最新';
+
+  @override
+  String get project => '项目';
+
+  @override
+  String get path => '路径';
+
+  @override
+  String get gitSnapshot => 'Git 快照';
+
+  @override
+  String get summary => '摘要';
+
+  @override
+  String get projectContextUnavailable => '项目上下文不可用。';
+
+  @override
+  String get clientId => '客户端 ID';
+
+  @override
+  String get replyBehaviorSection => '回复行为';
+
+  @override
+  String get currentVersionLabel => '当前版本';
+
+  @override
+  String get updateManifest => '更新清单';
+
+  @override
+  String get atAGlance => '概览';
+
+  @override
+  String get workspaceNote => '工作区备注';
+
+  @override
+  String get threads => '线程';
+
+  @override
+  String get active => '活跃';
+
+  @override
+  String get review => '待审';
+
+  @override
+  String get newLabel => '新建';
+
+  @override
+  String get inFocus => '焦点';
+
+  @override
+  String get upNext => '下一步';
+
+  @override
+  String threadsCount(int count) {
+    return '$count 个线程';
+  }
+
+  @override
+  String get nothingUrgentWaiting => '当前没有紧急等待项。';
+
+  @override
+  String visibleProjectsCount(int count) {
+    return '$count 个可见';
+  }
+
+  @override
+  String get authorizationNeeded => '需要授权';
+
+  @override
+  String connectedBridge(Object address) {
+    return '已连接 • $address';
+  }
+
+  @override
+  String get status => '状态';
+
+  @override
+  String get collapseStatus => '收起状态';
+
+  @override
+  String get pendingApprovals => '待审批';
+
+  @override
+  String waitingActionsNeedReview(int count) {
+    return '$count 个等待操作需要审批';
+  }
+
+  @override
+  String get noApprovalsWaiting => '当前没有等待审批的操作';
+
+  @override
+  String get bridgeStatus => 'Bridge 状态';
+
+  @override
+  String get voiceDevice => '语音 / 设备';
+
+  @override
+  String activeSessionsMicrophoneReady(int count) {
+    return '$count 个活跃会话 • 麦克风就绪';
+  }
+
+  @override
+  String get microphoneReadySystemSpeechAvailable => '麦克风就绪 • 系统语音可用';
+
+  @override
+  String get projectsOverview => '项目概览';
+
+  @override
+  String activeProjectsCount(int count) {
+    return '$count 个活跃项目';
+  }
+
+  @override
+  String get quickActions => '快捷操作';
+
+  @override
+  String get quickActionsBody => '打开项目或调整设置';
+
+  @override
+  String get pluginManifest => '插件清单';
+
+  @override
+  String get importLabel => '导入';
+
+  @override
+  String get systemDefault => '系统默认';
+
+  @override
+  String get systemDefaultCapabilitySubtitle => '使用此能力的内置行为。';
+
+  @override
+  String get chooseSpeechCapabilityProvider => '选择系统默认，或为这个能力选择一个插件。';
+
+  @override
+  String get savingPluginSettings => '正在保存插件设置...';
+
+  @override
+  String get savedToSettings => '已保存到设置。';
+
+  @override
+  String pluginSettingsSaveFailed(Object error) {
+    return '保存插件设置失败。\n\n原始错误：\n$error';
+  }
+
+  @override
+  String get fillRequiredPluginSettings => '使用此插件前，请先填写下方必填设置。';
+
+  @override
+  String get defaultTtsTestText => 'Hello from Omni Code speech settings.';
+
+  @override
+  String get systemTtsTestUnavailable => '当前平台无法测试系统 TTS。请选择一个 TTS 插件后在这里测试播放。';
+
+  @override
+  String get startingPlaybackTest => '正在开始播放测试...';
+
+  @override
+  String get playbackStartedSuccessfully => '播放已成功开始。';
+
+  @override
+  String get testTts => '测试 TTS';
+
+  @override
+  String get systemDefaultTtsCannotBeTested => '当前平台无法测试系统默认 TTS。';
+
+  @override
+  String get ttsTestUsesCurrentConfiguration => 'TTS 测试会使用当前已保存的语音配置。';
+
+  @override
+  String get testText => '测试文本';
+
+  @override
+  String get playing => '播放中...';
+
+  @override
+  String get play => '播放';
+
+  @override
+  String batchAsrAuthOrParameterError(Object error) {
+    return '认证或参数错误。请确认 APPID 和 API Key（Access Token）正确。\n\n原始错误：\n$error';
+  }
+
+  @override
+  String batchAsrAuthenticationFailed(Object error) {
+    return '认证失败。请确认 API Key 正确，并且已为该服务启用。\n\n原始错误：\n$error';
+  }
+
+  @override
+  String batchAsrAccessDenied(Object error) {
+    return '访问被拒绝。请确认 API Key 拥有所选 Resource ID 的权限。\n\n原始错误：\n$error';
+  }
+
+  @override
+  String get microphonePermissionRequired => '需要麦克风权限。';
+
+  @override
+  String get recordingStartedSpeakThenStop => '录音已开始。说一句短句后停止。';
+
+  @override
+  String get transcribingRecordedAudio => '正在转写录音...';
+
+  @override
+  String get transcriptionSucceeded => '转写成功。';
+
+  @override
+  String transcriptionSucceededWithText(Object text) {
+    return '转写成功：$text';
+  }
+
+  @override
+  String get testBatchAsr => '测试批量 ASR';
+
+  @override
+  String get batchAsrTestDescription => '批量 ASR 测试会录制一小段音频，再用当前已保存的语音配置进行转写。';
+
+  @override
+  String get record => '录音';
+
+  @override
+  String get transcribing => '转写中...';
+
+  @override
+  String get stopAndTranscribe => '停止并转写';
+
+  @override
+  String get recordingSpeakThenStop => '录音中...说一句短句后停止。';
+
+  @override
+  String realtimeAsrAuthenticationRejected(Object error) {
+    return '当前服务拒绝了实时语音认证。请检查所选插件凭据，尤其是 API Key 和 Resource ID。\n\n原始错误：\n$error';
+  }
+
+  @override
+  String realtimeAsrAccessRefused(Object error) {
+    return '当前服务拒绝实时语音访问。请确认 API Key 已为所选火山引擎语音资源启用，并且 Resource ID 与购买的时长版或并发版完全一致。\n\n原始错误：\n$error';
+  }
+
+  @override
+  String realtimeAsrStartFailed(Object error) {
+    return '当前服务无法启动实时语音。这通常表示所选插件没有提供有效的实时 websocket 端点。\n\n原始错误：\n$error';
+  }
+
+  @override
+  String get startingRealtimeSpeechTest => '正在开始实时语音测试...';
+
+  @override
+  String get realtimeTranscriptReceived => '已收到实时转写。';
+
+  @override
+  String get realtimeSpeechComingThrough => '实时语音已接入。';
+
+  @override
+  String realtimeSpeechComingThroughWithText(Object text) {
+    return '实时语音已接入：$text';
+  }
+
+  @override
+  String get listeningSpeakShortSentence => '正在聆听。请说一句短句。';
+
+  @override
+  String get testRealtimeAsr => '测试实时 ASR';
+
+  @override
+  String get realtimeAsrSystemTestDescription => '实时 ASR 测试会使用当前已保存的系统语音输入。';
+
+  @override
+  String get realtimeAsrPluginTestDescription => '实时 ASR 测试会使用当前已保存的插件配置。';
+
+  @override
+  String get starting => '启动中...';
+
+  @override
+  String get start => '开始';
+
+  @override
+  String get use => '使用';
+
+  @override
+  String get test => '测试';
+
+  @override
+  String get uninstall => '卸载';
+
+  @override
+  String get install => '安装';
+
+  @override
+  String get getApiKey => '获取 API Key';
+
+  @override
+  String get startService => '启动服务';
+
+  @override
+  String get stopService => '停止服务';
+
+  @override
+  String get sentAsXApiKey => '会作为 X-Api-Key 发送。';
+
+  @override
+  String get targetSpeakerOnly => '仅识别目标说话人';
+
+  @override
+  String get speakerName => '说话人名称';
+
+  @override
+  String get myVoice => '我的声音';
+
+  @override
+  String get speaker => '说话人';
+
+  @override
+  String get enrollSpeakerBeforeFiltering => '启用过滤前，请先在 Bridge 上录入一个说话人。';
+
+  @override
+  String get batchAsrIgnoresUnmatchedSpeaker => '批量 ASR 会忽略与所选声纹不匹配的语音。';
+
+  @override
+  String get voiceprintModelInstalled => '声纹模型已安装';
+
+  @override
+  String get voiceprintModelRequired => '需要声纹模型';
+
+  @override
+  String get savingSpeaker => '正在保存说话人';
+
+  @override
+  String get finishEnrollment => '完成录入';
+
+  @override
+  String get recordEnrollmentSample => '录制录入样本';
+
+  @override
+  String get speechRoutingSystemDefaultIntro =>
+      '语音默认使用系统能力。只有需要自定义服务的能力才需要安装插件。';
+
+  @override
+  String get realtimeAsrRouteSubtitle => '麦克风流式输入、实时转写和打断检测。';
+
+  @override
+  String get realtimeAsrRouteFooter => '适合设备本地听写和打断处理的默认选择。';
+
+  @override
+  String get batchAsrRouteSubtitle => '录音片段、上传和非实时识别。';
+
+  @override
+  String get batchAsrRouteFooter => '适合云端转写供应商或更高准确率的离线任务。';
+
+  @override
+  String get ttsRouteSubtitle => '回复播放、语音输出和通话模式朗读。';
+
+  @override
+  String get ttsRouteFooter => '需要云端音色或本地 TTS 服务时使用插件。';
+
+  @override
+  String get systemRealtimeAsrTestUnavailable =>
+      '当前平台无法测试系统实时 ASR。请选择一个实时 ASR 插件后测试。';
+
+  @override
+  String get systemBatchAsrTestUnavailable =>
+      '系统默认不提供批量 ASR 测试。请选择一个批量 ASR 插件后测试转写。';
+
+  @override
+  String get selectedPluginNotInstalled => '所选插件尚未安装，无法测试。';
+
+  @override
+  String selectedPluginMissingCapabilityConfig(Object capability) {
+    return '所选插件没有提供 $capability 配置，无法测试。';
+  }
+
+  @override
+  String get expectedTtsEndpoint => 'OpenAI 兼容 TTS 端点';
+
+  @override
+  String get expectedTranscriptionEndpoint => 'OpenAI 兼容转写端点';
+
+  @override
+  String get expectedRealtimeWebsocketEndpoint => '实时 websocket 端点';
+
+  @override
+  String currentSelectionMissingExpectedEndpoint(Object expected) {
+    return '当前选择没有提供 $expected，因此无法测试。';
+  }
+
+  @override
+  String currentSelectionMissingRequiredSetting(Object setting) {
+    return '当前选择缺少 $setting，因此无法测试。';
+  }
+
+  @override
+  String get currentSelectionMissingRealtimeWebsocketUrl =>
+      '当前选择缺少实时 websocket URL，因此无法测试。';
+
+  @override
+  String get currentSelectionInvalidRealtimeWebsocketUrl =>
+      '当前选择的实时 websocket URL 无效，因此无法测试。';
+
+  @override
+  String get currentSelectionNonStreamingEndpoint =>
+      '当前选择指向非流式端点，因此无法测试。请先配置实时 websocket URL。';
+
+  @override
+  String get installedAndReady => '已安装，可直接使用。';
+
+  @override
+  String get installBeforeSelectingPlugin => '请先安装，再选择此插件。';
+
+  @override
+  String get fillRequiredPluginSettingsBeforeTesting => '测试前请先填写必填设置。';
+
+  @override
+  String commandSucceeded(Object command) {
+    return '命令执行成功：$command';
+  }
+
+  @override
+  String commandFailed(int exitCode, Object stderr) {
+    return '命令执行失败（$exitCode）：$stderr';
+  }
+
+  @override
+  String get missingKey => '缺少密钥';
+
+  @override
+  String get keySaved => '密钥已保存';
+
+  @override
+  String pluginApiKeyTitle(Object pluginName) {
+    return '$pluginName · API Key';
+  }
+
+  @override
+  String get savePluginSettings => '保存插件设置';
+
+  @override
+  String get saveAndUse => '保存并使用';
+
+  @override
+  String get additionalPluginSettings => '附加插件设置';
+
+  @override
+  String bridgeErrorWithStatus(Object status, Object error) {
+    return 'Bridge 错误（$status）：$error';
+  }
+
+  @override
+  String get noEnrollmentAudioRecorded => '没有录到用于录入的音频。';
+
+  @override
+  String defaultSpeakerName(int index) {
+    return '说话人 $index';
+  }
 
   @override
   String get gitClean => '干净';

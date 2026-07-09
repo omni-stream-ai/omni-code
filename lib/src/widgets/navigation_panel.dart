@@ -145,7 +145,7 @@ class NavigationPanel extends StatelessWidget {
                 children: [
                   if (recentSessions.isNotEmpty) ...[
                     NavigationSectionLabel(
-                      label: 'Recent sessions',
+                      label: context.l10n.recentSessionsTitle,
                       collapsed: collapsed,
                       icon: Icons.schedule_rounded,
                     ),
@@ -186,7 +186,7 @@ class NavigationPanel extends StatelessWidget {
                             )
                           : const SizedBox(height: AppSpacing.stack),
                     NavigationSectionLabel(
-                      label: 'Recent projects',
+                      label: context.l10n.recentProjectsTitle,
                       collapsed: collapsed,
                       icon: Icons.folder_open_outlined,
                     ),
@@ -528,7 +528,7 @@ class _NavigationRecentMoreButton extends StatelessWidget {
         child: IgnorePointer(
           ignoring: !visible,
           child: IconButton(
-            tooltip: 'More',
+            tooltip: context.l10n.more,
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints.tightFor(
               width: 28,

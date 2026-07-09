@@ -350,7 +350,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     shape: const CircleBorder(),
                   ),
                   onPressed: () => Scaffold.of(context).openDrawer(),
-                  tooltip: 'Open navigation',
+                  tooltip: l10n.openNavigation,
                   icon: const Icon(Icons.menu_rounded, size: 18),
                 ),
               ),
@@ -659,7 +659,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           readOnly: true,
           style: formValueTextStyle,
           decoration: InputDecoration(
-            labelText: 'Client ID',
+            labelText: l10n.clientId,
             suffixIcon: IconButton(
               style: IconButton.styleFrom(
                 backgroundColor: Colors.transparent,
@@ -721,8 +721,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         TextField(
           controller: _aiApprovalModelController,
           style: formValueTextStyle,
-          decoration: const InputDecoration(
-            labelText: 'Model',
+          decoration: InputDecoration(
+            labelText: l10n.modelSessionLabel,
             hintText: 'gpt-4.1-mini',
           ),
         ),
@@ -766,7 +766,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ) {
     return _buildSectionCard(
       context,
-      title: 'REPLY BEHAVIOR',
+      title: l10n.replyBehaviorSection.toUpperCase(),
       children: [
         SwitchListTile(
           value: _autoSpeakReplies,
@@ -834,13 +834,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             _buildLabeledRow(
               context,
-              label: 'Current version',
+              label: l10n.currentVersionLabel,
               value: _currentVersion.isEmpty ? '...' : 'v$_currentVersion',
             ),
             const SizedBox(height: AppSpacing.micro),
             _buildLabeledRow(
               context,
-              label: 'Update manifest',
+              label: l10n.updateManifest,
               value: 'GitHub releases',
             ),
             TextField(
@@ -884,13 +884,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _DesktopSettingsRailCard(
-          title: 'At a glance',
+          title: l10n.atAGlance,
           child: Wrap(
             spacing: AppSpacing.compact,
             runSpacing: AppSpacing.compact,
             children: [
               _DesktopSettingsPill(
-                label: 'Language',
+                label: l10n.languageSection,
                 value: switch (_appLanguage) {
                   'zh' => 'Chinese',
                   'en' => 'English',
@@ -898,7 +898,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
               ),
               _DesktopSettingsPill(
-                label: 'Theme',
+                label: l10n.themeSection,
                 value: switch (_themeMode) {
                   AppThemeModeSetting.light => 'Light',
                   AppThemeModeSetting.dark => 'Dark',
@@ -906,11 +906,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
               ),
               _DesktopSettingsPill(
-                label: 'AI approval',
+                label: l10n.aiApprovalSection,
                 value: _aiApprovalEnabled ? 'On' : 'Off',
               ),
               _DesktopSettingsPill(
-                label: 'Speech',
+                label: l10n.speechSection,
                 value: _autoSpeakReplies ? 'Auto' : 'Manual',
               ),
             ],
@@ -918,7 +918,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: AppSpacing.card),
         _DesktopSettingsRailCard(
-          title: 'Workspace note',
+          title: l10n.workspaceNote,
           child: Text(
             'Keep fast actions on the left and slower infrastructure settings on the right. This reduces scanning fatigue on wide screens.',
             style: theme.textTheme.bodySmall?.copyWith(height: 1.5),
@@ -926,7 +926,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: AppSpacing.card),
         _DesktopSettingsRailCard(
-          title: 'Bridge',
+          title: l10n.bridgeSection,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

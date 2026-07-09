@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
+import '../l10n/app_locale.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 
@@ -759,6 +760,7 @@ class _CallControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final micIcon = isBusy
         ? Icons.stop_rounded
         : isStarting
@@ -791,7 +793,7 @@ class _CallControls extends StatelessWidget {
               icon: subtitlesVisible
                   ? Icons.subtitles_rounded
                   : Icons.subtitles_off_rounded,
-              label: 'Subtitles',
+              label: l10n.subtitles,
               tooltip: subtitleToggleTooltip,
               palette: palette,
               isSelected: subtitlesVisible,
@@ -800,8 +802,8 @@ class _CallControls extends StatelessWidget {
             _IconControl(
               buttonKey: const Key('call-mode-primary-button'),
               icon: micIcon,
-              label: isBusy ? 'Stop' : 'Hold',
-              tooltip: isBusy ? 'Stop' : 'Microphone',
+              label: isBusy ? l10n.stop : l10n.hold,
+              tooltip: isBusy ? l10n.stop : l10n.microphone,
               palette: palette,
               isPrimary: true,
               isSelected: isLive,
@@ -812,7 +814,7 @@ class _CallControls extends StatelessWidget {
             _IconControl(
               buttonKey: const Key('call-mode-close-button'),
               icon: Icons.call_end_rounded,
-              label: 'End',
+              label: l10n.end,
               tooltip: closeTooltip,
               palette: palette,
               isDanger: true,

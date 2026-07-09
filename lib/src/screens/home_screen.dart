@@ -2617,19 +2617,19 @@ class _HomeDesktopHero extends StatelessWidget {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           _HomeInlineStat(
-            label: 'Projects',
+            label: context.l10n.projectsTitle,
             value: '$projectCount',
           ),
           _HomeInlineStat(
-            label: 'Threads',
+            label: context.l10n.threads,
             value: '$sessionCount',
           ),
           _HomeInlineStat(
-            label: 'Active',
+            label: context.l10n.active,
             value: '$runningCount',
           ),
           _HomeInlineStat(
-            label: 'Review',
+            label: context.l10n.review,
             value: '$approvalCount',
           ),
         ],
@@ -2744,7 +2744,7 @@ class _HomeProjectRow extends StatelessWidget {
                     ),
               ),
               icon: const Icon(Icons.add_comment_outlined, size: 15),
-              label: const Text('New'),
+              label: Text(context.l10n.newLabel),
             ),
             const SizedBox(width: AppSpacing.textStack),
             Text(
@@ -2822,7 +2822,7 @@ class _HomeFeaturedSessionCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'In focus',
+              context.l10n.inFocus,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: AppColors.mutedFor(brightness),
                     fontWeight: FontWeight.w600,
@@ -2891,13 +2891,15 @@ class _HomeQueuePanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _SectionHeader(
-            title: 'Up next',
-            trailing: _DesktopSectionMeta(label: '${sessions.length} threads'),
+            title: context.l10n.upNext,
+            trailing: _DesktopSectionMeta(
+              label: context.l10n.threadsCount(sessions.length),
+            ),
           ),
           const SizedBox(height: AppSpacing.compact),
           if (sessions.isEmpty)
             Text(
-              'Nothing urgent is waiting right now.',
+              context.l10n.nothingUrgentWaiting,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: AppColors.mutedFor(brightness),
                   ),
@@ -3001,8 +3003,10 @@ class _HomeProjectsPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _SectionHeader(
-            title: 'Recent projects',
-            trailing: _DesktopSectionMeta(label: '${projects.length} visible'),
+            title: context.l10n.recentProjectsTitle,
+            trailing: _DesktopSectionMeta(
+              label: context.l10n.visibleProjectsCount(projects.length),
+            ),
           ),
           const SizedBox(height: AppSpacing.compact),
           for (final indexedProject in projects.indexed) ...[
@@ -3095,10 +3099,10 @@ class _HomeDesktopRail extends StatelessWidget {
   Widget build(BuildContext context) {
     final bridgeSummary =
         switch ((needsAuthorization, isWaitingAuth, authError)) {
-      (true, _, _) => 'Authorization needed',
-      (_, true, _) => 'Waiting for approval',
+      (true, _, _) => context.l10n.authorizationNeeded,
+      (_, true, _) => context.l10n.waitingApprovalTitle,
       (_, _, final Object error) => '$error',
-      _ => 'Connected • $bridgeUrl',
+      _ => context.l10n.connectedBridge(bridgeUrl),
     };
 
     return Container(
@@ -3120,7 +3124,7 @@ class _HomeDesktopRail extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Status',
+                  context.l10n.status,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
@@ -3128,7 +3132,7 @@ class _HomeDesktopRail extends StatelessWidget {
               ),
               IconButton(
                 key: const Key('home-rail-collapse-button'),
-                tooltip: 'Collapse status',
+                tooltip: context.l10n.collapseStatus,
                 style: IconButton.styleFrom(
                   backgroundColor: Colors.transparent,
                   foregroundColor: AppColors.textSoftFor(brightness),
@@ -3144,33 +3148,33 @@ class _HomeDesktopRail extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.stack),
           _HomeRailCard(
-            title: 'Pending approvals',
+            title: context.l10n.pendingApprovals,
             body: approvalCount > 0
-                ? '$approvalCount waiting actions need review'
-                : 'No approvals are waiting right now',
+                ? context.l10n.waitingActionsNeedReview(approvalCount)
+                : context.l10n.noApprovalsWaiting,
             warning: true,
           ),
           const SizedBox(height: AppSpacing.compact),
           _HomeRailCard(
-            title: 'Bridge status',
+            title: context.l10n.bridgeStatus,
             body: bridgeSummary,
           ),
           const SizedBox(height: AppSpacing.compact),
           _HomeRailCard(
-            title: 'Voice / device',
+            title: context.l10n.voiceDevice,
             body: runningCount > 0
-                ? '$runningCount active sessions • microphone ready'
-                : 'Microphone ready • system speech available',
+                ? context.l10n.activeSessionsMicrophoneReady(runningCount)
+                : context.l10n.microphoneReadySystemSpeechAvailable,
           ),
           const SizedBox(height: AppSpacing.compact),
           _HomeRailCard(
-            title: 'Projects overview',
-            body: '$projectsCount active projects',
+            title: context.l10n.projectsOverview,
+            body: context.l10n.activeProjectsCount(projectsCount),
           ),
           const SizedBox(height: AppSpacing.compact),
           _HomeRailCard(
-            title: 'Quick actions',
-            body: 'Open projects or adjust settings',
+            title: context.l10n.quickActions,
+            body: context.l10n.quickActionsBody,
             actions: [
               TextButton(
                 onPressed: onOpenProjects,
