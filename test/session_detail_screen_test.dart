@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -17,6 +18,7 @@ import 'package:omni_code/src/models.dart';
 import 'package:omni_code/src/screens/session_detail_screen.dart';
 import 'package:omni_code/src/services/audio_recording_service.dart';
 import 'package:omni_code/src/services/bridge_realtime_asr_service.dart';
+import 'package:omni_code/src/services/local_vad_service.dart';
 import 'package:omni_code/src/services/speech_input_service.dart';
 import 'package:omni_code/src/services/tts_service.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
@@ -9332,7 +9334,7 @@ void main() {
 
     await tester.ensureVisible(find.byKey(const Key('call-mode-close-button')));
     await tester.tap(find.byKey(const Key('call-mode-close-button')));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('call-mode-screen')), findsNothing);
     expect(find.byKey(const Key('session-voice-input-button')), findsOneWidget);
@@ -10132,6 +10134,60 @@ void main() {
     expect(audioService.startStreamCalls, 1);
   });
 
+  testWidgets('call mode starts local VAD beside bridge realtime ASR',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        asrProvider: AsrProvider.bridgeLocal,
+        callModeAllowInterruptions: true,
+      ),
+    );
+    final vadBackend = _FakeLocalVadBackend();
+    final localVadService = LocalVadService(
+      backendFactory: () async => vadBackend,
+    );
+    final audioService = _FakeAudioRecordingService(hasPermissionResult: true);
+    final bridgeRealtimeService = _FakeBridgeRealtimeAsrService();
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages([
+            _messageJson(
+              id: 'assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'Reply ready',
+              createdAt: '2026-05-09T10:00:01.000',
+            ),
+          ]),
+          audioRecordingService: audioService,
+          bridgeRealtimeAsrService: bridgeRealtimeService,
+          localVadService: localVadService,
+          ttsService: _FakeTtsService(systemAvailable: false),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await _enterCallModeFromHeader(tester);
+    await tester.pump();
+
+    expect(localVadService.isListening, isTrue);
+    vadBackend.detectedValue = true;
+    audioService.addAudio(Uint8List.fromList([0, 0, 0, 64]));
+    await tester.pump();
+
+    expect(vadBackend.acceptedChunks, hasLength(1));
+    expect(find.text('Speech detected'), findsOneWidget);
+
+    await localVadService.cancel();
+
+    expect(localVadService.isListening, isFalse);
+    expect(vadBackend.disposed, isTrue);
+  });
+
   testWidgets('call mode shows preparing state until realtime ASR starts',
       (tester) async {
     appSettingsController.debugReplaceSettings(
@@ -10280,11 +10336,11 @@ void main() {
     expect(find.textContaining('Bridge realtime'), findsNothing);
   });
 
-  testWidgets('cloud speech can be enabled explicitly from settings',
+  testWidgets('bridge local speech can be enabled explicitly from settings',
       (tester) async {
     appSettingsController.debugReplaceSettings(
       AppSettings.defaults().copyWith(
-        asrProvider: AsrProvider.whisper,
+        asrProvider: AsrProvider.bridgeLocal,
         ttsProvider: TtsProvider.bridgeLocal,
       ),
     );
@@ -10761,7 +10817,7 @@ void main() {
     appSettingsController.debugReplaceSettings(
       AppSettings.defaults().copyWith(
         autoSpeakReplies: true,
-        asrProvider: AsrProvider.whisper,
+        asrProvider: AsrProvider.bridgeLocal,
         ttsProvider: TtsProvider.bridgeLocal,
       ),
     );
@@ -11827,6 +11883,40 @@ class _FakeAudioRecordingService extends AudioRecordingService {
   Future<void> cancel() async {
     cancelCalls += 1;
     events?.add('audio-cancel');
+  }
+
+  void addAudio(Uint8List chunk) {
+    _audioStreamController.add(chunk);
+  }
+}
+
+class _FakeLocalVadBackend implements LocalVadBackend {
+  bool detectedValue = false;
+  bool disposed = false;
+  final List<Float32List> acceptedChunks = <Float32List>[];
+  final List<LocalVadSpeechSegment> segments = <LocalVadSpeechSegment>[];
+
+  @override
+  bool get detected => detectedValue;
+
+  @override
+  void acceptWaveform(Float32List samples) {
+    acceptedChunks.add(samples);
+  }
+
+  @override
+  List<LocalVadSpeechSegment> drainSegments() {
+    final drained = List<LocalVadSpeechSegment>.of(segments);
+    segments.clear();
+    return drained;
+  }
+
+  @override
+  void reset() {}
+
+  @override
+  void dispose() {
+    disposed = true;
   }
 }
 

@@ -45,5 +45,6 @@ flutter:
   uses-material-design: true
   assets:
     - assets/call_mode/glowing_orb_water_loop_inner_small.gif
+    - assets/speech/silero_vad.onnx
   shaders:
     - shaders/call_mode_orb.frag

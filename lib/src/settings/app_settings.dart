@@ -733,7 +733,7 @@ class AppSettings {
     if (raw == 'bridge') {
       return AsrProvider.bridgeLocal;
     }
-    if (raw == 'zhipu' || raw == 'tencentCloudStreaming') {
+    if (raw == 'whisper' || raw == 'zhipu' || raw == 'tencentCloudStreaming') {
       return AsrProvider.system;
     }
     for (final item in AsrProvider.values) {

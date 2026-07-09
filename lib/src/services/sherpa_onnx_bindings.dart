@@ -135,6 +135,71 @@ final class SherpaOnnxKeywordResult extends Struct {
   external Pointer<Utf8> json;
 }
 
+final class SherpaOnnxSileroVadModelConfig extends Struct {
+  external Pointer<Utf8> model;
+
+  @Float()
+  external double threshold;
+
+  @Float()
+  external double minSilenceDuration;
+
+  @Float()
+  external double minSpeechDuration;
+
+  @Int32()
+  external int windowSize;
+
+  @Float()
+  external double maxSpeechDuration;
+}
+
+final class SherpaOnnxTenVadModelConfig extends Struct {
+  external Pointer<Utf8> model;
+
+  @Float()
+  external double threshold;
+
+  @Float()
+  external double minSilenceDuration;
+
+  @Float()
+  external double minSpeechDuration;
+
+  @Int32()
+  external int windowSize;
+
+  @Float()
+  external double maxSpeechDuration;
+}
+
+final class SherpaOnnxVadModelConfig extends Struct {
+  external SherpaOnnxSileroVadModelConfig sileroVad;
+
+  @Int32()
+  external int sampleRate;
+
+  @Int32()
+  external int numThreads;
+
+  external Pointer<Utf8> provider;
+
+  @Int32()
+  external int debug;
+
+  external SherpaOnnxTenVadModelConfig tenVad;
+}
+
+final class SherpaOnnxSpeechSegment extends Struct {
+  @Int32()
+  external int start;
+
+  external Pointer<Float> samples;
+
+  @Int32()
+  external int n;
+}
+
 // Function bindings
 typedef CreateKeywordSpotterNative = Pointer<Void> Function(
     Pointer<SherpaOnnxKeywordSpotterConfig> config);
@@ -189,6 +254,47 @@ typedef ResetStreamNative = Void Function(
 typedef ResetStreamDart = void Function(
     Pointer<Void> spotter, Pointer<Void> stream);
 
+typedef CreateVoiceActivityDetectorNative = Pointer<Void> Function(
+    Pointer<SherpaOnnxVadModelConfig> config, Float bufferSizeInSeconds);
+typedef CreateVoiceActivityDetectorDart = Pointer<Void> Function(
+    Pointer<SherpaOnnxVadModelConfig> config, double bufferSizeInSeconds);
+
+typedef DestroyVoiceActivityDetectorNative = Void Function(Pointer<Void> vad);
+typedef DestroyVoiceActivityDetectorDart = void Function(Pointer<Void> vad);
+
+typedef VoiceActivityDetectorAcceptWaveformNative = Void Function(
+    Pointer<Void> vad, Pointer<Float> samples, Int32 n);
+typedef VoiceActivityDetectorAcceptWaveformDart = void Function(
+    Pointer<Void> vad, Pointer<Float> samples, int n);
+
+typedef VoiceActivityDetectorDetectedNative = Int32 Function(Pointer<Void> vad);
+typedef VoiceActivityDetectorDetectedDart = int Function(Pointer<Void> vad);
+
+typedef VoiceActivityDetectorEmptyNative = Int32 Function(Pointer<Void> vad);
+typedef VoiceActivityDetectorEmptyDart = int Function(Pointer<Void> vad);
+
+typedef VoiceActivityDetectorFrontNative = Pointer<SherpaOnnxSpeechSegment>
+    Function(Pointer<Void> vad);
+typedef VoiceActivityDetectorFrontDart = Pointer<SherpaOnnxSpeechSegment>
+    Function(Pointer<Void> vad);
+
+typedef VoiceActivityDetectorPopNative = Void Function(Pointer<Void> vad);
+typedef VoiceActivityDetectorPopDart = void Function(Pointer<Void> vad);
+
+typedef VoiceActivityDetectorResetNative = Void Function(Pointer<Void> vad);
+typedef VoiceActivityDetectorResetDart = void Function(Pointer<Void> vad);
+
+typedef VoiceActivityDetectorClearNative = Void Function(Pointer<Void> vad);
+typedef VoiceActivityDetectorClearDart = void Function(Pointer<Void> vad);
+
+typedef VoiceActivityDetectorFlushNative = Void Function(Pointer<Void> vad);
+typedef VoiceActivityDetectorFlushDart = void Function(Pointer<Void> vad);
+
+typedef DestroySpeechSegmentNative = Void Function(
+    Pointer<SherpaOnnxSpeechSegment> segment);
+typedef DestroySpeechSegmentDart = void Function(
+    Pointer<SherpaOnnxSpeechSegment> segment);
+
 // Bindings
 final createKeywordSpotter =
     _lib.lookupFunction<CreateKeywordSpotterNative, CreateKeywordSpotterDart>(
@@ -237,6 +343,51 @@ final freeKeywordResultJson =
 final resetStream = _lib.lookupFunction<ResetStreamNative, ResetStreamDart>(
     'SherpaOnnxResetKeywordStream');
 
+final createVoiceActivityDetector = _lib.lookupFunction<
+    CreateVoiceActivityDetectorNative,
+    CreateVoiceActivityDetectorDart>('SherpaOnnxCreateVoiceActivityDetector');
+
+final destroyVoiceActivityDetector = _lib.lookupFunction<
+    DestroyVoiceActivityDetectorNative,
+    DestroyVoiceActivityDetectorDart>('SherpaOnnxDestroyVoiceActivityDetector');
+
+final voiceActivityDetectorAcceptWaveform = _lib.lookupFunction<
+        VoiceActivityDetectorAcceptWaveformNative,
+        VoiceActivityDetectorAcceptWaveformDart>(
+    'SherpaOnnxVoiceActivityDetectorAcceptWaveform');
+
+final voiceActivityDetectorDetected = _lib.lookupFunction<
+        VoiceActivityDetectorDetectedNative, VoiceActivityDetectorDetectedDart>(
+    'SherpaOnnxVoiceActivityDetectorDetected');
+
+final voiceActivityDetectorEmpty = _lib.lookupFunction<
+    VoiceActivityDetectorEmptyNative,
+    VoiceActivityDetectorEmptyDart>('SherpaOnnxVoiceActivityDetectorEmpty');
+
+final voiceActivityDetectorFront = _lib.lookupFunction<
+    VoiceActivityDetectorFrontNative,
+    VoiceActivityDetectorFrontDart>('SherpaOnnxVoiceActivityDetectorFront');
+
+final voiceActivityDetectorPop = _lib.lookupFunction<
+    VoiceActivityDetectorPopNative,
+    VoiceActivityDetectorPopDart>('SherpaOnnxVoiceActivityDetectorPop');
+
+final voiceActivityDetectorReset = _lib.lookupFunction<
+    VoiceActivityDetectorResetNative,
+    VoiceActivityDetectorResetDart>('SherpaOnnxVoiceActivityDetectorReset');
+
+final voiceActivityDetectorClear = _lib.lookupFunction<
+    VoiceActivityDetectorClearNative,
+    VoiceActivityDetectorClearDart>('SherpaOnnxVoiceActivityDetectorClear');
+
+final voiceActivityDetectorFlush = _lib.lookupFunction<
+    VoiceActivityDetectorFlushNative,
+    VoiceActivityDetectorFlushDart>('SherpaOnnxVoiceActivityDetectorFlush');
+
+final destroySpeechSegment =
+    _lib.lookupFunction<DestroySpeechSegmentNative, DestroySpeechSegmentDart>(
+        'SherpaOnnxDestroySpeechSegment');
+
 // Helper to create a config
 Pointer<SherpaOnnxKeywordSpotterConfig> createKeywordSpotterConfig({
   required String encoderPath,
@@ -279,6 +430,44 @@ void freeKeywordSpotterConfig(Pointer<SherpaOnnxKeywordSpotterConfig> config) {
   calloc.free(config.ref.modelConfig.provider);
   if (config.ref.keywordsBuf != nullptr) {
     calloc.free(config.ref.keywordsBuf);
+  }
+  calloc.free(config);
+}
+
+Pointer<SherpaOnnxVadModelConfig> createSileroVadModelConfig({
+  required String modelPath,
+  int sampleRate = 16000,
+  int numThreads = 1,
+  String provider = 'cpu',
+  double threshold = 0.25,
+  double minSilenceDuration = 0.5,
+  double minSpeechDuration = 0.25,
+  int windowSize = 512,
+  double maxSpeechDuration = 20.0,
+}) {
+  final config = calloc<SherpaOnnxVadModelConfig>();
+  config.ref.sileroVad.model = modelPath.toNativeUtf8();
+  config.ref.sileroVad.threshold = threshold;
+  config.ref.sileroVad.minSilenceDuration = minSilenceDuration;
+  config.ref.sileroVad.minSpeechDuration = minSpeechDuration;
+  config.ref.sileroVad.windowSize = windowSize;
+  config.ref.sileroVad.maxSpeechDuration = maxSpeechDuration;
+  config.ref.sampleRate = sampleRate;
+  config.ref.numThreads = numThreads;
+  config.ref.provider = provider.toNativeUtf8();
+  config.ref.debug = 0;
+  return config;
+}
+
+void freeVadModelConfig(Pointer<SherpaOnnxVadModelConfig> config) {
+  if (config.ref.sileroVad.model != nullptr) {
+    calloc.free(config.ref.sileroVad.model);
+  }
+  if (config.ref.provider != nullptr) {
+    calloc.free(config.ref.provider);
+  }
+  if (config.ref.tenVad.model != nullptr) {
+    calloc.free(config.ref.tenVad.model);
   }
   calloc.free(config);
 }

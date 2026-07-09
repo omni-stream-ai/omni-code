@@ -84,8 +84,6 @@ class SpeechSettingsScreen extends StatefulWidget {
 }
 
 class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
-  final _whisperApiKeyController = TextEditingController();
-  final _whisperBaseUrlController = TextEditingController();
   final Map<String, TextEditingController> _speechPluginApiKeyControllers =
       <String, TextEditingController>{};
   final Map<String, TextEditingController> _speechPluginSettingControllers =
@@ -140,7 +138,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   SpeakerFilterSettings _speakerFilter =
       const SpeakerFilterSettings(enabled: false);
   String? _speechStatusError;
-  String? _speechPluginError;
   Timer? _speechPollingTimer;
 
   BridgeClient get _client => widget.client ?? bridgeClient;
@@ -262,8 +259,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     unawaited(_speechInputService.cancel());
     unawaited(_ttsService.stop(notifyCancel: false));
     unawaited(_bridgeRealtimeAsrService.cancel());
-    _whisperApiKeyController.dispose();
-    _whisperBaseUrlController.dispose();
     for (final controller in _speechPluginApiKeyControllers.values) {
       controller.dispose();
     }
@@ -333,8 +328,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         })
         .whereType<InstalledSpeechPlugin>()
         .toList(growable: false);
-    _whisperApiKeyController.text = settings.whisperApiKey;
-    _whisperBaseUrlController.text = settings.whisperBaseUrl;
   }
 
   void _onSettingsChanged() {
@@ -571,12 +564,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
           ),
         ],
       ),
-      const SizedBox(height: AppSpacing.stackTight),
-      _buildSectionCard(
-        context,
-        title: 'SPEECH PLUGINS',
-        children: [_buildSpeechPluginContent(context)],
-      ),
       if (_showLocalBridgeModelSettings) ...[
         const SizedBox(height: AppSpacing.stackTight),
         _buildSectionCard(
@@ -607,29 +594,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         title: l10n.callModeSection.toUpperCase(),
         children: [
           _buildCallModeContent(context, formValueTextStyle),
-        ],
-      ),
-      const SizedBox(height: AppSpacing.stackTight),
-      _buildSectionCard(
-        context,
-        title: l10n.whisperApiSection,
-        children: [
-          TextField(
-            controller: _whisperApiKeyController,
-            obscureText: true,
-            style: formValueTextStyle,
-            decoration: InputDecoration(
-              labelText: l10n.apiKey,
-            ),
-          ),
-          TextField(
-            controller: _whisperBaseUrlController,
-            style: formValueTextStyle,
-            decoration: const InputDecoration(
-              labelText: 'Base URL',
-              hintText: 'https://api.openai.com/v1',
-            ),
-          ),
         ],
       ),
     ];
@@ -974,230 +938,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       SpeechPluginCapability.batchAsr =>
         'System default',
     };
-  }
-
-  Widget _buildSpeechPluginContent(BuildContext context) {
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    final installedPluginCount = _installedSpeechPlugins.length;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: AppSpacing.tilePadding,
-          decoration: BoxDecoration(
-            color: AppColors.surfaceDeepFor(brightness),
-            borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
-            border: Border.all(color: AppColors.outlineFor(brightness)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Plugin manifests carry static transport and model metadata. Omni Code stores the local API key plus optional start and stop commands for local services.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface,
-                  height: 1.45,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.compact),
-              Wrap(
-                spacing: AppSpacing.compact,
-                runSpacing: AppSpacing.compact,
-                children: [
-                  _buildPluginStatChip(
-                    context,
-                    icon: Icons.key_outlined,
-                    label: 'Installed',
-                    value: '$installedPluginCount',
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        if (_speechPluginError != null) ...[
-          const SizedBox(height: AppSpacing.stack),
-          _buildSpeechErrorBanner(context, _speechPluginError!),
-        ],
-        const SizedBox(height: AppSpacing.stack),
-        _buildPluginSubsection(
-          context,
-          icon: Icons.admin_panel_settings_outlined,
-          title: 'Installed plugins',
-          description:
-              'Configure API keys and optional start or stop commands for local services.',
-          child: _installedSpeechPlugins.isEmpty
-              ? _buildPluginEmptyState(
-                  context,
-                  icon: Icons.key_off_outlined,
-                  message:
-                      'Install a plugin first to configure its API key locally.',
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: _installedSpeechPlugins
-                      .map(
-                        (plugin) => Padding(
-                          padding: const EdgeInsets.only(
-                            bottom: AppSpacing.compact,
-                          ),
-                          child: _buildSpeechPluginApiKeyCard(context, plugin),
-                        ),
-                      )
-                      .toList(growable: false),
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPluginSubsection(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String description,
-    required Widget child,
-  }) {
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    return Container(
-      padding: AppSpacing.tilePadding,
-      decoration: BoxDecoration(
-        color: AppColors.panelAltFor(brightness),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
-        border: Border.all(color: AppColors.outlineFor(brightness)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceDeepFor(brightness),
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-                ),
-                child: Icon(
-                  icon,
-                  size: 18,
-                  color: AppColors.accentBlueFor(brightness),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.compact),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.micro),
-                    Text(
-                      description,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.mutedSoftFor(brightness),
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.compact),
-          child,
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPluginStatChip(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.compact,
-        vertical: AppSpacing.micro,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.panelAltFor(brightness),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusCapsule),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 14,
-            color: AppColors.accentBlueFor(brightness),
-          ),
-          const SizedBox(width: AppSpacing.micro),
-          Text(
-            '$label ',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurface,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          Text(
-            value,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: AppColors.mutedSoftFor(brightness),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPluginEmptyState(
-    BuildContext context, {
-    required IconData icon,
-    required String message,
-  }) {
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    return Container(
-      padding: AppSpacing.tilePadding,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceDeepFor(brightness),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
-        border: Border.all(color: AppColors.outlineFor(brightness)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            icon,
-            size: 18,
-            color: AppColors.mutedSoftFor(brightness),
-          ),
-          const SizedBox(width: AppSpacing.compact),
-          Expanded(
-            child: Text(
-              message,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.mutedSoftFor(brightness),
-                height: 1.4,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _openCapabilitySelection(
@@ -1593,8 +1333,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         callModeSpeechPauseMillis: _callModeSpeechPauseMillis,
         callModeWakeWordEnabled: false,
         callModeWakeWords: defaultCallModeWakeWords,
-        whisperApiKey: _whisperApiKeyController.text.trim(),
-        whisperBaseUrl: _whisperBaseUrlController.text.trim(),
         selectedSpeechPluginByCapability: _selectedSpeechPluginByCapability,
         speechPluginApiKeysByPluginId: _speechPluginApiKeysByPluginId,
         speechPluginSettingsByPluginId: _speechPluginSettingsByPluginId,
@@ -5179,9 +4917,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   }
 
   Future<void> _refreshSpeechPlugins() async {
-    setState(() {
-      _speechPluginError = null;
-    });
     try {
       final indexes = await _speechPluginRegistry.fetchRepositoryIndexes();
       final installed = await _speechPluginRegistry.listInstalled();
@@ -5201,22 +4936,12 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         _installedSpeechPlugins = installed;
         _pruneSpeechPluginApiKeyControllers();
       });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _speechPluginError = error.toString();
-      });
-    }
+    } catch (_) {}
   }
 
   Future<void> _installSpeechPlugin(
     SpeechPluginRepositoryEntry entry,
   ) async {
-    setState(() {
-      _speechPluginError = null;
-    });
     try {
       await _speechPluginRegistry.installFromRepositoryEntry(entry);
       final installed = await _speechPluginRegistry.listInstalled();
@@ -5226,20 +4951,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       setState(() {
         _installedSpeechPlugins = installed;
       });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _speechPluginError = error.toString();
-      });
-    }
+    } catch (_) {}
   }
 
   Future<void> _uninstallSpeechPlugin(String pluginId) async {
-    setState(() {
-      _speechPluginError = null;
-    });
     try {
       await _speechPluginRegistry.uninstall(pluginId);
       final installed = await _speechPluginRegistry.listInstalled();
@@ -5254,14 +4969,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         _speechPluginApiKeysByPluginId.remove(pluginId);
         _pruneSpeechPluginApiKeyControllers();
       });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _speechPluginError = error.toString();
-      });
-    }
+    } catch (_) {}
   }
 
   Future<void> _downloadSpeechModel(String modelId) async {
@@ -5901,8 +5609,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         callModeSpeechPauseMillis: _callModeSpeechPauseMillis,
         callModeWakeWordEnabled: false,
         callModeWakeWords: defaultCallModeWakeWords,
-        whisperApiKey: _whisperApiKeyController.text.trim(),
-        whisperBaseUrl: _whisperBaseUrlController.text.trim(),
         selectedSpeechPluginByCapability: _selectedSpeechPluginByCapability,
         speechPluginApiKeysByPluginId: _speechPluginApiKeysByPluginId,
         speechPluginSettingsByPluginId: _speechPluginSettingsByPluginId,

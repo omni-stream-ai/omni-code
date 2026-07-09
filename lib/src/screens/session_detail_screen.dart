@@ -28,6 +28,7 @@ import '../services/cloud_speech_service.dart';
 import '../services/notification_service.dart';
 import '../services/audio_recording_service.dart';
 import '../services/bridge_realtime_asr_service.dart';
+import '../services/local_vad_service.dart';
 import '../services/speech_input_service.dart';
 import '../services/tts_service.dart';
 import '../settings/app_settings.dart';
@@ -52,6 +53,7 @@ class SessionDetailScreen extends StatefulWidget {
     this.speechInputService,
     this.ttsService,
     this.bridgeRealtimeAsrService,
+    this.localVadService,
     this.pickImages,
     this.readClipboardText,
     this.readClipboardAttachments,
@@ -67,6 +69,7 @@ class SessionDetailScreen extends StatefulWidget {
   final SpeechInputService? speechInputService;
   final TtsService? ttsService;
   final BridgeRealtimeAsrService? bridgeRealtimeAsrService;
+  final LocalVadService? localVadService;
   final Future<List<String>> Function()? pickImages;
   final Future<String?> Function()? readClipboardText;
   final Future<List<String>> Function()? readClipboardAttachments;
@@ -132,6 +135,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   late final SpeechInputService _speechInputService;
   late final TtsService _ttsService;
   late final BridgeRealtimeAsrService _bridgeRealtimeAsrService;
+  late final LocalVadService _localVadService;
   final Set<String> _autoSpokenAssistantMessageIds = <String>{};
   final Set<String> _notifiedAssistantMessageIds = <String>{};
   final Set<String> _streamingAssistantMessageIds = <String>{};
@@ -183,6 +187,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   DateTime? _callModeRecentTtsExpiresAt;
   bool _systemTranscriptCompleting = false;
   bool _streamingAsrActive = false;
+  bool _localVadActive = false;
   bool _callModeInterrupting = false;
   bool _callModeInterruptedCurrentReply = false;
   Future<void>? _callModeInterruptFuture;
@@ -591,6 +596,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _ttsService = widget.ttsService ?? TtsService();
     _bridgeRealtimeAsrService = widget.bridgeRealtimeAsrService ??
         BridgeRealtimeAsrService(client: _client);
+    _localVadService = widget.localVadService ?? LocalVadService();
     _session = widget.session;
     _voiceComposerMode = appSettingsController.settings.voiceComposerMode;
     _overrideProviderId = _session.providerId;
@@ -643,6 +649,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     unawaited(_audioRecordingService.cancel());
     unawaited(_speechInputService.cancel());
     unawaited(_bridgeRealtimeAsrService.cancel());
+    unawaited(_localVadService.cancel());
     _ttsService.stop();
     _controller.removeListener(_handleComposerTextChanged);
     _messageInputFocusNode.removeListener(_handleComposerFocusChanged);
@@ -8495,6 +8502,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       debugPrint('[call-mode] starting bridge realtime ASR');
       final audioStream =
           (await _audioRecordingService.startStream()).asBroadcastStream();
+      await _startLocalVadForCallMode(audioStream);
       await _bridgeRealtimeAsrService.start(
         audioStream: audioStream,
         config: _bridgeRealtimeAsrConfig(),
@@ -8640,7 +8648,37 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
   }
 
+  Future<void> _startLocalVadForCallMode(Stream<Uint8List> audioStream) async {
+    if (!_callModeEnabled || _localVadActive) {
+      return;
+    }
+    await _localVadService.start(
+      audioStream: audioStream,
+      onSpeechStarted: () {
+        debugPrint('[call-mode] local VAD speech_started');
+        if (!mounted || !_callModeEnabled) {
+          return;
+        }
+        _handleCallModeSpeechActivity();
+        _callModeInterruptFuture = _handleCallModeSpeechStarted();
+      },
+      onSpeechEnded: (_) {
+        debugPrint('[call-mode] local VAD speech_ended');
+      },
+      onError: (error) {
+        debugPrint('[call-mode] local VAD error: $error');
+      },
+    );
+    _localVadActive = _localVadService.isListening;
+  }
+
   Future<void> _cancelBridgeRealtimeAsrServices() async {
+    try {
+      await _localVadService.cancel();
+      _localVadActive = false;
+    } catch (error) {
+      debugPrint('[call-mode] failed to cancel local VAD: $error');
+    }
     try {
       await _bridgeRealtimeAsrService.cancel();
     } catch (error) {

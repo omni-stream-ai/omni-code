@@ -84,9 +84,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bridgeCloudProxy => 'Bridge / 云端中转';
 
   @override
-  String get whisperCompatible => 'Whisper / OpenAI Compatible';
-
-  @override
   String get apiKey => 'API Key';
 
   @override
@@ -1148,18 +1145,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speechVoiceGenderMale => '男声';
 
   @override
-  String get whisperApiSection => 'Whisper API';
-
-  @override
   String get bridgeLocalTtsHelp =>
       '通过 bridge-local 的 /v1/audio/speech 接口和下方选中的 TTS 模型进行本地播报。';
 
   @override
   String get bridgeLocalAsrHelp =>
       '通过 bridge-local 的 /v1/audio/transcriptions 接口处理录音后的语音转写。';
-
-  @override
-  String get whisperApiHelp => '需要填写兼容 Whisper 的 Base URL 和 API Key。';
 
   @override
   String get speechNotSelected => '未选择';

@@ -242,12 +242,6 @@ abstract class AppLocalizations {
   /// **'Bridge / Cloud relay'**
   String get bridgeCloudProxy;
 
-  /// No description provided for @whisperCompatible.
-  ///
-  /// In en, this message translates to:
-  /// **'Whisper / OpenAI Compatible'**
-  String get whisperCompatible;
-
   /// No description provided for @apiKey.
   ///
   /// In en, this message translates to:
@@ -2150,12 +2144,6 @@ abstract class AppLocalizations {
   /// **'Male'**
   String get speechVoiceGenderMale;
 
-  /// No description provided for @whisperApiSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Whisper API'**
-  String get whisperApiSection;
-
   /// No description provided for @bridgeLocalTtsHelp.
   ///
   /// In en, this message translates to:
@@ -2167,12 +2155,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Uses the bridge-local /v1/audio/transcriptions endpoint for recorded voice input.'**
   String get bridgeLocalAsrHelp;
-
-  /// No description provided for @whisperApiHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Requires a Whisper-compatible base URL and API key.'**
-  String get whisperApiHelp;
 
   /// No description provided for @speechNotSelected.
   ///

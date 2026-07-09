@@ -104,6 +104,18 @@ void main() {
     expect(settings.ttsProvider, TtsProvider.system);
   });
 
+  test('legacy whisper asr provider migrates to system', () {
+    final settings = AppSettings.fromJson(<String, dynamic>{
+      'asr_provider': 'whisper',
+      'whisper_api_key': 'legacy-key',
+      'whisper_base_url': 'https://example.com/v1',
+    });
+
+    expect(settings.asrProvider, AsrProvider.system);
+    expect(settings.whisperApiKey, 'legacy-key');
+    expect(settings.whisperBaseUrl, 'https://example.com/v1');
+  });
+
   test('updateTargetVersion defaults to empty string', () {
     expect(AppSettings.defaults().updateTargetVersion, isEmpty);
   });

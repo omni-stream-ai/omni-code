@@ -84,9 +84,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bridgeCloudProxy => 'Bridge / Cloud relay';
 
   @override
-  String get whisperCompatible => 'Whisper / OpenAI Compatible';
-
-  @override
   String get apiKey => 'API Key';
 
   @override
@@ -1195,19 +1192,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get speechVoiceGenderMale => 'Male';
 
   @override
-  String get whisperApiSection => 'Whisper API';
-
-  @override
   String get bridgeLocalTtsHelp =>
       'Uses the bridge-local /v1/audio/speech endpoint and the selected TTS model below.';
 
   @override
   String get bridgeLocalAsrHelp =>
       'Uses the bridge-local /v1/audio/transcriptions endpoint for recorded voice input.';
-
-  @override
-  String get whisperApiHelp =>
-      'Requires a Whisper-compatible base URL and API key.';
 
   @override
   String get speechNotSelected => 'Not selected';
