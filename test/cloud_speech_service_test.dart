@@ -109,10 +109,10 @@ void main() {
               'name': 'Volcengine Ark TTS',
               'vendor': 'volcengine',
               'version': '0.1.0',
-              'capabilities': ['tts'],
+              'capabilities': ['speech.tts'],
               'transport': 'openai_compatible',
               'capability_configs': {
-                'tts': {
+                'speech.tts': {
                   'transport': 'openai_compatible',
                   'base_url': 'https://ark.cn-beijing.volces.com/api/v3',
                   'model': 'doubao-tts-test',
@@ -123,7 +123,7 @@ void main() {
           },
         ],
         selectedSpeechPluginByCapability: const {
-          'tts': 'volcengine-ark-tts',
+          'speech.tts': 'volcengine-ark-tts',
         },
         speechPluginApiKeysByPluginId: const {
           'volcengine-ark-tts': 'test-key',
@@ -168,13 +168,13 @@ void main() {
                   'key': 'model',
                   'label': 'Ark endpoint ID',
                   'required': true,
-                  'capabilities': ['tts'],
+                  'capabilities': ['speech.tts'],
                 },
               ],
-              'capabilities': ['tts'],
+              'capabilities': ['speech.tts'],
               'transport': 'openai_compatible',
               'capability_configs': {
-                'tts': {
+                'speech.tts': {
                   'transport': 'openai_compatible',
                   'base_url': 'https://ark.cn-beijing.volces.com/api/v3',
                   'model': 'placeholder-model',
@@ -185,7 +185,7 @@ void main() {
           },
         ],
         selectedSpeechPluginByCapability: const {
-          'tts': 'volcengine-ark-tts',
+          'speech.tts': 'volcengine-ark-tts',
         },
         speechPluginApiKeysByPluginId: const {
           'volcengine-ark-tts': 'test-key',
@@ -215,7 +215,8 @@ void main() {
   });
 
   test('speech plugin batch asr uses configured model field', () async {
-    final file = File('${Directory.systemTemp.path}/cloud-speech-service-test.wav');
+    final file =
+        File('${Directory.systemTemp.path}/cloud-speech-service-test.wav');
     await file.writeAsBytes([1, 2, 3]);
     addTearDown(() async {
       if (await file.exists()) {
@@ -236,10 +237,10 @@ void main() {
               'name': 'Volcengine Ark Batch ASR',
               'vendor': 'volcengine',
               'version': '0.1.0',
-              'capabilities': ['batch_asr'],
+              'capabilities': ['speech.batch_asr'],
               'transport': 'openai_compatible',
               'capability_configs': {
-                'batch_asr': {
+                'speech.batch_asr': {
                   'transport': 'openai_compatible',
                   'base_url': 'https://ark.cn-beijing.volces.com/api/v3',
                   'model': 'doubao-asr-test',
@@ -250,7 +251,7 @@ void main() {
           },
         ],
         selectedSpeechPluginByCapability: const {
-          'batch_asr': 'volcengine-ark-batch-asr',
+          'speech.batch_asr': 'volcengine-ark-batch-asr',
         },
         speechPluginApiKeysByPluginId: const {
           'volcengine-ark-batch-asr': 'test-key',

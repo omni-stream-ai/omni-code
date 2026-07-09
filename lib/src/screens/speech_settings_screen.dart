@@ -57,8 +57,11 @@ class _CapabilityPluginOption {
 
   bool get isInstalled => installedPlugin != null;
   String get id => installedPlugin?.manifest.id ?? entry!.id;
-  String get name => installedPlugin?.manifest.name ?? entry!.name;
-  String get description => entry?.description ?? '';
+  String name(String localeTag) =>
+      installedPlugin?.manifest.localizedName(localeTag) ??
+      entry!.localizedName(localeTag);
+  String description(String localeTag) =>
+      entry?.localizedDescription(localeTag) ?? '';
   List<SpeechPluginCapability> get capabilities =>
       installedPlugin?.manifest.capabilities ?? entry?.capabilities ?? const [];
 }
@@ -178,6 +181,12 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     };
   }
 
+  String _pluginLocaleTag() {
+    return preferredLocaleTagFromSetting(
+      appSettingsController.settings.appLanguage,
+    );
+  }
+
   bool get _ttsProviderSupportedOnCurrentPlatform {
     return switch (_ttsProvider) {
       TtsProvider.system => _systemTtsSupportedOnPlatform,
@@ -230,7 +239,11 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       if (installCompare != 0) {
         return installCompare;
       }
-      return left.name.toLowerCase().compareTo(right.name.toLowerCase());
+      final localeTag = _pluginLocaleTag();
+      return left
+          .name(localeTag)
+          .toLowerCase()
+          .compareTo(right.name(localeTag).toLowerCase());
     });
     return options;
   }
@@ -930,7 +943,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   String _activeRouteLabel(SpeechPluginCapability capability) {
     final plugin = _selectedInstalledSpeechPlugin(capability);
     if (plugin != null) {
-      return plugin.manifest.name;
+      return plugin.manifest.localizedName(_pluginLocaleTag());
     }
     return switch (capability) {
       SpeechPluginCapability.tts => 'System default',
@@ -1135,7 +1148,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       resolvedConfig,
     );
     if (requiredMissing != null) {
-      return 'The current selection is missing ${requiredMissing.label}, so testing is unavailable.';
+      return 'The current selection is missing ${requiredMissing.localizedLabel(_pluginLocaleTag())}, so testing is unavailable.';
     }
     if (capability == SpeechPluginCapability.realtimeAsr) {
       final websocketUrl = resolvedConfig.websocketUrl?.trim() ?? '';
@@ -2205,6 +2218,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     final theme = Theme.of(context);
     final brightness = theme.brightness;
     final pluginError = _pluginConfigurationErrorsById[option.id];
+    final localeTag = _pluginLocaleTag();
+    final optionDescription = option.description(localeTag);
     return Material(
       color: pluginError != null
           ? AppColors.errorBgFor(brightness)
@@ -2231,15 +2246,15 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        option.name,
+                        option.name(localeTag),
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: AppSpacing.micro),
                       Text(
-                        option.description.isNotEmpty
-                            ? option.description
+                        optionDescription.isNotEmpty
+                            ? optionDescription
                             : option.isInstalled
                                 ? 'Installed and ready to use.'
                                 : 'Install first before selecting this plugin.',
@@ -2585,6 +2600,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         _savingPluginConfigurationIds.contains(plugin.manifest.id);
     final highlightApiKey = _highlightedPluginFieldKeys
         .contains('${plugin.manifest.id}::$_pluginApiKeyFieldKey');
+    final localeTag = _pluginLocaleTag();
+    final pluginName = plugin.manifest.localizedName(localeTag);
+    final pluginDescription = plugin.manifest.localizedDescription(localeTag);
+    final apiKeyLabel = plugin.manifest.localizedApiKeyLabel(localeTag);
 
     void toggleExpanded() {
       setState(() {
@@ -2649,7 +2668,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '${plugin.manifest.name} · API Key',
+                              '$pluginName · API Key',
                               style: theme.textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w800,
                               ),
@@ -2721,9 +2740,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                   _buildCapabilityTestFeedbackBanner(context, saveFeedback),
                   const SizedBox(height: AppSpacing.compact),
                 ],
-                if (plugin.manifest.description.isNotEmpty) ...[
+                if (pluginDescription.isNotEmpty) ...[
                   MarkdownBody(
-                    data: plugin.manifest.description,
+                    data: pluginDescription,
                     styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
                       p: theme.textTheme.bodySmall?.copyWith(
                         height: 1.35,
@@ -2819,9 +2838,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                       controller: controller,
                       obscureText: true,
                       decoration: InputDecoration(
-                        labelText: plugin.manifest.apiKeyLabel.isNotEmpty
-                            ? plugin.manifest.apiKeyLabel
-                            : 'API Key',
+                        labelText:
+                            apiKeyLabel.isNotEmpty ? apiKeyLabel : 'API Key',
                         helperText: 'Sent as X-Api-Key.',
                         errorText: highlightApiKey ? 'Required' : null,
                         filled: true,
@@ -2993,10 +3011,14 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(option.label),
-                                  if (option.help.isNotEmpty)
+                                  Text(
+                                    option.localizedLabel(_pluginLocaleTag()),
+                                  ),
+                                  if (option
+                                      .localizedHelp(_pluginLocaleTag())
+                                      .isNotEmpty)
                                     Text(
-                                      option.help,
+                                      option.localizedHelp(_pluginLocaleTag()),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: Theme.of(context)
@@ -3016,7 +3038,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                       selectedItemBuilder: (context) => field.options
                           .map(
                             (option) => Text(
-                              option.label,
+                              option.localizedLabel(_pluginLocaleTag()),
                               overflow: TextOverflow.ellipsis,
                             ),
                           )
@@ -3044,10 +3066,14 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     SpeechPluginSettingField field, {
     required bool highlighted,
   }) {
+    final localeTag = _pluginLocaleTag();
+    final label = field.localizedLabel(localeTag);
+    final help = field.localizedHelp(localeTag);
+    final placeholder = field.localizedPlaceholder(localeTag);
     return InputDecoration(
-      labelText: field.required ? '${field.label} *' : field.label,
-      hintText: field.placeholder.isNotEmpty ? field.placeholder : null,
-      helperText: field.help.isNotEmpty ? field.help : null,
+      labelText: field.required ? '$label *' : label,
+      hintText: placeholder.isNotEmpty ? placeholder : null,
+      helperText: help.isNotEmpty ? help : null,
       errorText: highlighted ? 'Required' : null,
       filled: true,
       fillColor: highlighted

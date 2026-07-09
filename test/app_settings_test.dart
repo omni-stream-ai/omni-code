@@ -226,9 +226,9 @@ void main() {
     expect(restored.desktopSessionRailCollapsed, isFalse);
   });
 
-  test('speech plugin settings round-trip through json', () {
+  test('plugin settings round-trip through generic json keys', () {
     final settings = AppSettings.defaults().copyWith(
-      speechPluginSources: const [
+      pluginSources: const [
         {
           'id': 'official',
           'name': 'Official',
@@ -242,7 +242,7 @@ void main() {
           'enabled': true,
         },
       ],
-      installedSpeechPlugins: const [
+      installedPlugins: const [
         {
           'installed_at': '2026-01-01T00:00:00.000Z',
           'manifest': {
@@ -250,20 +250,22 @@ void main() {
             'name': 'Plugin 1',
             'vendor': 'Vendor',
             'version': '1.0.0',
-            'capabilities': ['tts'],
+            'capabilities': ['speech.tts'],
             'transport': 'openai_compatible',
             'base_url': 'https://example.com/v1',
           },
         },
       ],
-      selectedSpeechPluginByCapability: const {
-        'tts': 'plugin-1',
-        'batch_asr': 'plugin-2',
+      selectedPluginByCapability: const {
+        'speech.tts': 'plugin-1',
+        'speech.batch_asr': 'plugin-2',
       },
-      speechPluginApiKeysByPluginId: const {
-        'plugin-1': 'secret-1',
+      pluginSecretsByPluginId: const {
+        'plugin-1': {
+          'api_key': 'secret-1',
+        },
       },
-      speechPluginSettingsByPluginId: const {
+      pluginSettingsByPluginId: const {
         'plugin-1': {
           'model': 'ep-123',
           'start_command': 'bun run plugin:start',
@@ -272,26 +274,79 @@ void main() {
       },
     );
 
-    final restored = AppSettings.fromJson(settings.toJson());
+    final json = settings.toJson();
+    final restored = AppSettings.fromJson(json);
 
+    expect(json.containsKey('speech_plugin_sources'), isFalse);
+    expect(json.containsKey('installed_speech_plugins'), isFalse);
+    expect(json.containsKey('selected_speech_plugin_by_capability'), isFalse);
+    expect(json.containsKey('speech_plugin_api_keys_by_plugin_id'), isFalse);
+    expect(json.containsKey('speech_plugin_settings_by_plugin_id'), isFalse);
     expect(
-      restored.speechPluginSources,
+      restored.pluginSources,
       hasLength(2),
     );
-    expect(restored.installedSpeechPlugins, hasLength(1));
-    expect(restored.selectedSpeechPluginByCapability, {
-      'tts': 'plugin-1',
-      'batch_asr': 'plugin-2',
+    expect(restored.installedPlugins, hasLength(1));
+    expect(restored.selectedPluginByCapability, {
+      'speech.tts': 'plugin-1',
+      'speech.batch_asr': 'plugin-2',
     });
-    expect(restored.speechPluginApiKeysByPluginId, {
-      'plugin-1': 'secret-1',
+    expect(restored.pluginSecretsByPluginId, {
+      'plugin-1': {
+        'api_key': 'secret-1',
+      },
     });
-    expect(restored.speechPluginSettingsByPluginId, {
+    expect(restored.pluginSettingsByPluginId, {
       'plugin-1': {
         'model': 'ep-123',
         'start_command': 'bun run plugin:start',
         'stop_command': 'bun run plugin:stop',
       },
+    });
+  });
+
+  test('legacy speech plugin settings migrate to generic plugin settings', () {
+    final restored = AppSettings.fromJson(<String, dynamic>{
+      'speech_plugin_sources': [
+        {
+          'id': 'official',
+          'name': 'Official',
+          'index_url': 'https://example.com/community-plugins.json',
+          'enabled': true,
+        },
+      ],
+      'installed_speech_plugins': [
+        {
+          'installed_at': '2026-01-01T00:00:00.000Z',
+          'manifest': {
+            'id': 'plugin-1',
+            'name': 'Plugin 1',
+            'version': '1.0.0',
+            'capabilities': ['speech.tts'],
+          },
+        },
+      ],
+      'selected_speech_plugin_by_capability': {
+        'tts': 'plugin-1',
+      },
+      'speech_plugin_api_keys_by_plugin_id': {
+        'plugin-1': 'secret-1',
+      },
+      'speech_plugin_settings_by_plugin_id': {
+        'plugin-1': {
+          'model': 'ep-123',
+        },
+      },
+    });
+
+    expect(restored.pluginSources, hasLength(1));
+    expect(restored.installedPlugins, hasLength(1));
+    expect(restored.selectedPluginByCapability, {'speech.tts': 'plugin-1'});
+    expect(restored.pluginSecretsByPluginId, {
+      'plugin-1': {'api_key': 'secret-1'},
+    });
+    expect(restored.pluginSettingsByPluginId, {
+      'plugin-1': {'model': 'ep-123'},
     });
   });
 }

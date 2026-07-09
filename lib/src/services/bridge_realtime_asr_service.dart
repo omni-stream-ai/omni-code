@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 import '../bridge_client.dart';
+import '../l10n/app_locale.dart';
 import '../plugins/speech_plugin_models.dart';
 import '../plugins/speech_plugin_registry.dart';
 import '../settings/app_settings.dart';
@@ -991,7 +992,9 @@ class BridgeRealtimeAsrService {
           resolved.authScheme?.trim() ?? '',
       };
       if (field.required && value.isEmpty) {
-        throw Exception('Plugin setting required: ${field.label}');
+        throw Exception(
+          'Plugin setting required: ${field.localizedLabel(_pluginLocaleTag())}',
+        );
       }
     }
 
@@ -1006,6 +1009,12 @@ class BridgeRealtimeAsrService {
       uri.toString(),
       headers: headers,
     ).then(_IoBridgeRealtimeSocket.new);
+  }
+
+  String _pluginLocaleTag() {
+    return preferredLocaleTagFromSetting(
+      appSettingsController.settings.appLanguage,
+    );
   }
 
   String _uuidV4() {

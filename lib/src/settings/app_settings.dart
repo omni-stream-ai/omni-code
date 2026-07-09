@@ -64,11 +64,11 @@ class AppSettings {
     required this.desktopSessionRailCollapsed,
     required this.voiceComposerMode,
     required this.videoPreviewMuted,
-    required this.speechPluginSources,
-    required this.installedSpeechPlugins,
-    required this.selectedSpeechPluginByCapability,
-    required this.speechPluginApiKeysByPluginId,
-    required this.speechPluginSettingsByPluginId,
+    required this.pluginSources,
+    required this.installedPlugins,
+    required this.selectedPluginByCapability,
+    required this.pluginSecretsByPluginId,
+    required this.pluginSettingsByPluginId,
   });
 
   final String bridgeUrl;
@@ -106,11 +106,28 @@ class AppSettings {
   final bool desktopSessionRailCollapsed;
   final bool voiceComposerMode;
   final bool videoPreviewMuted;
-  final List<Map<String, dynamic>> speechPluginSources;
-  final List<Map<String, dynamic>> installedSpeechPlugins;
-  final Map<String, String?> selectedSpeechPluginByCapability;
-  final Map<String, String> speechPluginApiKeysByPluginId;
-  final Map<String, Map<String, String>> speechPluginSettingsByPluginId;
+  final List<Map<String, dynamic>> pluginSources;
+  final List<Map<String, dynamic>> installedPlugins;
+  final Map<String, String?> selectedPluginByCapability;
+  final Map<String, Map<String, String>> pluginSecretsByPluginId;
+  final Map<String, Map<String, String>> pluginSettingsByPluginId;
+
+  List<Map<String, dynamic>> get speechPluginSources => pluginSources;
+  List<Map<String, dynamic>> get installedSpeechPlugins => installedPlugins;
+  Map<String, String?> get selectedSpeechPluginByCapability =>
+      selectedPluginByCapability;
+  Map<String, Map<String, String>> get speechPluginSettingsByPluginId =>
+      pluginSettingsByPluginId;
+  Map<String, String> get speechPluginApiKeysByPluginId {
+    final result = <String, String>{};
+    for (final entry in pluginSecretsByPluginId.entries) {
+      final apiKey = entry.value['api_key']?.trim() ?? '';
+      if (apiKey.isNotEmpty) {
+        result[entry.key] = apiKey;
+      }
+    }
+    return Map<String, String>.unmodifiable(result);
+  }
 
   factory AppSettings.defaults() {
     const configuredUrl = String.fromEnvironment('ECHO_MATE_BRIDGE_URL');
@@ -157,7 +174,7 @@ class AppSettings {
       desktopSessionRailCollapsed: true,
       voiceComposerMode: false,
       videoPreviewMuted: true,
-      speechPluginSources: const [
+      pluginSources: const [
         {
           'id': defaultSpeechPluginRepositorySourceId,
           'name': defaultSpeechPluginRepositorySourceName,
@@ -165,10 +182,10 @@ class AppSettings {
           'enabled': true,
         },
       ],
-      installedSpeechPlugins: const [],
-      selectedSpeechPluginByCapability: const {},
-      speechPluginApiKeysByPluginId: const {},
-      speechPluginSettingsByPluginId: const {},
+      installedPlugins: const [],
+      selectedPluginByCapability: const {},
+      pluginSecretsByPluginId: const {},
+      pluginSettingsByPluginId: const {},
     );
   }
 
@@ -207,6 +224,11 @@ class AppSettings {
     bool? desktopSessionRailCollapsed,
     bool? voiceComposerMode,
     bool? videoPreviewMuted,
+    List<Map<String, dynamic>>? pluginSources,
+    List<Map<String, dynamic>>? installedPlugins,
+    Map<String, String?>? selectedPluginByCapability,
+    Map<String, Map<String, String>>? pluginSecretsByPluginId,
+    Map<String, Map<String, String>>? pluginSettingsByPluginId,
     List<Map<String, dynamic>>? speechPluginSources,
     List<Map<String, dynamic>>? installedSpeechPlugins,
     Map<String, String?>? selectedSpeechPluginByCapability,
@@ -268,28 +290,33 @@ class AppSettings {
           desktopSessionRailCollapsed ?? this.desktopSessionRailCollapsed,
       voiceComposerMode: voiceComposerMode ?? this.voiceComposerMode,
       videoPreviewMuted: videoPreviewMuted ?? this.videoPreviewMuted,
-      speechPluginSources: List<Map<String, dynamic>>.unmodifiable(
-        speechPluginSources ?? this.speechPluginSources,
+      pluginSources: List<Map<String, dynamic>>.unmodifiable(
+        pluginSources ?? speechPluginSources ?? this.pluginSources,
       ),
-      installedSpeechPlugins: List<Map<String, dynamic>>.unmodifiable(
-        installedSpeechPlugins ?? this.installedSpeechPlugins,
+      installedPlugins: List<Map<String, dynamic>>.unmodifiable(
+        installedPlugins ?? installedSpeechPlugins ?? this.installedPlugins,
       ),
-      selectedSpeechPluginByCapability: Map<String, String?>.unmodifiable(
-        selectedSpeechPluginByCapability ??
-            this.selectedSpeechPluginByCapability,
-      ),
-      speechPluginApiKeysByPluginId: Map<String, String>.unmodifiable(
-        speechPluginApiKeysByPluginId ?? this.speechPluginApiKeysByPluginId,
-      ),
-      speechPluginSettingsByPluginId:
-          Map<String, Map<String, String>>.unmodifiable(
-        (speechPluginSettingsByPluginId ?? this.speechPluginSettingsByPluginId)
-            .map(
-          (key, value) => MapEntry(
-            key,
-            Map<String, String>.unmodifiable(value),
-          ),
+      selectedPluginByCapability: Map<String, String?>.unmodifiable(
+        _normalizeSelectedPluginByCapability(
+          selectedPluginByCapability ??
+              selectedSpeechPluginByCapability ??
+              this.selectedPluginByCapability,
         ),
+      ),
+      pluginSecretsByPluginId: _normalizeNestedStringMap(
+        pluginSecretsByPluginId ??
+            (speechPluginApiKeysByPluginId == null
+                ? null
+                : _mergeApiKeysIntoPluginSecrets(
+                    this.pluginSecretsByPluginId,
+                    speechPluginApiKeysByPluginId,
+                  )) ??
+            this.pluginSecretsByPluginId,
+      ),
+      pluginSettingsByPluginId: _normalizeNestedStringMap(
+        pluginSettingsByPluginId ??
+            speechPluginSettingsByPluginId ??
+            this.pluginSettingsByPluginId,
       ),
     );
   }
@@ -330,11 +357,11 @@ class AppSettings {
       'desktop_session_rail_collapsed': desktopSessionRailCollapsed,
       'voice_composer_mode': voiceComposerMode,
       'video_preview_muted': videoPreviewMuted,
-      'speech_plugin_sources': speechPluginSources,
-      'installed_speech_plugins': installedSpeechPlugins,
-      'selected_speech_plugin_by_capability': selectedSpeechPluginByCapability,
-      'speech_plugin_api_keys_by_plugin_id': speechPluginApiKeysByPluginId,
-      'speech_plugin_settings_by_plugin_id': speechPluginSettingsByPluginId,
+      'plugin_sources': pluginSources,
+      'installed_plugins': installedPlugins,
+      'selected_plugin_by_capability': selectedPluginByCapability,
+      'plugin_secrets_by_plugin_id': pluginSecretsByPluginId,
+      'plugin_settings_by_plugin_id': pluginSettingsByPluginId,
     };
   }
 
@@ -471,35 +498,20 @@ class AppSettings {
         'video_preview_muted',
         defaults.videoPreviewMuted,
       ),
-      speechPluginSources: List<Map<String, dynamic>>.unmodifiable(
-        _readSpeechPluginSources(json, defaults.speechPluginSources),
+      pluginSources: List<Map<String, dynamic>>.unmodifiable(
+        _readPluginSources(json, defaults.pluginSources),
       ),
-      installedSpeechPlugins: List<Map<String, dynamic>>.unmodifiable(
-        _readJsonObjectList(json, 'installed_speech_plugins'),
+      installedPlugins: List<Map<String, dynamic>>.unmodifiable(
+        _readPluginList(json),
       ),
-      selectedSpeechPluginByCapability: Map<String, String?>.unmodifiable(
-        _readNullableStringMap(
-          json,
-          'selected_speech_plugin_by_capability',
-        ),
+      selectedPluginByCapability: Map<String, String?>.unmodifiable(
+        _readSelectedPluginByCapability(json),
       ),
-      speechPluginApiKeysByPluginId: Map<String, String>.unmodifiable(
-        _readStringMap(
-          json,
-          'speech_plugin_api_keys_by_plugin_id',
-        ),
+      pluginSecretsByPluginId: _normalizeNestedStringMap(
+        _readPluginSecretsByPluginId(json),
       ),
-      speechPluginSettingsByPluginId:
-          Map<String, Map<String, String>>.unmodifiable(
-        _readNestedStringMap(
-          json,
-          'speech_plugin_settings_by_plugin_id',
-        ).map(
-          (key, value) => MapEntry(
-            key,
-            Map<String, String>.unmodifiable(value),
-          ),
-        ),
+      pluginSettingsByPluginId: _normalizeNestedStringMap(
+        _readPluginSettingsByPluginId(json),
       ),
     );
   }
@@ -606,13 +618,18 @@ class AppSettings {
         .toList(growable: false);
   }
 
-  static List<Map<String, dynamic>> _readSpeechPluginSources(
+  static List<Map<String, dynamic>> _readPluginSources(
     Map<String, dynamic> json,
     List<Map<String, dynamic>> fallback,
   ) {
-    final sources = _readJsonObjectList(json, 'speech_plugin_sources');
+    final sources = _readJsonObjectList(json, 'plugin_sources');
     if (sources.isNotEmpty) {
       return sources;
+    }
+
+    final legacySources = _readJsonObjectList(json, 'speech_plugin_sources');
+    if (legacySources.isNotEmpty) {
+      return legacySources;
     }
 
     final legacyUrl = _readString(json, 'speech_plugin_repository_url').trim();
@@ -632,6 +649,123 @@ class AppSettings {
     }
 
     return fallback;
+  }
+
+  static List<Map<String, dynamic>> _readPluginList(
+    Map<String, dynamic> json,
+  ) {
+    final plugins = _readJsonObjectList(json, 'installed_plugins');
+    if (plugins.isNotEmpty) {
+      return plugins;
+    }
+    return _readJsonObjectList(json, 'installed_speech_plugins');
+  }
+
+  static Map<String, String?> _readSelectedPluginByCapability(
+    Map<String, dynamic> json,
+  ) {
+    final selected = _readNullableStringMap(
+      json,
+      'selected_plugin_by_capability',
+    );
+    if (selected.isNotEmpty) {
+      return _normalizeSelectedPluginByCapability(selected);
+    }
+    return _normalizeSelectedPluginByCapability(
+      _readNullableStringMap(
+        json,
+        'selected_speech_plugin_by_capability',
+      ),
+    );
+  }
+
+  static Map<String, String?> _normalizeSelectedPluginByCapability(
+    Map<String, String?> selected,
+  ) {
+    final result = <String, String?>{};
+    for (final entry in selected.entries) {
+      final capabilityId = switch (entry.key) {
+        'realtime_asr' => SpeechPluginCapability.realtimeAsr.id,
+        'batch_asr' => SpeechPluginCapability.batchAsr.id,
+        'tts' => SpeechPluginCapability.tts.id,
+        _ => entry.key,
+      };
+      result[capabilityId] = entry.value;
+    }
+    return result;
+  }
+
+  static Map<String, Map<String, String>> _readPluginSecretsByPluginId(
+    Map<String, dynamic> json,
+  ) {
+    final secrets = _readNestedStringMap(json, 'plugin_secrets_by_plugin_id');
+    if (secrets.isNotEmpty) {
+      return secrets;
+    }
+    return _apiKeysToPluginSecrets(
+      _readStringMap(json, 'speech_plugin_api_keys_by_plugin_id'),
+    );
+  }
+
+  static Map<String, Map<String, String>> _readPluginSettingsByPluginId(
+    Map<String, dynamic> json,
+  ) {
+    final settings = _readNestedStringMap(json, 'plugin_settings_by_plugin_id');
+    if (settings.isNotEmpty) {
+      return settings;
+    }
+    return _readNestedStringMap(json, 'speech_plugin_settings_by_plugin_id');
+  }
+
+  static Map<String, Map<String, String>> _apiKeysToPluginSecrets(
+    Map<String, String> apiKeysByPluginId,
+  ) {
+    return {
+      for (final entry in apiKeysByPluginId.entries)
+        if (entry.value.trim().isNotEmpty)
+          entry.key: {'api_key': entry.value.trim()},
+    };
+  }
+
+  static Map<String, Map<String, String>> _mergeApiKeysIntoPluginSecrets(
+    Map<String, Map<String, String>> current,
+    Map<String, String> apiKeysByPluginId,
+  ) {
+    final result = {
+      for (final entry in current.entries)
+        entry.key: Map<String, String>.from(entry.value),
+    };
+    final activePluginIds = apiKeysByPluginId.keys.toSet();
+    for (final pluginId in result.keys.toList()) {
+      if (!activePluginIds.contains(pluginId)) {
+        result.remove(pluginId);
+      }
+    }
+    for (final entry in apiKeysByPluginId.entries) {
+      final apiKey = entry.value.trim();
+      if (apiKey.isEmpty) {
+        result.remove(entry.key);
+      } else {
+        result[entry.key] = {
+          ...(result[entry.key] ?? const <String, String>{}),
+          'api_key': apiKey,
+        };
+      }
+    }
+    return result;
+  }
+
+  static Map<String, Map<String, String>> _normalizeNestedStringMap(
+    Map<String, Map<String, String>> value,
+  ) {
+    return Map<String, Map<String, String>>.unmodifiable(
+      value.map(
+        (key, child) => MapEntry(
+          key,
+          Map<String, String>.unmodifiable(child),
+        ),
+      ),
+    );
   }
 
   static int _readInt(
@@ -861,13 +995,25 @@ class AppSettingsController extends ChangeNotifier {
         if (json['desktop_session_rail_collapsed'] == null) {
           shouldPersist = true;
         }
-        if (json['speech_plugin_sources'] == null) {
+        if (json['plugin_sources'] == null ||
+            json.containsKey('speech_plugin_sources') ||
+            json.containsKey('speech_plugin_repository_url')) {
           shouldPersist = true;
         }
-        if (json['installed_speech_plugins'] == null) {
+        if (json['installed_plugins'] == null ||
+            json.containsKey('installed_speech_plugins')) {
           shouldPersist = true;
         }
-        if (json['selected_speech_plugin_by_capability'] == null) {
+        if (json['selected_plugin_by_capability'] == null ||
+            json.containsKey('selected_speech_plugin_by_capability')) {
+          shouldPersist = true;
+        }
+        if (json['plugin_secrets_by_plugin_id'] == null ||
+            json.containsKey('speech_plugin_api_keys_by_plugin_id')) {
+          shouldPersist = true;
+        }
+        if (json['plugin_settings_by_plugin_id'] == null ||
+            json.containsKey('speech_plugin_settings_by_plugin_id')) {
           shouldPersist = true;
         }
         _settings = AppSettings.fromJson(json);

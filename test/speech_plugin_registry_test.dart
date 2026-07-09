@@ -32,7 +32,7 @@ void main() {
               'repo': 'vendor/tts-1',
               'registration_url': 'https://example.com/signup',
               'manifest_url': 'https://example.com/tts-1.json',
-              'capabilities': ['tts'],
+              'capabilities': ['speech.tts'],
             },
           ]),
           200,
@@ -64,7 +64,7 @@ void main() {
             'vendor': 'Vendor',
             'version': '1.0.0',
             'registration_url': 'https://example.com/signup',
-            'capabilities': ['tts'],
+            'capabilities': ['speech.tts'],
             'transport': 'openai_compatible',
             'base_url': 'https://example.com/v1',
           }),
@@ -97,7 +97,7 @@ void main() {
       'https://example.com/signup',
     );
     expect(
-      appSettingsController.settings.selectedSpeechPluginByCapability['tts'],
+      appSettingsController.settings.selectedPluginByCapability['speech.tts'],
       'tts-1',
     );
   });
@@ -116,7 +116,7 @@ void main() {
             'name': 'Volc TTS',
             'author': 'Vendor',
             'manifest_url': 'file://${directory.path}/volc-tts.json',
-            'capabilities': ['tts'],
+            'capabilities': ['speech.tts'],
           },
         ],
       }),
@@ -157,7 +157,7 @@ void main() {
         'name': 'Volc TTS',
         'vendor': 'Vendor',
         'version': '1.0.0',
-        'capabilities': ['tts'],
+        'capabilities': ['speech.tts'],
         'transport': 'openai_compatible',
       }),
     );
@@ -169,7 +169,7 @@ void main() {
           'name': 'Volc TTS',
           'author': 'Vendor',
           'manifest_path': 'plugins/volc-tts/manifest.json',
-          'capabilities': ['tts'],
+          'capabilities': ['speech.tts'],
         },
       ]),
     );
@@ -192,6 +192,65 @@ void main() {
 
     expect(manifest.id, 'volc-tts');
     expect(manifest.name, 'Volc TTS');
+  });
+
+  test('plugin manifest localizes configuration copy', () {
+    final manifest = SpeechPluginManifest.fromJson({
+      'id': 'doubao-tts',
+      'name': 'Doubao TTS',
+      'version': '1.0.0',
+      'description': 'Configure text-to-speech.',
+      'api_key_label': 'API Key',
+      'localized': {
+        'zh': {
+          'name': '豆包语音合成',
+          'description': '配置语音合成。',
+          'api_key_label': 'API Key',
+        },
+      },
+      'capabilities': ['speech.tts'],
+      'setting_fields': [
+        {
+          'key': 'model',
+          'label': 'Model',
+          'help': 'Choose a model.',
+          'placeholder': 'seed-tts-2.0',
+          'required': true,
+          'localized': {
+            'zh': {
+              'label': '模型',
+              'help': '选择模型。',
+              'placeholder': 'seed-tts-2.0',
+            },
+          },
+          'options': [
+            {
+              'value': 'seed-tts-2.0',
+              'label': 'TTS 2.0',
+              'help': 'Resource ID: seed-tts-2.0',
+              'localized': {
+                'zh': {
+                  'label': '语音合成 2.0',
+                  'help': '资源 ID：seed-tts-2.0',
+                },
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(manifest.localizedName('zh-CN'), '豆包语音合成');
+    expect(manifest.localizedDescription('zh-CN'), '配置语音合成。');
+    expect(manifest.localizedName('en'), 'Doubao TTS');
+    final field = manifest.settingFields.single;
+    expect(field.localizedLabel('zh-CN'), '模型');
+    expect(field.localizedHelp('zh-CN'), '选择模型。');
+    expect(field.localizedLabel('en'), 'Model');
+    final option = field.options.single;
+    expect(option.localizedLabel('zh-CN'), '语音合成 2.0');
+    expect(option.localizedHelp('zh-CN'), '资源 ID：seed-tts-2.0');
+    expect(option.localizedLabel('en'), 'TTS 2.0');
   });
 }
 

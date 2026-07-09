@@ -16,8 +16,8 @@ class SpeechPluginRegistry {
   SpeechPluginRegistry({
     http.Client? httpClient,
     PluginTextLoader? textLoader,
-  }) : _httpClient = httpClient ?? http.Client(),
-       _textLoader = textLoader ?? createPluginTextLoader();
+  })  : _httpClient = httpClient ?? http.Client(),
+        _textLoader = textLoader ?? createPluginTextLoader();
 
   final http.Client _httpClient;
   final PluginTextLoader _textLoader;
@@ -135,21 +135,26 @@ class SpeechPluginRegistry {
     final nextSelections = Map<String, String?>.from(
       appSettingsController.settings.selectedSpeechPluginByCapability,
     );
-    final nextApiKeysByPluginId = Map<String, String>.from(
-      appSettingsController.settings.speechPluginApiKeysByPluginId,
+    final nextSecretsByPluginId = Map<String, Map<String, String>>.from(
+      appSettingsController.settings.pluginSecretsByPluginId,
+    );
+    final nextSettingsByPluginId = Map<String, Map<String, String>>.from(
+      appSettingsController.settings.pluginSettingsByPluginId,
     );
     for (final entry in nextSelections.entries.toList()) {
       if (entry.value == normalizedId) {
         nextSelections.remove(entry.key);
       }
     }
-    nextApiKeysByPluginId.remove(normalizedId);
+    nextSecretsByPluginId.remove(normalizedId);
+    nextSettingsByPluginId.remove(normalizedId);
 
     final next = appSettingsController.settings.copyWith(
-      installedSpeechPlugins:
+      installedPlugins:
           installed.map((item) => item.toJson()).toList(growable: false),
-      selectedSpeechPluginByCapability: nextSelections,
-      speechPluginApiKeysByPluginId: nextApiKeysByPluginId,
+      selectedPluginByCapability: nextSelections,
+      pluginSecretsByPluginId: nextSecretsByPluginId,
+      pluginSettingsByPluginId: nextSettingsByPluginId,
     );
     await appSettingsController.save(next);
   }
@@ -181,7 +186,7 @@ class SpeechPluginRegistry {
     }
     await appSettingsController.save(
       appSettingsController.settings.copyWith(
-        selectedSpeechPluginByCapability: nextSelections,
+        selectedPluginByCapability: nextSelections,
       ),
     );
   }
@@ -196,7 +201,7 @@ class SpeechPluginRegistry {
 
   String? selectedPluginIdForCapability(SpeechPluginCapability capability) {
     return appSettingsController
-        .settings.selectedSpeechPluginByCapability[capability.id];
+        .settings.selectedPluginByCapability[capability.id];
   }
 
   InstalledSpeechPlugin? selectedPluginForCapability(
@@ -214,8 +219,8 @@ class SpeechPluginRegistry {
     if (normalizedId.isEmpty) {
       return '';
     }
-    return appSettingsController.settings.speechPluginApiKeysByPluginId[
-            normalizedId] ??
+    return appSettingsController.settings.pluginSecretsByPluginId[normalizedId]
+            ?['api_key'] ??
         '';
   }
 
@@ -243,24 +248,28 @@ class SpeechPluginRegistry {
       return const {};
     }
     return appSettingsController
-            .settings
-            .speechPluginSettingsByPluginId[normalizedId] ??
+            .settings.pluginSettingsByPluginId[normalizedId] ??
         const {};
   }
 
   List<SpeechPluginSource> configuredSources() {
-    return const [
-      SpeechPluginSource(
-        id: defaultSpeechPluginRepositorySourceId,
-        name: defaultSpeechPluginRepositorySourceName,
-        indexUrl: defaultSpeechPluginRepositoryIndexUrl,
-      ),
-    ];
+    final raw = appSettingsController.settings.pluginSources;
+    return raw
+        .map((item) {
+          try {
+            return SpeechPluginSource.fromJson(item);
+          } catch (_) {
+            return null;
+          }
+        })
+        .whereType<SpeechPluginSource>()
+        .where((item) => item.id.isNotEmpty && item.indexUrl.isNotEmpty)
+        .toList(growable: false);
   }
 
   Future<void> _saveInstalled(List<InstalledSpeechPlugin> installed) async {
     final next = appSettingsController.settings.copyWith(
-      installedSpeechPlugins:
+      installedPlugins:
           installed.map((item) => item.toJson()).toList(growable: false),
     );
     await appSettingsController.save(next);

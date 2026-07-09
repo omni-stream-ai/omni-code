@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import '../bridge_client.dart';
 import '../l10n/current_l10n.dart';
+import '../l10n/app_locale.dart';
 import '../plugins/speech_plugin_models.dart';
 import '../plugins/speech_plugin_registry.dart';
 import '../settings/app_settings.dart';
@@ -196,9 +197,8 @@ class CloudSpeechService {
     final fieldMap = config.requestFieldMap;
     final fileField = fieldMap['file'] ?? 'file';
     final modelField = fieldMap['model'] ?? 'model';
-    final responseTextPath = config.responseTextPath.isNotEmpty
-        ? config.responseTextPath
-        : 'text';
+    final responseTextPath =
+        config.responseTextPath.isNotEmpty ? config.responseTextPath : 'text';
 
     final request = http.MultipartRequest(
       'POST',
@@ -234,7 +234,8 @@ class CloudSpeechService {
     final payload = jsonDecode(body) as Map<String, dynamic>;
     final text = _extractNestedJsonValue(payload, responseTextPath) as String?;
     if (text == null || text.trim().isEmpty) {
-      throw Exception('Speech plugin ASR response missing text at "$responseTextPath".');
+      throw Exception(
+          'Speech plugin ASR response missing text at "$responseTextPath".');
     }
     return text;
   }
@@ -246,7 +247,8 @@ class CloudSpeechService {
   }) async {
     final normalizedBase = _normalizeBaseUrl(config.baseUrl);
     final apiKey = speechPluginRegistry.effectiveApiKeyForManifest(manifest);
-    final settings = speechPluginRegistry.configuredSettingsForPluginId(manifest.id);
+    final settings =
+        speechPluginRegistry.configuredSettingsForPluginId(manifest.id);
     final language = settings['resource_id'] ?? 'zh-CN';
 
     final pathVars = {
@@ -287,8 +289,7 @@ class CloudSpeechService {
         'Submit failed (${submitResp.statusCode}): ${submitResp.body}',
       );
     }
-    final submitPayload =
-        jsonDecode(submitResp.body) as Map<String, dynamic>;
+    final submitPayload = jsonDecode(submitResp.body) as Map<String, dynamic>;
     final taskId = submitPayload['id'] as String?;
     if (taskId == null || taskId.isEmpty) {
       throw Exception('Submit response missing task id: ${submitResp.body}');
@@ -340,7 +341,8 @@ class CloudSpeechService {
         throw Exception('No speech detected in the audio.');
       }
       if (code != 2000) {
-        final message = payload['message'] as String? ?? payload['code'].toString();
+        final message =
+            payload['message'] as String? ?? payload['code'].toString();
         throw Exception('Batch ASR error $code: $message');
       }
     }
@@ -391,10 +393,10 @@ class CloudSpeechService {
 
     if (pollPath.isEmpty) {
       final payload = jsonDecode(submitResp.body) as Map<String, dynamic>;
-      final responseTextPath = config.responseTextPath.isNotEmpty
-          ? config.responseTextPath
-          : 'text';
-      final text = _extractNestedJsonValue(payload, responseTextPath) as String?;
+      final responseTextPath =
+          config.responseTextPath.isNotEmpty ? config.responseTextPath : 'text';
+      final text =
+          _extractNestedJsonValue(payload, responseTextPath) as String?;
       if (text == null || text.trim().isEmpty) {
         throw Exception(
           'Speech plugin response missing text at "$responseTextPath".',
@@ -422,10 +424,9 @@ class CloudSpeechService {
       if (apiKey.isNotEmpty) {
         final authHeader = config.authHeader?.trim() ?? '';
         if (authHeader.isNotEmpty) {
-          final scheme =
-              (config.authScheme?.trim() ?? '').isNotEmpty
-                  ? '${config.authScheme!.trim()} '
-                  : '';
+          final scheme = (config.authScheme?.trim() ?? '').isNotEmpty
+              ? '${config.authScheme!.trim()} '
+              : '';
           pollHeaders[authHeader] = '$scheme$apiKey';
         }
       }
@@ -528,7 +529,8 @@ class CloudSpeechService {
     return resolved;
   }
 
-  void _resolveTtsBodyVars(Map<String, dynamic> body, String text, String speaker) {
+  void _resolveTtsBodyVars(
+      Map<String, dynamic> body, String text, String speaker) {
     for (final entry in body.entries.toList()) {
       final value = entry.value;
       if (value is String) {
@@ -558,10 +560,9 @@ class CloudSpeechService {
     if (apiKey.isNotEmpty) {
       final authHeader = config.authHeader?.trim() ?? '';
       if (authHeader.isNotEmpty) {
-        final scheme =
-            (config.authScheme?.trim() ?? '').isNotEmpty
-                ? '${config.authScheme!.trim()} '
-                : '';
+        final scheme = (config.authScheme?.trim() ?? '').isNotEmpty
+            ? '${config.authScheme!.trim()} '
+            : '';
         headers[authHeader] = '$scheme$apiKey';
       } else {
         headers['Authorization'] = 'Bearer $apiKey';
@@ -600,7 +601,8 @@ class CloudSpeechService {
       manifest: manifest,
       config: config,
     );
-    final settings = speechPluginRegistry.configuredSettingsForPluginId(manifest.id);
+    final settings =
+        speechPluginRegistry.configuredSettingsForPluginId(manifest.id);
     final speaker = settings['resource_id'] ?? '';
     _resolveTtsBodyVars(body, input, speaker);
 
@@ -635,7 +637,8 @@ class CloudSpeechService {
     if (audioChunks.isEmpty) {
       throw Exception('TTS response contains no audio data.');
     }
-    final totalLength = audioChunks.fold<int>(0, (sum, chunk) => sum + chunk.length);
+    final totalLength =
+        audioChunks.fold<int>(0, (sum, chunk) => sum + chunk.length);
     final merged = Uint8List(totalLength);
     var offset = 0;
     for (final chunk in audioChunks) {
@@ -758,7 +761,9 @@ class CloudSpeechService {
           resolved.authScheme?.trim() ?? '',
       };
       if (field.required && value.isEmpty) {
-        throw Exception('Plugin setting required: ${field.label}');
+        throw Exception(
+          'Plugin setting required: ${field.localizedLabel(_pluginLocaleTag())}',
+        );
       }
     }
 
@@ -769,6 +774,12 @@ class CloudSpeechService {
     final trimmed = raw.trim();
     final value = trimmed.isEmpty ? 'https://api.openai.com/v1' : trimmed;
     return value.endsWith('/') ? value.substring(0, value.length - 1) : value;
+  }
+
+  String _pluginLocaleTag() {
+    return preferredLocaleTagFromSetting(
+      appSettingsController.settings.appLanguage,
+    );
   }
 
   String _normalizePluginPath(String? raw, String fallback) {
@@ -844,7 +855,8 @@ class CloudSpeechService {
   }
 
   static String _uuidV4() {
-    final r = List<int>.generate(16, (_) => (_random.nextDouble() * 256).truncate());
+    final r =
+        List<int>.generate(16, (_) => (_random.nextDouble() * 256).truncate());
     r[6] = (r[6] & 0x0f) | 0x40;
     r[8] = (r[8] & 0x3f) | 0x80;
     final hex = r.map((b) => b.toRadixString(16).padLeft(2, '0')).join();

@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 
 enum SpeechPluginCapability {
-  realtimeAsr('realtime_asr'),
-  batchAsr('batch_asr'),
-  tts('tts');
+  realtimeAsr('speech.realtime_asr'),
+  batchAsr('speech.batch_asr'),
+  tts('speech.tts');
 
   const SpeechPluginCapability(this.id);
 
@@ -105,6 +105,7 @@ class SpeechPluginSettingField {
     this.required = false,
     this.options = const [],
     this.capabilities = const [],
+    this.localized = const {},
   });
 
   final SpeechPluginSettingFieldKey key;
@@ -114,6 +115,24 @@ class SpeechPluginSettingField {
   final bool required;
   final List<SpeechPluginSettingFieldOption> options;
   final List<SpeechPluginCapability> capabilities;
+  final Map<String, Map<String, String>> localized;
+
+  String localizedLabel(String localeTag) {
+    return _localizedString(localized, localeTag, 'label', label);
+  }
+
+  String localizedHelp(String localeTag) {
+    return _localizedString(localized, localeTag, 'help', help);
+  }
+
+  String localizedPlaceholder(String localeTag) {
+    return _localizedString(
+      localized,
+      localeTag,
+      'placeholder',
+      placeholder,
+    );
+  }
 
   bool appliesTo(SpeechPluginCapability capability) {
     return capabilities.isEmpty || capabilities.contains(capability);
@@ -130,6 +149,7 @@ class SpeechPluginSettingField {
         'options': options.map((item) => item.toJson()).toList(),
       if (capabilities.isNotEmpty)
         'capabilities': capabilities.map((item) => item.id).toList(),
+      if (localized.isNotEmpty) 'localized': localized,
     };
   }
 
@@ -150,6 +170,7 @@ class SpeechPluginSettingField {
       required: json['required'] as bool? ?? false,
       options: _readSettingFieldOptions(json['options']),
       capabilities: _parseCapabilities(json['capabilities']),
+      localized: _readLocalizedMap(json['localized']),
     );
   }
 }
@@ -160,17 +181,28 @@ class SpeechPluginSettingFieldOption {
     required this.value,
     required this.label,
     this.help = '',
+    this.localized = const {},
   });
 
   final String value;
   final String label;
   final String help;
+  final Map<String, Map<String, String>> localized;
+
+  String localizedLabel(String localeTag) {
+    return _localizedString(localized, localeTag, 'label', label);
+  }
+
+  String localizedHelp(String localeTag) {
+    return _localizedString(localized, localeTag, 'help', help);
+  }
 
   Map<String, dynamic> toJson() {
     return {
       'value': value,
       'label': label,
       if (help.isNotEmpty) 'help': help,
+      if (localized.isNotEmpty) 'localized': localized,
     };
   }
 
@@ -182,6 +214,7 @@ class SpeechPluginSettingFieldOption {
           ? (json['label'] as String).trim()
           : value,
       help: (json['help'] as String? ?? '').trim(),
+      localized: _readLocalizedMap(json['localized']),
     );
   }
 }
@@ -198,6 +231,7 @@ class SpeechPluginRepositoryEntry {
     this.registrationUrl = '',
     this.manifestUrl,
     this.capabilities = const [],
+    this.localized = const {},
     this.version = '',
     this.sourceName = '',
     this.indexUrl = '',
@@ -219,6 +253,20 @@ class SpeechPluginRepositoryEntry {
   final String version;
   final String description;
   final String registrationUrl;
+  final Map<String, Map<String, String>> localized;
+
+  String localizedName(String localeTag) {
+    return _localizedString(localized, localeTag, 'name', name);
+  }
+
+  String localizedDescription(String localeTag) {
+    return _localizedString(
+      localized,
+      localeTag,
+      'description',
+      description,
+    );
+  }
 
   String get resolvedManifestUrl {
     final direct = manifestUrl?.trim() ?? '';
@@ -268,6 +316,7 @@ class SpeechPluginRepositoryEntry {
           (json['manifest_path'] as String? ?? 'manifest.json').trim(),
       manifestUrl: (json['manifest_url'] as String?)?.trim(),
       capabilities: _parseCapabilities(json['capabilities']),
+      localized: _readLocalizedMap(json['localized']),
       version: (json['version'] as String? ?? '').trim(),
       description: (json['description'] as String? ?? '').trim(),
       registrationUrl: (json['registration_url'] as String? ?? '').trim(),
@@ -429,7 +478,8 @@ class SpeechPluginCapabilityConfig {
       if (textFieldMap.isNotEmpty) 'text_field_map': textFieldMap,
       if (requestFieldMap.isNotEmpty) 'request_field_map': requestFieldMap,
       if (responseTextPath.isNotEmpty) 'response_text_path': responseTextPath,
-      if (requestContentType.isNotEmpty) 'request_content_type': requestContentType,
+      if (requestContentType.isNotEmpty)
+        'request_content_type': requestContentType,
       if (requestBody.isNotEmpty) 'request_body': requestBody,
       if (extraHeaders.isNotEmpty) 'extra_headers': extraHeaders,
     };
@@ -450,8 +500,11 @@ class SpeechPluginCapabilityConfig {
       textFieldMap: _readStringMap(json['text_field_map']),
       requestFieldMap: _readStringMap(json['request_field_map']),
       responseTextPath: (json['response_text_path'] as String? ?? '').trim(),
-      requestContentType: (json['request_content_type'] as String? ?? '').trim(),
-      requestBody: json['request_body'] is Map ? Map<String, dynamic>.from(json['request_body'] as Map) : const {},
+      requestContentType:
+          (json['request_content_type'] as String? ?? '').trim(),
+      requestBody: json['request_body'] is Map
+          ? Map<String, dynamic>.from(json['request_body'] as Map)
+          : const {},
       extraHeaders: _readStringMap(json['extra_headers']),
     );
   }
@@ -482,6 +535,7 @@ class SpeechPluginManifest {
     this.apiKeyLabel = '',
     this.requiresApiKey = true,
     this.serviceCommands = const {},
+    this.localized = const {},
   });
 
   final String id;
@@ -507,6 +561,29 @@ class SpeechPluginManifest {
   final String apiKeyLabel;
   final bool requiresApiKey;
   final Map<String, String> serviceCommands;
+  final Map<String, Map<String, String>> localized;
+
+  String localizedName(String localeTag) {
+    return _localizedString(localized, localeTag, 'name', name);
+  }
+
+  String localizedDescription(String localeTag) {
+    return _localizedString(
+      localized,
+      localeTag,
+      'description',
+      description,
+    );
+  }
+
+  String localizedApiKeyLabel(String localeTag) {
+    return _localizedString(
+      localized,
+      localeTag,
+      'api_key_label',
+      apiKeyLabel,
+    );
+  }
 
   bool supports(SpeechPluginCapability capability) {
     return capabilities.contains(capability);
@@ -591,6 +668,7 @@ class SpeechPluginManifest {
       if (apiKeyLabel.isNotEmpty) 'api_key_label': apiKeyLabel,
       if (!requiresApiKey) 'requires_api_key': false,
       if (serviceCommands.isNotEmpty) 'service_commands': serviceCommands,
+      if (localized.isNotEmpty) 'localized': localized,
     };
   }
 
@@ -618,6 +696,7 @@ class SpeechPluginManifest {
       apiKeyLabel: (json['api_key_label'] as String? ?? '').trim(),
       requiresApiKey: json['requires_api_key'] as bool? ?? true,
       serviceCommands: _readStringMap(json['service_commands']),
+      localized: _readLocalizedMap(json['localized']),
     );
   }
 }
@@ -676,6 +755,55 @@ Map<String, String> _readStringMap(Object? raw) {
     for (final entry in raw.entries)
       entry.key.toString(): entry.value?.toString() ?? '',
   });
+}
+
+Map<String, Map<String, String>> _readLocalizedMap(Object? raw) {
+  if (raw is! Map) {
+    return const {};
+  }
+  final result = <String, Map<String, String>>{};
+  for (final entry in raw.entries) {
+    final locale = entry.key.toString().trim().replaceAll('_', '-');
+    if (locale.isEmpty || entry.value is! Map) {
+      continue;
+    }
+    final values = _readStringMap(entry.value);
+    if (values.isNotEmpty) {
+      result[locale] = values;
+    }
+  }
+  return Map<String, Map<String, String>>.unmodifiable(
+    result.map(
+      (key, value) => MapEntry(key, Map<String, String>.unmodifiable(value)),
+    ),
+  );
+}
+
+String _localizedString(
+  Map<String, Map<String, String>> localized,
+  String localeTag,
+  String key,
+  String fallback,
+) {
+  final locale = localeTag.trim().replaceAll('_', '-').toLowerCase();
+  final language = locale.split('-').first;
+  for (final candidate in <String>[locale, language]) {
+    final values = localized[candidate] ?? localized[candidate.toUpperCase()];
+    final value = values?[key]?.trim() ?? '';
+    if (value.isNotEmpty) {
+      return value;
+    }
+  }
+  for (final entry in localized.entries) {
+    final entryLocale = entry.key.trim().replaceAll('_', '-').toLowerCase();
+    if (entryLocale == locale || entryLocale.split('-').first == language) {
+      final value = entry.value[key]?.trim() ?? '';
+      if (value.isNotEmpty) {
+        return value;
+      }
+    }
+  }
+  return fallback;
 }
 
 List<SpeechPluginSettingField> _readSettingFields(Object? raw) {

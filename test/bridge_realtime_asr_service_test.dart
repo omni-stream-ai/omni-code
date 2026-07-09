@@ -188,7 +188,7 @@ void main() {
               'name': 'Realtime 1',
               'vendor': 'Vendor',
               'version': '1.0.0',
-              'capabilities': ['realtime_asr'],
+              'capabilities': ['speech.realtime_asr'],
               'transport': 'bridge_openai_compatible',
               'base_url': 'https://speech.example.com',
               'realtime_asr_path': '/vendor/realtime',
@@ -196,7 +196,7 @@ void main() {
           },
         ],
         selectedSpeechPluginByCapability: const {
-          'realtime_asr': 'realtime-1',
+          'speech.realtime_asr': 'realtime-1',
         },
         speechPluginSettingsByPluginId: const {
           'realtime-1': {
@@ -255,7 +255,7 @@ void main() {
               'name': 'Custom Realtime',
               'vendor': 'Vendor',
               'version': '1.0.0',
-              'capabilities': ['realtime_asr'],
+              'capabilities': ['speech.realtime_asr'],
               'transport': 'realtime_websocket',
               'realtime_websocket_url': 'wss://rt.example.com/listen',
               'realtime_auth_header': 'Authorization',
@@ -273,7 +273,7 @@ void main() {
           },
         ],
         selectedSpeechPluginByCapability: const {
-          'realtime_asr': 'custom-realtime',
+          'speech.realtime_asr': 'custom-realtime',
         },
         speechPluginApiKeysByPluginId: const {
           'custom-realtime': 'secret',
@@ -351,7 +351,7 @@ void main() {
               'name': 'Doubao Realtime ASR',
               'vendor': 'volcengine',
               'version': '0.3.0',
-              'capabilities': ['realtime_asr'],
+              'capabilities': ['speech.realtime_asr'],
               'transport': 'realtime_websocket',
               'realtime_websocket_url':
                   'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async',
@@ -362,7 +362,7 @@ void main() {
           },
         ],
         selectedSpeechPluginByCapability: const {
-          'realtime_asr': 'doubao-realtime-asr',
+          'speech.realtime_asr': 'doubao-realtime-asr',
         },
         speechPluginApiKeysByPluginId: const {
           'doubao-realtime-asr': 'secret-key',

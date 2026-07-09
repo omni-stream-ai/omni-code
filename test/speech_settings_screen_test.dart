@@ -101,13 +101,13 @@ void main() {
                   'key': 'model',
                   'label': 'Ark endpoint ID',
                   'required': true,
-                  'capabilities': ['tts'],
+                  'capabilities': ['speech.tts'],
                 },
               ],
-              'capabilities': ['tts'],
+              'capabilities': ['speech.tts'],
               'transport': 'openai_compatible',
               'capability_configs': {
-                'tts': {
+                'speech.tts': {
                   'transport': 'openai_compatible',
                   'base_url': 'https://ark.cn-beijing.volces.com/api/v3',
                   'model': 'ep-test',
@@ -150,7 +150,7 @@ void main() {
               'vendor': 'local',
               'version': '0.1.0',
               'description': 'already ready',
-              'capabilities': ['tts'],
+              'capabilities': ['speech.tts'],
               'transport': 'openai_compatible',
             },
           },
@@ -183,7 +183,7 @@ void main() {
     appSettingsController.debugReplaceSettings(
       AppSettings.defaults().copyWith(
         selectedSpeechPluginByCapability: const {
-          'tts': 'metadata-tts',
+          'speech.tts': 'metadata-tts',
         },
         installedSpeechPlugins: const [
           {
@@ -193,10 +193,10 @@ void main() {
               'name': 'Metadata TTS',
               'vendor': 'local',
               'version': '0.1.0',
-              'capabilities': ['tts'],
+              'capabilities': ['speech.tts'],
               'transport': 'metadata_only',
               'capability_configs': {
-                'tts': {
+                'speech.tts': {
                   'transport': 'metadata_only',
                 },
               },
@@ -232,7 +232,7 @@ void main() {
               'name': 'Doubao Realtime ASR',
               'vendor': 'volcengine',
               'version': '0.3.0',
-              'capabilities': ['realtime_asr'],
+              'capabilities': ['speech.realtime_asr'],
               'transport': 'realtime_websocket',
               'realtime_websocket_url':
                   'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async',
@@ -241,7 +241,7 @@ void main() {
                   'key': 'resource_id',
                   'label': 'Resource ID',
                   'required': true,
-                  'capabilities': ['realtime_asr'],
+                  'capabilities': ['speech.realtime_asr'],
                   'options': [
                     {
                       'value': 'volc.bigasr.sauc.duration',
@@ -257,7 +257,7 @@ void main() {
                 },
               ],
               'capability_configs': {
-                'realtime_asr': {
+                'speech.realtime_asr': {
                   'transport': 'realtime_websocket',
                   'websocket_url':
                       'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async',
@@ -325,10 +325,10 @@ void main() {
                   'key': 'model',
                   'label': 'Ark endpoint ID',
                   'required': true,
-                  'capabilities': ['tts'],
+                  'capabilities': ['speech.tts'],
                 },
               ],
-              'capabilities': ['tts'],
+              'capabilities': ['speech.tts'],
               'transport': 'openai_compatible',
             },
           },
@@ -410,7 +410,7 @@ SpeechPluginRegistry _testSpeechPluginRegistry() {
             'author': 'Catalog',
             'description': 'Realtime ASR from catalog',
             'manifest_url': 'https://example.com/catalog-realtime-asr.json',
-            'capabilities': ['realtime_asr'],
+            'capabilities': ['speech.realtime_asr'],
           },
         ]),
         200,
