@@ -432,6 +432,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       ),
       agentLabelFor: _client.agentLabelFor,
       bodyBuilder: (context, useDesktop, constraints) {
+        final viewportHeight = MediaQuery.of(context).size.height;
         return SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(
@@ -441,7 +442,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
             AppSpacing.block,
           ),
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            constraints: BoxConstraints(minHeight: viewportHeight),
             child: Align(
               alignment: Alignment.topCenter,
               child: ConstrainedBox(

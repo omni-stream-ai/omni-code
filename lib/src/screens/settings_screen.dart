@@ -223,6 +223,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       agentLabelFor: bridgeClient.agentLabelFor,
       bodyBuilder: (context, useDesktop, constraints) {
+        final viewportHeight = MediaQuery.of(context).size.height;
         return SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(
@@ -232,7 +233,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             AppSpacing.block,
           ),
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            constraints: BoxConstraints(minHeight: viewportHeight),
             child: Align(
               alignment: Alignment.topCenter,
               child: useDesktop

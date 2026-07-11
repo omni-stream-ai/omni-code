@@ -210,6 +210,7 @@ class _ModelProviderScreenState extends State<ModelProviderScreen> {
       ),
       agentLabelFor: bridgeClient.agentLabelFor,
       bodyBuilder: (context, useDesktop, constraints) {
+        final viewportHeight = MediaQuery.of(context).size.height;
         return SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(
@@ -219,7 +220,7 @@ class _ModelProviderScreenState extends State<ModelProviderScreen> {
             AppSpacing.block,
           ),
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            constraints: BoxConstraints(minHeight: viewportHeight),
             child: Align(
               alignment: Alignment.topCenter,
               child: ConstrainedBox(
