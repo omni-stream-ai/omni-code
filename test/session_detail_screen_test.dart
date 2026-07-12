@@ -5760,6 +5760,8 @@ void main() {
     await tester.pump();
 
     final field = tester.widget<TextField>(input);
+    expect(field.keyboardType, TextInputType.multiline);
+    expect(field.textInputAction, TextInputAction.newline);
     expect(sentBodies, isEmpty);
     expect(field.controller!.text, 'Hello');
   },

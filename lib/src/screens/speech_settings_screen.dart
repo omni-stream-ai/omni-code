@@ -2857,24 +2857,11 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                             : null,
                       ),
                       onChanged: (value) {
-                        final trimmed = value.trim();
-                        setState(() {
-                          _clearPluginConfigurationError(plugin.manifest.id);
-                          if (trimmed.isEmpty) {
-                            _speechPluginApiKeysByPluginId.remove(
-                              plugin.manifest.id,
-                            );
-                          } else {
-                            _speechPluginApiKeysByPluginId[plugin.manifest.id] =
-                                trimmed;
-                          }
-                          if (trimmed.isNotEmpty) {
-                            _highlightedPluginFieldKeys.remove(
-                              '${plugin.manifest.id}::$_pluginApiKeyFieldKey',
-                            );
-                          }
-                        });
-                        onStateChanged?.call(() {});
+                        _setPluginApiKeyValue(
+                          plugin.manifest.id,
+                          value,
+                          onStateChanged: onStateChanged,
+                        );
                       },
                     ),
                   ),
@@ -3104,11 +3091,53 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     if (controller != null && controller.text != trimmed) {
       controller.text = trimmed;
     }
-    setState(() {
-      _clearPluginConfigurationError(pluginId);
-      _highlightedPluginFieldKeys.remove('$pluginId::$fieldKey');
-    });
     _updateSpeechPluginLocalSetting(pluginId, fieldKey, trimmed);
+    _refreshPluginConfigurationFieldState(
+      pluginId,
+      fieldKey,
+      hasValue: trimmed.isNotEmpty,
+      onStateChanged: onStateChanged,
+    );
+  }
+
+  void _setPluginApiKeyValue(
+    String pluginId,
+    String value, {
+    StateSetter? onStateChanged,
+  }) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      _speechPluginApiKeysByPluginId.remove(pluginId);
+    } else {
+      _speechPluginApiKeysByPluginId[pluginId] = trimmed;
+    }
+    _refreshPluginConfigurationFieldState(
+      pluginId,
+      _pluginApiKeyFieldKey,
+      hasValue: trimmed.isNotEmpty,
+      onStateChanged: onStateChanged,
+    );
+  }
+
+  void _refreshPluginConfigurationFieldState(
+    String pluginId,
+    String fieldKey, {
+    required bool hasValue,
+    StateSetter? onStateChanged,
+  }) {
+    var needsRebuild = false;
+    if (_pluginConfigurationErrorsById.containsKey(pluginId)) {
+      _clearPluginConfigurationError(pluginId);
+      needsRebuild = true;
+    }
+    if (hasValue &&
+        _highlightedPluginFieldKeys.remove('$pluginId::$fieldKey')) {
+      needsRebuild = true;
+    }
+    if (!needsRebuild) {
+      return;
+    }
+    setState(() {});
     onStateChanged?.call(() {});
   }
 
@@ -4189,14 +4218,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                   isDense: true,
                 ),
                 onChanged: (value) {
-                  setState(() {
-                    _callModeSpeechPauseError =
-                        _callModeSpeechPauseInputError(l10n, value);
-                    final parsed = int.tryParse(value);
-                    if (_callModeSpeechPauseError == null && parsed != null) {
-                      _callModeSpeechPauseMillis = parsed;
-                    }
-                  });
+                  _handleCallModeSpeechPauseChanged(l10n, value);
                 },
               ),
             ),
@@ -4281,17 +4303,44 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     return null;
   }
 
+  void _handleCallModeSpeechPauseChanged(
+    AppLocalizations l10n,
+    String value,
+  ) {
+    final nextError = _callModeSpeechPauseInputError(l10n, value);
+    final parsed = int.tryParse(value);
+    final nextMillis = nextError == null && parsed != null
+        ? parsed
+        : _callModeSpeechPauseMillis;
+    if (nextError == _callModeSpeechPauseError &&
+        nextMillis == _callModeSpeechPauseMillis) {
+      return;
+    }
+    setState(() {
+      _callModeSpeechPauseError = nextError;
+      _callModeSpeechPauseMillis = nextMillis;
+    });
+  }
+
   bool _applyCallModeSpeechPauseInput(AppLocalizations l10n) {
     final text = _callModeSpeechPauseController.text;
     final error = _callModeSpeechPauseInputError(l10n, text);
     if (error != null) {
+      if (_callModeSpeechPauseError == error) {
+        return false;
+      }
       setState(() {
         _callModeSpeechPauseError = error;
       });
       return false;
     }
+    final nextMillis = int.parse(text.trim());
+    if (_callModeSpeechPauseMillis == nextMillis &&
+        _callModeSpeechPauseError == null) {
+      return true;
+    }
     setState(() {
-      _callModeSpeechPauseMillis = int.parse(text.trim());
+      _callModeSpeechPauseMillis = nextMillis;
       _callModeSpeechPauseError = null;
     });
     return true;

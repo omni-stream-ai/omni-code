@@ -36,6 +36,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   static const double _desktopRailWidth = 304;
   static const _pageSize = 7;
   static const _autoRefreshInterval = Duration(seconds: 5);
+  static const _searchDebounceDuration = Duration(milliseconds: 300);
   static const _progressMinHeight = AppSpacing.textStack + AppSpacing.hairline;
 
   late ProjectSummary _project;
@@ -48,12 +49,14 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   String _searchQuery = '';
   int _visibleCount = _pageSize;
   Timer? _autoRefreshTimer;
+  Timer? _searchDebounceTimer;
 
   BridgeClient get _client => widget.client ?? bridgeClient;
 
   @override
   void dispose() {
     _autoRefreshTimer?.cancel();
+    _searchDebounceTimer?.cancel();
     _searchFocusNode.dispose();
     _searchController.dispose();
     super.dispose();
@@ -123,6 +126,28 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         });
       }
     }
+  }
+
+  void _scheduleSearchQueryUpdate(String value) {
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = Timer(_searchDebounceDuration, () {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _searchQuery = value.trim().toLowerCase();
+        _visibleCount = _pageSize;
+      });
+    });
+  }
+
+  void _clearSearchQuery() {
+    _searchDebounceTimer?.cancel();
+    _searchController.clear();
+    setState(() {
+      _searchQuery = '';
+      _visibleCount = _pageSize;
+    });
   }
 
   Future<void> _reloadSessions() {
@@ -585,18 +610,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       focusNode: _searchFocusNode,
       hintText: l10n.searchSessions,
       onChanged: (value) {
-        setState(() {
-          _searchQuery = value.trim().toLowerCase();
-          _visibleCount = _pageSize;
-        });
+        _scheduleSearchQueryUpdate(value);
       },
-      onClear: () {
-        _searchController.clear();
-        setState(() {
-          _searchQuery = '';
-          _visibleCount = _pageSize;
-        });
-      },
+      onClear: _clearSearchQuery,
     );
   }
 

@@ -212,6 +212,86 @@ void main() {
     expect(find.byTooltip('Expand navigation'), findsOneWidget);
   });
 
+  testWidgets('project detail search is debounced', (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/projects/project-1/sessions') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                _sessionJson(
+                  id: 'session-1',
+                  projectId: 'project-1',
+                  title: 'Alpha Session',
+                  updatedAt: '2026-05-05T11:00:00.000',
+                  preview: 'Build alpha',
+                ),
+                _sessionJson(
+                  id: 'session-2',
+                  projectId: 'project-1',
+                  title: 'Beta Session',
+                  updatedAt: '2026-05-05T10:00:00.000',
+                  preview: 'Build beta',
+                ),
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'project-1',
+                  'name': 'Project One',
+                  'root_path': '/tmp/project-1',
+                  'updated_at': '2026-05-05T11:00:00.000',
+                  'session_count': 2,
+                  'last_session_preview': 'Build alpha',
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: ProjectDetailScreen(
+          client: client,
+          project: _project(
+            id: 'project-1',
+            name: 'Project One',
+            updatedAt: DateTime(2026, 5, 5, 11),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('Alpha Session'), findsWidgets);
+    expect(find.text('Beta Session'), findsWidgets);
+
+    await tester.enterText(find.byType(TextField), 'alpha');
+    await tester.pump();
+
+    expect(find.text('Alpha Session'), findsWidgets);
+    expect(find.text('Beta Session'), findsWidgets);
+
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Alpha Session'), findsWidgets);
+    expect(find.text('Beta Session'), findsNothing);
+  });
+
   testWidgets('create session dialog includes provider selection',
       (tester) async {
     final client = BridgeClient(

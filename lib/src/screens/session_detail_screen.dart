@@ -161,6 +161,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _pickingAttachments = false;
   bool _uploadingAttachments = false;
   bool _composerDraftFromVoice = false;
+  bool _composerTextHasSendableDraft = false;
   bool _markNextComposerChangeAsVoice = false;
   final List<_PendingAttachment> _pendingAttachments = <_PendingAttachment>[];
 
@@ -767,11 +768,21 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   void _handleComposerTextChanged() {
+    var needsRebuild = false;
+    final hasSendableText = _controller.text.trim().isNotEmpty;
+    if (hasSendableText != _composerTextHasSendableDraft) {
+      _composerTextHasSendableDraft = hasSendableText;
+      needsRebuild = true;
+    }
     if (_markNextComposerChangeAsVoice) {
       _markNextComposerChangeAsVoice = false;
-      _composerDraftFromVoice = _controller.text.trim().isNotEmpty;
+      if (_composerDraftFromVoice != hasSendableText) {
+        _composerDraftFromVoice = hasSendableText;
+        needsRebuild = true;
+      }
     } else if (_composerDraftFromVoice) {
       _composerDraftFromVoice = false;
+      needsRebuild = true;
     }
     final query = _commandQuery;
     final queryChanged = query != _lastCommandQuery;
@@ -779,6 +790,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (queryChanged) {
       _commandSuggestionsDismissed = false;
       _selectedCommandSuggestionIndex = 0;
+      needsRebuild = true;
     }
     final fileQuery = _fileCompletionQuery;
     final fileQueryChanged = fileQuery != _lastFileCompletionQuery;
@@ -786,6 +798,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (fileQueryChanged) {
       _fileSuggestionsDismissed = false;
       _selectedFileCompletionIndex = 0;
+      needsRebuild = true;
       if (fileQuery == null) {
         _fileCompletionRequestToken += 1;
         _fileCompletions = const [];
@@ -794,8 +807,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         unawaited(_loadFileCompletions(fileQuery));
       }
     }
-    if (mounted) {
+    if (mounted && needsRebuild) {
       setState(() {});
+      _syncComposerSuggestionsOverlayAfterFrame();
+    } else if (mounted && (_showCommandSuggestions || _showFileSuggestions)) {
       _syncComposerSuggestionsOverlayAfterFrame();
     }
   }
@@ -1775,22 +1790,27 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             ),
           ),
         Expanded(
-          child: _buildConversationPane(
-            turns: turns,
-            showHistoryLoader: showHistoryLoader,
+          child: RepaintBoundary(
+            child: _buildConversationPane(
+              turns: turns,
+              showHistoryLoader: showHistoryLoader,
+            ),
           ),
         ),
         if (_pendingApproval != null)
           _buildComposerApprovalCard(approvalCardMaxHeight),
-        KeyedSubtree(
-          key: const ValueKey('session-composer'),
-          child: _buildMessageComposer(
-            canCancelReply: canCancelReply,
-            hasActiveTurn: hasActiveTurn,
-            isSessionBusy: isSessionBusy,
-            isWaitingForBridgeReply: isWaitingForBridgeReply,
-            showVoiceInputUnavailableTooltip: showVoiceInputUnavailableTooltip,
-            systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
+        RepaintBoundary(
+          child: KeyedSubtree(
+            key: const ValueKey('session-composer'),
+            child: _buildMessageComposer(
+              canCancelReply: canCancelReply,
+              hasActiveTurn: hasActiveTurn,
+              isSessionBusy: isSessionBusy,
+              isWaitingForBridgeReply: isWaitingForBridgeReply,
+              showVoiceInputUnavailableTooltip:
+                  showVoiceInputUnavailableTooltip,
+              systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
+            ),
           ),
         ),
       ],
@@ -1830,24 +1850,28 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 showPendingApprovalInline: false,
               ),
               Expanded(
-                child: _buildConversationPane(
-                  turns: turns,
-                  showHistoryLoader: showHistoryLoader,
+                child: RepaintBoundary(
+                  child: _buildConversationPane(
+                    turns: turns,
+                    showHistoryLoader: showHistoryLoader,
+                  ),
                 ),
               ),
               if (_pendingApproval != null)
                 _buildComposerApprovalCard(approvalCardMaxHeight),
-              KeyedSubtree(
-                key: const ValueKey('session-composer'),
-                child: _buildMessageComposer(
-                  canCancelReply: canCancelReply,
-                  hasActiveTurn: hasActiveTurn,
-                  isSessionBusy: isSessionBusy,
-                  isWaitingForBridgeReply: isWaitingForBridgeReply,
-                  showVoiceInputUnavailableTooltip:
-                      showVoiceInputUnavailableTooltip,
-                  systemSpeechUnavailableMessage:
-                      systemSpeechUnavailableMessage,
+              RepaintBoundary(
+                child: KeyedSubtree(
+                  key: const ValueKey('session-composer'),
+                  child: _buildMessageComposer(
+                    canCancelReply: canCancelReply,
+                    hasActiveTurn: hasActiveTurn,
+                    isSessionBusy: isSessionBusy,
+                    isWaitingForBridgeReply: isWaitingForBridgeReply,
+                    showVoiceInputUnavailableTooltip:
+                        showVoiceInputUnavailableTooltip,
+                    systemSpeechUnavailableMessage:
+                        systemSpeechUnavailableMessage,
+                  ),
                 ),
               ),
             ],
@@ -2388,6 +2412,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             enabled: !isSessionBusy,
             maxLines: showExpandedComposer ? 4 : 1,
             minLines: 1,
+            keyboardType: _isMobilePlatform ? TextInputType.multiline : null,
             textInputAction: _isMobilePlatform ? TextInputAction.newline : null,
             decoration: InputDecoration(
               hintText: _isListening
