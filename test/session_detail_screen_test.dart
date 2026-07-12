@@ -2754,6 +2754,262 @@ void main() {
     await events.close();
   });
 
+  testWidgets('message_snapshot replaces non-prefix streamed content',
+      (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'messages': const [],
+                  'has_more': false,
+                  'next_cursor': null,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_delta',
+            'payload': {
+              'message_id': 'assistant-1',
+              'delta': 'Old wording',
+            },
+          },
+          {
+            'type': 'message_snapshot',
+            'payload': {
+              'message_id': 'assistant-1',
+              'content': 'Revised wording',
+            },
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Revised wording'), findsOneWidget);
+    expect(find.text('Old wordingRevised wording'), findsNothing);
+
+    await events.close();
+  });
+
+  testWidgets('provider final reply replaces empty assistant placeholder',
+      (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'messages': const [],
+                  'has_more': false,
+                  'next_cursor': null,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'bridge-user-1',
+              sessionId: 'session-1',
+              role: 'user',
+              content: 'Inspect the workspace',
+              createdAt: '2026-05-09T10:00:00.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'bridge-assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: '',
+              createdAt: '2026-05-09T10:00:01.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'provider-assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'I found two changed files.',
+              createdAt: '2026-05-09T10:00:02.000',
+            ),
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('I found two changed files.'), findsOneWidget);
+    expect(
+        find.byKey(
+            const ValueKey('assistant-message-bubble-bridge-assistant-1')),
+        findsNothing);
+    expect(
+      find.byKey(
+          const ValueKey('assistant-message-bubble-provider-assistant-1')),
+      findsOneWidget,
+    );
+
+    await events.close();
+  });
+
+  testWidgets('provider final reply replaces non-prefix streaming reply',
+      (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'messages': const [],
+                  'has_more': false,
+                  'next_cursor': null,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'bridge-user-1',
+              sessionId: 'session-1',
+              role: 'user',
+              content: 'Inspect the workspace',
+              createdAt: '2026-05-09T10:00:00.000',
+            ),
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'bridge-assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: '',
+              createdAt: '2026-05-09T10:00:01.000',
+            ),
+          },
+          {
+            'type': 'message_snapshot',
+            'payload': {
+              'message_id': 'bridge-assistant-1',
+              'content': 'Looking through the repository now.',
+            },
+          },
+          {
+            'type': 'message_created',
+            'payload': _messageJson(
+              id: 'provider-assistant-1',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'I found two changed files and one untracked directory.',
+              createdAt: '2026-05-09T10:00:02.000',
+            ),
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.text('I found two changed files and one untracked directory.'),
+      findsOneWidget,
+    );
+    expect(find.text('Looking through the repository now.'), findsNothing);
+    expect(
+      find.byKey(
+          const ValueKey('assistant-message-bubble-provider-assistant-1')),
+      findsOneWidget,
+    );
+
+    await events.close();
+  });
+
   testWidgets('stale assistant snapshot does not remove newer streamed text',
       (tester) async {
     final events = StreamController<List<int>>.broadcast();

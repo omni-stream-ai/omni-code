@@ -144,6 +144,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   late SessionSummary _session;
   final List<ChatMessage> _messages = [];
   StreamSubscription<Map<String, dynamic>>? _eventsSubscription;
+  int _eventsSubscriptionGeneration = 0;
+  int _lastSessionEventId = 0;
   Timer? _eventsReconnectTimer;
   late final AnimationController _callModeOrbController;
   Timer? _speechStatusAutoDismissTimer;
@@ -638,6 +640,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     _callModeOrbController.dispose();
     WidgetsBinding.instance.removeObserver(this);
+    _eventsSubscriptionGeneration += 1;
     _eventsSubscription?.cancel();
     _eventsReconnectTimer?.cancel();
     _speechStatusAutoDismissTimer?.cancel();
@@ -699,6 +702,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _messages.clear();
         _localMessageStates.clear();
         _unreadToolCounts.clear();
+        _lastSessionEventId = 0;
         _hasMoreOlderMessages = false;
         _olderMessagesCursor = null;
         _loadingMessages = true;
@@ -6056,20 +6060,47 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_creatingSession) {
       return;
     }
+    final generation = ++_eventsSubscriptionGeneration;
     _eventsSubscription?.cancel();
     _eventsReconnectTimer?.cancel();
-    _eventsSubscription = _client.subscribeToSessionEvents(_session.id).listen(
-          _handleBridgeEvent,
-          onError: (_) => _scheduleEventReconnect(),
-          onDone: _scheduleEventReconnect,
-          cancelOnError: true,
-        );
+    _eventsSubscription = _client
+        .subscribeToSessionEvents(
+      _session.id,
+      lastEventId: _lastSessionEventId == 0 ? null : '$_lastSessionEventId',
+    )
+        .listen(
+      (event) {
+        if (!mounted || generation != _eventsSubscriptionGeneration) {
+          return;
+        }
+        final eventId = int.tryParse(event['id'] as String? ?? '');
+        if (eventId != null) {
+          if (eventId <= _lastSessionEventId) {
+            return;
+          }
+          _lastSessionEventId = eventId;
+        }
+        _handleBridgeEvent(event);
+      },
+      onError: (_) {
+        if (mounted && generation == _eventsSubscriptionGeneration) {
+          _scheduleEventReconnect();
+        }
+      },
+      onDone: () {
+        if (mounted && generation == _eventsSubscriptionGeneration) {
+          _scheduleEventReconnect();
+        }
+      },
+      cancelOnError: true,
+    );
   }
 
   void _scheduleEventReconnect() {
     if (!mounted) {
       return;
     }
+    _eventsSubscriptionGeneration += 1;
     _eventsSubscription?.cancel();
     _eventsReconnectTimer?.cancel();
     _eventsReconnectTimer = Timer(const Duration(seconds: 2), () {
@@ -6160,6 +6191,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     switch (type) {
       case 'sync_required':
+        _lastSessionEventId = 0;
         _scheduleEventReconnect();
         break;
       case 'session_snapshot':
@@ -6254,7 +6286,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               }
             }
           } else {
-            final duplicateIndex = _matchingEquivalentLiveMessageIndex(message);
+            final activeReplyIndex =
+                _matchingActiveAssistantReplyIndex(message);
+            final duplicateIndex = activeReplyIndex >= 0
+                ? activeReplyIndex
+                : _matchingEquivalentLiveMessageIndex(message);
             if (duplicateIndex >= 0) {
               message = _preserveStreamingAssistantContent(
                 existing: _messages[duplicateIndex],
@@ -6285,6 +6321,33 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         }
         if (shouldAutoScroll) {
           _animateToBottom();
+        }
+        break;
+      case 'message_snapshot':
+        final shouldAutoScroll = _isNearBottom();
+        final messageId = payload['message_id'] as String;
+        final content = payload['content'] as String;
+        setState(() {
+          _streamingAssistantMessageIds.add(messageId);
+          final index = _messages.indexWhere((item) => item.id == messageId);
+          if (index >= 0) {
+            _messages[index] = _messages[index].copyWith(content: content);
+          } else {
+            _appendOrUpdateMessage(
+              ChatMessage(
+                id: messageId,
+                sessionId: _session.id,
+                role: MessageRole.assistant,
+                content: content,
+                createdAt: DateTime.now(),
+              ),
+            );
+          }
+        });
+        _maybeAutoSpeakAssistantMessage(messageId);
+        _maybeNotifyAssistantMessage(messageId);
+        if (shouldAutoScroll) {
+          _jumpToBottom();
         }
         break;
       case 'message_delta':
@@ -7701,7 +7764,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _requestComposerFocusAfterFrame(consumeReturnRequest: false);
 
     try {
-      await _client.sendMessage(
+      final result = await _client.sendMessage(
         _session.id,
         content,
         inputMode: inputMode,
@@ -7721,8 +7784,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
       setState(() {
         final draft = _localMessageStates[messageId];
+        final localIndex = _messages.indexWhere(
+          (message) => message.id == messageId,
+        );
+        if (localIndex >= 0) {
+          _messages[localIndex] = result.userMessage;
+          _localMessageStates.remove(messageId);
+        }
         if (draft != null) {
-          _localMessageStates[messageId] = _LocalMessageDraft(
+          _localMessageStates[result.userMessage.id] = _LocalMessageDraft(
             state: _LocalMessageState.submitted,
             inputMode: draft.inputMode,
             createdAt: draft.createdAt,
@@ -7928,6 +7998,31 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       if (secondsApart <= 600) {
         return index;
       }
+    }
+    return -1;
+  }
+
+  int _matchingActiveAssistantReplyIndex(ChatMessage incoming) {
+    if (incoming.role != MessageRole.assistant ||
+        incoming.content.trim().isEmpty ||
+        _session.status != SessionStatus.running) {
+      return -1;
+    }
+    for (var index = _messages.length - 1; index >= 0; index -= 1) {
+      final existing = _messages[index];
+      if (existing.role != MessageRole.assistant ||
+          existing.sessionId != incoming.sessionId ||
+          (!_streamingAssistantMessageIds.contains(existing.id) &&
+              existing.content.trim().isNotEmpty) ||
+          !_messagesShareTurnAnchor(
+            existing,
+            incoming,
+            existingContext: _messages,
+            incomingContext: [..._messages, incoming],
+          )) {
+        continue;
+      }
+      return index;
     }
     return -1;
   }

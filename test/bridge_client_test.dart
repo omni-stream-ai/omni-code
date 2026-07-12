@@ -322,12 +322,14 @@ void main() {
       expect(page.nextCursor, 'message-1');
     });
 
-    test('parses final SSE event without trailing blank line', () async {
+    test('parses SSE event ID and sends Last-Event-ID', () async {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
           expect(request.method, 'GET');
           expect(request.url.path, '/sessions/session-1/events');
+          expect(request.headers['last-event-id'], '42');
           return http.Response(
+            'id: 43\n'
             'event: session\n'
             'data: {"type":"message_delta","payload":{"message_id":"m1","delta":"hello"}}',
             200,
@@ -336,11 +338,13 @@ void main() {
         }),
       );
 
-      final events =
-          await client.subscribeToSessionEvents('session-1').toList();
+      final events = await client
+          .subscribeToSessionEvents('session-1', lastEventId: '42')
+          .toList();
 
       expect(events, hasLength(1));
       expect(events.single['event'], 'session');
+      expect(events.single['id'], '43');
       expect(events.single['data'], {
         'type': 'message_delta',
         'payload': {'message_id': 'm1', 'delta': 'hello'},

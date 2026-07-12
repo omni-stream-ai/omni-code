@@ -1190,32 +1190,40 @@ class BridgeClient {
   }
 
   Stream<Map<String, dynamic>> subscribeToSessionEvents(
-    String sessionId,
-  ) async* {
+    String sessionId, {
+    String? lastEventId,
+  }) async* {
     final request = http.Request(
       'GET',
       Uri.parse('$baseUrl/sessions/$sessionId/events'),
     );
     request.headers['Accept'] = 'text/event-stream';
     request.headers.addAll(_defaultHeaders);
+    if (lastEventId != null && lastEventId.isNotEmpty) {
+      request.headers['Last-Event-ID'] = lastEventId;
+    }
 
     final response = await _httpClient.send(request);
     final lines =
         response.stream.transform(utf8.decoder).transform(const LineSplitter());
 
     String? eventName;
+    String? eventId;
     final dataBuffer = <String>[];
 
     Map<String, dynamic>? flushEvent() {
       if (dataBuffer.isEmpty) {
         eventName = null;
+        eventId = null;
         return null;
       }
       final event = {
         'event': eventName ?? 'message',
+        if (eventId != null) 'id': eventId,
         'data': jsonDecode(dataBuffer.join('\n')) as Map<String, dynamic>,
       };
       eventName = null;
+      eventId = null;
       dataBuffer.clear();
       return event;
     }
@@ -1231,6 +1239,8 @@ class BridgeClient {
 
       if (line.startsWith('event:')) {
         eventName = _readSseFieldValue(line.substring(6));
+      } else if (line.startsWith('id:')) {
+        eventId = _readSseFieldValue(line.substring(3));
       } else if (line.startsWith('data:')) {
         dataBuffer.add(_readSseFieldValue(line.substring(5)));
       }
