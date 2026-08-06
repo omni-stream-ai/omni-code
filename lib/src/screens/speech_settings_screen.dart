@@ -57,6 +57,7 @@ class _CapabilityPluginOption {
   final InstalledSpeechPlugin? installedPlugin;
 
   bool get isInstalled => installedPlugin != null;
+  bool get isBuiltIn => entry?.builtInManifest != null;
   String get id => installedPlugin?.manifest.id ?? entry!.id;
   String name(String localeTag) =>
       installedPlugin?.manifest.localizedName(localeTag) ??
@@ -160,9 +161,9 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
       TargetPlatform.android ||
       TargetPlatform.iOS ||
       TargetPlatform.macOS ||
-      TargetPlatform.windows =>
+      TargetPlatform.windows ||
+      TargetPlatform.linux =>
         true,
-      TargetPlatform.linux => false,
       _ => false,
     };
   }
@@ -207,7 +208,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   List<_CapabilityPluginOption> _pluginOptionsForCapability(
     SpeechPluginCapability capability,
   ) {
-    final repositoryEntries = _speechPluginIndex?.plugins ?? const [];
+    final repositoryEntries = [
+      ...builtInSpeechPluginRepositoryEntries,
+      ...?_speechPluginIndex?.plugins,
+    ];
     final installedById = {
       for (final plugin in _installedSpeechPlugins) plugin.manifest.id: plugin,
     };
@@ -235,6 +239,11 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     }
 
     options.sort((left, right) {
+      final builtInCompare =
+          (right.isBuiltIn ? 1 : 0).compareTo(left.isBuiltIn ? 1 : 0);
+      if (builtInCompare != 0) {
+        return builtInCompare;
+      }
       final installCompare =
           (right.isInstalled ? 1 : 0).compareTo(left.isInstalled ? 1 : 0);
       if (installCompare != 0) {
@@ -337,16 +346,37 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         settings.speechPluginSettingsByPluginId.map(
       (key, value) => MapEntry(key, Map<String, String>.from(value)),
     );
-    _installedSpeechPlugins = settings.installedSpeechPlugins
-        .map((item) {
-          try {
-            return InstalledSpeechPlugin.fromJson(item);
-          } catch (_) {
-            return null;
-          }
-        })
-        .whereType<InstalledSpeechPlugin>()
-        .toList(growable: false);
+    _installedSpeechPlugins = _withBuiltInSpeechPlugins(
+      settings.installedSpeechPlugins
+          .map((item) {
+            try {
+              return InstalledSpeechPlugin.fromJson(item);
+            } catch (_) {
+              return null;
+            }
+          })
+          .whereType<InstalledSpeechPlugin>()
+          .toList(growable: false),
+    );
+  }
+
+  List<InstalledSpeechPlugin> _withBuiltInSpeechPlugins(
+    List<InstalledSpeechPlugin> installed,
+  ) {
+    final byId = {
+      for (final plugin in installed) plugin.manifest.id: plugin,
+    };
+    for (final entry in builtInSpeechPluginRepositoryEntries) {
+      final manifest = entry.builtInManifest;
+      if (manifest == null || byId.containsKey(manifest.id)) {
+        continue;
+      }
+      byId[manifest.id] = InstalledSpeechPlugin(
+        installedAt: DateTime.fromMillisecondsSinceEpoch(0),
+        manifest: manifest,
+      );
+    }
+    return byId.values.toList(growable: false);
   }
 
   void _onSettingsChanged() {
@@ -989,7 +1019,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
           return;
         }
         setState(() {
-          _installedSpeechPlugins = installed;
+          _installedSpeechPlugins = _withBuiltInSpeechPlugins(installed);
           _pruneSpeechPluginApiKeyControllers();
         });
         routeSetState(() {});
@@ -1125,15 +1155,17 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     final resolvedConfig = _capabilityTestConfigWithOverrides(
       plugin.manifest,
       config,
+      capability,
     );
     final supported = switch (capability) {
       SpeechPluginCapability.tts ||
       SpeechPluginCapability.batchAsr =>
-        resolvedConfig.transport == SpeechPluginTransport.openAiCompatible ||
-            resolvedConfig.transport ==
+        resolvedConfig.resolvedTransport ==
+                SpeechPluginTransport.openAiCompatible ||
+            resolvedConfig.resolvedTransport ==
                 SpeechPluginTransport.bridgeOpenAiCompatible,
-      SpeechPluginCapability.realtimeAsr =>
-        resolvedConfig.transport == SpeechPluginTransport.realtimeWebsocket,
+      SpeechPluginCapability.realtimeAsr => resolvedConfig.resolvedTransport ==
+          SpeechPluginTransport.realtimeWebsocket,
     };
     if (!supported) {
       final expected = switch (capability) {
@@ -1177,10 +1209,14 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   SpeechPluginCapabilityConfig _capabilityTestConfigWithOverrides(
     SpeechPluginManifest manifest,
     SpeechPluginCapabilityConfig base,
+    SpeechPluginCapability capability,
   ) {
     final overrides = _speechPluginSettingsByPluginId[manifest.id] ?? const {};
+    final modelKey = modelSettingFieldKeyForCapability(capability);
     return base.copyWith(
-      model: overrides[SpeechPluginSettingFieldKey.model.id] ?? base.model,
+      model: overrides[modelKey.id] ??
+          overrides[SpeechPluginSettingFieldKey.model.id] ??
+          base.model,
       baseUrl:
           overrides[SpeechPluginSettingFieldKey.baseUrl.id] ?? base.baseUrl,
       path: overrides[SpeechPluginSettingFieldKey.path.id] ?? base.path,
@@ -1200,7 +1236,10 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   ) {
     for (final field in manifest.settingFieldsForCapability(capability)) {
       final value = switch (field.key) {
-        SpeechPluginSettingFieldKey.model => config.model.trim(),
+        SpeechPluginSettingFieldKey.model ||
+        SpeechPluginSettingFieldKey.batchAsrModel ||
+        SpeechPluginSettingFieldKey.ttsModel =>
+          config.model.trim(),
         SpeechPluginSettingFieldKey.baseUrl => config.baseUrl.trim(),
         SpeechPluginSettingFieldKey.path => config.path?.trim() ?? '',
         SpeechPluginSettingFieldKey.websocketUrl =>
@@ -1391,6 +1430,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
 
   Future<bool> _savePluginConfigurationAndUse(
     InstalledSpeechPlugin plugin,
+    SpeechPluginCapability capability,
     VoidCallback onInstalledSelected,
     StateSetter? onStateChanged,
   ) async {
@@ -1398,7 +1438,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     if (!mounted) {
       return false;
     }
-    final missing = _missingPluginFields(plugin.manifest);
+    final missing = _missingPluginFields(plugin.manifest, capability);
     if (missing.isNotEmpty) {
       await _expandAndHighlightPluginFields(plugin.manifest.id, missing);
       if (!mounted) {
@@ -2292,123 +2332,119 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                           ),
                         )
                       else
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            TextButton(
-                              onPressed: () {
-                                final missing = _missingPluginFields(
-                                  option.installedPlugin!.manifest,
-                                );
-                                if (missing.isNotEmpty) {
-                                  unawaited(_expandAndHighlightPluginFields(
-                                    option.id,
-                                    missing,
-                                  ));
-                                  setState(() {
-                                    _pluginConfigurationErrorsById[option.id] =
-                                        context.l10n.fillRequiredPluginSettings;
-                                  });
-                                  onStateChanged(() {});
-                                  return;
-                                }
-                                setState(() {
-                                  _pluginConfigurationErrorsById.remove(
-                                    option.id,
-                                  );
-                                });
-                                onStateChanged(() {});
-                                onInstalledSelected();
-                              },
-                              style: TextButton.styleFrom(
-                                minimumSize: const Size(0, 36),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: AppSpacing.compact,
-                                  vertical: AppSpacing.micro,
-                                ),
-                                foregroundColor:
-                                    AppColors.accentBlueFor(brightness),
-                                textStyle:
-                                    theme.textTheme.labelMedium?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              child: Text(context.l10n.use),
+                        TextButton(
+                          onPressed: () {
+                            final missing = _missingPluginFields(
+                              option.installedPlugin!.manifest,
+                              capability,
+                            );
+                            if (missing.isNotEmpty) {
+                              unawaited(_expandAndHighlightPluginFields(
+                                option.id,
+                                missing,
+                              ));
+                              setState(() {
+                                _pluginConfigurationErrorsById[option.id] =
+                                    context.l10n.fillRequiredPluginSettings;
+                              });
+                              onStateChanged(() {});
+                              return;
+                            }
+                            setState(() {
+                              _pluginConfigurationErrorsById.remove(
+                                option.id,
+                              );
+                            });
+                            onStateChanged(() {});
+                            onInstalledSelected();
+                          },
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(0, 36),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.compact,
+                              vertical: AppSpacing.micro,
                             ),
-                            PopupMenuButton<String>(
-                              tooltip: context.l10n.more,
-                              padding: EdgeInsets.zero,
-                              icon: Icon(
-                                Icons.more_horiz_rounded,
-                                color: AppColors.mutedSoftFor(brightness),
-                                size: 18,
-                              ),
-                              onSelected: (value) async {
-                                if (value == 'uninstall') {
-                                  await _uninstallSpeechPlugin(option.id);
-                                  if (!mounted) {
-                                    return;
-                                  }
-                                  setState(() {});
-                                } else if (value == 'test') {
-                                  final missing = _missingPluginFields(
-                                    option.installedPlugin!.manifest,
-                                  );
-                                  if (missing.isNotEmpty) {
-                                    unawaited(_expandAndHighlightPluginFields(
-                                      option.id,
-                                      missing,
-                                    ));
-                                    setState(() {
-                                      _pluginConfigurationErrorsById[
-                                          option
-                                              .id] = context.l10n
-                                          .fillRequiredPluginSettingsBeforeTesting;
-                                    });
-                                    onStateChanged(() {});
-                                    return;
-                                  }
-                                  setState(() {
-                                    _pluginConfigurationErrorsById.remove(
-                                      option.id,
-                                    );
-                                  });
-                                  onStateChanged(() {});
-                                  await _showCapabilityTestSheet(
-                                    context,
-                                    capability,
-                                    pluginId: option.id,
-                                  );
-                                  onStateChanged(() {});
-                                }
-                              },
-                              itemBuilder: (context) => [
-                                PopupMenuItem<String>(
-                                  value: 'test',
-                                  child: ListTile(
-                                    leading: const Icon(
-                                        Icons.play_arrow_rounded,
-                                        size: 20),
-                                    title: Text(context.l10n.test),
-                                    contentPadding: EdgeInsets.zero,
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                ),
-                                PopupMenuItem<String>(
-                                  value: 'uninstall',
-                                  child: ListTile(
-                                    leading: const Icon(
-                                        Icons.delete_outline_rounded,
-                                        size: 20),
-                                    title: Text(context.l10n.uninstall),
-                                    contentPadding: EdgeInsets.zero,
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                ),
-                              ],
+                            foregroundColor:
+                                AppColors.accentBlueFor(brightness),
+                            textStyle: theme.textTheme.labelMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
                             ),
-                          ],
+                          ),
+                          child: Text(context.l10n.use),
                         ),
+                      if (selected) const SizedBox(width: AppSpacing.compact),
+                      PopupMenuButton<String>(
+                        tooltip: context.l10n.more,
+                        padding: EdgeInsets.zero,
+                        icon: Icon(
+                          Icons.more_horiz_rounded,
+                          color: AppColors.mutedSoftFor(brightness),
+                          size: 18,
+                        ),
+                        onSelected: (value) async {
+                          if (value == 'uninstall') {
+                            await _uninstallSpeechPlugin(option.id);
+                            if (!mounted) {
+                              return;
+                            }
+                            setState(() {});
+                          } else if (value == 'test') {
+                            final missing = _missingPluginFields(
+                              option.installedPlugin!.manifest,
+                              capability,
+                            );
+                            if (missing.isNotEmpty) {
+                              unawaited(_expandAndHighlightPluginFields(
+                                option.id,
+                                missing,
+                              ));
+                              setState(() {
+                                _pluginConfigurationErrorsById[
+                                    option
+                                        .id] = context.l10n
+                                    .fillRequiredPluginSettingsBeforeTesting;
+                              });
+                              onStateChanged(() {});
+                              return;
+                            }
+                            setState(() {
+                              _pluginConfigurationErrorsById.remove(
+                                option.id,
+                              );
+                            });
+                            onStateChanged(() {});
+                            await _showCapabilityTestSheet(
+                              context,
+                              capability,
+                              pluginId: option.id,
+                            );
+                            onStateChanged(() {});
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          if (!option.isBuiltIn)
+                            PopupMenuItem<String>(
+                              value: 'test',
+                              child: ListTile(
+                                leading: const Icon(Icons.play_arrow_rounded,
+                                    size: 20),
+                                title: Text(context.l10n.test),
+                                contentPadding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                          PopupMenuItem<String>(
+                            value: 'uninstall',
+                            child: ListTile(
+                              leading: const Icon(Icons.delete_outline_rounded,
+                                  size: 20),
+                              title: Text(context.l10n.uninstall),
+                              contentPadding: EdgeInsets.zero,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   )
                 else
@@ -2465,6 +2501,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
               _buildSpeechPluginApiKeyCard(
                 context,
                 option.installedPlugin!,
+                capability: capability,
                 pluginError: pluginError,
                 onInstalledSelected: onInstalledSelected,
                 onStateChanged: onStateChanged,
@@ -2477,14 +2514,17 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     );
   }
 
-  List<String> _missingPluginFields(SpeechPluginManifest manifest) {
+  List<String> _missingPluginFields(
+    SpeechPluginManifest manifest,
+    SpeechPluginCapability capability,
+  ) {
     final missing = <String>[];
     final apiKey = _speechPluginApiKeysByPluginId[manifest.id]?.trim() ?? '';
     if (apiKey.isEmpty) {
       missing.add(_pluginApiKeyFieldKey);
     }
     final configured = _speechPluginSettingsByPluginId[manifest.id] ?? const {};
-    for (final field in manifest.settingFields) {
+    for (final field in manifest.settingFieldsForCapability(capability)) {
       if (!field.required) {
         continue;
       }
@@ -2589,6 +2629,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   Widget _buildSpeechPluginApiKeyCard(
     BuildContext context,
     InstalledSpeechPlugin plugin, {
+    required SpeechPluginCapability capability,
     String? pluginError,
     VoidCallback? onInstalledSelected,
     StateSetter? onStateChanged,
@@ -2793,6 +2834,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                 ..._buildPluginSettingFields(
                   context,
                   plugin,
+                  capability: capability,
                   onStateChanged: onStateChanged,
                   useGlobalKeys: useGlobalKeys,
                 ),
@@ -2897,6 +2939,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
                             : () async {
                                 await _savePluginConfigurationAndUse(
                                   plugin,
+                                  capability,
                                   onInstalledSelected,
                                   onStateChanged,
                                 );
@@ -2921,10 +2964,11 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   List<Widget> _buildPluginSettingFields(
     BuildContext context,
     InstalledSpeechPlugin plugin, {
+    required SpeechPluginCapability capability,
     StateSetter? onStateChanged,
     bool useGlobalKeys = true,
   }) {
-    final fields = plugin.manifest.settingFields;
+    final fields = plugin.manifest.settingFieldsForCapability(capability);
     if (fields.isEmpty) {
       return const <Widget>[];
     }
@@ -4347,12 +4391,6 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   }
 
   String? _ttsPlatformHelp(AppLocalizations l10n) {
-    if (!_systemTtsSupportedOnPlatform && !_isWebPlatform) {
-      return switch (_platform) {
-        TargetPlatform.linux => l10n.systemTtsUnavailableOnLinux,
-        _ => l10n.speechSystemPreferredHelp,
-      };
-    }
     return l10n.speechSystemPreferredHelp;
   }
 
@@ -4455,7 +4493,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
           plugins:
               indexes.expand((index) => index.plugins).toList(growable: false),
         );
-        _installedSpeechPlugins = installed;
+        _installedSpeechPlugins = _withBuiltInSpeechPlugins(installed);
         _pruneSpeechPluginApiKeyControllers();
       });
     } catch (_) {}
@@ -4471,7 +4509,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         return;
       }
       setState(() {
-        _installedSpeechPlugins = installed;
+        _installedSpeechPlugins = _withBuiltInSpeechPlugins(installed);
       });
     } catch (_) {}
   }
@@ -4484,7 +4522,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         return;
       }
       setState(() {
-        _installedSpeechPlugins = installed;
+        _installedSpeechPlugins = _withBuiltInSpeechPlugins(installed);
         _selectedSpeechPluginByCapability.removeWhere(
           (_, value) => value == pluginId,
         );

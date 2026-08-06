@@ -278,6 +278,25 @@ void main() {
   });
 
   group('BridgeClient session defaults and messaging', () {
+    test('keeps cached streamed messages available after session navigation',
+        () {
+      final client = BridgeClient();
+      final message = ChatMessage(
+        id: 'assistant-1',
+        sessionId: 'session-1',
+        role: MessageRole.assistant,
+        content: 'Reply received from the event stream',
+        createdAt: DateTime(2026, 7, 18, 10),
+      );
+
+      client.cacheSessionMessages('session-1', [message]);
+
+      final cached = client.peekSessionMessages('session-1');
+      expect(cached, hasLength(1));
+      expect(cached!.single, message);
+      expect(() => cached.add(message), throwsUnsupportedError);
+    });
+
     test('lists messages using paginated envelope and cursor parameters',
         () async {
       final client = BridgeClient(
@@ -1085,6 +1104,24 @@ void main() {
   });
 
   group('BridgeClient listProjectSessions', () {
+    test('reports an unauthorized project session request', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.url.path, '/projects/project-1/sessions');
+          return http.Response(
+            jsonEncode({'error': 'Invalid client token'}),
+            401,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      await expectLater(
+        client.listProjectSessions('project-1'),
+        throwsA(isA<ClientUnauthorizedException>()),
+      );
+    });
+
     test(
       'force refresh replaces removed project sessions instead of keeping stale cache',
       () async {

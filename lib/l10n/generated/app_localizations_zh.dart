@@ -574,7 +574,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get callModeRequiresStreamingAsr =>
-      '通话模式当前仅支持系统语音识别或 Omni Bridge Local。';
+      '通话模式需要 Omni Bridge Local 或实时 ASR 插件。';
 
   @override
   String get callModeSection => '通话模式';
@@ -1027,7 +1027,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get systemTtsUnavailableOnLinux =>
-      'Linux 当前还不支持系统 TTS。请切换到云端服务商后再启用播报。';
+      'Linux 系统 TTS 需要 speech-dispatcher（spd-say）或 espeak-ng。请安装后重试，或切换到云端服务商。';
 
   @override
   String get systemAsrUnavailableOnLinux =>
@@ -1797,7 +1797,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stopService => '停止服务';
 
   @override
-  String get sentAsXApiKey => '会作为 X-Api-Key 发送。';
+  String get sentAsXApiKey => '会按插件的认证配置发送。';
 
   @override
   String get targetSpeakerOnly => '仅识别目标说话人';

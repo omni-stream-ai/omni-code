@@ -172,6 +172,19 @@ class AgentDescriptor {
     return value == id || aliases.contains(value);
   }
 
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'label': label,
+      'aliases': aliases,
+      'selectable': selectable,
+      'default_selected': defaultSelected,
+      'compatible_formats': compatibleFormats.map((format) => format.id).toList(
+            growable: false,
+          ),
+    };
+  }
+
   factory AgentDescriptor.fromJson(Map<String, dynamic> json) {
     final id = (json['id'] as String?)?.trim();
     final legacyKind = (json['kind'] as String?)?.trim();
@@ -287,6 +300,15 @@ class AgentSummary {
   bool get selectable => descriptor.selectable;
   bool get defaultSelected => descriptor.defaultSelected;
   List<ApiFormat> get compatibleFormats => descriptor.compatibleFormats;
+
+  Map<String, dynamic> toJson() {
+    return {
+      ...descriptor.toJson(),
+      'installed': installed,
+      'install_hint': installHint,
+      if (installedPath != null) 'installed_path': installedPath,
+    };
+  }
 
   factory AgentSummary.fromJson(Map<String, dynamic> json) {
     return AgentSummary(

@@ -1133,7 +1133,7 @@ abstract class AppLocalizations {
   /// No description provided for @callModeRequiresStreamingAsr.
   ///
   /// In en, this message translates to:
-  /// **'Call mode currently requires System ASR or Omni Bridge Local.'**
+  /// **'Call mode requires Omni Bridge Local or a realtime ASR plugin.'**
   String get callModeRequiresStreamingAsr;
 
   /// No description provided for @callModeSection.
@@ -1931,7 +1931,7 @@ abstract class AppLocalizations {
   /// No description provided for @systemTtsUnavailableOnLinux.
   ///
   /// In en, this message translates to:
-  /// **'System TTS is not available on Linux yet. Choose a cloud provider to enable playback.'**
+  /// **'Linux system TTS requires speech-dispatcher (spd-say) or espeak-ng. Install one and retry, or switch to a cloud provider.'**
   String get systemTtsUnavailableOnLinux;
 
   /// No description provided for @systemAsrUnavailableOnLinux.
@@ -3347,7 +3347,7 @@ abstract class AppLocalizations {
   /// No description provided for @sentAsXApiKey.
   ///
   /// In en, this message translates to:
-  /// **'Sent as X-Api-Key.'**
+  /// **'Sent using the plugin authentication configuration.'**
   String get sentAsXApiKey;
 
   /// No description provided for @targetSpeakerOnly.

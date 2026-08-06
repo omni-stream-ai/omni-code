@@ -1034,6 +1034,105 @@ void main() {
     expect(find.text('Updated Agent'), findsOneWidget);
     expect(find.text('Cached Agent'), findsNothing);
   });
+
+  testWidgets(
+      'create session dialog shows persisted cached agents before initial refresh completes',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        cachedAgents: const [
+          AgentSummary(
+            descriptor: AgentDescriptor(
+              id: 'persisted_agent',
+              label: 'Persisted Agent',
+              aliases: ['persisted_agent'],
+              defaultSelected: true,
+              compatibleFormats: [ApiFormat.codex],
+            ),
+            installed: true,
+            installHint: 'manual',
+            installedPath: '/usr/local/bin/persisted-agent',
+          ),
+        ],
+      ),
+    );
+
+    final refreshResponse = Completer<http.Response>();
+    var agentRequests = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/agents') {
+          agentRequests += 1;
+          return refreshResponse.future;
+        }
+        if (request.method == 'GET' && request.url.path == '/settings') {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'model_providers': [],
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () {
+                  showDialog<CreateSessionDialogResult>(
+                    context: context,
+                    builder: (_) => CreateSessionDialog(client: client),
+                  );
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('open'));
+    await tester.pump();
+
+    expect(agentRequests, 1);
+    expect(find.text('Persisted Agent'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+
+    refreshResponse.complete(
+      http.Response(
+        jsonEncode({
+          'data': [
+            _agentJson(
+              id: 'fresh_agent',
+              label: 'Fresh Agent',
+              aliases: const ['fresh_agent'],
+              compatibleFormats: const ['codex'],
+              defaultSelected: true,
+              installed: true,
+              installedPath: '/usr/local/bin/fresh-agent',
+              installHint: 'manual',
+            ),
+          ],
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Fresh Agent'), findsOneWidget);
+    expect(find.text('Persisted Agent'), findsNothing);
+  });
 }
 
 class _TestApp extends StatelessWidget {

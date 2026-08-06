@@ -85,6 +85,15 @@ class SpeechPluginRegistry {
         return plugin;
       }
     }
+    for (final entry in builtInSpeechPluginRepositoryEntries) {
+      final manifest = entry.builtInManifest;
+      if (manifest?.id == normalizedId) {
+        return InstalledSpeechPlugin(
+          installedAt: DateTime.fromMillisecondsSinceEpoch(0),
+          manifest: manifest!,
+        );
+      }
+    }
     return null;
   }
 
@@ -106,6 +115,10 @@ class SpeechPluginRegistry {
   Future<void> installFromRepositoryEntry(
     SpeechPluginRepositoryEntry entry,
   ) async {
+    final builtInManifest = entry.builtInManifest;
+    if (builtInManifest != null) {
+      return installManifest(builtInManifest);
+    }
     final manifest = await fetchManifest(entry.resolvedManifestUrl);
     await installManifest(manifest);
   }

@@ -60,6 +60,8 @@ class BridgeClient {
   _CacheEntry<List<AgentSummary>>? _agentsCache;
   final Map<String, _CacheEntry<List<SessionSummary>>> _projectSessionsCache =
       {};
+  final Map<String, List<ChatMessage>> _sessionMessagesCache =
+      <String, List<ChatMessage>>{};
   Map<String, AgentDescriptor> _agentDescriptors = {};
 
   void _assertJsonResponse(http.Response response) {
@@ -268,6 +270,17 @@ class BridgeClient {
         ?.value
         .where((session) => session.id == sessionId)
         .firstOrNull;
+  }
+
+  /// Keeps event-streamed messages available while navigating between sessions.
+  /// The bridge's history endpoint can briefly lag the event stream.
+  List<ChatMessage>? peekSessionMessages(String sessionId) {
+    final messages = _sessionMessagesCache[sessionId];
+    return messages == null ? null : List<ChatMessage>.unmodifiable(messages);
+  }
+
+  void cacheSessionMessages(String sessionId, Iterable<ChatMessage> messages) {
+    _sessionMessagesCache[sessionId] = List<ChatMessage>.of(messages);
   }
 
   AgentDescriptor agentDescriptorFor(String agentId) {
@@ -490,6 +503,10 @@ class BridgeClient {
       Uri.parse('$baseUrl/projects/$projectId/sessions'),
       headers: _defaultHeaders,
     );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
     final items = payload['data'] as List<dynamic>;
     final sessions = items

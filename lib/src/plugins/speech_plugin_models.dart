@@ -41,6 +41,8 @@ enum SpeechPluginTransport {
 
 enum SpeechPluginSettingFieldKey {
   model('model'),
+  batchAsrModel('batch_asr_model'),
+  ttsModel('tts_model'),
   baseUrl('base_url'),
   path('path'),
   websocketUrl('websocket_url'),
@@ -61,6 +63,16 @@ enum SpeechPluginSettingFieldKey {
     return null;
   }
 }
+
+SpeechPluginSettingFieldKey modelSettingFieldKeyForCapability(
+  SpeechPluginCapability capability,
+) =>
+    switch (capability) {
+      SpeechPluginCapability.batchAsr =>
+        SpeechPluginSettingFieldKey.batchAsrModel,
+      SpeechPluginCapability.tts => SpeechPluginSettingFieldKey.ttsModel,
+      SpeechPluginCapability.realtimeAsr => SpeechPluginSettingFieldKey.model,
+    };
 
 @immutable
 class SpeechPluginSource {
@@ -237,6 +249,7 @@ class SpeechPluginRepositoryEntry {
     this.indexUrl = '',
     this.repoBranch = 'main',
     this.manifestPath = 'manifest.json',
+    this.builtInManifest,
   });
 
   final String id;
@@ -249,6 +262,7 @@ class SpeechPluginRepositoryEntry {
   final String repoBranch;
   final String manifestPath;
   final String? manifestUrl;
+  final SpeechPluginManifest? builtInManifest;
   final List<SpeechPluginCapability> capabilities;
   final String version;
   final String description;
@@ -323,6 +337,98 @@ class SpeechPluginRepositoryEntry {
     );
   }
 }
+
+/// A ready-to-configure provider for OpenAI and services exposing the same
+/// `/audio/transcriptions` and `/audio/speech` endpoints.
+const openAiCompatibleSpeechManifest = SpeechPluginManifest(
+  id: 'openai-compatible-speech',
+  name: 'OpenAI Compatible Speech',
+  version: '1.0.0',
+  description:
+      'Use an OpenAI-compatible API for audio transcription and text-to-speech.',
+  apiKeyLabel: 'API Key',
+  capabilities: [
+    SpeechPluginCapability.batchAsr,
+    SpeechPluginCapability.tts,
+  ],
+  transport: SpeechPluginTransport.openAiCompatible,
+  capabilityConfigs: {
+    SpeechPluginCapability.batchAsr: SpeechPluginCapabilityConfig(
+      transport: SpeechPluginTransport.openAiCompatible,
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'whisper-1',
+      path: '/audio/transcriptions',
+    ),
+    SpeechPluginCapability.tts: SpeechPluginCapabilityConfig(
+      transport: SpeechPluginTransport.openAiCompatible,
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini-tts',
+      path: '/audio/speech',
+      requestBody: {
+        'model': r'${model}',
+        'input': r'${text}',
+        'voice': r'${speaker}',
+        'response_format': 'wav',
+      },
+    ),
+  },
+  settingFields: [
+    SpeechPluginSettingField(
+      key: SpeechPluginSettingFieldKey.baseUrl,
+      label: 'Base URL',
+      help:
+          'Include the API version path, for example https://api.openai.com/v1.',
+      placeholder: 'https://api.openai.com/v1',
+      required: true,
+    ),
+    SpeechPluginSettingField(
+      key: SpeechPluginSettingFieldKey.batchAsrModel,
+      label: 'ASR model',
+      placeholder: 'whisper-1',
+      required: true,
+      capabilities: [SpeechPluginCapability.batchAsr],
+    ),
+    SpeechPluginSettingField(
+      key: SpeechPluginSettingFieldKey.ttsModel,
+      label: 'TTS model',
+      placeholder: 'gpt-4o-mini-tts',
+      required: true,
+      capabilities: [SpeechPluginCapability.tts],
+    ),
+    SpeechPluginSettingField(
+      key: SpeechPluginSettingFieldKey.resourceId,
+      label: 'TTS voice',
+      help: 'The voice name accepted by the selected API.',
+      placeholder: 'alloy',
+      required: true,
+      capabilities: [SpeechPluginCapability.tts],
+    ),
+  ],
+  localized: {
+    'zh': {
+      'name': 'OpenAI 兼容语音服务',
+      'description': '通过 OpenAI 兼容接口进行音频转写和文字转语音。',
+      'api_key_label': 'API Key',
+    },
+  },
+);
+
+final builtInSpeechPluginRepositoryEntries =
+    List<SpeechPluginRepositoryEntry>.unmodifiable([
+  SpeechPluginRepositoryEntry(
+    id: openAiCompatibleSpeechManifest.id,
+    name: openAiCompatibleSpeechManifest.name,
+    author: 'Omni Code',
+    repo: '',
+    sourceId: 'built-in',
+    sourceName: 'Built in',
+    description: openAiCompatibleSpeechManifest.description,
+    capabilities: openAiCompatibleSpeechManifest.capabilities,
+    builtInManifest: openAiCompatibleSpeechManifest,
+    localized: openAiCompatibleSpeechManifest.localized,
+    version: openAiCompatibleSpeechManifest.version,
+  ),
+]);
 
 @immutable
 class SpeechPluginRepositoryIndex {

@@ -16,6 +16,18 @@ cmake_policy(SET CMP0063 NEW)
 # Load bundled libraries from the lib/ directory relative to the binary.
 set(CMAKE_INSTALL_RPATH "$ORIGIN/lib")
 
+# flutter_soloud ships prebuilt opus/ogg/vorbis/FLAC .so files that require a
+# newer glibc than this system provides, which breaks runtime dlopen(). TTS
+# only plays WAV/PCM, so skip bundling those codecs entirely.
+set(ENV{NO_XIPH_LIBS} "1")
+
+# flutter_soloud uses find_library() for system audio libs (ALSA), which does
+# not search Nix profile paths on its own. Point CMake at the profile lib dir.
+if(NOT DEFINED CMAKE_LIBRARY_PATH AND DEFINED ENV{HOME})
+  list(APPEND CMAKE_LIBRARY_PATH
+    "$ENV{HOME}/.local/state/nix/profiles/profile/lib")
+endif()
+
 # Root filesystem for cross-building.
 if(FLUTTER_TARGET_PLATFORM_SYSROOT)
   set(CMAKE_SYSROOT ${FLUTTER_TARGET_PLATFORM_SYSROOT})
@@ -74,6 +86,20 @@ set_target_properties(${BINARY_NAME}
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# Workaround for flutter_soloud bug: its linux/CMakeLists.txt never links the
+# ALSA backend library, so snd_* symbols stay undefined and dlopen() fails at
+# runtime. Append the ALSA library to the plugin target here, after the plugin
+# target has been defined.
+if(TARGET flutter_soloud_plugin)
+  pkg_check_modules(OMNI_ALSA IMPORTED_TARGET alsa)
+  if(OMNI_ALSA_FOUND)
+    target_link_libraries(flutter_soloud_plugin PRIVATE PkgConfig::OMNI_ALSA)
+    message(STATUS "omni_code: configured flutter_soloud_plugin with ALSA")
+  else()
+    message(WARNING "omni_code: ALSA development package not found; flutter_soloud playback may fail")
+  endif()
+endif()
+
 
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build
@@ -99,6 +125,27 @@ install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}
 
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
+
+# Flutter FFI plugins (flutter_soloud) are dlopen()ed at runtime by the Dart VM
+# inside libflutter_linux_gtk.so. dlopen() uses the *caller's* RUNPATH, so the
+# engine library must be able to find sibling plugin .so files. Add an $ORIGIN
+# RUNPATH so bundle/lib/ is searched when the VM dlopens a plugin by name.
+find_program(OMNI_PATCHELF_EXECUTABLE patchelf)
+if(OMNI_PATCHELF_EXECUTABLE)
+  install(CODE "
+    execute_process(
+      COMMAND \"${OMNI_PATCHELF_EXECUTABLE}\"
+              --add-rpath \"\$ORIGIN\"
+              --force-rpath
+              \"${INSTALL_BUNDLE_LIB_DIR}/libflutter_linux_gtk.so\"
+      RESULT_VARIABLE _omni_patchelf_result
+    )
+    if(NOT _omni_patchelf_result EQUAL 0)
+      message(WARNING
+        \"omni_code: patchelf on libflutter_linux_gtk.so failed\")
+    endif()
+  ")
+endif()
 
 foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
   install(FILES "${bundled_library}"

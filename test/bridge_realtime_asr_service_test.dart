@@ -352,11 +352,14 @@ void main() {
               'vendor': 'volcengine',
               'version': '0.3.0',
               'capabilities': ['speech.realtime_asr'],
-              'transport': 'realtime_websocket',
-              'realtime_websocket_url':
-                  'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async',
-              'realtime_event_map': {
-                'protocol': 'volcengine_sauc',
+              'capability_configs': {
+                'speech.realtime_asr': {
+                  'websocket_url':
+                      'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async',
+                  'event_map': {
+                    'protocol': 'volcengine_sauc',
+                  },
+                },
               },
             },
           },

@@ -187,29 +187,35 @@ class SherpaLocalVadBackend implements LocalVadBackend {
 class LocalVadService {
   LocalVadService({
     Future<LocalVadBackend?> Function()? backendFactory,
-  }) : _backendFactory =
-            backendFactory ?? (() => SherpaLocalVadBackend.create());
+  }) : _backendFactory = backendFactory;
 
-  final Future<LocalVadBackend?> Function() _backendFactory;
+  final Future<LocalVadBackend?> Function()? _backendFactory;
 
   StreamSubscription<Uint8List>? _subscription;
   LocalVadBackend? _backend;
   bool _listening = false;
   bool _speechActive = false;
+  int _startGeneration = 0;
 
   bool get isListening => _listening;
 
   Future<void> start({
     required Stream<Uint8List> audioStream,
     required void Function() onSpeechStarted,
+    double minSilenceDuration = 0.5,
     void Function(LocalVadSpeechSegment segment)? onSpeechEnded,
     void Function(String error)? onError,
   }) async {
     if (_listening) {
       return;
     }
-    final backend = await _backendFactory();
-    if (backend == null) {
+    final startGeneration = ++_startGeneration;
+    final backend = await (_backendFactory?.call() ??
+        SherpaLocalVadBackend.create(
+          minSilenceDuration: minSilenceDuration,
+        ));
+    if (backend == null || startGeneration != _startGeneration) {
+      backend?.dispose();
       return;
     }
     _backend = backend;
@@ -251,6 +257,7 @@ class LocalVadService {
   }
 
   Future<void> cancel() async {
+    _startGeneration += 1;
     final subscription = _subscription;
     _subscription = null;
     _listening = false;

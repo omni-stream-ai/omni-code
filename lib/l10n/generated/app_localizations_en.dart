@@ -596,7 +596,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get callModeRequiresStreamingAsr =>
-      'Call mode currently requires System ASR or Omni Bridge Local.';
+      'Call mode requires Omni Bridge Local or a realtime ASR plugin.';
 
   @override
   String get callModeSection => 'Call mode';
@@ -1068,7 +1068,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get systemTtsUnavailableOnLinux =>
-      'System TTS is not available on Linux yet. Choose a cloud provider to enable playback.';
+      'Linux system TTS requires speech-dispatcher (spd-say) or espeak-ng. Install one and retry, or switch to a cloud provider.';
 
   @override
   String get systemAsrUnavailableOnLinux =>
@@ -1862,7 +1862,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stopService => 'Stop Service';
 
   @override
-  String get sentAsXApiKey => 'Sent as X-Api-Key.';
+  String get sentAsXApiKey =>
+      'Sent using the plugin authentication configuration.';
 
   @override
   String get targetSpeakerOnly => 'Target speaker only';

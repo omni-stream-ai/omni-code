@@ -132,7 +132,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Doubao TTS'), findsOneWidget);
-    expect(find.text('Use'), findsOneWidget);
+    expect(find.text('OpenAI Compatible Speech'), findsOneWidget);
+    expect(find.text('Install'), findsNothing);
+    expect(_pluginUseButton('Doubao TTS'), findsOneWidget);
     expect(find.text('Installed'), findsNothing);
   });
 
@@ -174,8 +176,13 @@ void main() {
             'Choose system default or pick a plugin for this capability.'),
         findsOneWidget);
     expect(find.text('Installed TTS'), findsOneWidget);
-    expect(find.text('Use'), findsOneWidget);
-    expect(find.byIcon(Icons.more_horiz_rounded), findsOneWidget);
+    expect(find.text('OpenAI Compatible Speech'), findsOneWidget);
+    expect(_pluginUseButton('Installed TTS'), findsOneWidget);
+    expect(find.byIcon(Icons.more_horiz_rounded), findsNWidgets(2));
+    expect(
+      tester.getTopLeft(find.text('OpenAI Compatible Speech')).dy,
+      lessThan(tester.getTopLeft(find.text('Installed TTS')).dy),
+    );
   });
 
   testWidgets('disables capability test when current selection is unsupported',
@@ -218,6 +225,107 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Metadata TTS'), findsOneWidget);
+  });
+
+  testWidgets('keeps Test available for the selected plugin', (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        selectedSpeechPluginByCapability: const {
+          'speech.tts': 'selected-tts',
+        },
+        installedSpeechPlugins: const [
+          {
+            'installed_at': '2026-01-01T00:00:00.000Z',
+            'manifest': {
+              'id': 'selected-tts',
+              'name': 'Selected TTS',
+              'vendor': 'local',
+              'version': '0.1.0',
+              'capabilities': ['speech.tts'],
+              'transport': 'openai_compatible',
+              'capability_configs': {
+                'speech.tts': {
+                  'transport': 'openai_compatible',
+                  'base_url': 'https://example.com/v1',
+                  'model': 'test-model',
+                },
+              },
+            },
+          },
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(_TestApp(home: _speechSettingsScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('TTS').first);
+    await tester.tap(find.text('TTS').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Selected TTS'), findsOneWidget);
+    await tester.tap(_pluginMenuButton('Selected TTS'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Test'), findsOneWidget);
+  });
+
+  testWidgets('tests a realtime plugin inferred from its websocket endpoint',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        selectedSpeechPluginByCapability: const {
+          'speech.realtime_asr': 'doubao-realtime-asr',
+        },
+        speechPluginApiKeysByPluginId: const {
+          'doubao-realtime-asr': 'test-api-key',
+        },
+        installedSpeechPlugins: const [
+          {
+            'installed_at': '2026-01-01T00:00:00.000Z',
+            'manifest': {
+              'id': 'doubao-realtime-asr',
+              'name': 'Doubao Realtime ASR',
+              'vendor': 'volcengine',
+              'version': '0.3.0',
+              'capabilities': ['speech.realtime_asr'],
+              'capability_configs': {
+                'speech.realtime_asr': {
+                  'websocket_url':
+                      'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async',
+                },
+              },
+            },
+          },
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(_TestApp(home: _speechSettingsScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Realtime ASR').first);
+    await tester.tap(find.text('Realtime ASR').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_horiz_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Test'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Test Realtime ASR'), findsOneWidget);
+    expect(
+      find.text(
+        'Current selection does not provide a realtime websocket endpoint, so it cannot be tested.',
+      ),
+      findsNothing,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Start'))
+          .onPressed,
+      isNotNull,
+    );
   });
 
   testWidgets('plugin settings support dropdown options and inline test',
@@ -350,7 +458,7 @@ void main() {
     expect(find.text('Additional plugin settings'), findsNothing);
     expect(find.text('Start command'), findsNothing);
 
-    await tester.tap(find.text('Use').first);
+    await tester.tap(_pluginUseButton('Doubao TTS'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 1700));
 
@@ -398,6 +506,23 @@ SpeechSettingsScreen _speechSettingsScreen({
     debugIsWebOverride: debugIsWebOverride,
   );
 }
+
+Finder _pluginUseButton(String pluginName) => find.descendant(
+      of: _pluginCard(pluginName),
+      matching: find.widgetWithText(TextButton, 'Use'),
+    );
+
+Finder _pluginMenuButton(String pluginName) => find.descendant(
+      of: _pluginCard(pluginName),
+      matching: find.byIcon(Icons.more_horiz_rounded),
+    );
+
+Finder _pluginCard(String pluginName) => find
+    .ancestor(
+      of: find.text(pluginName),
+      matching: find.byType(Material),
+    )
+    .first;
 
 SpeechPluginRegistry _testSpeechPluginRegistry() {
   return SpeechPluginRegistry(

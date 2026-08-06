@@ -102,6 +102,46 @@ void main() {
     );
   });
 
+  test('resolves the built-in OpenAI-compatible speech plugin without install',
+      () {
+    final registry = SpeechPluginRegistry(httpClient: _FakeHttpClient.unused());
+
+    final plugin = registry.findInstalledById('openai-compatible-speech');
+    expect(plugin, isNotNull);
+    expect(plugin!.manifest.id, 'openai-compatible-speech');
+    expect(
+      plugin.manifest.capabilities,
+      containsAll([
+        SpeechPluginCapability.batchAsr,
+        SpeechPluginCapability.tts,
+      ]),
+    );
+  });
+
+  test('scopes built-in OpenAI-compatible model settings by capability', () {
+    final asrFields = openAiCompatibleSpeechManifest
+        .settingFieldsForCapability(SpeechPluginCapability.batchAsr);
+    final ttsFields = openAiCompatibleSpeechManifest
+        .settingFieldsForCapability(SpeechPluginCapability.tts);
+
+    expect(
+      asrFields.map((field) => field.key),
+      contains(SpeechPluginSettingFieldKey.batchAsrModel),
+    );
+    expect(
+      asrFields.map((field) => field.key),
+      isNot(contains(SpeechPluginSettingFieldKey.ttsModel)),
+    );
+    expect(
+      ttsFields.map((field) => field.key),
+      contains(SpeechPluginSettingFieldKey.ttsModel),
+    );
+    expect(
+      ttsFields.map((field) => field.key),
+      isNot(contains(SpeechPluginSettingFieldKey.batchAsrModel)),
+    );
+  });
+
   test('fetches repository index from a local file path', () async {
     final directory = await Directory.systemTemp.createTemp(
       'speech-plugin-registry-test-',

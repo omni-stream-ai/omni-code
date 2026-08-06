@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omni_code/src/models.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 
 void main() {
@@ -160,6 +161,59 @@ void main() {
     );
     final restored = AppSettings.fromJson(settings.toJson());
     expect(restored.lastSelectedAgent, 'claude_code');
+  });
+
+  test('cachedAgents round-trip through json', () {
+    final settings = AppSettings.defaults().copyWith(
+      cachedAgents: const [
+        AgentSummary(
+          descriptor: AgentDescriptor(
+            id: 'codex',
+            label: 'Codex',
+            aliases: ['codex'],
+            defaultSelected: true,
+            compatibleFormats: [ApiFormat.codex],
+          ),
+          installed: true,
+          installHint: 'manual',
+          installedPath: '/usr/local/bin/codex',
+        ),
+        AgentSummary(
+          descriptor: AgentDescriptor(
+            id: 'claude_code',
+            label: 'Claude Code',
+            aliases: ['claude_code'],
+            selectable: false,
+            compatibleFormats: [ApiFormat.anthropicMessages],
+          ),
+          installed: false,
+          installHint: 'brew install claude-code',
+        ),
+      ],
+    );
+    final restored = AppSettings.fromJson(settings.toJson());
+    expect(restored.cachedAgents, hasLength(2));
+    expect(restored.cachedAgents.first.id, 'codex');
+    expect(restored.cachedAgents.first.defaultSelected, isTrue);
+    expect(restored.cachedAgents.first.installed, isTrue);
+    expect(
+      restored.cachedAgents.first.compatibleFormats,
+      equals(const [ApiFormat.codex]),
+    );
+    expect(restored.cachedAgents.last.id, 'claude_code');
+    expect(restored.cachedAgents.last.selectable, isFalse);
+    expect(restored.cachedAgents.last.installed, isFalse);
+    expect(
+      restored.cachedAgents.last.compatibleFormats,
+      equals(const [ApiFormat.anthropicMessages]),
+    );
+  });
+
+  test('null cached_agents falls back to empty list', () {
+    final settings = AppSettings.fromJson(<String, dynamic>{
+      'cached_agents': null,
+    });
+    expect(settings.cachedAgents, isEmpty);
   });
 
   test('lastSelectedProviderByProject round-trips through json', () {

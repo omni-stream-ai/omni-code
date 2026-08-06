@@ -5,7 +5,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
-import '../bridge_client.dart';
+import '../bridge_client.dart' show SynthesizedSpeech;
 import '../l10n/current_l10n.dart';
 import '../l10n/app_locale.dart';
 import '../plugins/speech_plugin_models.dart';
@@ -31,9 +31,6 @@ class CloudSpeechService {
         'System ASR should be handled by SpeechInputService, not CloudSpeechService.',
       );
     }
-    if (settings.asrProvider == AsrProvider.bridgeLocal) {
-      return BridgeClient(httpClient: _httpClient).transcribeAudio(audioFile);
-    }
     if (settings.asrProvider == AsrProvider.whisper) {
       return _transcribeWithWhisper(
         audioFile,
@@ -51,18 +48,6 @@ class CloudSpeechService {
     );
     if (ttsPlugin != null) {
       return _synthesizeWithPlugin(text, ttsPlugin.manifest);
-    }
-    if (settings.ttsProvider == TtsProvider.bridgeLocal) {
-      final sanitizedText = _sanitizeBridgeLocalTtsInput(text);
-      if (sanitizedText.isEmpty) {
-        throw Exception(
-          currentL10n().ttsFailed('Text contains no speakable characters.'),
-        );
-      }
-      return BridgeClient(httpClient: _httpClient).synthesizeSpeech(
-        sanitizedText,
-        stream: settings.bridgeLocalTtsStreaming,
-      );
     }
     throw StateError('Unsupported cloud TTS provider: ${settings.ttsProvider}');
   }
@@ -206,8 +191,7 @@ class CloudSpeechService {
     );
     if (apiKey.isNotEmpty) {
       if (authHeader.isNotEmpty) {
-        final scheme = authScheme.isNotEmpty ? '$authScheme ' : '';
-        request.headers[authHeader] = '$scheme$apiKey';
+        request.headers[authHeader] = _authorizationValue(authScheme, apiKey);
       } else {
         request.headers['Authorization'] = 'Bearer $apiKey';
       }
@@ -269,15 +253,18 @@ class CloudSpeechService {
     if (apiKey.isNotEmpty) {
       final authHeader = config.authHeader?.trim() ?? '';
       if (authHeader.isNotEmpty) {
-        final scheme = (config.authScheme?.trim() ?? '').isNotEmpty
-            ? '${config.authScheme!.trim()} '
-            : '';
-        headers[authHeader] = '$scheme$apiKey';
+        headers[authHeader] = _authorizationValue(config.authScheme, apiKey);
       } else {
         headers['Authorization'] = 'Bearer $apiKey';
       }
     }
-
+    for (final entry in config.extraHeaders.entries) {
+      headers[entry.key] = _resolveHeaderValue(
+        entry.value,
+        manifest: manifest,
+        config: config,
+      );
+    }
     final submitUrl = Uri.parse('$normalizedBase$submitPath');
     final submitResp = await _httpClient.post(
       submitUrl,
@@ -328,11 +315,11 @@ class CloudSpeechService {
         final responseTextPath = config.responseTextPath.isNotEmpty
             ? config.responseTextPath
             : 'utterances.0.text';
-        final text =
-            _extractNestedJsonValue(payload, responseTextPath) as String?;
+        final text = _extractBatchAsrText(payload, responseTextPath);
         if (text == null || text.trim().isEmpty) {
           throw Exception(
-            'Batch ASR response missing text at "$responseTextPath".',
+            'Batch ASR response missing text at "$responseTextPath": '
+            '${jsonEncode(payload)}',
           );
         }
         return text;
@@ -376,7 +363,6 @@ class CloudSpeechService {
       manifest: manifest,
       config: config,
     );
-
     final headers = _buildJsonRequestHeaders(manifest, config, apiKey);
     final submitUrl = Uri.parse('$normalizedBase$submitPath');
 
@@ -406,7 +392,7 @@ class CloudSpeechService {
     }
 
     final requestId = headers['X-Api-Request-Id'] ?? _uuidV4();
-    final modelValue = config.model.isNotEmpty ? config.model : manifest.id;
+    final resourceId = _resourceIdForPlugin(manifest, config);
     final pollUrl = Uri.parse('$normalizedBase$pollPath');
     const maxAttempts = 120;
     for (var i = 0; i < maxAttempts; i++) {
@@ -424,14 +410,12 @@ class CloudSpeechService {
       if (apiKey.isNotEmpty) {
         final authHeader = config.authHeader?.trim() ?? '';
         if (authHeader.isNotEmpty) {
-          final scheme = (config.authScheme?.trim() ?? '').isNotEmpty
-              ? '${config.authScheme!.trim()} '
-              : '';
-          pollHeaders[authHeader] = '$scheme$apiKey';
+          pollHeaders[authHeader] =
+              _authorizationValue(config.authScheme, apiKey);
         }
       }
       pollHeaders['X-Api-Request-Id'] = requestId;
-      pollHeaders['X-Api-Resource-Id'] = modelValue;
+      pollHeaders['X-Api-Resource-Id'] = resourceId;
 
       final pollResp = await _httpClient.post(
         pollUrl,
@@ -489,7 +473,7 @@ class CloudSpeechService {
     return _resolveBodyMap(template, {
       'audio_data_uri': audioDataUri,
       'audio_format': audioFormat,
-      'resource_id': modelValue,
+      'resource_id': _resourceIdForPlugin(manifest, config),
       'model': modelValue,
       'uuid': _uuidV4(),
     });
@@ -560,10 +544,7 @@ class CloudSpeechService {
     if (apiKey.isNotEmpty) {
       final authHeader = config.authHeader?.trim() ?? '';
       if (authHeader.isNotEmpty) {
-        final scheme = (config.authScheme?.trim() ?? '').isNotEmpty
-            ? '${config.authScheme!.trim()} '
-            : '';
-        headers[authHeader] = '$scheme$apiKey';
+        headers[authHeader] = _authorizationValue(config.authScheme, apiKey);
       } else {
         headers['Authorization'] = 'Bearer $apiKey';
       }
@@ -673,8 +654,7 @@ class CloudSpeechService {
     };
     if (apiKey.isNotEmpty) {
       if (authHeader.isNotEmpty) {
-        final scheme = authScheme.isNotEmpty ? '$authScheme ' : '';
-        headers[authHeader] = '$scheme$apiKey';
+        headers[authHeader] = _authorizationValue(authScheme, apiKey);
       } else {
         headers['Authorization'] = 'Bearer $apiKey';
       }
@@ -686,14 +666,31 @@ class CloudSpeechService {
         config: config,
       );
     }
+    final settings =
+        speechPluginRegistry.configuredSettingsForPluginId(manifest.id);
+    final body = config.requestBody.isEmpty
+        ? <String, dynamic>{
+            'model': config.model.isNotEmpty ? config.model : manifest.id,
+            'input': input,
+            'response_format': 'wav',
+          }
+        : _buildJsonBody(
+            config.requestBody,
+            audioDataUri: '',
+            audioFormat: 'wav',
+            manifest: manifest,
+            config: config,
+          );
+    _resolveTtsBodyVars(
+      body,
+      input,
+      settings[SpeechPluginSettingFieldKey.resourceId.id] ?? '',
+    );
+
     final response = await _httpClient.post(
       Uri.parse('$normalizedBase$path'),
       headers: headers,
-      body: jsonEncode({
-        'model': config.model.isNotEmpty ? config.model : manifest.id,
-        'input': input,
-        'response_format': 'wav',
-      }),
+      body: jsonEncode(body),
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -732,8 +729,11 @@ class CloudSpeechService {
     }
     final overrides =
         speechPluginRegistry.configuredSettingsForPluginId(manifest.id);
+    final modelKey = modelSettingFieldKeyForCapability(capability);
     final resolved = base.copyWith(
-      model: overrides[SpeechPluginSettingFieldKey.model.id] ?? base.model,
+      model: overrides[modelKey.id] ??
+          overrides[SpeechPluginSettingFieldKey.model.id] ??
+          base.model,
       baseUrl:
           overrides[SpeechPluginSettingFieldKey.baseUrl.id] ?? base.baseUrl,
       path: overrides[SpeechPluginSettingFieldKey.path.id] ?? base.path,
@@ -747,7 +747,10 @@ class CloudSpeechService {
 
     for (final field in manifest.settingFieldsForCapability(capability)) {
       final value = switch (field.key) {
-        SpeechPluginSettingFieldKey.model => resolved.model.trim(),
+        SpeechPluginSettingFieldKey.model ||
+        SpeechPluginSettingFieldKey.batchAsrModel ||
+        SpeechPluginSettingFieldKey.ttsModel =>
+          resolved.model.trim(),
         SpeechPluginSettingFieldKey.baseUrl => resolved.baseUrl.trim(),
         SpeechPluginSettingFieldKey.path => resolved.path?.trim() ?? '',
         SpeechPluginSettingFieldKey.websocketUrl =>
@@ -850,8 +853,31 @@ class CloudSpeechService {
   }) {
     final modelValue = config.model.isNotEmpty ? config.model : manifest.id;
     return template
-        .replaceAll(r'${resource_id}', modelValue)
+        .replaceAll(r'${resource_id}', _resourceIdForPlugin(manifest, config))
+        .replaceAll(r'${model}', modelValue)
         .replaceAll(r'${uuid}', _uuidV4());
+  }
+
+  String _resourceIdForPlugin(
+    SpeechPluginManifest manifest,
+    SpeechPluginCapabilityConfig config,
+  ) {
+    final configured = speechPluginRegistry
+        .configuredSettingsForPluginId(
+            manifest.id)[SpeechPluginSettingFieldKey.resourceId.id]
+        ?.trim();
+    if (configured?.isNotEmpty == true) {
+      return configured!;
+    }
+    return config.model.isNotEmpty ? config.model : manifest.id;
+  }
+
+  String _authorizationValue(String? rawScheme, String apiKey) {
+    final scheme = rawScheme?.trim() ?? '';
+    if (scheme.isEmpty) {
+      return apiKey;
+    }
+    return '$scheme $apiKey';
   }
 
   static String _uuidV4() {
@@ -884,6 +910,25 @@ Object? _extractNestedJsonValue(Map<String, dynamic> root, String path) {
     }
   }
   return current;
+}
+
+String? _extractBatchAsrText(
+  Map<String, dynamic> payload,
+  String preferredPath,
+) {
+  const fallbackPaths = [
+    'utterances.0.text',
+    'data.utterances.0.text',
+    'result.utterances.0.text',
+    'data.result.utterances.0.text',
+  ];
+  for (final path in [preferredPath, ...fallbackPaths]) {
+    final value = _extractNestedJsonValue(payload, path);
+    if (value is String && value.trim().isNotEmpty) {
+      return value;
+    }
+  }
+  return null;
 }
 
 final cloudSpeechService = CloudSpeechService();

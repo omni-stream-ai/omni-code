@@ -13,8 +13,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:omni_code/l10n/generated/app_localizations.dart';
+import 'package:omni_code/src/app_routes.dart';
 import 'package:omni_code/src/bridge_client.dart';
 import 'package:omni_code/src/models.dart';
+import 'package:omni_code/src/plugins/speech_plugin_models.dart';
 import 'package:omni_code/src/screens/session_detail_screen.dart';
 import 'package:omni_code/src/services/audio_recording_service.dart';
 import 'package:omni_code/src/services/bridge_realtime_asr_service.dart';
@@ -2604,6 +2606,253 @@ void main() {
     await events.close();
   });
 
+  testWidgets('reopening a session keeps a streamed reply absent from history',
+      (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'messages': [
+                    _messageJson(
+                      id: 'user-1',
+                      sessionId: 'session-1',
+                      role: 'user',
+                      content: 'Question',
+                      createdAt: '2026-05-09T10:00:00.000',
+                    ),
+                  ],
+                  'has_more': false,
+                  'next_cursor': null,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          key: const ValueKey('first-session-page'),
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_delta',
+            'payload': {
+              'message_id': 'assistant-1',
+              'delta': 'Reply received from the event stream',
+            },
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Reply received from the event stream'), findsOneWidget);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          key: const ValueKey('reopened-session-page'),
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Reply received from the event stream'), findsOneWidget);
+    await events.close();
+  });
+
+  testWidgets('opening a recent session removes previous session routes',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final firstSession = _session();
+    final secondSession = _session(
+      id: 'session-2',
+      title: 'Second Session',
+    );
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path.endsWith('/messages')) {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path.endsWith('/events')) {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    )..debugSeedSessions([firstSession, secondSession]);
+    final observer = _RecordingNavigatorObserver();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        navigatorObservers: [observer],
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        initialRoute: AppRoutes.session(
+          firstSession.projectId,
+          firstSession.id,
+        ),
+        onGenerateRoute: (settings) {
+          final session = settings.arguments as SessionSummary? ??
+              (settings.name ==
+                      AppRoutes.session(firstSession.projectId, firstSession.id)
+                  ? firstSession
+                  : null);
+          if (session == null) {
+            return null;
+          }
+          return MaterialPageRoute<void>(
+            settings: settings,
+            builder: (_) => SessionDetailScreen(
+              session: session,
+              client: client,
+              enableSpeechServices: false,
+            ),
+          );
+        },
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    final initialPushes = observer.pushes;
+
+    await tester.tap(find.text('Second Session').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('Second Session'), findsWidgets);
+    expect(observer.replacements, 0);
+    expect(observer.pushes, initialPushes + 1);
+    expect(observer.removals, 1);
+  });
+
+  testWidgets('streamed delta stays after latest restored messages',
+      (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'messages': [
+                    _messageJson(
+                      id: 'user-1',
+                      sessionId: 'session-1',
+                      role: 'user',
+                      content: 'Existing user message',
+                      createdAt: '2099-05-09T10:00:00.000',
+                    ),
+                    _messageJson(
+                      id: 'assistant-newer',
+                      sessionId: 'session-1',
+                      role: 'assistant',
+                      content: 'Newer restored assistant message',
+                      createdAt: '2099-05-09T10:00:01.000',
+                    ),
+                  ],
+                  'has_more': false,
+                  'next_cursor': null,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_delta',
+            'payload': {
+              'message_id': 'assistant-live',
+              'delta': 'Live streamed assistant message',
+            },
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final restoredBubble = find.byKey(
+      const ValueKey('assistant-message-bubble-assistant-newer'),
+    );
+    final liveBubble = find.byKey(
+      const ValueKey('assistant-message-bubble-assistant-live'),
+    );
+
+    expect(restoredBubble, findsOneWidget);
+    expect(liveBubble, findsOneWidget);
+    expect(
+      tester.getTopLeft(liveBubble).dy,
+      greaterThan(tester.getTopLeft(restoredBubble).dy),
+    );
+
+    await events.close();
+  });
+
   testWidgets('streamed delta is not cleared by empty message_created',
       (tester) async {
     final events = StreamController<List<int>>.broadcast();
@@ -3948,6 +4197,32 @@ void main() {
         200,
         headers: {'content-type': 'application/json'},
       ),
+      http.Response(
+        jsonEncode({
+          'data': {
+            'messages': [
+              _messageJson(
+                id: 'local-user-1',
+                sessionId: 'session-1',
+                role: 'user',
+                content: '提交推送',
+                createdAt: '2026-05-09T10:00:00.000',
+              ),
+              _messageJson(
+                id: 'local-assistant-1',
+                sessionId: 'session-1',
+                role: 'assistant',
+                content: '我先检查当前工作区状态和分支，然后提交并推送。当前分支是 feat/desktop。',
+                createdAt: '2026-05-09T09:59:59.000',
+              ),
+            ],
+            'has_more': false,
+            'next_cursor': null,
+          },
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      ),
     ];
     final client = BridgeClient(
       httpClient: _StreamingEventHttpClient(
@@ -4018,6 +4293,26 @@ void main() {
     await tester.pump();
 
     expect(find.text('提交推送'), findsOneWidget);
+    expect(find.text('我先检查当前工作区状态和分支，然后提交并推送。'), findsOneWidget);
+    expect(
+      find.text('我先检查当前工作区状态和分支，然后提交并推送。当前分支是 feat/desktop。'),
+      findsNothing,
+    );
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'session_status',
+            'payload': {'status': 'idle'},
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
+
     expect(
       find.text('我先检查当前工作区状态和分支，然后提交并推送。'),
       findsNothing,
@@ -5769,6 +6064,75 @@ void main() {
         TargetPlatform.android,
       }));
 
+  testWidgets('focusing the mobile composer keeps the latest history visible',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(_conversationMessages(12)),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-message-input')));
+    await tester.pump();
+
+    expect(find.text('Answer 12'), findsOneWidget);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('session-text-composer-surface')))
+          .height,
+      greaterThan(48),
+    );
+  },
+      variant: const TargetPlatformVariant(<TargetPlatform>{
+        TargetPlatform.android,
+      }));
+
+  testWidgets('mobile composer settings opens the model panel after focus',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 336);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('session-message-input')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-composer-settings-button')));
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-model-button')));
+    await tester.pump();
+
+    final modelInput = find.byKey(const Key('session-model-custom-input'));
+    expect(modelInput, findsOneWidget);
+    expect(tester.getRect(modelInput).bottom, lessThanOrEqualTo(508));
+  },
+      variant: const TargetPlatformVariant(<TargetPlatform>{
+        TargetPlatform.android,
+      }));
+
   testWidgets('assistant reply refreshes generated session title',
       (tester) async {
     var refreshedSession = false;
@@ -7202,6 +7566,8 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
+
+    expect(find.text('Reply from event'), findsNothing);
 
     restoreMessages.complete(
       http.Response(
@@ -9159,6 +9525,183 @@ void main() {
     expect(callModeButton.onPressed, isNotNull);
   });
 
+  testWidgets(
+      'system ASR call mode submits a final system-recognized utterance',
+      (tester) async {
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        asrProvider: AsrProvider.system,
+        callModeAllowInterruptions: false,
+      ),
+    );
+    final sentBodies = <Map<String, dynamic>>[];
+    final speechService = _FakeSpeechInputService(initializeResult: true);
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({'data': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/sessions/session-1/messages') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          sentBodies.add(body);
+          return http.Response(
+            jsonEncode({'data': {}}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          speechInputService: speechService,
+          ttsService: _FakeTtsService(systemAvailable: true),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await _openSessionHeaderMenu(tester);
+    final callModeButton = tester.widget<IconButton>(
+      find.byKey(const Key('session-call-mode-button')),
+    );
+    expect(callModeButton.onPressed, isNotNull);
+
+    await _enterCallModeFromHeader(tester);
+    expect(speechService.startListeningCalls, 1);
+
+    speechService.emitResult('system final transcript', isFinal: true);
+    await tester.pump();
+    await tester.pump();
+
+    expect(speechService.stopListeningCalls, 1);
+    expect(sentBodies, hasLength(1));
+    expect(sentBodies.single['content'], 'system final transcript');
+    expect(sentBodies.single['input_mode'], 'voice');
+  });
+
+  testWidgets(
+      'selected realtime ASR plugin enables voice controls without system ASR',
+      (tester) async {
+    final plugin = InstalledSpeechPlugin(
+      installedAt: DateTime(2026),
+      manifest: const SpeechPluginManifest(
+        id: 'websocket-asr',
+        name: 'Websocket ASR',
+        version: '1.0.0',
+        capabilities: [SpeechPluginCapability.realtimeAsr],
+        transport: SpeechPluginTransport.realtimeWebsocket,
+        realtimeWebsocketUrl: 'wss://speech.example.com/realtime',
+      ),
+    );
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        asrProvider: AsrProvider.system,
+        installedPlugins: [plugin.toJson()],
+        selectedPluginByCapability: const {
+          'speech.realtime_asr': 'websocket-asr',
+        },
+      ),
+    );
+    final audioService = _FakeAudioRecordingService(hasPermissionResult: true);
+    final speechService = _FakeSpeechInputService(initializeResult: false);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const []),
+          audioRecordingService: audioService,
+          speechInputService: speechService,
+          bridgeRealtimeAsrService: _FakeBridgeRealtimeAsrService(),
+          ttsService: _FakeTtsService(systemAvailable: false),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(audioService.hasPermissionCalls, 1);
+    expect(speechService.initializeCalls, 0);
+    await tester.tap(find.byKey(const Key('session-voice-input-button')));
+    await tester.pump();
+    expect(audioService.startStreamCalls, 1);
+
+    await _openSessionHeaderMenu(tester);
+    final callModeButton = tester.widget<IconButton>(
+      find.byKey(const Key('session-call-mode-button')),
+    );
+    expect(callModeButton.onPressed, isNotNull);
+  });
+
+  testWidgets('speech controls refresh after selecting an ASR plugin',
+      (tester) async {
+    final audioService = _FakeAudioRecordingService(hasPermissionResult: true);
+    final speechService = _FakeSpeechInputService(initializeResult: false);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForMessages(const []),
+          audioRecordingService: audioService,
+          speechInputService: speechService,
+          ttsService: _FakeTtsService(systemAvailable: false),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final plugin = InstalledSpeechPlugin(
+      installedAt: DateTime(2026),
+      manifest: const SpeechPluginManifest(
+        id: 'websocket-asr',
+        name: 'Websocket ASR',
+        version: '1.0.0',
+        capabilities: [SpeechPluginCapability.realtimeAsr],
+        transport: SpeechPluginTransport.realtimeWebsocket,
+        realtimeWebsocketUrl: 'wss://speech.example.com/realtime',
+      ),
+    );
+    appSettingsController.debugReplaceSettings(
+      AppSettings.defaults().copyWith(
+        installedPlugins: [plugin.toJson()],
+        selectedPluginByCapability: const {
+          'speech.realtime_asr': 'websocket-asr',
+        },
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(audioService.hasPermissionCalls, 1);
+    expect(speechService.initializeCalls, 1);
+
+    await _openSessionHeaderMenu(tester);
+    final callModeButton = tester.widget<IconButton>(
+      find.byKey(const Key('session-call-mode-button')),
+    );
+    expect(callModeButton.onPressed, isNotNull);
+  });
+
   testWidgets('bridge local call mode sends final realtime transcript',
       (tester) async {
     appSettingsController.debugReplaceSettings(
@@ -9249,14 +9792,9 @@ void main() {
     await _enterCallModeFromHeader(tester);
 
     expect(bridgeRealtimeService.startCalls, 1);
-    expect(
-      bridgeRealtimeService.lastConfig?.endpointTrailingSilenceMs,
-      (defaultCallModeSpeechPauseMillis / 0.7).ceil(),
-    );
-    expect(
-      bridgeRealtimeService.lastConfig?.vadMinSilenceMs,
-      defaultCallModeSpeechPauseMillis,
-    );
+    expect(bridgeRealtimeService.lastConfig?.enableVad, isFalse);
+    expect(bridgeRealtimeService.lastConfig?.endpointTrailingSilenceMs, isNull);
+    expect(bridgeRealtimeService.lastConfig?.vadMinSilenceMs, isNull);
     bridgeRealtimeService.emitFinal('。');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -10433,12 +10971,21 @@ void main() {
     await tester.pump();
 
     expect(localVadService.isListening, isTrue);
+    expect(bridgeRealtimeService.lastConfig?.enableVad, isFalse);
     vadBackend.detectedValue = true;
     audioService.addAudio(Uint8List.fromList([0, 0, 0, 64]));
     await tester.pump();
 
     expect(vadBackend.acceptedChunks, hasLength(1));
     expect(find.text('Speech detected'), findsOneWidget);
+
+    vadBackend.segments.add(
+      LocalVadSpeechSegment(start: 0, samples: Float32List(0)),
+    );
+    audioService.addAudio(Uint8List.fromList([0, 0, 0, 0]));
+    await tester.pump();
+
+    expect(bridgeRealtimeService.finishCalls, 1);
 
     await localVadService.cancel();
 
@@ -10996,12 +11543,27 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, 'Stop playback'), findsNothing);
   });
 
-  testWidgets('auto speaking assistant reply shows stop playback only',
+  testWidgets('selected TTS plugin auto speaks when system TTS is unavailable',
       (tester) async {
     appSettingsController.debugReplaceSettings(
       AppSettings.defaults().copyWith(
         autoSpeakReplies: true,
-        ttsProvider: TtsProvider.bridgeLocal,
+        installedPlugins: const [
+          {
+            'installed_at': '2026-01-01T00:00:00.000Z',
+            'manifest': {
+              'id': 'selected-tts',
+              'name': 'Selected TTS',
+              'version': '1.0.0',
+              'capabilities': ['speech.tts'],
+              'transport': 'openai_compatible',
+              'base_url': 'https://tts.example.com/v1',
+            },
+          },
+        ],
+        selectedPluginByCapability: const {
+          'speech.tts': 'selected-tts',
+        },
       ),
     );
     final eventGate = Completer<void>();
@@ -11534,6 +12096,53 @@ void main() {
     );
   });
 
+  testWidgets('mobile error banner keeps the composer at the screen bottom',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response('boom', 500);
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('session-error-banner')),
+      findsOneWidget,
+    );
+    final composerRect = tester.getRect(
+      find.byKey(const Key('session-message-composer')),
+    );
+    final screenBottom =
+        tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    expect(composerRect.bottom, screenBottom);
+  });
+
   testWidgets('session reasoning effort selector patches session default',
       (tester) async {
     final patchBodies = <Map<String, dynamic>>[];
@@ -11846,6 +12455,8 @@ class _TestApp extends StatelessWidget {
 }
 
 SessionSummary _session({
+  String id = 'session-1',
+  String projectId = 'project-1',
   SessionStatus status = SessionStatus.idle,
   bool briefReplyMode = false,
   String title = 'Test Session',
@@ -11853,8 +12464,8 @@ SessionSummary _session({
   String? runtimeSessionRef,
 }) {
   return SessionSummary(
-    id: 'session-1',
-    projectId: 'project-1',
+    id: id,
+    projectId: projectId,
     title: title,
     agentId: 'codex',
     briefReplyMode: briefReplyMode,
@@ -11866,6 +12477,30 @@ SessionSummary _session({
     reasoningEffort: reasoningEffort,
     runtimeSessionRef: runtimeSessionRef,
   );
+}
+
+class _RecordingNavigatorObserver extends NavigatorObserver {
+  int pushes = 0;
+  int replacements = 0;
+  int removals = 0;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushes += 1;
+    super.didPush(route, previousRoute);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    replacements += 1;
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    removals += 1;
+    super.didRemove(route, previousRoute);
+  }
 }
 
 BridgeClient _clientForMessages(List<Map<String, dynamic>> messages) {
@@ -12191,6 +12826,7 @@ class _FakeBridgeRealtimeAsrService extends BridgeRealtimeAsrService {
   void Function(String error)? _onError;
   int startCalls = 0;
   int cancelCalls = 0;
+  int finishCalls = 0;
   BridgeRealtimeAsrConfig? lastConfig;
 
   @override
@@ -12217,6 +12853,11 @@ class _FakeBridgeRealtimeAsrService extends BridgeRealtimeAsrService {
   Future<void> cancel() async {
     cancelCalls += 1;
     events?.add('bridge-cancel');
+  }
+
+  @override
+  Future<void> finish() async {
+    finishCalls += 1;
   }
 
   void emitPartial(

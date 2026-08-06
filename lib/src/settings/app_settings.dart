@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import '../models.dart';
 import '../plugins/speech_plugin_models.dart';
 import '../plugins/speech_plugin_registry.dart';
 import 'app_settings_store.dart';
@@ -58,6 +59,7 @@ class AppSettings {
     required this.callModeWakeWordEnabled,
     required this.callModeWakeWords,
     required this.lastSelectedAgent,
+    required this.cachedAgents,
     required this.lastSelectedProviderByProject,
     required this.desktopNavigationCollapsed,
     required this.desktopHomeRailCollapsed,
@@ -100,6 +102,7 @@ class AppSettings {
   final bool callModeWakeWordEnabled;
   final String callModeWakeWords;
   final String lastSelectedAgent;
+  final List<AgentSummary> cachedAgents;
   final Map<String, String?> lastSelectedProviderByProject;
   final bool desktopNavigationCollapsed;
   final bool desktopHomeRailCollapsed;
@@ -168,6 +171,7 @@ class AppSettings {
       callModeWakeWordEnabled: false,
       callModeWakeWords: defaultCallModeWakeWords,
       lastSelectedAgent: '',
+      cachedAgents: const [],
       lastSelectedProviderByProject: const {},
       desktopNavigationCollapsed: false,
       desktopHomeRailCollapsed: true,
@@ -219,6 +223,7 @@ class AppSettings {
     bool? callModeWakeWordEnabled,
     String? callModeWakeWords,
     String? lastSelectedAgent,
+    List<AgentSummary>? cachedAgents,
     Map<String, String?>? lastSelectedProviderByProject,
     bool? desktopNavigationCollapsed,
     bool? desktopHomeRailCollapsed,
@@ -280,6 +285,8 @@ class AppSettings {
       callModeWakeWords: _normalizeCallModeWakeWords(
           callModeWakeWords ?? this.callModeWakeWords),
       lastSelectedAgent: lastSelectedAgent ?? this.lastSelectedAgent,
+      cachedAgents:
+          List<AgentSummary>.unmodifiable(cachedAgents ?? this.cachedAgents),
       lastSelectedProviderByProject: Map<String, String?>.unmodifiable(
         lastSelectedProviderByProject ?? this.lastSelectedProviderByProject,
       ),
@@ -352,6 +359,9 @@ class AppSettings {
       'call_mode_wake_word_enabled': callModeWakeWordEnabled,
       'call_mode_wake_words': callModeWakeWords,
       'last_selected_agent': lastSelectedAgent,
+      'cached_agents': [
+        for (final agent in cachedAgents) agent.toJson(),
+      ],
       'last_selected_provider_by_project': lastSelectedProviderByProject,
       'desktop_navigation_collapsed': desktopNavigationCollapsed,
       'desktop_home_rail_collapsed': desktopHomeRailCollapsed,
@@ -468,6 +478,9 @@ class AppSettings {
         'last_selected_agent',
         defaults.lastSelectedAgent,
       ),
+      cachedAgents: List<AgentSummary>.unmodifiable(
+        _readAgentSummaries(json, 'cached_agents'),
+      ),
       lastSelectedProviderByProject: Map<String, String?>.unmodifiable(
         _readNullableStringMap(
           json,
@@ -548,6 +561,26 @@ class AppSettings {
             _ => entry.value.toString(),
           },
     };
+  }
+
+  static List<AgentSummary> _readAgentSummaries(
+    Map<String, dynamic> json,
+    String key,
+  ) {
+    final value = json[key];
+    if (value is! List) {
+      return const [];
+    }
+    return value
+        .whereType<Map>()
+        .map(
+          (item) => AgentSummary.fromJson(
+            Map<String, dynamic>.from(
+              item.map((key, value) => MapEntry(key.toString(), value)),
+            ),
+          ),
+        )
+        .toList(growable: false);
   }
 
   static Map<String, String> _readStringMap(
@@ -850,9 +883,6 @@ class AppSettings {
   }
 
   static TtsProvider _parseTtsProvider(String? raw, TtsProvider fallback) {
-    if (raw == 'bridge') {
-      return TtsProvider.bridgeLocal;
-    }
     if (raw == 'zhipu') {
       return TtsProvider.system;
     }
@@ -865,9 +895,6 @@ class AppSettings {
   }
 
   static AsrProvider _parseAsrProvider(String? raw, AsrProvider fallback) {
-    if (raw == 'bridge') {
-      return AsrProvider.bridgeLocal;
-    }
     if (raw == 'whisper' || raw == 'zhipu' || raw == 'tencentCloudStreaming') {
       return AsrProvider.system;
     }
@@ -985,6 +1012,9 @@ class AppSettingsController extends ChangeNotifier {
           shouldPersist = true;
         }
         if (json['last_selected_agent'] == null) {
+          shouldPersist = true;
+        }
+        if (json['cached_agents'] == null) {
           shouldPersist = true;
         }
         if (json['voice_composer_mode'] == null) {
