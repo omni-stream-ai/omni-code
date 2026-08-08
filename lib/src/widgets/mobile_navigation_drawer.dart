@@ -70,6 +70,7 @@ class MobileNavigationDrawer extends StatelessWidget {
                   onNewSessionForSession: onNewSessionForSession,
                   agentLabelFor: agentLabelFor,
                   showRecentContent: activeRoute != AppRouteKind.home,
+                  alwaysShowRecentMenus: true,
                   onBeforeNavigate: () => Navigator.of(context).pop(),
                   headerStyle: NavigationHeaderStyle.prominent,
                 ),

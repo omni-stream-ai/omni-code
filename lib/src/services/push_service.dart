@@ -18,6 +18,9 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 class PushService {
   final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
   bool _backgroundHandlerRegistered = false;
+  bool _remoteNotificationsRegistered = false;
+
+  bool get remoteNotificationsRegistered => _remoteNotificationsRegistered;
 
   Future<void> initialize() async {
     if (!Platform.isAndroid && !Platform.isIOS) {
@@ -80,6 +83,7 @@ class PushService {
         fcmToken: token,
         miPushRegId: null,
       );
+      _remoteNotificationsRegistered = true;
     } catch (_) {
       return;
     }
@@ -95,12 +99,20 @@ class PushService {
 
   void _handleForegroundMessage(RemoteMessage message) {
     final payload = message.data['payload_json'] as String?;
+    final notificationType = message.data['notification_type'] as String?;
+    final title = message.notification?.title;
     final body = message.notification?.body;
     unawaited(
-      notificationService.showRemoteAssistantReplyNotification(
-        payload: payload,
-        body: body,
-      ),
+      notificationType == 'approval_request'
+          ? notificationService.showRemoteApprovalRequestNotification(
+              payload: payload,
+              title: title,
+              body: body,
+            )
+          : notificationService.showRemoteAssistantReplyNotification(
+              payload: payload,
+              body: body,
+            ),
     );
   }
 }

@@ -84,9 +84,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bridgeCloudProxy => 'Bridge / Cloud relay';
 
   @override
-  String get whisperCompatible => 'Whisper / OpenAI Compatible';
-
-  @override
   String get apiKey => 'API Key';
 
   @override
@@ -109,7 +106,36 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get enableAiApprovalSubtitle =>
-      'Use an OpenAI-compatible endpoint to approve low-risk commands';
+      'Use a configured model to approve low-risk commands';
+
+  @override
+  String get aiApprovalModel => 'Approval model';
+
+  @override
+  String get aiApprovalProvider => 'Approval model provider';
+
+  @override
+  String get loadingApprovalModels => 'Loading models...';
+
+  @override
+  String get approvalModelsLoadFailed =>
+      'Could not load models; configured defaults are shown';
+
+  @override
+  String get noApprovalModels => 'No models returned by this provider';
+
+  @override
+  String get loadingModelProviders => 'Loading configured models...';
+
+  @override
+  String get noConfiguredModels =>
+      'Configure and enable a model provider first';
+
+  @override
+  String get modelProvidersLoadFailed => 'Could not load configured models';
+
+  @override
+  String get selectAiApprovalModel => 'Select an approval model';
 
   @override
   String get aiApprovalMaxRisk => 'Highest auto-approval risk';
@@ -117,6 +143,54 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get aiApprovalHelp =>
       'Saved settings sync to the current Bridge. Keeping Low is recommended. High-risk commands, failed calls, or hard-blocked rules still fall back to manual approval on the phone.';
+
+  @override
+  String get aiApprovalPrompt => 'Global approval prompt';
+
+  @override
+  String get aiApprovalPromptHint => 'Add organization-wide approval guidance';
+
+  @override
+  String get aiApprovalPromptEntrySubtitle =>
+      'Edit the instructions used for automatic approval decisions';
+
+  @override
+  String get projectAiApprovalPrompt => 'Project approval prompt';
+
+  @override
+  String get projectAiApprovalPromptHint =>
+      'Add approval guidance for this project';
+
+  @override
+  String get alwaysAllowedCommands => 'Always allowed commands';
+
+  @override
+  String get alwaysAllow => 'Always allow';
+
+  @override
+  String get autoApprovalAiReviewTitle => 'AI recommends your review';
+
+  @override
+  String get autoApprovalRiskThresholdTitle =>
+      'Risk exceeds the automatic approval limit';
+
+  @override
+  String get autoApprovalHardBlockTitle => 'Blocked by a safety rule';
+
+  @override
+  String get autoApprovalReviewFailedTitle =>
+      'Automatic review was unavailable';
+
+  @override
+  String get autoApprovalHardBlockReason =>
+      'This command affects a protected or project-external resource, so it needs your confirmation.';
+
+  @override
+  String get autoApprovalReviewFailedReason =>
+      'The approval model could not complete its review, so this request was sent to you instead.';
+
+  @override
+  String get projectApprovalSettingsSaved => 'Project approval settings saved';
 
   @override
   String get riskLow => 'Low';
@@ -599,7 +673,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get callModeRequiresStreamingAsr =>
-      'Call mode currently requires System ASR or Omni Bridge Local.';
+      'Call mode requires Omni Bridge Local or a realtime ASR plugin.';
 
   @override
   String get callModeSection => 'Call mode';
@@ -616,11 +690,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get callModeSpeechPauseHelp =>
-      'How long to wait after you stop speaking before the current utterance is sent automatically.';
+      'How many milliseconds of silence to wait before sending the current utterance. Recommended range: 600-2400 ms.';
 
   @override
-  String callModeSpeechPauseOption(Object seconds) {
-    return 'Pause ${seconds}s';
+  String callModeSpeechPauseRangeError(int min, int max) {
+    return 'Enter a value from $min to $max ms.';
   }
 
   @override
@@ -1071,7 +1145,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get systemTtsUnavailableOnLinux =>
-      'System TTS is not available on Linux yet. Choose a cloud provider to enable playback.';
+      'Linux system TTS requires speech-dispatcher (spd-say) or espeak-ng. Install one and retry, or switch to a cloud provider.';
 
   @override
   String get systemAsrUnavailableOnLinux =>
@@ -1107,10 +1181,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get localBridgeDownloadTasksSection => 'Download tasks';
-
-  @override
-  String get localBridgeNoCompatibleModels =>
-      'No compatible models are available for this type yet.';
 
   @override
   String get localBridgeTtsVoiceLabel => 'TTS voice';
@@ -1195,19 +1265,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get speechVoiceGenderMale => 'Male';
 
   @override
-  String get whisperApiSection => 'Whisper API';
-
-  @override
   String get bridgeLocalTtsHelp =>
       'Uses the bridge-local /v1/audio/speech endpoint and the selected TTS model below.';
 
   @override
   String get bridgeLocalAsrHelp =>
       'Uses the bridge-local /v1/audio/transcriptions endpoint for recorded voice input.';
-
-  @override
-  String get whisperApiHelp =>
-      'Requires a Whisper-compatible base URL and API key.';
 
   @override
   String get speechNotSelected => 'Not selected';
@@ -1234,15 +1297,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get speechNoInstalledModels => 'No installed models yet.';
 
   @override
-  String get speechSelect => 'Select';
-
-  @override
-  String get speechChange => 'Change';
-
-  @override
-  String get speechSelected => 'Selected';
-
-  @override
   String get speechModelKindAsr => 'ASR';
 
   @override
@@ -1261,51 +1315,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get speechProfileBatchAsrTitle => 'Batch ASR';
 
   @override
-  String get speechProfileBatchAsrHelp =>
-      'Used for recorded voice transcription. Pick this when you want accurate transcription after the user finishes speaking.';
-
-  @override
-  String get speechProfileBatchAsrAction => 'Use for Batch ASR';
-
-  @override
   String get speechProfileRealtimeAsrTitle => 'Realtime ASR';
 
   @override
-  String get speechProfileRealtimeAsrHelp =>
-      'Used by call mode and realtime websocket transcription. Pick this when you need partial transcripts while the user is still speaking.';
-
-  @override
-  String get speechProfileRealtimeAsrAction => 'Use for Realtime ASR';
-
-  @override
   String get speechProfileTtsTitle => 'TTS';
-
-  @override
-  String get speechProfileTtsHelp =>
-      'Used for spoken reply playback from the local Bridge. Pick this when you want the assistant to speak through a local model.';
-
-  @override
-  String get speechProfileTtsAction => 'Use for TTS';
-
-  @override
-  String get speechProfileVadTitle => 'VAD';
-
-  @override
-  String get speechProfileVadHelp =>
-      'Used to detect when speech starts and ends in realtime mode. Pick this when you want faster turn-taking and cleaner cutoffs.';
-
-  @override
-  String get speechProfileVadAction => 'Use for VAD';
-
-  @override
-  String get speechProfileWakeWordTitle => 'Wake word';
-
-  @override
-  String get speechProfileWakeWordHelp =>
-      'Used by Omni Bridge Local to detect the wake word before accepting realtime call-mode speech.';
-
-  @override
-  String get speechProfileWakeWordAction => 'Use for Wake word';
 
   @override
   String get speechDownloadStatusQueued => 'Queued';
@@ -1349,11 +1362,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String speechModelDownloadFailed(Object modelId, Object error) {
     return 'Download failed for $modelId: $error';
-  }
-
-  @override
-  String speechProfileUpdateFailed(Object profile, Object error) {
-    return 'Failed to update $profile: $error';
   }
 
   @override
@@ -1512,6 +1520,594 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fieldRequired => 'This field is required';
+
+  @override
+  String unknownRoute(Object route) {
+    return 'Unknown route: $route';
+  }
+
+  @override
+  String get recentProjectsTitle => 'Recent projects';
+
+  @override
+  String get more => 'More';
+
+  @override
+  String get subtitles => 'Subtitles';
+
+  @override
+  String get stop => 'Stop';
+
+  @override
+  String get hold => 'Hold';
+
+  @override
+  String get microphone => 'Microphone';
+
+  @override
+  String get end => 'End';
+
+  @override
+  String get openNavigation => 'Open navigation';
+
+  @override
+  String get providerOrder => 'Provider order';
+
+  @override
+  String get configured => 'Configured';
+
+  @override
+  String get enabled => 'Enabled';
+
+  @override
+  String get defaultLabel => 'Default';
+
+  @override
+  String get none => 'None';
+
+  @override
+  String get projectDesk => 'Project desk';
+
+  @override
+  String get allSessions => 'All sessions';
+
+  @override
+  String get inMotion => 'In motion';
+
+  @override
+  String get clearSearch => 'Clear search';
+
+  @override
+  String get projectContext => 'Project context';
+
+  @override
+  String get rootPath => 'Root path';
+
+  @override
+  String get branch => 'Branch';
+
+  @override
+  String get gitState => 'Git state';
+
+  @override
+  String get statusMix => 'Status mix';
+
+  @override
+  String get approvals => 'Approvals';
+
+  @override
+  String get notes => 'Notes';
+
+  @override
+  String get projectNotesNoActiveSessions =>
+      'No active sessions yet. Start a new one to turn this project into a working desk.';
+
+  @override
+  String get projectNotesWaitingApproval =>
+      'There are sessions waiting on approval. Review them before starting parallel work.';
+
+  @override
+  String get projectNotesActiveWork =>
+      'This project has active work in motion. Keep recent sessions concise and easy to scan.';
+
+  @override
+  String get projectNotesQuiet =>
+      'The current session mix is quiet. Use this space to restart stalled threads or begin a focused run.';
+
+  @override
+  String get sessionOptions => 'Session options';
+
+  @override
+  String get collapseSessionDetails => 'Collapse session details';
+
+  @override
+  String get customModel => 'Custom model';
+
+  @override
+  String get files => 'files';
+
+  @override
+  String get scrollToLatest => 'Scroll to latest';
+
+  @override
+  String get project => 'Project';
+
+  @override
+  String get path => 'Path';
+
+  @override
+  String get gitSnapshot => 'Git snapshot';
+
+  @override
+  String get summary => 'Summary';
+
+  @override
+  String get projectContextUnavailable => 'Project context is unavailable.';
+
+  @override
+  String get clientId => 'Client ID';
+
+  @override
+  String get replyBehaviorSection => 'Reply behavior';
+
+  @override
+  String get currentVersionLabel => 'Current version';
+
+  @override
+  String get updateManifest => 'Update manifest';
+
+  @override
+  String get atAGlance => 'At a glance';
+
+  @override
+  String get workspaceNote => 'Workspace note';
+
+  @override
+  String get threads => 'Threads';
+
+  @override
+  String get active => 'Active';
+
+  @override
+  String get review => 'Review';
+
+  @override
+  String get newLabel => 'New';
+
+  @override
+  String get inFocus => 'In focus';
+
+  @override
+  String get upNext => 'Up next';
+
+  @override
+  String threadsCount(int count) {
+    return '$count threads';
+  }
+
+  @override
+  String get nothingUrgentWaiting => 'Nothing urgent is waiting right now.';
+
+  @override
+  String visibleProjectsCount(int count) {
+    return '$count visible';
+  }
+
+  @override
+  String get authorizationNeeded => 'Authorization needed';
+
+  @override
+  String connectedBridge(Object address) {
+    return 'Connected • $address';
+  }
+
+  @override
+  String get status => 'Status';
+
+  @override
+  String get collapseStatus => 'Collapse status';
+
+  @override
+  String get pendingApprovals => 'Pending approvals';
+
+  @override
+  String waitingActionsNeedReview(int count) {
+    return '$count waiting actions need review';
+  }
+
+  @override
+  String get noApprovalsWaiting => 'No approvals are waiting right now';
+
+  @override
+  String get bridgeStatus => 'Bridge status';
+
+  @override
+  String get voiceDevice => 'Voice / device';
+
+  @override
+  String activeSessionsMicrophoneReady(int count) {
+    return '$count active sessions • microphone ready';
+  }
+
+  @override
+  String get microphoneReadySystemSpeechAvailable =>
+      'Microphone ready • system speech available';
+
+  @override
+  String get projectsOverview => 'Projects overview';
+
+  @override
+  String activeProjectsCount(int count) {
+    return '$count active projects';
+  }
+
+  @override
+  String get quickActions => 'Quick actions';
+
+  @override
+  String get quickActionsBody => 'Open projects or adjust settings';
+
+  @override
+  String get pluginManifest => 'Plugin manifest';
+
+  @override
+  String get importLabel => 'Import';
+
+  @override
+  String get systemDefault => 'System default';
+
+  @override
+  String get systemDefaultCapabilitySubtitle =>
+      'Use the built-in behavior for this capability.';
+
+  @override
+  String get chooseSpeechCapabilityProvider =>
+      'Choose system default or pick a plugin for this capability.';
+
+  @override
+  String get savingPluginSettings => 'Saving plugin settings...';
+
+  @override
+  String get savedToSettings => 'Saved to settings.';
+
+  @override
+  String pluginSettingsSaveFailed(Object error) {
+    return 'Failed to save plugin settings.\n\nRaw error:\n$error';
+  }
+
+  @override
+  String get fillRequiredPluginSettings =>
+      'Fill in the required settings below before using this plugin.';
+
+  @override
+  String get defaultTtsTestText => 'Hello from Omni Code speech settings.';
+
+  @override
+  String get systemTtsTestUnavailable =>
+      'System TTS test is not available on this platform. Choose a TTS plugin to test playback here.';
+
+  @override
+  String get startingPlaybackTest => 'Starting playback test...';
+
+  @override
+  String get playbackStartedSuccessfully => 'Playback started successfully.';
+
+  @override
+  String get testTts => 'Test TTS';
+
+  @override
+  String get systemDefaultTtsCannotBeTested =>
+      'System default TTS cannot be tested on this platform.';
+
+  @override
+  String get ttsTestUsesCurrentConfiguration =>
+      'TTS test uses your current saved speech configuration.';
+
+  @override
+  String get testText => 'Test text';
+
+  @override
+  String get playing => 'Playing...';
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String batchAsrAuthOrParameterError(Object error) {
+    return 'Authentication or parameter error. Check that APPID and API Key (Access Token) are correct.\n\nRaw error:\n$error';
+  }
+
+  @override
+  String batchAsrAuthenticationFailed(Object error) {
+    return 'Authentication failed. Check that the API Key is correct and enabled for this service.\n\nRaw error:\n$error';
+  }
+
+  @override
+  String batchAsrAccessDenied(Object error) {
+    return 'Access denied. Check that the API Key has permission for the selected Resource ID.\n\nRaw error:\n$error';
+  }
+
+  @override
+  String get microphonePermissionRequired =>
+      'Microphone permission is required.';
+
+  @override
+  String get recordingStartedSpeakThenStop =>
+      'Recording started. Speak a short sentence, then stop.';
+
+  @override
+  String get transcribingRecordedAudio => 'Transcribing recorded audio...';
+
+  @override
+  String get transcriptionSucceeded => 'Transcription succeeded.';
+
+  @override
+  String transcriptionSucceededWithText(Object text) {
+    return 'Transcription succeeded: $text';
+  }
+
+  @override
+  String get testBatchAsr => 'Test Batch ASR';
+
+  @override
+  String get batchAsrTestDescription =>
+      'Batch ASR test records a short clip, then transcribes it with your current saved speech configuration.';
+
+  @override
+  String get record => 'Record';
+
+  @override
+  String get transcribing => 'Transcribing...';
+
+  @override
+  String get stopAndTranscribe => 'Stop & Transcribe';
+
+  @override
+  String get recordingSpeakThenStop =>
+      'Recording... speak a short sentence, then stop.';
+
+  @override
+  String realtimeAsrAuthenticationRejected(Object error) {
+    return 'The current service rejected realtime speech authentication. Check the selected plugin credentials, especially API Key and Resource ID.\n\nRaw error:\n$error';
+  }
+
+  @override
+  String realtimeAsrAccessRefused(Object error) {
+    return 'The current service refused realtime speech access. Check that the API Key is enabled for the selected Volcengine speech resource, and that Resource ID exactly matches the purchased duration or concurrent edition.\n\nRaw error:\n$error';
+  }
+
+  @override
+  String realtimeAsrStartFailed(Object error) {
+    return 'The current service could not start realtime speech. This usually means the selected plugin is not exposing a valid realtime websocket endpoint.\n\nRaw error:\n$error';
+  }
+
+  @override
+  String get startingRealtimeSpeechTest => 'Starting realtime speech test...';
+
+  @override
+  String get realtimeTranscriptReceived => 'Realtime transcript received.';
+
+  @override
+  String get realtimeSpeechComingThrough =>
+      'Realtime speech is coming through.';
+
+  @override
+  String realtimeSpeechComingThroughWithText(Object text) {
+    return 'Realtime speech is coming through: $text';
+  }
+
+  @override
+  String get listeningSpeakShortSentence =>
+      'Listening now. Speak a short sentence.';
+
+  @override
+  String get testRealtimeAsr => 'Test Realtime ASR';
+
+  @override
+  String get realtimeAsrSystemTestDescription =>
+      'Realtime ASR test uses the current saved system speech input.';
+
+  @override
+  String get realtimeAsrPluginTestDescription =>
+      'Realtime ASR test uses the current saved plugin configuration.';
+
+  @override
+  String get starting => 'Starting...';
+
+  @override
+  String get start => 'Start';
+
+  @override
+  String get use => 'Use';
+
+  @override
+  String get test => 'Test';
+
+  @override
+  String get uninstall => 'Uninstall';
+
+  @override
+  String get install => 'Install';
+
+  @override
+  String get getApiKey => 'Get API key';
+
+  @override
+  String get startService => 'Start Service';
+
+  @override
+  String get stopService => 'Stop Service';
+
+  @override
+  String get sentAsXApiKey =>
+      'Sent using the plugin authentication configuration.';
+
+  @override
+  String get targetSpeakerOnly => 'Target speaker only';
+
+  @override
+  String get speakerName => 'Speaker name';
+
+  @override
+  String get myVoice => 'My voice';
+
+  @override
+  String get speaker => 'Speaker';
+
+  @override
+  String get enrollSpeakerBeforeFiltering =>
+      'Enroll a speaker on the bridge before enabling filtering.';
+
+  @override
+  String get batchAsrIgnoresUnmatchedSpeaker =>
+      'Batch ASR will ignore speech that does not match the selected voiceprint.';
+
+  @override
+  String get voiceprintModelInstalled => 'Voiceprint model installed';
+
+  @override
+  String get voiceprintModelRequired => 'Voiceprint model is required';
+
+  @override
+  String get savingSpeaker => 'Saving speaker';
+
+  @override
+  String get finishEnrollment => 'Finish enrollment';
+
+  @override
+  String get recordEnrollmentSample => 'Record enrollment sample';
+
+  @override
+  String get speechRoutingSystemDefaultIntro =>
+      'Speech uses the system by default. Install a plugin only for the capabilities that need a custom service.';
+
+  @override
+  String get realtimeAsrRouteSubtitle =>
+      'Mic streaming, live transcripts, and interrupt detection.';
+
+  @override
+  String get realtimeAsrRouteFooter =>
+      'Good default for on-device dictation and interruption handling.';
+
+  @override
+  String get batchAsrRouteSubtitle =>
+      'Recorded clips, uploads, and non-realtime recognition.';
+
+  @override
+  String get batchAsrRouteFooter =>
+      'Useful for cloud transcription providers or higher-accuracy offline jobs.';
+
+  @override
+  String get ttsRouteSubtitle =>
+      'Reply playback, voice output, and spoken call-mode responses.';
+
+  @override
+  String get ttsRouteFooter =>
+      'Use a plugin when you want a cloud voice or a local TTS service.';
+
+  @override
+  String get systemRealtimeAsrTestUnavailable =>
+      'System realtime ASR cannot be tested on this platform. Choose a realtime ASR plugin to test here.';
+
+  @override
+  String get systemBatchAsrTestUnavailable =>
+      'System default does not provide batch ASR testing. Choose a batch ASR plugin to test transcription here.';
+
+  @override
+  String get selectedPluginNotInstalled =>
+      'The selected plugin is not installed, so it cannot be tested.';
+
+  @override
+  String selectedPluginMissingCapabilityConfig(Object capability) {
+    return 'The selected plugin does not expose $capability configuration, so it cannot be tested.';
+  }
+
+  @override
+  String get expectedTtsEndpoint => 'an OpenAI-compatible TTS endpoint';
+
+  @override
+  String get expectedTranscriptionEndpoint =>
+      'an OpenAI-compatible transcription endpoint';
+
+  @override
+  String get expectedRealtimeWebsocketEndpoint =>
+      'a realtime websocket endpoint';
+
+  @override
+  String currentSelectionMissingExpectedEndpoint(Object expected) {
+    return 'The current selection does not expose $expected, so testing is unavailable.';
+  }
+
+  @override
+  String currentSelectionMissingRequiredSetting(Object setting) {
+    return 'The current selection is missing $setting, so testing is unavailable.';
+  }
+
+  @override
+  String get currentSelectionMissingRealtimeWebsocketUrl =>
+      'The current selection is missing a realtime websocket URL, so testing is unavailable.';
+
+  @override
+  String get currentSelectionInvalidRealtimeWebsocketUrl =>
+      'The current selection has an invalid realtime websocket URL, so testing is unavailable.';
+
+  @override
+  String get currentSelectionNonStreamingEndpoint =>
+      'The current selection points to a non-streaming endpoint, so testing is unavailable. Configure a realtime websocket URL first.';
+
+  @override
+  String get installedAndReady => 'Installed and ready to use.';
+
+  @override
+  String get installBeforeSelectingPlugin =>
+      'Install first before selecting this plugin.';
+
+  @override
+  String get fillRequiredPluginSettingsBeforeTesting =>
+      'Fill in the required settings before testing.';
+
+  @override
+  String commandSucceeded(Object command) {
+    return 'Command succeeded: $command';
+  }
+
+  @override
+  String commandFailed(int exitCode, Object stderr) {
+    return 'Command failed ($exitCode): $stderr';
+  }
+
+  @override
+  String get missingKey => 'Missing key';
+
+  @override
+  String get keySaved => 'Key saved';
+
+  @override
+  String pluginApiKeyTitle(Object pluginName) {
+    return '$pluginName · API Key';
+  }
+
+  @override
+  String get savePluginSettings => 'Save plugin settings';
+
+  @override
+  String get saveAndUse => 'Save and use';
+
+  @override
+  String get additionalPluginSettings => 'Additional plugin settings';
+
+  @override
+  String bridgeErrorWithStatus(Object status, Object error) {
+    return 'Bridge error ($status): $error';
+  }
+
+  @override
+  String get noEnrollmentAudioRecorded => 'No enrollment audio was recorded.';
+
+  @override
+  String defaultSpeakerName(int index) {
+    return 'Speaker $index';
+  }
 
   @override
   String get gitClean => 'clean';

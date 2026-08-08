@@ -130,6 +130,58 @@ void main() {
 
     await projectGesture.removePointer();
   });
+
+  testWidgets('recent menus can stay visible for touch layouts',
+      (tester) async {
+    var sessionNewSessionCount = 0;
+    final sessions = [
+      SessionSummary(
+        id: 'session-0',
+        projectId: 'project-1',
+        title: 'Session 0',
+        agentId: 'codex',
+        briefReplyMode: false,
+        status: SessionStatus.idle,
+        updatedAt: DateTime(2026, 5, 5, 11),
+        unreadCount: 0,
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SizedBox(
+            width: 280,
+            child: NavigationPanel(
+              activeRoute: AppRouteKind.session,
+              onNavigateHome: () {},
+              onNavigateProjects: () {},
+              onNavigateSettings: () {},
+              recentSessions: sessions,
+              showRecentContent: true,
+              alwaysShowRecentMenus: true,
+              onOpenSession: (_) {},
+              onNewSessionForSession: (_) => sessionNewSessionCount += 1,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tapAt(_rowMoreButtonPoint(tester, find.text('Session 0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New session'));
+    await tester.pumpAndSettle();
+
+    expect(sessionNewSessionCount, 1);
+  });
 }
 
 Offset _rowMoreButtonPoint(WidgetTester tester, Finder rowText) {

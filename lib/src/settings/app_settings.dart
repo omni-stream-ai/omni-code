@@ -3,6 +3,9 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import '../models.dart';
+import '../plugins/speech_plugin_models.dart';
+import '../plugins/speech_plugin_registry.dart';
 import 'app_settings_store.dart';
 
 const _defaultUpdateManifestUrl =
@@ -44,6 +47,7 @@ class AppSettings {
     required this.aiApprovalEnabled,
     required this.aiApprovalBaseUrl,
     required this.aiApprovalApiKey,
+    required this.aiApprovalProviderId,
     required this.aiApprovalModel,
     required this.aiApprovalMaxRisk,
     required this.notificationMaxChars,
@@ -56,12 +60,18 @@ class AppSettings {
     required this.callModeWakeWordEnabled,
     required this.callModeWakeWords,
     required this.lastSelectedAgent,
+    required this.cachedAgents,
     required this.lastSelectedProviderByProject,
     required this.desktopNavigationCollapsed,
     required this.desktopHomeRailCollapsed,
     required this.desktopSessionRailCollapsed,
     required this.voiceComposerMode,
     required this.videoPreviewMuted,
+    required this.pluginSources,
+    required this.installedPlugins,
+    required this.selectedPluginByCapability,
+    required this.pluginSecretsByPluginId,
+    required this.pluginSettingsByPluginId,
   });
 
   final String bridgeUrl;
@@ -81,6 +91,7 @@ class AppSettings {
   final bool aiApprovalEnabled;
   final String aiApprovalBaseUrl;
   final String aiApprovalApiKey;
+  final String aiApprovalProviderId;
   final String aiApprovalModel;
   final String aiApprovalMaxRisk;
   final int notificationMaxChars;
@@ -93,17 +104,40 @@ class AppSettings {
   final bool callModeWakeWordEnabled;
   final String callModeWakeWords;
   final String lastSelectedAgent;
+  final List<AgentSummary> cachedAgents;
   final Map<String, String?> lastSelectedProviderByProject;
   final bool desktopNavigationCollapsed;
   final bool desktopHomeRailCollapsed;
   final bool desktopSessionRailCollapsed;
   final bool voiceComposerMode;
   final bool videoPreviewMuted;
+  final List<Map<String, dynamic>> pluginSources;
+  final List<Map<String, dynamic>> installedPlugins;
+  final Map<String, String?> selectedPluginByCapability;
+  final Map<String, Map<String, String>> pluginSecretsByPluginId;
+  final Map<String, Map<String, String>> pluginSettingsByPluginId;
+
+  List<Map<String, dynamic>> get speechPluginSources => pluginSources;
+  List<Map<String, dynamic>> get installedSpeechPlugins => installedPlugins;
+  Map<String, String?> get selectedSpeechPluginByCapability =>
+      selectedPluginByCapability;
+  Map<String, Map<String, String>> get speechPluginSettingsByPluginId =>
+      pluginSettingsByPluginId;
+  Map<String, String> get speechPluginApiKeysByPluginId {
+    final result = <String, String>{};
+    for (final entry in pluginSecretsByPluginId.entries) {
+      final apiKey = entry.value['api_key']?.trim() ?? '';
+      if (apiKey.isNotEmpty) {
+        result[entry.key] = apiKey;
+      }
+    }
+    return Map<String, String>.unmodifiable(result);
+  }
 
   factory AppSettings.defaults() {
-    const configuredUrl = String.fromEnvironment('ECHO_MATE_BRIDGE_URL');
+    const configuredUrl = String.fromEnvironment('OMNI_CODE_BRIDGE_URL');
     const updateManifestUrl = String.fromEnvironment(
-      'ECHO_MATE_UPDATE_MANIFEST_URL',
+      'OMNI_CODE_UPDATE_MANIFEST_URL',
       defaultValue: _defaultUpdateManifestUrl,
     );
     return AppSettings(
@@ -127,6 +161,7 @@ class AppSettings {
       aiApprovalEnabled: false,
       aiApprovalBaseUrl: 'https://api.openai.com/v1',
       aiApprovalApiKey: '',
+      aiApprovalProviderId: '',
       aiApprovalModel: 'gpt-4.1-mini',
       aiApprovalMaxRisk: 'low',
       notificationMaxChars: _defaultNotificationMaxChars,
@@ -139,12 +174,25 @@ class AppSettings {
       callModeWakeWordEnabled: false,
       callModeWakeWords: defaultCallModeWakeWords,
       lastSelectedAgent: '',
+      cachedAgents: const [],
       lastSelectedProviderByProject: const {},
       desktopNavigationCollapsed: false,
       desktopHomeRailCollapsed: true,
       desktopSessionRailCollapsed: true,
       voiceComposerMode: false,
       videoPreviewMuted: true,
+      pluginSources: const [
+        {
+          'id': defaultSpeechPluginRepositorySourceId,
+          'name': defaultSpeechPluginRepositorySourceName,
+          'index_url': defaultSpeechPluginRepositoryIndexUrl,
+          'enabled': true,
+        },
+      ],
+      installedPlugins: const [],
+      selectedPluginByCapability: const {},
+      pluginSecretsByPluginId: const {},
+      pluginSettingsByPluginId: const {},
     );
   }
 
@@ -166,8 +214,10 @@ class AppSettings {
     bool? aiApprovalEnabled,
     String? aiApprovalBaseUrl,
     String? aiApprovalApiKey,
+    String? aiApprovalProviderId,
     String? aiApprovalModel,
     String? aiApprovalMaxRisk,
+    int? notificationMaxChars,
     bool? autoSpeakReplies,
     bool? speechPlaybackPromptEnabled,
     bool? compressAssistantReplies,
@@ -177,12 +227,23 @@ class AppSettings {
     bool? callModeWakeWordEnabled,
     String? callModeWakeWords,
     String? lastSelectedAgent,
+    List<AgentSummary>? cachedAgents,
     Map<String, String?>? lastSelectedProviderByProject,
     bool? desktopNavigationCollapsed,
     bool? desktopHomeRailCollapsed,
     bool? desktopSessionRailCollapsed,
     bool? voiceComposerMode,
     bool? videoPreviewMuted,
+    List<Map<String, dynamic>>? pluginSources,
+    List<Map<String, dynamic>>? installedPlugins,
+    Map<String, String?>? selectedPluginByCapability,
+    Map<String, Map<String, String>>? pluginSecretsByPluginId,
+    Map<String, Map<String, String>>? pluginSettingsByPluginId,
+    List<Map<String, dynamic>>? speechPluginSources,
+    List<Map<String, dynamic>>? installedSpeechPlugins,
+    Map<String, String?>? selectedSpeechPluginByCapability,
+    Map<String, String>? speechPluginApiKeysByPluginId,
+    Map<String, Map<String, String>>? speechPluginSettingsByPluginId,
   }) {
     return AppSettings(
       bridgeUrl: bridgeUrl ?? this.bridgeUrl,
@@ -205,9 +266,10 @@ class AppSettings {
       aiApprovalEnabled: aiApprovalEnabled ?? this.aiApprovalEnabled,
       aiApprovalBaseUrl: aiApprovalBaseUrl ?? this.aiApprovalBaseUrl,
       aiApprovalApiKey: aiApprovalApiKey ?? this.aiApprovalApiKey,
+      aiApprovalProviderId: aiApprovalProviderId ?? this.aiApprovalProviderId,
       aiApprovalModel: aiApprovalModel ?? this.aiApprovalModel,
       aiApprovalMaxRisk: aiApprovalMaxRisk ?? this.aiApprovalMaxRisk,
-      notificationMaxChars: notificationMaxChars,
+      notificationMaxChars: notificationMaxChars ?? this.notificationMaxChars,
       autoSpeakReplies: autoSpeakReplies ?? this.autoSpeakReplies,
       speechPlaybackPromptEnabled:
           speechPlaybackPromptEnabled ?? this.speechPlaybackPromptEnabled,
@@ -228,6 +290,8 @@ class AppSettings {
       callModeWakeWords: _normalizeCallModeWakeWords(
           callModeWakeWords ?? this.callModeWakeWords),
       lastSelectedAgent: lastSelectedAgent ?? this.lastSelectedAgent,
+      cachedAgents:
+          List<AgentSummary>.unmodifiable(cachedAgents ?? this.cachedAgents),
       lastSelectedProviderByProject: Map<String, String?>.unmodifiable(
         lastSelectedProviderByProject ?? this.lastSelectedProviderByProject,
       ),
@@ -239,6 +303,34 @@ class AppSettings {
           desktopSessionRailCollapsed ?? this.desktopSessionRailCollapsed,
       voiceComposerMode: voiceComposerMode ?? this.voiceComposerMode,
       videoPreviewMuted: videoPreviewMuted ?? this.videoPreviewMuted,
+      pluginSources: List<Map<String, dynamic>>.unmodifiable(
+        pluginSources ?? speechPluginSources ?? this.pluginSources,
+      ),
+      installedPlugins: List<Map<String, dynamic>>.unmodifiable(
+        installedPlugins ?? installedSpeechPlugins ?? this.installedPlugins,
+      ),
+      selectedPluginByCapability: Map<String, String?>.unmodifiable(
+        _normalizeSelectedPluginByCapability(
+          selectedPluginByCapability ??
+              selectedSpeechPluginByCapability ??
+              this.selectedPluginByCapability,
+        ),
+      ),
+      pluginSecretsByPluginId: _normalizeNestedStringMap(
+        pluginSecretsByPluginId ??
+            (speechPluginApiKeysByPluginId == null
+                ? null
+                : _mergeApiKeysIntoPluginSecrets(
+                    this.pluginSecretsByPluginId,
+                    speechPluginApiKeysByPluginId,
+                  )) ??
+            this.pluginSecretsByPluginId,
+      ),
+      pluginSettingsByPluginId: _normalizeNestedStringMap(
+        pluginSettingsByPluginId ??
+            speechPluginSettingsByPluginId ??
+            this.pluginSettingsByPluginId,
+      ),
     );
   }
 
@@ -259,8 +351,7 @@ class AppSettings {
       'update_manifest_url': updateManifestUrl,
       'update_target_version': updateTargetVersion,
       'ai_approval_enabled': aiApprovalEnabled,
-      'ai_approval_base_url': aiApprovalBaseUrl,
-      'ai_approval_api_key': aiApprovalApiKey,
+      'ai_approval_provider_id': aiApprovalProviderId,
       'ai_approval_model': aiApprovalModel,
       'ai_approval_max_risk': aiApprovalMaxRisk,
       'auto_speak_replies': autoSpeakReplies,
@@ -272,12 +363,20 @@ class AppSettings {
       'call_mode_wake_word_enabled': callModeWakeWordEnabled,
       'call_mode_wake_words': callModeWakeWords,
       'last_selected_agent': lastSelectedAgent,
+      'cached_agents': [
+        for (final agent in cachedAgents) agent.toJson(),
+      ],
       'last_selected_provider_by_project': lastSelectedProviderByProject,
       'desktop_navigation_collapsed': desktopNavigationCollapsed,
       'desktop_home_rail_collapsed': desktopHomeRailCollapsed,
       'desktop_session_rail_collapsed': desktopSessionRailCollapsed,
       'voice_composer_mode': voiceComposerMode,
       'video_preview_muted': videoPreviewMuted,
+      'plugin_sources': pluginSources,
+      'installed_plugins': installedPlugins,
+      'selected_plugin_by_capability': selectedPluginByCapability,
+      'plugin_secrets_by_plugin_id': pluginSecretsByPluginId,
+      'plugin_settings_by_plugin_id': pluginSettingsByPluginId,
     };
   }
 
@@ -326,6 +425,7 @@ class AppSettings {
         defaults.aiApprovalBaseUrl,
       ),
       aiApprovalApiKey: _readString(json, 'ai_approval_api_key'),
+      aiApprovalProviderId: _readString(json, 'ai_approval_provider_id'),
       aiApprovalModel:
           _readString(json, 'ai_approval_model', defaults.aiApprovalModel),
       aiApprovalMaxRisk: _normalizeRisk(
@@ -383,6 +483,9 @@ class AppSettings {
         'last_selected_agent',
         defaults.lastSelectedAgent,
       ),
+      cachedAgents: List<AgentSummary>.unmodifiable(
+        _readAgentSummaries(json, 'cached_agents'),
+      ),
       lastSelectedProviderByProject: Map<String, String?>.unmodifiable(
         _readNullableStringMap(
           json,
@@ -413,6 +516,21 @@ class AppSettings {
         json,
         'video_preview_muted',
         defaults.videoPreviewMuted,
+      ),
+      pluginSources: List<Map<String, dynamic>>.unmodifiable(
+        _readPluginSources(json, defaults.pluginSources),
+      ),
+      installedPlugins: List<Map<String, dynamic>>.unmodifiable(
+        _readPluginList(json),
+      ),
+      selectedPluginByCapability: Map<String, String?>.unmodifiable(
+        _readSelectedPluginByCapability(json),
+      ),
+      pluginSecretsByPluginId: _normalizeNestedStringMap(
+        _readPluginSecretsByPluginId(json),
+      ),
+      pluginSettingsByPluginId: _normalizeNestedStringMap(
+        _readPluginSettingsByPluginId(json),
       ),
     );
   }
@@ -448,6 +566,245 @@ class AppSettings {
             _ => entry.value.toString(),
           },
     };
+  }
+
+  static List<AgentSummary> _readAgentSummaries(
+    Map<String, dynamic> json,
+    String key,
+  ) {
+    final value = json[key];
+    if (value is! List) {
+      return const [];
+    }
+    return value
+        .whereType<Map>()
+        .map(
+          (item) => AgentSummary.fromJson(
+            Map<String, dynamic>.from(
+              item.map((key, value) => MapEntry(key.toString(), value)),
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  static Map<String, String> _readStringMap(
+    Map<String, dynamic> json,
+    String key,
+  ) {
+    final value = json[key];
+    if (value is! Map) {
+      return const {};
+    }
+    final result = <String, String>{};
+    for (final entry in value.entries) {
+      if (entry.key is! String) {
+        continue;
+      }
+      final nextValue = entry.value?.toString().trim() ?? '';
+      if (nextValue.isEmpty) {
+        continue;
+      }
+      result[entry.key as String] = nextValue;
+    }
+    return result;
+  }
+
+  static Map<String, Map<String, String>> _readNestedStringMap(
+    Map<String, dynamic> json,
+    String key,
+  ) {
+    final value = json[key];
+    if (value is! Map) {
+      return const {};
+    }
+    final result = <String, Map<String, String>>{};
+    for (final entry in value.entries) {
+      if (entry.key is! String || entry.value is! Map) {
+        continue;
+      }
+      final normalized = <String, String>{};
+      for (final child in (entry.value as Map).entries) {
+        if (child.key is! String) {
+          continue;
+        }
+        final nextValue = child.value?.toString().trim() ?? '';
+        if (nextValue.isEmpty) {
+          continue;
+        }
+        normalized[child.key as String] = nextValue;
+      }
+      result[entry.key as String] = normalized;
+    }
+    return result;
+  }
+
+  static List<Map<String, dynamic>> _readJsonObjectList(
+    Map<String, dynamic> json,
+    String key,
+  ) {
+    final value = json[key];
+    if (value is! List) {
+      return const [];
+    }
+    return value
+        .whereType<Map>()
+        .map(
+          (item) => Map<String, dynamic>.from(
+            item.map((key, value) => MapEntry(key.toString(), value)),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  static List<Map<String, dynamic>> _readPluginSources(
+    Map<String, dynamic> json,
+    List<Map<String, dynamic>> fallback,
+  ) {
+    final sources = _readJsonObjectList(json, 'plugin_sources');
+    if (sources.isNotEmpty) {
+      return sources;
+    }
+
+    final legacySources = _readJsonObjectList(json, 'speech_plugin_sources');
+    if (legacySources.isNotEmpty) {
+      return legacySources;
+    }
+
+    final legacyUrl = _readString(json, 'speech_plugin_repository_url').trim();
+    if (legacyUrl.isNotEmpty) {
+      return [
+        const SpeechPluginSource(
+          id: defaultSpeechPluginRepositorySourceId,
+          name: defaultSpeechPluginRepositorySourceName,
+          indexUrl: defaultSpeechPluginRepositoryIndexUrl,
+        ).toJson(),
+        SpeechPluginSource(
+          id: 'custom-1',
+          name: 'Custom',
+          indexUrl: legacyUrl,
+        ).toJson(),
+      ];
+    }
+
+    return fallback;
+  }
+
+  static List<Map<String, dynamic>> _readPluginList(
+    Map<String, dynamic> json,
+  ) {
+    final plugins = _readJsonObjectList(json, 'installed_plugins');
+    if (plugins.isNotEmpty) {
+      return plugins;
+    }
+    return _readJsonObjectList(json, 'installed_speech_plugins');
+  }
+
+  static Map<String, String?> _readSelectedPluginByCapability(
+    Map<String, dynamic> json,
+  ) {
+    final selected = _readNullableStringMap(
+      json,
+      'selected_plugin_by_capability',
+    );
+    if (selected.isNotEmpty) {
+      return _normalizeSelectedPluginByCapability(selected);
+    }
+    return _normalizeSelectedPluginByCapability(
+      _readNullableStringMap(
+        json,
+        'selected_speech_plugin_by_capability',
+      ),
+    );
+  }
+
+  static Map<String, String?> _normalizeSelectedPluginByCapability(
+    Map<String, String?> selected,
+  ) {
+    final result = <String, String?>{};
+    for (final entry in selected.entries) {
+      final capabilityId = switch (entry.key) {
+        'realtime_asr' => SpeechPluginCapability.realtimeAsr.id,
+        'batch_asr' => SpeechPluginCapability.batchAsr.id,
+        'tts' => SpeechPluginCapability.tts.id,
+        _ => entry.key,
+      };
+      result[capabilityId] = entry.value;
+    }
+    return result;
+  }
+
+  static Map<String, Map<String, String>> _readPluginSecretsByPluginId(
+    Map<String, dynamic> json,
+  ) {
+    final secrets = _readNestedStringMap(json, 'plugin_secrets_by_plugin_id');
+    if (secrets.isNotEmpty) {
+      return secrets;
+    }
+    return _apiKeysToPluginSecrets(
+      _readStringMap(json, 'speech_plugin_api_keys_by_plugin_id'),
+    );
+  }
+
+  static Map<String, Map<String, String>> _readPluginSettingsByPluginId(
+    Map<String, dynamic> json,
+  ) {
+    final settings = _readNestedStringMap(json, 'plugin_settings_by_plugin_id');
+    if (settings.isNotEmpty) {
+      return settings;
+    }
+    return _readNestedStringMap(json, 'speech_plugin_settings_by_plugin_id');
+  }
+
+  static Map<String, Map<String, String>> _apiKeysToPluginSecrets(
+    Map<String, String> apiKeysByPluginId,
+  ) {
+    return {
+      for (final entry in apiKeysByPluginId.entries)
+        if (entry.value.trim().isNotEmpty)
+          entry.key: {'api_key': entry.value.trim()},
+    };
+  }
+
+  static Map<String, Map<String, String>> _mergeApiKeysIntoPluginSecrets(
+    Map<String, Map<String, String>> current,
+    Map<String, String> apiKeysByPluginId,
+  ) {
+    final result = {
+      for (final entry in current.entries)
+        entry.key: Map<String, String>.from(entry.value),
+    };
+    final activePluginIds = apiKeysByPluginId.keys.toSet();
+    for (final pluginId in result.keys.toList()) {
+      if (!activePluginIds.contains(pluginId)) {
+        result.remove(pluginId);
+      }
+    }
+    for (final entry in apiKeysByPluginId.entries) {
+      final apiKey = entry.value.trim();
+      if (apiKey.isEmpty) {
+        result.remove(entry.key);
+      } else {
+        result[entry.key] = {
+          ...(result[entry.key] ?? const <String, String>{}),
+          'api_key': apiKey,
+        };
+      }
+    }
+    return result;
+  }
+
+  static Map<String, Map<String, String>> _normalizeNestedStringMap(
+    Map<String, Map<String, String>> value,
+  ) {
+    return Map<String, Map<String, String>>.unmodifiable(
+      value.map(
+        (key, child) => MapEntry(
+          key,
+          Map<String, String>.unmodifiable(child),
+        ),
+      ),
+    );
   }
 
   static int _readInt(
@@ -549,7 +906,7 @@ class AppSettings {
     if (raw == 'bridge') {
       return AsrProvider.bridgeLocal;
     }
-    if (raw == 'zhipu' || raw == 'tencentCloudStreaming') {
+    if (raw == 'whisper' || raw == 'zhipu' || raw == 'tencentCloudStreaming') {
       return AsrProvider.system;
     }
     for (final item in AsrProvider.values) {
@@ -576,6 +933,7 @@ class AppSettings {
 class AppSettingsController extends ChangeNotifier {
   AppSettings _settings = AppSettings.defaults();
   AppSettingsStore _store = createAppSettingsStore();
+  AppSettings? _persistedSettingsOverrideBase;
 
   AppSettings get settings => _settings;
 
@@ -623,6 +981,9 @@ class AppSettingsController extends ChangeNotifier {
         if (json['call_mode_speech_pause_millis'] == null) {
           shouldPersist = true;
         }
+        if (json.containsKey('call_mode_vad_silence_millis')) {
+          shouldPersist = true;
+        }
         if (json['bridge_local_tts_streaming'] == null) {
           shouldPersist = true;
         }
@@ -655,6 +1016,10 @@ class AppSettingsController extends ChangeNotifier {
         if (json['ai_approval_enabled'] == null) {
           shouldPersist = true;
         }
+        if (json.containsKey('ai_approval_base_url') ||
+            json.containsKey('ai_approval_api_key')) {
+          shouldPersist = true;
+        }
         if (json.containsKey('notification_max_chars')) {
           shouldPersist = true;
         }
@@ -662,6 +1027,9 @@ class AppSettingsController extends ChangeNotifier {
           shouldPersist = true;
         }
         if (json['last_selected_agent'] == null) {
+          shouldPersist = true;
+        }
+        if (json['cached_agents'] == null) {
           shouldPersist = true;
         }
         if (json['voice_composer_mode'] == null) {
@@ -674,6 +1042,27 @@ class AppSettingsController extends ChangeNotifier {
           shouldPersist = true;
         }
         if (json['desktop_session_rail_collapsed'] == null) {
+          shouldPersist = true;
+        }
+        if (json['plugin_sources'] == null ||
+            json.containsKey('speech_plugin_sources') ||
+            json.containsKey('speech_plugin_repository_url')) {
+          shouldPersist = true;
+        }
+        if (json['installed_plugins'] == null ||
+            json.containsKey('installed_speech_plugins')) {
+          shouldPersist = true;
+        }
+        if (json['selected_plugin_by_capability'] == null ||
+            json.containsKey('selected_speech_plugin_by_capability')) {
+          shouldPersist = true;
+        }
+        if (json['plugin_secrets_by_plugin_id'] == null ||
+            json.containsKey('speech_plugin_api_keys_by_plugin_id')) {
+          shouldPersist = true;
+        }
+        if (json['plugin_settings_by_plugin_id'] == null ||
+            json.containsKey('speech_plugin_settings_by_plugin_id')) {
           shouldPersist = true;
         }
         _settings = AppSettings.fromJson(json);
@@ -699,6 +1088,23 @@ class AppSettingsController extends ChangeNotifier {
     await _store
         .write(const JsonEncoder.withIndent('  ').convert(next.toJson()));
     _settings = next;
+    _persistedSettingsOverrideBase = null;
+    notifyListeners();
+  }
+
+  void pushEphemeralSettings(AppSettings next) {
+    _persistedSettingsOverrideBase ??= _settings;
+    _settings = next;
+    notifyListeners();
+  }
+
+  void popEphemeralSettings() {
+    final base = _persistedSettingsOverrideBase;
+    if (base == null) {
+      return;
+    }
+    _persistedSettingsOverrideBase = null;
+    _settings = base;
     notifyListeners();
   }
 }

@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="README.zh-CN.md">中文文档</a>
+  <a href="docs/zh/README.md">中文文档</a>
 </p>
 
 ---
@@ -20,6 +20,8 @@
 A cross-platform Flutter client for desktop agent sessions. Available on both desktop and mobile, its core goal is to let you complete product design, development, and testing workflows from mobile or via voice input.
 
 Connects to [omni-code-bridge](https://github.com/omni-stream-ai/omni-code-bridge), extending desktop agent capabilities to multiple devices and voice interaction.
+
+See also: [Plugin Writing Guide](https://github.com/omni-stream-ai/omni-code-plugins/blob/main/docs/en/plugin-manifest-guide.md) | [Plugin Repository](https://github.com/omni-stream-ai/omni-code-plugins)
 
 ## Preview
 

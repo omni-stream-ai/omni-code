@@ -172,6 +172,19 @@ class AgentDescriptor {
     return value == id || aliases.contains(value);
   }
 
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'label': label,
+      'aliases': aliases,
+      'selectable': selectable,
+      'default_selected': defaultSelected,
+      'compatible_formats': compatibleFormats.map((format) => format.id).toList(
+            growable: false,
+          ),
+    };
+  }
+
   factory AgentDescriptor.fromJson(Map<String, dynamic> json) {
     final id = (json['id'] as String?)?.trim();
     final legacyKind = (json['kind'] as String?)?.trim();
@@ -222,12 +235,16 @@ class ApprovalRequest {
     required this.resolvable,
     this.command,
     this.reason,
+    this.autoApprovalReason,
+    this.autoApprovalReasonKind,
   });
 
   final String requestId;
   final String kind;
   final String? command;
   final String? reason;
+  final String? autoApprovalReason;
+  final String? autoApprovalReasonKind;
   final bool allowAcceptForSession;
   final bool allowCancel;
   final bool resolvable;
@@ -238,11 +255,31 @@ class ApprovalRequest {
       kind: json['kind'] as String,
       command: json['command'] as String?,
       reason: json['reason'] as String?,
+      autoApprovalReason: json['auto_approval_reason'] as String?,
+      autoApprovalReasonKind: json['auto_approval_reason_kind'] as String?,
       allowAcceptForSession: json['allow_accept_for_session'] as bool? ?? false,
       allowCancel: json['allow_cancel'] as bool? ?? false,
       resolvable: json['resolvable'] as bool? ?? true,
     );
   }
+}
+
+class ProjectAiApprovalSettings {
+  const ProjectAiApprovalSettings({
+    this.prompt = '',
+  });
+
+  final String prompt;
+
+  factory ProjectAiApprovalSettings.fromJson(Map<String, dynamic> json) {
+    return ProjectAiApprovalSettings(
+      prompt: json['prompt'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'prompt': prompt,
+      };
 }
 
 class ClientAuthRequest {
@@ -287,6 +324,15 @@ class AgentSummary {
   bool get selectable => descriptor.selectable;
   bool get defaultSelected => descriptor.defaultSelected;
   List<ApiFormat> get compatibleFormats => descriptor.compatibleFormats;
+
+  Map<String, dynamic> toJson() {
+    return {
+      ...descriptor.toJson(),
+      'installed': installed,
+      'install_hint': installHint,
+      if (installedPath != null) 'installed_path': installedPath,
+    };
+  }
 
   factory AgentSummary.fromJson(Map<String, dynamic> json) {
     return AgentSummary(

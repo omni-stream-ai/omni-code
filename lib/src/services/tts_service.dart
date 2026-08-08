@@ -2,36 +2,47 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import 'cloud_speech_service.dart';
+import '../plugins/speech_plugin_models.dart';
+import '../plugins/speech_plugin_registry.dart';
 import '../settings/app_settings.dart';
 
 const int _wavHeaderLength = 44;
 
+@visibleForTesting
+bool shouldStopFlutterTts({
+  required bool isWeb,
+  required bool isLinux,
+}) =>
+    isWeb || !isLinux;
+
 class TtsService {
   TtsService({
-    AudioPlayer? player,
     FlutterTts? flutterTts,
     CloudSpeechService? speechService,
-  })  : _player = player ?? AudioPlayer(),
-        _flutterTts = flutterTts ?? FlutterTts(),
+  })  : _flutterTts = flutterTts ?? FlutterTts(),
         _speechService = speechService ?? cloudSpeechService;
 
-  final AudioPlayer _player;
   final FlutterTts _flutterTts;
   final CloudSpeechService _speechService;
-  StreamSubscription<PlayerState>? _playerStateSubscription;
+  StreamSubscription<void>? _finishedSubscription;
+  AudioSource? _loadedSource;
+  SoundHandle? _activeHandle;
   Process? _streamingPlaybackProcess;
   http.Client? _streamingPlaybackClient;
   bool _streamingPlaybackStopping = false;
   bool _systemTtsReady = false;
   bool _systemTtsUnavailable = false;
+  bool _linuxTtsEngineDetected = false;
+  int? _linuxTtsRunId;
+  Process? _linuxTtsProcess;
   String? _currentAudioPath;
   void Function()? _onStart;
   void Function()? _onComplete;
@@ -51,16 +62,27 @@ class TtsService {
     _onCancel = onCancel;
     _onError = onError;
 
-    await _playerStateSubscription?.cancel();
-    _playerStateSubscription = _player.onPlayerStateChanged.listen((state) {
-      if (state == PlayerState.completed) {
-        _cleanupAudioFile();
-        _onComplete?.call();
-      }
-    });
-
+    await _finishedSubscription?.cancel();
+    _finishedSubscription = null;
     await _configurePlaybackContext();
-    if (appSettingsController.settings.ttsProvider != TtsProvider.system) {
+    final ttsPlugin = speechPluginRegistry.selectedPluginForCapability(
+      SpeechPluginCapability.tts,
+    );
+    final usesSystemTts = ttsPlugin == null &&
+        appSettingsController.settings.ttsProvider == TtsProvider.system;
+
+    if (!usesSystemTts) {
+      if (!SoLoud.instance.isInitialized) {
+        await SoLoud.instance.init();
+      }
+      return;
+    }
+
+    if (!kIsWeb && Platform.isLinux) {
+      _linuxTtsEngineDetected =
+          await _hasExecutable('spd-say') || await _hasExecutable('espeak-ng');
+      _systemTtsReady = _linuxTtsEngineDetected;
+      _systemTtsUnavailable = !_linuxTtsEngineDetected;
       return;
     }
 
@@ -98,12 +120,19 @@ class TtsService {
     try {
       await stop(notifyCancel: false);
       _streamingPlaybackStopping = false;
+      final ttsPlugin = speechPluginRegistry.selectedPluginForCapability(
+        SpeechPluginCapability.tts,
+      );
       final provider = appSettingsController.settings.ttsProvider;
-      if (provider == TtsProvider.system) {
+      if (ttsPlugin == null && provider == TtsProvider.system) {
         if (_systemTtsUnavailable) {
           throw Exception(
-            'System TTS is unavailable on this device. '
-            'Please switch to Omni Bridge Local TTS in Settings.',
+            !kIsWeb && Platform.isLinux
+                ? 'Linux system TTS requires speech-dispatcher (spd-say) '
+                    'or espeak-ng. Install one and retry, or switch to Omni '
+                    'Bridge Local TTS in Settings.'
+                : 'System TTS is unavailable on this device. Please switch '
+                    'to Omni Bridge Local TTS in Settings.',
           );
         }
         await _speakWithSystemTts(text);
@@ -116,22 +145,12 @@ class TtsService {
           await _playStreamingWavOnLinux(speech.streamUrl!);
           return;
         }
-        await _player.play(
-          UrlSource(
-            speech.streamUrl!,
-            mimeType: speech.contentType,
-          ),
-        );
+        await _playUrl(speech.streamUrl!);
         return;
       }
       final filePath = await _writeAudioFile(speech.bytes);
       _currentAudioPath = filePath;
-      await _player.play(
-        DeviceFileSource(
-          filePath,
-          mimeType: speech.contentType,
-        ),
-      );
+      await _playFile(filePath);
     } catch (error) {
       _onError?.call(error.toString());
       rethrow;
@@ -139,7 +158,15 @@ class TtsService {
   }
 
   Future<void> stop({bool notifyCancel = true}) async {
-    if (_systemTtsReady) {
+    _linuxTtsRunId = (_linuxTtsRunId ?? 0) + 1;
+    final linuxTtsProcess = _linuxTtsProcess;
+    _linuxTtsProcess = null;
+    linuxTtsProcess?.kill();
+    if (_systemTtsReady &&
+        shouldStopFlutterTts(
+          isWeb: kIsWeb,
+          isLinux: !kIsWeb && Platform.isLinux,
+        )) {
       try {
         await _flutterTts.stop();
       } catch (_) {
@@ -147,12 +174,64 @@ class TtsService {
         _systemTtsUnavailable = true;
       }
     }
-    await _player.stop();
+    await _stopPlayback();
     await _stopStreamingPlaybackProcess();
     await _cleanupAudioFile();
     if (notifyCancel) {
       _onCancel?.call();
     }
+  }
+
+  Future<void> _stopPlayback() async {
+    await _finishedSubscription?.cancel();
+    _finishedSubscription = null;
+    final handle = _activeHandle;
+    _activeHandle = null;
+    if (handle != null && SoLoud.instance.isInitialized) {
+      try {
+        await SoLoud.instance.stop(handle);
+      } catch (_) {
+        // The voice may already have ended on its own.
+      }
+    }
+    final source = _loadedSource;
+    _loadedSource = null;
+    if (source != null && SoLoud.instance.isInitialized) {
+      try {
+        await SoLoud.instance.disposeSource(source);
+      } catch (_) {
+        // Best-effort source cleanup.
+      }
+    }
+  }
+
+  Future<void> _playFile(String filePath) async {
+    final source = await SoLoud.instance.loadFile(filePath);
+    await _playSource(source);
+  }
+
+  Future<void> _playUrl(String url) async {
+    final source = await SoLoud.instance.loadUrl(url);
+    await _playSource(source);
+  }
+
+  Future<void> _playSource(AudioSource source) async {
+    await _finishedSubscription?.cancel();
+    _finishedSubscription = source.allInstancesFinished.listen((_) {
+      _cleanupAudioFile();
+      _onComplete?.call();
+    });
+    final previous = _loadedSource;
+    _loadedSource = source;
+    if (previous != null && previous != source) {
+      try {
+        await SoLoud.instance.disposeSource(previous);
+      } catch (_) {
+        // Best-effort source cleanup.
+      }
+    }
+    final handle = SoLoud.instance.play(source);
+    _activeHandle = handle;
   }
 
   Future<void> _speakWithSystemTts(String text) async {
@@ -165,6 +244,10 @@ class TtsService {
         'Please switch to Omni Bridge Local TTS in Settings.',
       );
     }
+    if (!kIsWeb && Platform.isLinux) {
+      await _speakWithLinuxSystemTts(text);
+      return;
+    }
     final locale = _preferredSystemLocale();
     if (locale != null) {
       await _flutterTts.setLanguage(locale);
@@ -174,6 +257,48 @@ class TtsService {
       return;
     }
     await _flutterTts.speak(text);
+  }
+
+  Future<void> _speakWithLinuxSystemTts(String text) async {
+    final runId = (_linuxTtsRunId ?? 0) + 1;
+    _linuxTtsRunId = runId;
+    final hasChinese = _containsCjk(text);
+    final useEspeak = hasChinese && await _hasExecutable('espeak-ng');
+    final isSpeechDispatcher = !useEspeak && await _hasExecutable('spd-say');
+    try {
+      _onStart?.call();
+      final process = useEspeak
+          ? await Process.start(
+              'espeak-ng',
+              ['-v', 'zh', text],
+            )
+          : isSpeechDispatcher
+              ? await Process.start('spd-say', ['-w', text])
+              : await Process.start(
+                  'espeak-ng',
+                  [text],
+                );
+      _linuxTtsProcess = process;
+      _drainPlaybackProcessOutput(process);
+      final exitCode = await process.exitCode;
+      if (_linuxTtsRunId != runId) {
+        return;
+      }
+      if (_linuxTtsProcess == process) {
+        _linuxTtsProcess = null;
+      }
+      if (exitCode != 0) {
+        throw Exception('Linux system TTS failed (exit code $exitCode)');
+      }
+      _onComplete?.call();
+    } on Object {
+      if (_linuxTtsRunId == runId) {
+        final process = _linuxTtsProcess;
+        _linuxTtsProcess = null;
+        process?.kill();
+      }
+      rethrow;
+    }
   }
 
   Future<void> _playStreamingWavOnLinux(String streamUrl) async {
@@ -368,22 +493,18 @@ class TtsService {
     return locale;
   }
 
-  Future<void> _configurePlaybackContext() async {
-    try {
-      await _player.setAudioContext(
-        AudioContext(
-          android: const AudioContextAndroid(
-            stayAwake: true,
-          ),
-          iOS: AudioContextIOS(
-            category: AVAudioSessionCategory.playback,
-          ),
-        ),
-      );
-    } catch (_) {
-      // Best-effort audio session tuning for lock-screen playback.
+  bool _containsCjk(String text) {
+    for (final codeUnit in text.runes) {
+      if (codeUnit >= 0x4E00 && codeUnit <= 0x9FFF ||
+          codeUnit >= 0x3400 && codeUnit <= 0x4DBF ||
+          codeUnit >= 0xF900 && codeUnit <= 0xFAFF) {
+        return true;
+      }
     }
+    return false;
+  }
 
+  Future<void> _configurePlaybackContext() async {
     if (kIsWeb) {
       return;
     }

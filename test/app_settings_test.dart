@@ -1,7 +1,25 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omni_code/src/models.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 
 void main() {
+  test('AI approval provider selection persists without provider credentials',
+      () {
+    final json = AppSettings.defaults()
+        .copyWith(
+          aiApprovalProviderId: 'primary',
+          aiApprovalBaseUrl: 'https://example.test/v1',
+          aiApprovalApiKey: 'secret',
+          aiApprovalModel: 'gpt-test',
+        )
+        .toJson();
+
+    expect(json['ai_approval_provider_id'], 'primary');
+    expect(json['ai_approval_model'], 'gpt-test');
+    expect(json, isNot(contains('ai_approval_base_url')));
+    expect(json, isNot(contains('ai_approval_api_key')));
+  });
+
   test('autoSpeakReplies defaults to false', () {
     expect(AppSettings.defaults().autoSpeakReplies, isFalse);
   });
@@ -104,6 +122,18 @@ void main() {
     expect(settings.ttsProvider, TtsProvider.system);
   });
 
+  test('legacy whisper asr provider migrates to system', () {
+    final settings = AppSettings.fromJson(<String, dynamic>{
+      'asr_provider': 'whisper',
+      'whisper_api_key': 'legacy-key',
+      'whisper_base_url': 'https://example.com/v1',
+    });
+
+    expect(settings.asrProvider, AsrProvider.system);
+    expect(settings.whisperApiKey, 'legacy-key');
+    expect(settings.whisperBaseUrl, 'https://example.com/v1');
+  });
+
   test('updateTargetVersion defaults to empty string', () {
     expect(AppSettings.defaults().updateTargetVersion, isEmpty);
   });
@@ -148,6 +178,59 @@ void main() {
     );
     final restored = AppSettings.fromJson(settings.toJson());
     expect(restored.lastSelectedAgent, 'claude_code');
+  });
+
+  test('cachedAgents round-trip through json', () {
+    final settings = AppSettings.defaults().copyWith(
+      cachedAgents: const [
+        AgentSummary(
+          descriptor: AgentDescriptor(
+            id: 'codex',
+            label: 'Codex',
+            aliases: ['codex'],
+            defaultSelected: true,
+            compatibleFormats: [ApiFormat.codex],
+          ),
+          installed: true,
+          installHint: 'manual',
+          installedPath: '/usr/local/bin/codex',
+        ),
+        AgentSummary(
+          descriptor: AgentDescriptor(
+            id: 'claude_code',
+            label: 'Claude Code',
+            aliases: ['claude_code'],
+            selectable: false,
+            compatibleFormats: [ApiFormat.anthropicMessages],
+          ),
+          installed: false,
+          installHint: 'brew install claude-code',
+        ),
+      ],
+    );
+    final restored = AppSettings.fromJson(settings.toJson());
+    expect(restored.cachedAgents, hasLength(2));
+    expect(restored.cachedAgents.first.id, 'codex');
+    expect(restored.cachedAgents.first.defaultSelected, isTrue);
+    expect(restored.cachedAgents.first.installed, isTrue);
+    expect(
+      restored.cachedAgents.first.compatibleFormats,
+      equals(const [ApiFormat.codex]),
+    );
+    expect(restored.cachedAgents.last.id, 'claude_code');
+    expect(restored.cachedAgents.last.selectable, isFalse);
+    expect(restored.cachedAgents.last.installed, isFalse);
+    expect(
+      restored.cachedAgents.last.compatibleFormats,
+      equals(const [ApiFormat.anthropicMessages]),
+    );
+  });
+
+  test('null cached_agents falls back to empty list', () {
+    final settings = AppSettings.fromJson(<String, dynamic>{
+      'cached_agents': null,
+    });
+    expect(settings.cachedAgents, isEmpty);
   });
 
   test('lastSelectedProviderByProject round-trips through json', () {
@@ -212,5 +295,129 @@ void main() {
     );
     final restored = AppSettings.fromJson(settings.toJson());
     expect(restored.desktopSessionRailCollapsed, isFalse);
+  });
+
+  test('plugin settings round-trip through generic json keys', () {
+    final settings = AppSettings.defaults().copyWith(
+      pluginSources: const [
+        {
+          'id': 'official',
+          'name': 'Official',
+          'index_url': 'https://example.com/community-plugins.json',
+          'enabled': true,
+        },
+        {
+          'id': 'custom-1',
+          'name': 'Custom',
+          'index_url': 'https://example.com/custom.json',
+          'enabled': true,
+        },
+      ],
+      installedPlugins: const [
+        {
+          'installed_at': '2026-01-01T00:00:00.000Z',
+          'manifest': {
+            'id': 'plugin-1',
+            'name': 'Plugin 1',
+            'vendor': 'Vendor',
+            'version': '1.0.0',
+            'capabilities': ['speech.tts'],
+            'transport': 'openai_compatible',
+            'base_url': 'https://example.com/v1',
+          },
+        },
+      ],
+      selectedPluginByCapability: const {
+        'speech.tts': 'plugin-1',
+        'speech.batch_asr': 'plugin-2',
+      },
+      pluginSecretsByPluginId: const {
+        'plugin-1': {
+          'api_key': 'secret-1',
+        },
+      },
+      pluginSettingsByPluginId: const {
+        'plugin-1': {
+          'model': 'ep-123',
+          'start_command': 'bun run plugin:start',
+          'stop_command': 'bun run plugin:stop',
+        },
+      },
+    );
+
+    final json = settings.toJson();
+    final restored = AppSettings.fromJson(json);
+
+    expect(json.containsKey('speech_plugin_sources'), isFalse);
+    expect(json.containsKey('installed_speech_plugins'), isFalse);
+    expect(json.containsKey('selected_speech_plugin_by_capability'), isFalse);
+    expect(json.containsKey('speech_plugin_api_keys_by_plugin_id'), isFalse);
+    expect(json.containsKey('speech_plugin_settings_by_plugin_id'), isFalse);
+    expect(
+      restored.pluginSources,
+      hasLength(2),
+    );
+    expect(restored.installedPlugins, hasLength(1));
+    expect(restored.selectedPluginByCapability, {
+      'speech.tts': 'plugin-1',
+      'speech.batch_asr': 'plugin-2',
+    });
+    expect(restored.pluginSecretsByPluginId, {
+      'plugin-1': {
+        'api_key': 'secret-1',
+      },
+    });
+    expect(restored.pluginSettingsByPluginId, {
+      'plugin-1': {
+        'model': 'ep-123',
+        'start_command': 'bun run plugin:start',
+        'stop_command': 'bun run plugin:stop',
+      },
+    });
+  });
+
+  test('legacy speech plugin settings migrate to generic plugin settings', () {
+    final restored = AppSettings.fromJson(<String, dynamic>{
+      'speech_plugin_sources': [
+        {
+          'id': 'official',
+          'name': 'Official',
+          'index_url': 'https://example.com/community-plugins.json',
+          'enabled': true,
+        },
+      ],
+      'installed_speech_plugins': [
+        {
+          'installed_at': '2026-01-01T00:00:00.000Z',
+          'manifest': {
+            'id': 'plugin-1',
+            'name': 'Plugin 1',
+            'version': '1.0.0',
+            'capabilities': ['speech.tts'],
+          },
+        },
+      ],
+      'selected_speech_plugin_by_capability': {
+        'tts': 'plugin-1',
+      },
+      'speech_plugin_api_keys_by_plugin_id': {
+        'plugin-1': 'secret-1',
+      },
+      'speech_plugin_settings_by_plugin_id': {
+        'plugin-1': {
+          'model': 'ep-123',
+        },
+      },
+    });
+
+    expect(restored.pluginSources, hasLength(1));
+    expect(restored.installedPlugins, hasLength(1));
+    expect(restored.selectedPluginByCapability, {'speech.tts': 'plugin-1'});
+    expect(restored.pluginSecretsByPluginId, {
+      'plugin-1': {'api_key': 'secret-1'},
+    });
+    expect(restored.pluginSettingsByPluginId, {
+      'plugin-1': {'model': 'ep-123'},
+    });
   });
 }

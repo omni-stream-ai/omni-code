@@ -88,7 +88,7 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
       settings,
       _RouteStateScreen(
         title: context.l10n.appTitle,
-        message: 'Unknown route: ${settings.name ?? AppRoutes.home}',
+        message: context.l10n.unknownRoute(settings.name ?? AppRoutes.home),
       ),
     );
   }

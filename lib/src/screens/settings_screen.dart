@@ -22,13 +22,16 @@ import '../widgets/app_navigation_scaffold.dart';
 import '../widgets/copyable_message.dart';
 import '../widgets/new_session_flow.dart';
 import 'model_provider_screen.dart';
+import 'ai_approval_prompt_screen.dart';
 import 'speech_settings_screen.dart';
 import '../../l10n/generated/app_localizations.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.client});
 
   static const routeName = '/settings';
+
+  final BridgeClient? client;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -40,13 +43,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _clientIdController = TextEditingController();
   final _updateManifestUrlController = TextEditingController();
   final _updateTargetVersionController = TextEditingController();
-  final _aiApprovalBaseUrlController = TextEditingController();
-  final _aiApprovalApiKeyController = TextEditingController();
-  final _aiApprovalModelController = TextEditingController();
   final _compressAssistantReplyMaxCharsController = TextEditingController();
+  final _aiApprovalPromptController = TextEditingController();
 
   late bool _aiApprovalEnabled;
   late String _aiApprovalMaxRisk;
+  String _aiApprovalProviderId = '';
+  List<ModelProviderConfig> _modelProviders = const [];
+  List<String> _aiApprovalModels = const [];
+  String _aiApprovalModel = '';
+  bool _loadingModelProviders = true;
+  bool _loadingAiApprovalModels = false;
+  String? _aiApprovalModelsError;
+  String? _modelProvidersError;
+  bool _aiApprovalDirty = false;
   late AppThemeModeSetting _themeMode;
   late bool _autoSpeakReplies;
   late bool _compressAssistantReplies;
@@ -55,12 +65,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _saving = false;
   bool _checkingUpdate = false;
 
+  BridgeClient get _client => widget.client ?? bridgeClient;
+
   @override
   void initState() {
     super.initState();
     _syncFromSettings(appSettingsController.settings);
     appSettingsController.addListener(_onSettingsChanged);
     unawaited(_loadCurrentVersion());
+    unawaited(_loadModelProviders());
+    unawaited(_loadAiApprovalPrompt());
   }
 
   @override
@@ -70,10 +84,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _clientIdController.dispose();
     _updateManifestUrlController.dispose();
     _updateTargetVersionController.dispose();
-    _aiApprovalBaseUrlController.dispose();
-    _aiApprovalApiKeyController.dispose();
-    _aiApprovalModelController.dispose();
     _compressAssistantReplyMaxCharsController.dispose();
+    _aiApprovalPromptController.dispose();
     super.dispose();
   }
 
@@ -82,9 +94,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _clientIdController.text = settings.clientId;
     _appLanguage = settings.appLanguage;
     _updateManifestUrlController.text = settings.updateManifestUrl;
-    _aiApprovalBaseUrlController.text = settings.aiApprovalBaseUrl;
-    _aiApprovalApiKeyController.text = settings.aiApprovalApiKey;
-    _aiApprovalModelController.text = settings.aiApprovalModel;
+    _aiApprovalProviderId = settings.aiApprovalProviderId;
+    _aiApprovalModel = settings.aiApprovalModel;
     _aiApprovalEnabled = settings.aiApprovalEnabled;
     _aiApprovalMaxRisk = settings.aiApprovalMaxRisk;
     _compressAssistantReplyMaxCharsController.text =
@@ -92,6 +103,97 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _themeMode = settings.themeMode;
     _autoSpeakReplies = settings.autoSpeakReplies;
     _compressAssistantReplies = settings.compressAssistantReplies;
+  }
+
+  Future<void> _loadModelProviders() async {
+    try {
+      final providers = await _client.getModelProviders();
+      if (!mounted) return;
+      final enabledProviders =
+          providers.where((provider) => provider.enabled).toList();
+      var selectedId = _aiApprovalProviderId;
+      if (!enabledProviders.any((provider) => provider.id == selectedId)) {
+        final legacyModel =
+            appSettingsController.settings.aiApprovalModel.trim();
+        selectedId = enabledProviders
+                .where((provider) => provider.model?.trim() == legacyModel)
+                .map((provider) => provider.id)
+                .firstOrNull ??
+            '';
+      }
+      setState(() {
+        _modelProviders = enabledProviders;
+        _aiApprovalProviderId = selectedId;
+        _loadingModelProviders = false;
+        _modelProvidersError = null;
+      });
+      final selectedProvider = enabledProviders
+          .where((provider) => provider.id == selectedId)
+          .firstOrNull;
+      if (selectedProvider != null) {
+        await _loadAiApprovalModels(
+          selectedProvider,
+          preferredModel: appSettingsController.settings.aiApprovalModel,
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingModelProviders = false;
+        _modelProvidersError = '$error';
+      });
+    }
+  }
+
+  Future<void> _loadAiApprovalModels(
+    ModelProviderConfig provider, {
+    String? preferredModel,
+  }) async {
+    setState(() {
+      _loadingAiApprovalModels = true;
+      _aiApprovalModelsError = null;
+    });
+    try {
+      final fetched = await _client.getProviderModels(provider);
+      if (!mounted || provider.id != _aiApprovalProviderId) return;
+      final models = <String>{...fetched};
+      final configuredModel = provider.model?.trim();
+      if (configuredModel?.isNotEmpty == true) models.add(configuredModel!);
+      final preferred = preferredModel?.trim() ?? '';
+      if (preferred.isNotEmpty) models.add(preferred);
+      final sorted = models.toList()..sort();
+      setState(() {
+        _aiApprovalModels = sorted;
+        _aiApprovalModel = models.contains(preferred)
+            ? preferred
+            : (configuredModel?.isNotEmpty == true
+                ? configuredModel!
+                : (sorted.firstOrNull ?? ''));
+        _loadingAiApprovalModels = false;
+      });
+    } catch (error) {
+      if (!mounted || provider.id != _aiApprovalProviderId) return;
+      final fallback = <String>{
+        if (provider.model?.trim().isNotEmpty == true) provider.model!.trim(),
+        if (preferredModel?.trim().isNotEmpty == true) preferredModel!.trim(),
+      }.toList();
+      setState(() {
+        _aiApprovalModels = fallback;
+        _aiApprovalModel = fallback.firstOrNull ?? '';
+        _loadingAiApprovalModels = false;
+        _aiApprovalModelsError = '$error';
+      });
+    }
+  }
+
+  Future<void> _loadAiApprovalPrompt() async {
+    try {
+      final prompt = await _client.getAiApprovalPrompt();
+      if (!mounted || _aiApprovalDirty) return;
+      _aiApprovalPromptController.text = prompt;
+    } catch (_) {
+      // The model provider request already surfaces Bridge connectivity errors.
+    }
   }
 
   void _onSettingsChanged() {
@@ -219,6 +321,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       agentLabelFor: bridgeClient.agentLabelFor,
       bodyBuilder: (context, useDesktop, constraints) {
+        final viewportHeight = MediaQuery.of(context).size.height;
         return SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(
@@ -228,7 +331,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             AppSpacing.block,
           ),
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            constraints: BoxConstraints(minHeight: viewportHeight),
             child: Align(
               alignment: Alignment.topCenter,
               child: useDesktop
@@ -346,7 +449,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     shape: const CircleBorder(),
                   ),
                   onPressed: () => Scaffold.of(context).openDrawer(),
-                  tooltip: 'Open navigation',
+                  tooltip: l10n.openNavigation,
                   icon: const Icon(Icons.menu_rounded, size: 18),
                 ),
               ),
@@ -448,34 +551,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ThemeData theme,
     TextStyle formValueTextStyle,
   ) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildSpeechSection(context, l10n),
-              const SizedBox(height: AppSpacing.fieldGap),
-              _buildModelProvidersSection(context, l10n),
-              const SizedBox(height: AppSpacing.fieldGap),
-              _buildReplyBehaviorSection(context, l10n, formValueTextStyle),
-            ],
-          ),
-        ),
-        const SizedBox(width: AppSpacing.card),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildAiApprovalSection(context, l10n, formValueTextStyle),
-              const SizedBox(height: AppSpacing.fieldGap),
-              _buildSystemSection(context, l10n),
-              const SizedBox(height: AppSpacing.fieldGap),
-              _buildUpdateSection(context, l10n, theme, formValueTextStyle),
-            ],
-          ),
-        ),
+        _buildSpeechSection(context, l10n),
+        const SizedBox(height: AppSpacing.fieldGap),
+        _buildModelProvidersSection(context, l10n),
+        const SizedBox(height: AppSpacing.fieldGap),
+        _buildReplyBehaviorSection(context, l10n, formValueTextStyle),
+        const SizedBox(height: AppSpacing.fieldGap),
+        _buildAiApprovalSection(context, l10n, formValueTextStyle),
+        const SizedBox(height: AppSpacing.fieldGap),
+        _buildSystemSection(context, l10n),
+        const SizedBox(height: AppSpacing.fieldGap),
+        _buildUpdateSection(context, l10n, theme, formValueTextStyle),
       ],
     );
   }
@@ -669,7 +758,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           readOnly: true,
           style: formValueTextStyle,
           decoration: InputDecoration(
-            labelText: 'Client ID',
+            labelText: l10n.clientId,
             suffixIcon: IconButton(
               style: IconButton.styleFrom(
                 backgroundColor: Colors.transparent,
@@ -702,6 +791,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: (value) {
             setState(() {
               _aiApprovalEnabled = value;
+              _aiApprovalDirty = true;
             });
           },
           title: Text(l10n.enableAiApproval),
@@ -709,32 +799,106 @@ class _SettingsScreenState extends State<SettingsScreen> {
           visualDensity: VisualDensity.compact,
           contentPadding: EdgeInsets.zero,
         ),
-        const SizedBox(height: AppSpacing.micro),
-        TextField(
-          controller: _aiApprovalBaseUrlController,
+        DropdownButtonFormField<String>(
+          key: ValueKey('ai-approval-provider-$_aiApprovalProviderId'),
+          initialValue: _modelProviders
+                  .any((provider) => provider.id == _aiApprovalProviderId)
+              ? _aiApprovalProviderId
+              : null,
           style: formValueTextStyle,
           decoration: InputDecoration(
-            labelText: l10n.baseUrl,
-            hintText: 'https://api.openai.com/v1',
+            labelText: l10n.aiApprovalProvider,
+            helperText: _loadingModelProviders
+                ? l10n.loadingModelProviders
+                : _modelProvidersError == null
+                    ? (_modelProviders.isEmpty ? l10n.noConfiguredModels : null)
+                    : l10n.modelProvidersLoadFailed,
+            suffixIcon: _modelProvidersError == null
+                ? null
+                : IconButton(
+                    tooltip: l10n.retry,
+                    onPressed: _loadModelProviders,
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
           ),
+          items: [
+            for (final provider in _modelProviders)
+              DropdownMenuItem(
+                value: provider.id,
+                child: Text(
+                  provider.model?.trim().isNotEmpty == true
+                      ? '${provider.name} · ${provider.model}'
+                      : provider.name,
+                ),
+              ),
+          ],
+          onChanged: _loadingModelProviders
+              ? null
+              : (value) {
+                  if (value != null) {
+                    final provider = _modelProviders
+                        .where((item) => item.id == value)
+                        .firstOrNull;
+                    setState(() {
+                      _aiApprovalProviderId = value;
+                      _aiApprovalModels = const [];
+                      _aiApprovalModel = '';
+                      _aiApprovalDirty = true;
+                    });
+                    if (provider != null) {
+                      unawaited(_loadAiApprovalModels(provider));
+                    }
+                  }
+                },
         ),
         const SizedBox(height: AppSpacing.compact),
-        TextField(
-          controller: _aiApprovalApiKeyController,
-          obscureText: true,
+        DropdownButtonFormField<String>(
+          key: ValueKey('ai-approval-model-$_aiApprovalModel'),
+          initialValue: _aiApprovalModels.contains(_aiApprovalModel)
+              ? _aiApprovalModel
+              : null,
           style: formValueTextStyle,
           decoration: InputDecoration(
-            labelText: l10n.apiKey,
+            labelText: l10n.aiApprovalModel,
+            helperText: _loadingAiApprovalModels
+                ? l10n.loadingApprovalModels
+                : _aiApprovalModelsError != null
+                    ? l10n.approvalModelsLoadFailed
+                    : (_aiApprovalProviderId.isNotEmpty &&
+                            _aiApprovalModels.isEmpty
+                        ? l10n.noApprovalModels
+                        : null),
+            suffixIcon: _aiApprovalModelsError == null
+                ? null
+                : IconButton(
+                    tooltip: l10n.retry,
+                    onPressed: () {
+                      final provider = _modelProviders
+                          .where(
+                            (item) => item.id == _aiApprovalProviderId,
+                          )
+                          .firstOrNull;
+                      if (provider != null) {
+                        unawaited(_loadAiApprovalModels(provider));
+                      }
+                    },
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
           ),
-        ),
-        const SizedBox(height: AppSpacing.fieldGap),
-        TextField(
-          controller: _aiApprovalModelController,
-          style: formValueTextStyle,
-          decoration: const InputDecoration(
-            labelText: 'Model',
-            hintText: 'gpt-4.1-mini',
-          ),
+          items: [
+            for (final model in _aiApprovalModels)
+              DropdownMenuItem(value: model, child: Text(model)),
+          ],
+          onChanged: _loadingAiApprovalModels
+              ? null
+              : (value) {
+                  if (value != null) {
+                    setState(() {
+                      _aiApprovalModel = value;
+                      _aiApprovalDirty = true;
+                    });
+                  }
+                },
         ),
         const SizedBox(height: AppSpacing.compact),
         DropdownButtonFormField<String>(
@@ -761,7 +925,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
             if (value != null) {
               setState(() {
                 _aiApprovalMaxRisk = value;
+                _aiApprovalDirty = true;
               });
+            }
+          },
+        ),
+        const SizedBox(height: AppSpacing.compact),
+        ListTile(
+          key: const Key('ai-approval-prompt-entry'),
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.rule_rounded),
+          title: Text(l10n.aiApprovalPrompt),
+          subtitle: Text(l10n.aiApprovalPromptEntrySubtitle),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () async {
+            final prompt = await showAiApprovalPromptDialog(
+              context,
+              client: _client,
+              initialPrompt: _aiApprovalPromptController.text,
+            );
+            if (prompt != null && mounted) {
+              _aiApprovalPromptController.text = prompt;
             }
           },
         ),
@@ -776,7 +960,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ) {
     return _buildSectionCard(
       context,
-      title: 'REPLY BEHAVIOR',
+      title: l10n.replyBehaviorSection.toUpperCase(),
       children: [
         SwitchListTile(
           value: _autoSpeakReplies,
@@ -844,13 +1028,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             _buildLabeledRow(
               context,
-              label: 'Current version',
+              label: l10n.currentVersionLabel,
               value: _currentVersion.isEmpty ? '...' : 'v$_currentVersion',
             ),
             const SizedBox(height: AppSpacing.micro),
             _buildLabeledRow(
               context,
-              label: 'Update manifest',
+              label: l10n.updateManifest,
               value: 'GitHub releases',
             ),
             TextField(
@@ -894,13 +1078,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _DesktopSettingsRailCard(
-          title: 'At a glance',
+          title: l10n.atAGlance,
           child: Wrap(
             spacing: AppSpacing.compact,
             runSpacing: AppSpacing.compact,
             children: [
               _DesktopSettingsPill(
-                label: 'Language',
+                label: l10n.languageSection,
                 value: switch (_appLanguage) {
                   'zh' => 'Chinese',
                   'en' => 'English',
@@ -908,7 +1092,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
               ),
               _DesktopSettingsPill(
-                label: 'Theme',
+                label: l10n.themeSection,
                 value: switch (_themeMode) {
                   AppThemeModeSetting.light => 'Light',
                   AppThemeModeSetting.dark => 'Dark',
@@ -916,11 +1100,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
               ),
               _DesktopSettingsPill(
-                label: 'AI approval',
+                label: l10n.aiApprovalSection,
                 value: _aiApprovalEnabled ? 'On' : 'Off',
               ),
               _DesktopSettingsPill(
-                label: 'Speech',
+                label: l10n.speechSection,
                 value: _autoSpeakReplies ? 'Auto' : 'Manual',
               ),
             ],
@@ -928,7 +1112,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: AppSpacing.card),
         _DesktopSettingsRailCard(
-          title: 'Workspace note',
+          title: l10n.workspaceNote,
           child: Text(
             'Keep fast actions on the left and slower infrastructure settings on the right. This reduces scanning fatigue on wide screens.',
             style: theme.textTheme.bodySmall?.copyWith(height: 1.5),
@@ -936,7 +1120,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: AppSpacing.card),
         _DesktopSettingsRailCard(
-          title: 'Bridge',
+          title: l10n.bridgeSection,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1042,6 +1226,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _saving = true;
     });
     try {
+      final selectedProvider = _modelProviders
+          .where((provider) => provider.id == _aiApprovalProviderId)
+          .firstOrNull;
+      if (_aiApprovalDirty && _aiApprovalEnabled && selectedProvider == null) {
+        throw Exception(context.l10n.selectAiApprovalModel);
+      }
+      if (_aiApprovalDirty &&
+          _aiApprovalEnabled &&
+          _aiApprovalModel.trim().isEmpty) {
+        throw Exception(context.l10n.selectAiApprovalModel);
+      }
+      final approvalProvider = selectedProvider?.copyWith(
+        model: _aiApprovalModel.trim(),
+      );
       final next = appSettingsController.settings.copyWith(
         bridgeUrl: _bridgeUrlController.text.trim(),
         clientId: _clientIdController.text.trim(),
@@ -1049,9 +1247,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         themeMode: _themeMode,
         updateManifestUrl: _updateManifestUrlController.text.trim(),
         aiApprovalEnabled: _aiApprovalEnabled,
-        aiApprovalBaseUrl: _aiApprovalBaseUrlController.text.trim(),
-        aiApprovalApiKey: _aiApprovalApiKeyController.text.trim(),
-        aiApprovalModel: _aiApprovalModelController.text.trim(),
+        aiApprovalProviderId: _aiApprovalProviderId,
+        aiApprovalModel: _aiApprovalModel.trim(),
         aiApprovalMaxRisk: _aiApprovalMaxRisk,
         autoSpeakReplies: _autoSpeakReplies,
         compressAssistantReplies: _compressAssistantReplies,
@@ -1060,8 +1257,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           appSettingsController.settings.compressAssistantReplyMaxChars,
         ),
       );
+      if (_aiApprovalDirty) {
+        await _client.updateBridgeSettings(
+          next,
+          includeAiApproval: true,
+          aiApprovalProvider: approvalProvider,
+          aiApprovalPrompt: _aiApprovalPromptController.text,
+        );
+      }
       await appSettingsController.save(next);
-      await bridgeClient.updateBridgeSettings(next);
       if (!mounted) {
         return;
       }
@@ -1069,6 +1273,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         SnackBar(content: Text(context.l10n.settingsSaved)),
       );
       Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showCopyableErrorSnackBar(context.l10n.settingsSaveFailed('$error'));
     } finally {
       if (mounted) {
         setState(() {

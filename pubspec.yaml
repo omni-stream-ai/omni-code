@@ -1,7 +1,7 @@
 name: omni_code
 description: Client console for managing desktop coding agents.
 publish_to: "none"
-version: 0.6.1+10
+version: 0.7.0+11
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
@@ -9,13 +9,14 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  uuid: ^4.5.1
   flutter_web_plugins:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
   cupertino_icons: ^1.0.8
   http: ^1.2.2
-  audioplayers: ^6.4.0
+  flutter_soloud: ^4.1.6
   flutter_tts: ^4.2.2
   path_provider: ^2.1.5
   package_info_plus: ^8.1.1
@@ -33,6 +34,7 @@ dependencies:
   ffi: ^2.1.0
   video_player: ^2.9.2
   super_clipboard: ^0.9.1
+  encrypt: ^5.0.3
 
 dev_dependencies:
   flutter_test:
@@ -44,5 +46,6 @@ flutter:
   uses-material-design: true
   assets:
     - assets/call_mode/glowing_orb_water_loop_inner_small.gif
+    - assets/speech/silero_vad.onnx
   shaders:
     - shaders/call_mode_orb.frag

@@ -1,18 +1,18 @@
 <p align="center">
-  <img src="assets/app-icon.svg" width="128" alt="Omni Code">
+  <img src="../../assets/app-icon.svg" width="128" alt="Omni Code">
 </p>
 
 <h1 align="center">Omni Code Client</h1>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
+  <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
   <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.5+-02569B?logo=flutter" alt="Flutter"></a>
   <img src="https://img.shields.io/badge/platform-Android%20%7C%20iOS%20%7C%20Web%20%7C%20Desktop-4CAF50?logo=googleplay&logoColor=white" alt="Platforms">
   <a href="https://github.com/omni-stream-ai/omni-code/releases"><img src="https://img.shields.io/github/v/release/omni-stream-ai/omni-code" alt="Release"></a>
 </p>
 
 <p align="center">
-  <a href="README.md">English</a>
+  <a href="../../README.md">English</a>
 </p>
 
 ---
@@ -21,9 +21,11 @@ Omni Code 是一个跨平台 Flutter 客户端，支持桌面端和移动端，�
 
 它连接 [omni-code-bridge](https://github.com/omni-stream-ai/omni-code-bridge)，让桌面 agent 的能力延伸到多端和语音交互中。
 
+参见：[插件编写指南](https://github.com/omni-stream-ai/omni-code-plugins/blob/main/docs/zh/plugin-manifest-guide.md) | [插件仓库](https://github.com/omni-stream-ai/omni-code-plugins)
+
 ## 预览
 
-![Omni Code](preview/omni-code-showcase.png)
+![Omni Code](../../preview/omni-code-showcase.png)
 
 ## 路线图 (V1)
 
@@ -63,8 +65,8 @@ flutter run
 
 ## 贡献
 
-参见 [CONTRIBUTING.md](CONTRIBUTING.md)。项目 TODO 看板在 [GitHub Projects](https://github.com/orgs/omni-stream-ai/projects/2)。
+参见 [CONTRIBUTING.md](../../CONTRIBUTING.md)。项目 TODO 看板在 [GitHub Projects](https://github.com/orgs/omni-stream-ai/projects/2)。
 
 ## 许可证
 
-[MIT](LICENSE)
+[MIT](../../LICENSE)

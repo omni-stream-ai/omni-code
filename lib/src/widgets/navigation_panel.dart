@@ -28,6 +28,7 @@ class NavigationPanel extends StatelessWidget {
     this.agentLabelFor,
     this.collapsed = false,
     this.showRecentContent = false,
+    this.alwaysShowRecentMenus = false,
     this.onBeforeNavigate,
     this.headerStyle = NavigationHeaderStyle.compact,
     this.onToggleCollapsed,
@@ -49,6 +50,7 @@ class NavigationPanel extends StatelessWidget {
   final AgentLabelResolver? agentLabelFor;
   final bool collapsed;
   final bool showRecentContent;
+  final bool alwaysShowRecentMenus;
   final VoidCallback? onBeforeNavigate;
   final NavigationHeaderStyle headerStyle;
   final VoidCallback? onToggleCollapsed;
@@ -145,7 +147,7 @@ class NavigationPanel extends StatelessWidget {
                 children: [
                   if (recentSessions.isNotEmpty) ...[
                     NavigationSectionLabel(
-                      label: 'Recent sessions',
+                      label: context.l10n.recentSessionsTitle,
                       collapsed: collapsed,
                       icon: Icons.schedule_rounded,
                     ),
@@ -159,6 +161,7 @@ class NavigationPanel extends StatelessWidget {
                               label: session.title,
                               active: session.id == activeSessionId,
                               collapsed: collapsed,
+                              alwaysShowMenu: alwaysShowRecentMenus,
                               icon: Icons.chat_bubble_outline_rounded,
                               menuChildren: _recentSessionMenuChildren(
                                 context,
@@ -186,7 +189,7 @@ class NavigationPanel extends StatelessWidget {
                             )
                           : const SizedBox(height: AppSpacing.stack),
                     NavigationSectionLabel(
-                      label: 'Recent projects',
+                      label: context.l10n.recentProjectsTitle,
                       collapsed: collapsed,
                       icon: Icons.folder_open_outlined,
                     ),
@@ -200,6 +203,7 @@ class NavigationPanel extends StatelessWidget {
                               label: project.name,
                               active: project.id == activeProjectId,
                               collapsed: collapsed,
+                              alwaysShowMenu: alwaysShowRecentMenus,
                               icon: Icons.folder_outlined,
                               menuChildren: _recentProjectMenuChildren(
                                 context,
@@ -358,6 +362,7 @@ class NavigationRecentItem extends StatefulWidget {
     required this.label,
     required this.active,
     this.collapsed = false,
+    this.alwaysShowMenu = false,
     this.icon,
     this.menuChildren = const [],
     required this.onTap,
@@ -366,6 +371,7 @@ class NavigationRecentItem extends StatefulWidget {
   final String label;
   final bool active;
   final bool collapsed;
+  final bool alwaysShowMenu;
   final IconData? icon;
   final List<Widget> menuChildren;
   final VoidCallback? onTap;
@@ -451,7 +457,8 @@ class _NavigationRecentItemState extends State<NavigationRecentItem> {
                         const SizedBox(width: AppSpacing.micro),
                         _NavigationRecentMoreButton(
                           controller: _menuController,
-                          visible: _hovered || _menuOpen,
+                          visible:
+                              widget.alwaysShowMenu || _hovered || _menuOpen,
                           menuChildren: widget.menuChildren,
                           onOpenChanged: (isOpen) {
                             if (mounted) {
@@ -528,7 +535,7 @@ class _NavigationRecentMoreButton extends StatelessWidget {
         child: IgnorePointer(
           ignoring: !visible,
           child: IconButton(
-            tooltip: 'More',
+            tooltip: context.l10n.more,
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints.tightFor(
               width: 28,

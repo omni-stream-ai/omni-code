@@ -19,6 +19,7 @@ import '../widgets/create_session_dialog.dart';
 import '../widgets/copyable_message.dart';
 import '../widgets/new_session_flow.dart';
 import 'session_detail_screen.dart';
+import 'project_ai_approval_prompt_screen.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
   const ProjectDetailScreen({super.key, required this.project, this.client});
@@ -32,10 +33,12 @@ class ProjectDetailScreen extends StatefulWidget {
   State<ProjectDetailScreen> createState() => _ProjectDetailScreenState();
 }
 
-class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
+class _ProjectDetailScreenState extends State<ProjectDetailScreen>
+    with WidgetsBindingObserver {
   static const double _desktopRailWidth = 304;
   static const _pageSize = 7;
   static const _autoRefreshInterval = Duration(seconds: 5);
+  static const _searchDebounceDuration = Duration(milliseconds: 300);
   static const _progressMinHeight = AppSpacing.textStack + AppSpacing.hairline;
 
   late ProjectSummary _project;
@@ -48,12 +51,16 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   String _searchQuery = '';
   int _visibleCount = _pageSize;
   Timer? _autoRefreshTimer;
+  Timer? _searchDebounceTimer;
+  bool _appIsActive = true;
 
   BridgeClient get _client => widget.client ?? bridgeClient;
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _autoRefreshTimer?.cancel();
+    _searchDebounceTimer?.cancel();
     _searchFocusNode.dispose();
     _searchController.dispose();
     super.dispose();
@@ -62,14 +69,41 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _project = widget.project;
-    unawaited(_loadSessions());
+    final hasCachedProject = _client.peekProject(_project.id) != null;
+    final hasCachedSessions = _client.peekProjectSessions(_project.id) != null;
+    if (hasCachedProject && hasCachedSessions) {
+      unawaited(_loadCachedSessionsThenRefresh());
+    } else {
+      unawaited(_loadSessions(forceRefresh: true));
+    }
     _autoRefreshTimer = Timer.periodic(_autoRefreshInterval, (_) {
-      if (!mounted || _isRefreshing || _isLoading) {
+      if (!mounted || !_appIsActive || _isRefreshing || _isLoading) {
         return;
       }
       unawaited(_loadSessions(forceRefresh: true));
     });
+  }
+
+  Future<void> _loadCachedSessionsThenRefresh() async {
+    await _loadSessions();
+    if (mounted) {
+      await _loadSessions(forceRefresh: true);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final wasActive = _appIsActive;
+    _appIsActive = state == AppLifecycleState.resumed;
+    if (!wasActive &&
+        _appIsActive &&
+        mounted &&
+        !_isRefreshing &&
+        !_isLoading) {
+      unawaited(_loadSessions(forceRefresh: true));
+    }
   }
 
   Future<void> _loadSessions({bool forceRefresh = false}) async {
@@ -90,8 +124,11 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     });
     try {
       final results = await Future.wait<Object>([
-        _client.listProjectSessions(_project.id, forceRefresh: true),
-        _client.getProject(_project.id, forceRefresh: true),
+        _client.listProjectSessions(
+          _project.id,
+          forceRefresh: forceRefresh,
+        ),
+        _client.getProject(_project.id, forceRefresh: forceRefresh),
       ]);
       if (!mounted) {
         return;
@@ -123,6 +160,28 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         });
       }
     }
+  }
+
+  void _scheduleSearchQueryUpdate(String value) {
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = Timer(_searchDebounceDuration, () {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _searchQuery = value.trim().toLowerCase();
+        _visibleCount = _pageSize;
+      });
+    });
+  }
+
+  void _clearSearchQuery() {
+    _searchDebounceTimer?.cancel();
+    _searchController.clear();
+    setState(() {
+      _searchQuery = '';
+      _visibleCount = _pageSize;
+    });
   }
 
   Future<void> _reloadSessions() {
@@ -326,6 +385,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               const SizedBox(height: AppSpacing.card),
               _buildProjectSummaryCard(context),
               const SizedBox(height: AppSpacing.card),
+              _buildAiApprovalSettingsCard(context),
+              const SizedBox(height: AppSpacing.card),
               _buildSearchSection(context),
               const SizedBox(height: AppSpacing.tileY),
               _buildSessionsSection(
@@ -414,7 +475,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   shape: const CircleBorder(),
                 ),
                 onPressed: () => Scaffold.of(context).openDrawer(),
-                tooltip: 'Open navigation',
+                tooltip: context.l10n.openNavigation,
                 icon: const Icon(Icons.menu_rounded, size: 18),
               ),
             ),
@@ -423,7 +484,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         ],
         Expanded(
           child: AppBackHeader(
-            title: 'SESSIONS',
+            title: context.l10n.sessionsTitle.toUpperCase(),
             titleStyle: titleStyle,
           ),
         ),
@@ -469,7 +530,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'PROJECT DESK',
+                      context.l10n.projectDesk.toUpperCase(),
                       style: theme.textTheme.labelSmall?.copyWith(
                         letterSpacing: 0.8,
                         fontWeight: FontWeight.w800,
@@ -520,20 +581,20 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             runSpacing: AppSpacing.compact,
             children: [
               _DesktopProjectMetricChip(
-                label: 'All sessions',
+                label: context.l10n.allSessions,
                 value: '${sessions.length}',
               ),
               _DesktopProjectMetricChip(
-                label: 'In motion',
+                label: context.l10n.inMotion,
                 value: '$activeCount',
               ),
               _DesktopProjectMetricChip(
-                label: 'Awaiting approval',
+                label: context.l10n.sessionStatusAwaitingApproval,
                 value:
                     '${_statusCount(sessions, SessionStatus.awaitingApproval)}',
               ),
               _DesktopProjectMetricChip(
-                label: 'Idle',
+                label: context.l10n.sessionStatusIdle,
                 value: '${_statusCount(sessions, SessionStatus.idle)}',
               ),
             ],
@@ -585,18 +646,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       focusNode: _searchFocusNode,
       hintText: l10n.searchSessions,
       onChanged: (value) {
-        setState(() {
-          _searchQuery = value.trim().toLowerCase();
-          _visibleCount = _pageSize;
-        });
+        _scheduleSearchQueryUpdate(value);
       },
-      onClear: () {
-        _searchController.clear();
-        setState(() {
-          _searchQuery = '';
-          _visibleCount = _pageSize;
-        });
-      },
+      onClear: _clearSearchQuery,
     );
   }
 
@@ -647,7 +699,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                       _visibleCount = _pageSize;
                     });
                   },
-                  child: const Text('Clear search'),
+                  child: Text(context.l10n.clearSearch),
                 ),
             ],
           ),
@@ -752,26 +804,26 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _DesktopProjectRailCard(
-          title: 'Project context',
+          title: context.l10n.projectContext,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _DesktopProjectRailRow(
-                label: 'Root path',
+                label: context.l10n.rootPath,
                 value: _project.rootPath,
                 mono: true,
               ),
               if (_project.gitBranch != null) ...[
                 const SizedBox(height: AppSpacing.stack),
                 _DesktopProjectRailRow(
-                  label: 'Branch',
+                  label: context.l10n.branch,
                   value: _project.gitBranch!,
                 ),
               ],
               if (_project.gitStatus != null) ...[
                 const SizedBox(height: AppSpacing.stack),
                 _DesktopProjectRailRow(
-                  label: 'Git state',
+                  label: context.l10n.gitState,
                   value: _project.gitStatus == ProjectGitStatus.dirty
                       ? context.l10n.gitDirty
                       : context.l10n.gitClean,
@@ -781,39 +833,73 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           ),
         ),
         const SizedBox(height: AppSpacing.card),
+        _buildAiApprovalSettingsCard(context),
+        const SizedBox(height: AppSpacing.card),
         _DesktopProjectRailCard(
-          title: 'Status mix',
+          title: context.l10n.statusMix,
           child: Wrap(
             spacing: AppSpacing.compact,
             runSpacing: AppSpacing.compact,
             children: [
               _DesktopProjectMetricChip(
-                  label: 'Running', value: '$runningCount'),
+                  label: context.l10n.sessionStatusRunning,
+                  value: '$runningCount'),
               _DesktopProjectMetricChip(
-                  label: 'Waiting', value: '$waitingCount'),
+                  label: context.l10n.sessionStatusWaiting,
+                  value: '$waitingCount'),
               _DesktopProjectMetricChip(
-                label: 'Approvals',
+                label: context.l10n.approvals,
                 value: '$approvalCount',
               ),
-              _DesktopProjectMetricChip(label: 'Failed', value: '$failedCount'),
+              _DesktopProjectMetricChip(
+                label: context.l10n.sessionStatusFailed,
+                value: '$failedCount',
+              ),
             ],
           ),
         ),
         const SizedBox(height: AppSpacing.card),
         _DesktopProjectRailCard(
-          title: 'Notes',
+          title: context.l10n.notes,
           child: Text(
             sessions.isEmpty
-                ? 'No active sessions yet. Start a new one to turn this project into a working desk.'
+                ? context.l10n.projectNotesNoActiveSessions
                 : approvalCount > 0
-                    ? 'There are sessions waiting on approval. Review them before starting parallel work.'
+                    ? context.l10n.projectNotesWaitingApproval
                     : runningCount > 0 || waitingCount > 0
-                        ? 'This project has active work in motion. Keep recent sessions concise and easy to scan.'
-                        : 'The current session mix is quiet. Use this space to restart stalled threads or begin a focused run.',
+                        ? context.l10n.projectNotesActiveWork
+                        : context.l10n.projectNotesQuiet,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.5),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAiApprovalSettingsCard(BuildContext context) {
+    return AppCard(
+      key: const Key('project-ai-approval-prompt-entry'),
+      onTap: () => showProjectAiApprovalPromptDialog(
+        context,
+        client: _client,
+        projectId: _project.id,
+      ),
+      padding: AppSpacing.tilePadding,
+      child: Row(
+        children: [
+          const Icon(Icons.rule_folder_outlined),
+          const SizedBox(width: AppSpacing.compact),
+          Expanded(
+            child: Text(
+              context.l10n.projectAiApprovalPrompt,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          ),
+          const Icon(Icons.chevron_right_rounded),
+        ],
+      ),
     );
   }
 
@@ -844,6 +930,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 ),
                 child: Center(
                   child: TextField(
+                    key: const Key('project-session-search-field'),
                     focusNode: focusNode,
                     controller: controller,
                     onChanged: onChanged,
@@ -929,8 +1016,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     );
 
     final initialTitle = result.$1?.trim();
+    final clientSessionId = BridgeClient.newClientSessionId();
     final placeholderSession = SessionSummary(
-      id: 'local-draft-${DateTime.now().microsecondsSinceEpoch}',
+      id: clientSessionId,
       projectId: _project.id,
       title: (initialTitle != null && initialTitle.isNotEmpty)
           ? initialTitle
@@ -947,6 +1035,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       projectId: _project.id,
       title: result.$1,
       agent: result.$2,
+      clientSessionId: clientSessionId,
       briefReplyMode: appSettingsController.settings.compressAssistantReplies,
       providerId: result.$3,
       reasoningEffort: result.$4,

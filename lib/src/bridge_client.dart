@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:uuid/uuid.dart';
 
 import 'bridge_speech_models.dart';
 import 'models.dart';
@@ -50,6 +52,10 @@ class MessageListPage {
 }
 
 class BridgeClient {
+  static String newClientSessionId() => const Uuid().v4();
+  static const int _maxCachedMessageSessions = 8;
+  static const int _maxCachedMessagesPerSession = 200;
+
   BridgeClient({
     http.Client? httpClient,
   }) : _httpClient = httpClient ?? http.Client();
@@ -61,6 +67,8 @@ class BridgeClient {
   final Map<String, _CacheEntry<List<SessionSummary>>> _projectSessionsCache =
       {};
   final Map<String, String> _lastSessionEventIds = {};
+  final LinkedHashMap<String, List<ChatMessage>> _sessionMessagesCache =
+      LinkedHashMap<String, List<ChatMessage>>();
   Map<String, AgentDescriptor> _agentDescriptors = {};
 
   void _assertJsonResponse(http.Response response) {
@@ -269,6 +277,39 @@ class BridgeClient {
         ?.value
         .where((session) => session.id == sessionId)
         .firstOrNull;
+  }
+
+  /// Keeps event-streamed messages available while navigating between sessions.
+  /// The bridge's history endpoint can briefly lag the event stream.
+  List<ChatMessage>? peekSessionMessages(String sessionId) {
+    final messages = _sessionMessagesCache.remove(sessionId);
+    if (messages != null) {
+      _sessionMessagesCache[sessionId] = messages;
+    }
+    return messages == null ? null : List<ChatMessage>.unmodifiable(messages);
+  }
+
+  void cacheSessionMessages(String sessionId, Iterable<ChatMessage> messages) {
+    final List<ChatMessage> retained;
+    if (messages is List<ChatMessage>) {
+      final start = max(0, messages.length - _maxCachedMessagesPerSession);
+      retained =
+          List<ChatMessage>.of(messages.getRange(start, messages.length));
+    } else {
+      final queue = ListQueue<ChatMessage>();
+      for (final message in messages) {
+        if (queue.length == _maxCachedMessagesPerSession) {
+          queue.removeFirst();
+        }
+        queue.addLast(message);
+      }
+      retained = List<ChatMessage>.of(queue);
+    }
+    _sessionMessagesCache.remove(sessionId);
+    _sessionMessagesCache[sessionId] = retained;
+    while (_sessionMessagesCache.length > _maxCachedMessageSessions) {
+      _sessionMessagesCache.remove(_sessionMessagesCache.keys.first);
+    }
   }
 
   AgentDescriptor agentDescriptorFor(String agentId) {
@@ -487,6 +528,10 @@ class BridgeClient {
       Uri.parse('$baseUrl/projects/$projectId/sessions'),
       headers: _defaultHeaders,
     );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
     final items = payload['data'] as List<dynamic>;
     final sessions = items
@@ -526,6 +571,7 @@ class BridgeClient {
     String? systemPrompt,
     String? providerId,
     ReasoningEffort? reasoningEffort,
+    String? model,
     String? clientMessageId,
   }) async {
     final body = <String, dynamic>{
@@ -541,6 +587,9 @@ class BridgeClient {
     }
     if (reasoningEffort != null) {
       body['reasoning_effort'] = reasoningEffort.apiValue;
+    }
+    if (model != null && model.trim().isNotEmpty) {
+      body['model'] = model.trim();
     }
     if (clientMessageId != null && clientMessageId.isNotEmpty) {
       body['client_message_id'] = clientMessageId;
@@ -652,16 +701,21 @@ class BridgeClient {
   Future<void> updateBridgeSettings(
     AppSettings settings, {
     List<ModelProviderConfig>? modelProviders,
+    bool includeAiApproval = false,
+    ModelProviderConfig? aiApprovalProvider,
+    String? aiApprovalPrompt,
   }) async {
-    final body = <String, dynamic>{
-      'ai_approval': {
+    final body = <String, dynamic>{};
+    if (includeAiApproval) {
+      body['ai_approval'] = {
         'enabled': settings.aiApprovalEnabled,
-        'base_url': settings.aiApprovalBaseUrl.trim(),
-        'api_key': settings.aiApprovalApiKey.trim(),
+        'base_url': aiApprovalProvider?.baseUrl.trim() ?? '',
+        'api_key': aiApprovalProvider?.apiKey.trim() ?? '',
         'model': settings.aiApprovalModel.trim(),
         'max_risk': settings.aiApprovalMaxRisk.trim(),
-      },
-    };
+        'prompt': aiApprovalPrompt?.trim() ?? '',
+      };
+    }
     if (modelProviders != null) {
       body['model_providers'] = modelProviders.map((p) => p.toJson()).toList();
     }
@@ -679,6 +733,58 @@ class BridgeClient {
     }
   }
 
+  Future<String> getAiApprovalPrompt() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/settings/ai-approval-prompt'),
+      headers: _defaultHeaders,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+    final data = _decodeApiData(response.body);
+    return data['prompt'] as String? ?? '';
+  }
+
+  Future<String> updateAiApprovalPrompt(String prompt) async {
+    final response = await _httpClient.put(
+      Uri.parse('$baseUrl/settings/ai-approval-prompt'),
+      headers: {..._defaultHeaders, 'Content-Type': 'application/json'},
+      body: jsonEncode({'prompt': prompt.trim()}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+    return _decodeApiData(response.body)['prompt'] as String? ?? '';
+  }
+
+  Future<ProjectAiApprovalSettings> getProjectAiApprovalSettings(
+    String projectId,
+  ) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/projects/$projectId/ai-approval'),
+      headers: _defaultHeaders,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+    return ProjectAiApprovalSettings.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<ProjectAiApprovalSettings> updateProjectAiApprovalSettings(
+    String projectId,
+    ProjectAiApprovalSettings settings,
+  ) async {
+    final response = await _httpClient.put(
+      Uri.parse('$baseUrl/projects/$projectId/ai-approval'),
+      headers: {..._defaultHeaders, 'Content-Type': 'application/json'},
+      body: jsonEncode(settings.toJson()),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+    return ProjectAiApprovalSettings.fromJson(_decodeApiData(response.body));
+  }
+
   Future<List<ModelProviderConfig>> getModelProviders() async {
     final response = await _httpClient.get(
       Uri.parse('$baseUrl/settings'),
@@ -693,6 +799,35 @@ class BridgeClient {
     return providers
         .map((p) => ModelProviderConfig.fromJson(p as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<List<String>> getProviderModels(ModelProviderConfig provider) async {
+    final modelsUrl = provider.baseUrl.endsWith('/')
+        ? '${provider.baseUrl}models'
+        : '${provider.baseUrl}/models';
+    final response = await _httpClient.get(
+      Uri.parse(modelsUrl),
+      headers: {
+        if (provider.apiKey.isNotEmpty)
+          'Authorization': 'Bearer ${provider.apiKey}',
+        'Content-Type': 'application/json',
+      },
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = payload['data'] as List<dynamic>? ?? const [];
+    final models = data
+        .whereType<Map<String, dynamic>>()
+        .map((item) => item['id'] as String?)
+        .whereType<String>()
+        .map((model) => model.trim())
+        .where((model) => model.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    return models;
   }
 
   Future<List<AgentSummary>> listAgents({bool forceRefresh = false}) async {
@@ -808,6 +943,7 @@ class BridgeClient {
     required String projectId,
     String? title,
     required String agent,
+    String? clientSessionId,
     bool? briefReplyMode,
     String? providerId,
     ReasoningEffort? reasoningEffort,
@@ -816,6 +952,7 @@ class BridgeClient {
       'project_id': projectId,
       'title': title,
       'agent': agent,
+      'client_session_id': clientSessionId ?? newClientSessionId(),
       'brief_reply_mode': briefReplyMode ??
           appSettingsController.settings.compressAssistantReplies,
     };
@@ -954,40 +1091,6 @@ class BridgeClient {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(_extractErrorMessage(response));
     }
-  }
-
-  Future<SpeechProfileBinding> getSpeechProfileModel(
-      SpeechProfile profile) async {
-    final response = await _httpClient.get(
-      Uri.parse(
-          '$baseUrl/speech/profiles/${_speechProfileSlug(profile)}/model'),
-      headers: _defaultHeaders,
-    );
-    if (_isUnauthorized(response)) {
-      throw ClientUnauthorizedException(response.body);
-    }
-    _assertJsonResponse(response);
-    return SpeechProfileBinding.fromJson(_decodeApiData(response.body));
-  }
-
-  Future<SpeechProfileSelection> updateSpeechProfileModel(
-    SpeechProfile profile, {
-    String? modelId,
-  }) async {
-    final response = await _httpClient.put(
-      Uri.parse(
-          '$baseUrl/speech/profiles/${_speechProfileSlug(profile)}/model'),
-      headers: {
-        ..._defaultHeaders,
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({'model_id': modelId}),
-    );
-    if (_isUnauthorized(response)) {
-      throw ClientUnauthorizedException(response.body);
-    }
-    _assertJsonResponse(response);
-    return SpeechProfileSelection.fromJson(_decodeApiData(response.body));
   }
 
   Future<SpeechModelVoiceBinding> getSpeechModelVoice(String modelId) async {
@@ -1221,17 +1324,18 @@ class BridgeClient {
   }
 
   Stream<Map<String, dynamic>> subscribeToSessionEvents(
-    String sessionId,
-  ) async* {
+    String sessionId, {
+    String? lastEventId,
+  }) async* {
     final request = http.Request(
       'GET',
       Uri.parse('$baseUrl/sessions/$sessionId/events'),
     );
     request.headers['Accept'] = 'text/event-stream';
     request.headers.addAll(_defaultHeaders);
-    final lastEventId = _lastSessionEventIds[sessionId];
-    if (lastEventId != null && lastEventId.isNotEmpty) {
-      request.headers['Last-Event-ID'] = lastEventId;
+    final resumeEventId = lastEventId ?? _lastSessionEventIds[sessionId];
+    if (resumeEventId != null && resumeEventId.isNotEmpty) {
+      request.headers['Last-Event-ID'] = resumeEventId;
     }
 
     final response = await _httpClient.send(request);
@@ -1259,6 +1363,7 @@ class BridgeClient {
     Map<String, dynamic>? flushEvent() {
       if (dataBuffer.isEmpty) {
         eventName = null;
+        eventId = null;
         return null;
       }
       final event = {
@@ -1511,16 +1616,6 @@ class BridgeClient {
       return 'video/mp4';
     }
     return 'application/octet-stream';
-  }
-
-  static String _speechProfileSlug(SpeechProfile profile) {
-    return switch (profile) {
-      SpeechProfile.asrBatch => 'asr.batch',
-      SpeechProfile.asrRealtime => 'asr.realtime',
-      SpeechProfile.ttsDefault => 'tts.default',
-      SpeechProfile.vadDefault => 'vad.default',
-      SpeechProfile.wakeWordDefault => 'wake_word.default',
-    };
   }
 
   static String _sanitizeSpeechInput(String value) {

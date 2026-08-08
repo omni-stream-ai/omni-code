@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../bridge_client.dart';
@@ -44,6 +46,14 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
   String? _agentError;
 
   BridgeClient get _client => widget.client ?? bridgeClient;
+
+  void _persistCachedAgents(List<AgentSummary> agents) {
+    unawaited(
+      appSettingsController.save(
+        appSettingsController.settings.copyWith(cachedAgents: agents),
+      ),
+    );
+  }
 
   List<ModelProviderConfig> get _providers {
     final compatible = _selectedAgentSummary?.compatibleFormats ??
@@ -128,8 +138,11 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
     super.initState();
     _loadProviders();
     final cachedAgents = _client.peekAgents();
-    if (cachedAgents != null && cachedAgents.isNotEmpty) {
-      _agentOptions = cachedAgents;
+    final initialAgents = (cachedAgents != null && cachedAgents.isNotEmpty)
+        ? cachedAgents
+        : appSettingsController.settings.cachedAgents;
+    if (initialAgents.isNotEmpty) {
+      _agentOptions = initialAgents;
       _normalizeSelectedAgent();
       _normalizeProviderSelection();
       _loadingAgents = false;
@@ -170,6 +183,7 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
         _normalizeProviderSelection();
         _loadingAgents = false;
       });
+      _persistCachedAgents(agents);
     } catch (_) {
       if (!mounted) {
         return;
@@ -193,7 +207,7 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
       }
       setState(() {
         _installingAgent = false;
-        _agentOptions = [
+        final updatedAgents = [
           for (final agent in _agentOptions)
             if (agent.id == selectedAgentId)
               AgentSummary(
@@ -206,8 +220,12 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
             else
               agent,
         ];
+        _agentOptions = updatedAgents;
         _agentError = result.success ? null : result.message;
         _normalizeProviderSelection();
+        if (result.success) {
+          _persistCachedAgents(updatedAgents);
+        }
       });
     } catch (error) {
       if (!mounted) {

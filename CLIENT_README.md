@@ -18,7 +18,7 @@ flutter run -d <device-id>
 Notes:
 - `google-services.json` is intentionally gitignored.
 - The bridge still needs server-side FCM credentials to send pushes:
-  `ECHO_MATE_FCM_SERVICE_ACCOUNT_PATH=/path/to/service-account.json`.
+  `OMNI_CODE_FCM_SERVICE_ACCOUNT_PATH=/path/to/service-account.json`.
 
 Desktop support now works as follows:
 

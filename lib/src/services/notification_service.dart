@@ -210,6 +210,10 @@ class NotificationService {
     );
   }
 
+  Future<void> cancelAssistantReplyNotification(String sessionId) {
+    return _plugin.cancel(id: sessionId.hashCode);
+  }
+
   Future<void> showRemoteAssistantReplyNotification({
     required String? payload,
     required String? body,
@@ -229,6 +233,31 @@ class NotificationService {
       return;
     }
     await showAssistantReplyNotification(session, notificationBody);
+  }
+
+  Future<void> showRemoteApprovalRequestNotification({
+    required String? payload,
+    required String? title,
+    required String? body,
+  }) async {
+    if (payload == null || payload.trim().isEmpty) {
+      return;
+    }
+    final json = jsonDecode(payload) as Map<String, dynamic>;
+    final session = SessionSummary.fromJson(
+      json['session'] as Map<String, dynamic>,
+    );
+    final notificationBody = body?.trim();
+    if (notificationBody == null || notificationBody.isEmpty) {
+      return;
+    }
+    await showApprovalRequestNotification(
+      session,
+      title: title?.trim().isNotEmpty == true
+          ? title!.trim()
+          : 'Approval required',
+      body: notificationBody,
+    );
   }
 
   Future<void> showApprovalRequestNotification(
