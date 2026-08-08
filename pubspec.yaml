@@ -1,7 +1,7 @@
 name: omni_code
 description: Client console for managing desktop coding agents.
 publish_to: "none"
-version: 0.6.1+10
+version: 0.7.0+11
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
@@ -9,6 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  uuid: ^4.5.1
   flutter_web_plugins:
     sdk: flutter
   flutter_localizations:

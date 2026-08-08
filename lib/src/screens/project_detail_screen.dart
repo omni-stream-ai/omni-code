@@ -1016,8 +1016,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
     );
 
     final initialTitle = result.$1?.trim();
+    final clientSessionId = BridgeClient.newClientSessionId();
     final placeholderSession = SessionSummary(
-      id: 'local-draft-${DateTime.now().microsecondsSinceEpoch}',
+      id: clientSessionId,
       projectId: _project.id,
       title: (initialTitle != null && initialTitle.isNotEmpty)
           ? initialTitle
@@ -1034,6 +1035,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
       projectId: _project.id,
       title: result.$1,
       agent: result.$2,
+      clientSessionId: clientSessionId,
       briefReplyMode: appSettingsController.settings.compressAssistantReplies,
       providerId: result.$3,
       reasoningEffort: result.$4,

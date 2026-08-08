@@ -260,12 +260,14 @@ void main() {
         projectId: 'project-1',
         title: 'Test',
         agent: 'claude_code',
+        clientSessionId: 'client-session-1',
         briefReplyMode: false,
       );
 
       expect(body['project_id'], 'project-1');
       expect(body['title'], 'Test');
       expect(body['agent'], 'claude_code');
+      expect(body['client_session_id'], 'client-session-1');
       expect(body.containsKey('provider_id'), isFalse);
       expect(session.agentId, 'claude_code');
     });

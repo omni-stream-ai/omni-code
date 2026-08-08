@@ -6,6 +6,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:uuid/uuid.dart';
 
 import 'bridge_speech_models.dart';
 import 'models.dart';
@@ -51,6 +52,7 @@ class MessageListPage {
 }
 
 class BridgeClient {
+  static String newClientSessionId() => const Uuid().v4();
   static const int _maxCachedMessageSessions = 8;
   static const int _maxCachedMessagesPerSession = 200;
 
@@ -944,6 +946,7 @@ class BridgeClient {
     required String projectId,
     String? title,
     required String agent,
+    String? clientSessionId,
     bool? briefReplyMode,
     String? providerId,
     ReasoningEffort? reasoningEffort,
@@ -952,6 +955,7 @@ class BridgeClient {
       'project_id': projectId,
       'title': title,
       'agent': agent,
+      'client_session_id': clientSessionId ?? newClientSessionId(),
       'brief_reply_mode': briefReplyMode ??
           appSettingsController.settings.compressAssistantReplies,
     };

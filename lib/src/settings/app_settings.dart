@@ -888,6 +888,9 @@ class AppSettings {
   }
 
   static TtsProvider _parseTtsProvider(String? raw, TtsProvider fallback) {
+    if (raw == 'bridge') {
+      return TtsProvider.bridgeLocal;
+    }
     if (raw == 'zhipu') {
       return TtsProvider.system;
     }
@@ -900,6 +903,9 @@ class AppSettings {
   }
 
   static AsrProvider _parseAsrProvider(String? raw, AsrProvider fallback) {
+    if (raw == 'bridge') {
+      return AsrProvider.bridgeLocal;
+    }
     if (raw == 'whisper' || raw == 'zhipu' || raw == 'tencentCloudStreaming') {
       return AsrProvider.system;
     }

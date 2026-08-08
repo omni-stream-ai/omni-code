@@ -91,8 +91,9 @@ Future<void> startNewSessionFlow(
   );
 
   final initialTitle = sessionResult.$1?.trim();
+  final clientSessionId = BridgeClient.newClientSessionId();
   final placeholderSession = SessionSummary(
-    id: 'local-draft-${DateTime.now().microsecondsSinceEpoch}',
+    id: clientSessionId,
     projectId: project.id,
     title: (initialTitle != null && initialTitle.isNotEmpty)
         ? initialTitle
@@ -109,6 +110,7 @@ Future<void> startNewSessionFlow(
     projectId: project.id,
     title: sessionResult.$1,
     agent: sessionResult.$2,
+    clientSessionId: clientSessionId,
     briefReplyMode: appSettingsController.settings.compressAssistantReplies,
     providerId: sessionResult.$3,
     reasoningEffort: sessionResult.$4,
