@@ -1,7 +1,15 @@
+import com.android.build.api.dsl.LibraryExtension
+
 allprojects {
     repositories {
-        google()
-        mavenCentral()
+        val useMirror = System.getenv("OMNI_ANDROID_MAVEN_MIRROR") == "aliyun"
+        if (useMirror) {
+            maven(url = "https://maven.aliyun.com/repository/google")
+            maven(url = "https://maven.aliyun.com/repository/public")
+        } else {
+            google()
+            mavenCentral()
+        }
     }
 }
 
@@ -17,6 +25,14 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
+    val ndkOverride = System.getenv("OMNI_ANDROID_NDK_VERSION")
+    if (ndkOverride != null) {
+        plugins.withId("com.android.library") {
+            extensions.configure<LibraryExtension> {
+                ndkVersion = ndkOverride
+            }
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {

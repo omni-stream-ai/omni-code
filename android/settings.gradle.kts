@@ -11,9 +11,16 @@ pluginManagement {
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
+        val useMirror = System.getenv("OMNI_ANDROID_MAVEN_MIRROR") == "aliyun"
+        if (useMirror) {
+            maven(url = "https://maven.aliyun.com/repository/gradle-plugin")
+            maven(url = "https://maven.aliyun.com/repository/google")
+            maven(url = "https://maven.aliyun.com/repository/public")
+        } else {
+            google()
+            mavenCentral()
+            gradlePluginPortal()
+        }
     }
 }
 
