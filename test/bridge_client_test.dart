@@ -347,6 +347,43 @@ void main() {
       });
     });
 
+    test('reuses the last SSE event id when reconnecting', () async {
+      var requestCount = 0;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          requestCount += 1;
+          expect(request.method, 'GET');
+          expect(request.url.path, '/sessions/session-1/events');
+          if (requestCount == 1) {
+            expect(request.headers['last-event-id'], isNull);
+            return http.Response(
+              'id: 41\n'
+              'event: message.snapshot\n'
+              'data: {"type":"message_snapshot","payload":{"session_id":"session-1","message_id":"m1","content":"hello"}}\n\n',
+              200,
+              headers: {'content-type': 'text/event-stream'},
+            );
+          }
+          expect(request.headers['last-event-id'], '41');
+          return http.Response(
+            'id: 42\n'
+            'event: session.status\n'
+            'data: {"type":"session_status","payload":{"session_id":"session-1","status":"idle"}}\n\n',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }),
+      );
+
+      final first = await client.subscribeToSessionEvents('session-1').toList();
+      final second =
+          await client.subscribeToSessionEvents('session-1').toList();
+
+      expect(first.single['id'], '41');
+      expect(second.single['id'], '42');
+      expect(requestCount, 2);
+    });
+
     test('sends reasoning effort when posting a message', () async {
       late Map<String, dynamic> body;
       final client = BridgeClient(

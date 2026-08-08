@@ -60,6 +60,7 @@ class BridgeClient {
   _CacheEntry<List<AgentSummary>>? _agentsCache;
   final Map<String, _CacheEntry<List<SessionSummary>>> _projectSessionsCache =
       {};
+  final Map<String, String> _lastSessionEventIds = {};
   Map<String, AgentDescriptor> _agentDescriptors = {};
 
   void _assertJsonResponse(http.Response response) {
@@ -389,19 +390,15 @@ class BridgeClient {
 
   Future<List<ChatMessage>> listMessages(String sessionId) async {
     const limit = 100;
-    final all = <ChatMessage>[];
-    String? cursor;
-    bool hasMore = true;
-    while (hasMore) {
-      final page = await listMessagesPage(
+    var page = await listMessagesPage(sessionId, limit: limit);
+    final all = page.messages.toList(growable: true);
+    while (page.hasMore && page.nextCursor != null) {
+      page = await listMessagesPage(
         sessionId,
         limit: limit,
-        afterId: cursor,
+        beforeId: page.nextCursor,
       );
-      all.addAll(page.messages);
-      hasMore = page.hasMore;
-      cursor = page.nextCursor;
-      if (!hasMore || cursor == null) break;
+      all.insertAll(0, page.messages);
     }
     return all;
   }
@@ -1232,12 +1229,31 @@ class BridgeClient {
     );
     request.headers['Accept'] = 'text/event-stream';
     request.headers.addAll(_defaultHeaders);
+    final lastEventId = _lastSessionEventIds[sessionId];
+    if (lastEventId != null && lastEventId.isNotEmpty) {
+      request.headers['Last-Event-ID'] = lastEventId;
+    }
 
     final response = await _httpClient.send(request);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final body = await response.stream.bytesToString();
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        throw ClientUnauthorizedException(body);
+      }
+      throw Exception(_extractErrorMessageFromBody(body));
+    }
+    final contentType = response.headers['content-type'] ?? '';
+    if (!contentType.contains('text/event-stream')) {
+      final body = await response.stream.bytesToString();
+      throw Exception(
+        body.isEmpty ? 'Invalid SSE response: $contentType' : body,
+      );
+    }
     final lines =
         response.stream.transform(utf8.decoder).transform(const LineSplitter());
 
     String? eventName;
+    String? eventId;
     final dataBuffer = <String>[];
 
     Map<String, dynamic>? flushEvent() {
@@ -1247,9 +1263,17 @@ class BridgeClient {
       }
       final event = {
         'event': eventName ?? 'message',
+        if (eventId != null) 'id': eventId,
         'data': jsonDecode(dataBuffer.join('\n')) as Map<String, dynamic>,
       };
+      final data = event['data'] as Map<String, dynamic>;
+      if (data['type'] == 'sync_required') {
+        _lastSessionEventIds.remove(sessionId);
+      } else if (eventId != null && eventId!.isNotEmpty) {
+        _lastSessionEventIds[sessionId] = eventId!;
+      }
       eventName = null;
+      eventId = null;
       dataBuffer.clear();
       return event;
     }
@@ -1265,6 +1289,8 @@ class BridgeClient {
 
       if (line.startsWith('event:')) {
         eventName = _readSseFieldValue(line.substring(6));
+      } else if (line.startsWith('id:')) {
+        eventId = _readSseFieldValue(line.substring(3));
       } else if (line.startsWith('data:')) {
         dataBuffer.add(_readSseFieldValue(line.substring(5)));
       }

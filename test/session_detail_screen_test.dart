@@ -2829,6 +2829,75 @@ void main() {
     await events.close();
   });
 
+  testWidgets('message snapshot replaces in-flight assistant content',
+      (tester) async {
+    final events = StreamController<List<int>>.broadcast();
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'messages': const [],
+                  'has_more': false,
+                  'next_cursor': null,
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    events.add(
+      utf8.encode(
+        _eventStreamBody([
+          {
+            'type': 'message_snapshot',
+            'payload': {
+              'session_id': 'session-1',
+              'message_id': 'assistant-1',
+              'content': 'First snapshot',
+            },
+          },
+          {
+            'type': 'message_snapshot',
+            'payload': {
+              'session_id': 'session-1',
+              'message_id': 'assistant-1',
+              'content': 'Corrected final snapshot',
+            },
+          },
+        ]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Corrected final snapshot'), findsOneWidget);
+    expect(find.text('First snapshot'), findsNothing);
+
+    await events.close();
+  });
+
   testWidgets(
       'same assistant message_created snapshot replaces existing content',
       (tester) async {

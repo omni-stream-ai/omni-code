@@ -1833,7 +1833,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   isWaitingForBridgeReply: isWaitingForBridgeReply,
                   showVoiceInputUnavailableTooltip:
                       showVoiceInputUnavailableTooltip,
-                  systemSpeechUnavailableMessage: systemSpeechUnavailableMessage,
+                  systemSpeechUnavailableMessage:
+                      systemSpeechUnavailableMessage,
                 ),
               ),
             ],
@@ -4215,8 +4216,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   double _messageBubbleMaxWidthFor(double availableWidth) {
-    final isDesktop =
-        MediaQuery.sizeOf(context).width >= AppResponsiveLayout.desktopBreakpoint;
+    final isDesktop = MediaQuery.sizeOf(context).width >=
+        AppResponsiveLayout.desktopBreakpoint;
     final factor = isDesktop ? _assistantMessageBubbleWidthFactor : 1.0;
     final preferredWidth = availableWidth * factor;
     return math.min(
@@ -6299,6 +6300,37 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 sessionId: _session.id,
                 role: MessageRole.assistant,
                 content: delta,
+                createdAt: DateTime.now(),
+              ),
+            );
+          }
+        });
+        _maybeAutoSpeakAssistantMessage(messageId);
+        _maybeNotifyAssistantMessage(messageId);
+        if (shouldAutoScroll) {
+          _jumpToBottom();
+        }
+        break;
+      case 'message_snapshot':
+        final shouldAutoScroll = _isNearBottom();
+        final messageId = payload['message_id'] as String;
+        final sessionId = payload['session_id'] as String;
+        final content = payload['content'] as String;
+        if (sessionId != _session.id) {
+          return;
+        }
+        setState(() {
+          _streamingAssistantMessageIds.add(messageId);
+          final index = _messages.indexWhere((item) => item.id == messageId);
+          if (index >= 0) {
+            _messages[index] = _messages[index].copyWith(content: content);
+          } else {
+            _appendOrUpdateMessage(
+              ChatMessage(
+                id: messageId,
+                sessionId: sessionId,
+                role: MessageRole.assistant,
+                content: content,
                 createdAt: DateTime.now(),
               ),
             );
