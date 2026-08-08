@@ -4,10 +4,124 @@ import 'dart:io';
 import 'package:omni_code/src/bridge_client.dart';
 import 'package:omni_code/src/bridge_speech_models.dart';
 import 'package:omni_code/src/models.dart';
+import 'package:omni_code/src/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
 void main() {
+  group('BridgeClient settings', () {
+    test('does not include AI approval unless explicitly requested', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response('', 204);
+        }),
+      );
+
+      await client.updateBridgeSettings(
+        AppSettings.defaults(),
+        modelProviders: const [],
+      );
+
+      expect(body, containsPair('model_providers', const []));
+      expect(body, isNot(contains('ai_approval')));
+    });
+
+    test('builds AI approval from the selected provider', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response('', 204);
+        }),
+      );
+      const provider = ModelProviderConfig(
+        id: 'primary',
+        name: 'Primary',
+        baseUrl: 'https://example.test/v1',
+        apiKey: 'secret',
+        model: 'gpt-test',
+      );
+
+      await client.updateBridgeSettings(
+        AppSettings.defaults().copyWith(
+          aiApprovalEnabled: true,
+          aiApprovalModel: 'gpt-test',
+          aiApprovalMaxRisk: 'medium',
+        ),
+        includeAiApproval: true,
+        aiApprovalProvider: provider,
+      );
+
+      expect(body['ai_approval'], {
+        'enabled': true,
+        'base_url': 'https://example.test/v1',
+        'api_key': 'secret',
+        'model': 'gpt-test',
+        'max_risk': 'medium',
+        'prompt': '',
+      });
+    });
+
+    test('loads and sorts models from a provider without a default model',
+        () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.url.toString(), 'https://example.test/v1/models');
+          expect(request.headers['authorization'], 'Bearer secret');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {'id': 'model-b'},
+                {'id': 'model-a'},
+              ],
+            }),
+            200,
+          );
+        }),
+      );
+
+      final models = await client.getProviderModels(
+        const ModelProviderConfig(
+          id: 'primary',
+          name: 'Primary',
+          baseUrl: 'https://example.test/v1',
+          apiKey: 'secret',
+        ),
+      );
+
+      expect(models, ['model-a', 'model-b']);
+    });
+
+    test('updates the approval prompt through the dedicated endpoint',
+        () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(
+            request.url.path,
+            '/settings/ai-approval-prompt',
+          );
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {'prompt': 'Allow repository checks'},
+            }),
+            200,
+          );
+        }),
+      );
+
+      final prompt = await client.updateAiApprovalPrompt(
+        ' Allow repository checks ',
+      );
+
+      expect(body, {'prompt': 'Allow repository checks'});
+      expect(prompt, 'Allow repository checks');
+    });
+  });
+
   group('BridgeClient project ordering', () {
     test('sortProjectsForDisplay orders projects by updatedAt descending', () {
       final older = _project(
@@ -297,6 +411,58 @@ void main() {
       expect(() => cached.add(message), throwsUnsupportedError);
     });
 
+    test('bounds cached streamed messages by session count and history size',
+        () {
+      final client = BridgeClient();
+      final createdAt = DateTime(2026, 7, 18, 10);
+
+      for (var sessionIndex = 0; sessionIndex < 9; sessionIndex += 1) {
+        final sessionId = 'session-$sessionIndex';
+        client.cacheSessionMessages(
+          sessionId,
+          List<ChatMessage>.generate(
+            205,
+            (messageIndex) => ChatMessage(
+              id: 'message-$sessionIndex-$messageIndex',
+              sessionId: sessionId,
+              role: MessageRole.assistant,
+              content: 'Message $messageIndex',
+              createdAt: createdAt.add(Duration(seconds: messageIndex)),
+            ),
+          ),
+        );
+      }
+
+      expect(client.peekSessionMessages('session-0'), isNull);
+      final newestSession = client.peekSessionMessages('session-8');
+      expect(newestSession, hasLength(200));
+      expect(newestSession!.first.id, 'message-8-5');
+      expect(newestSession.last.id, 'message-8-204');
+    });
+
+    test('bounds a non-list message iterable without changing retained order',
+        () {
+      final client = BridgeClient();
+      final createdAt = DateTime(2026, 7, 18, 10);
+      final messages = List<ChatMessage>.generate(
+        205,
+        (index) => ChatMessage(
+          id: 'message-$index',
+          sessionId: 'session-1',
+          role: MessageRole.assistant,
+          content: 'Message $index',
+          createdAt: createdAt.add(Duration(seconds: index)),
+        ),
+      ).where((_) => true);
+
+      client.cacheSessionMessages('session-1', messages);
+
+      final cached = client.peekSessionMessages('session-1')!;
+      expect(cached, hasLength(200));
+      expect(cached.first.id, 'message-5');
+      expect(cached.last.id, 'message-204');
+    });
+
     test('lists messages using paginated envelope and cursor parameters',
         () async {
       final client = BridgeClient(
@@ -406,10 +572,12 @@ void main() {
         'session-1',
         'Hello',
         reasoningEffort: ReasoningEffort.max,
+        model: 'gpt-5.2-codex',
         clientMessageId: 'local-123',
       );
 
       expect(body['reasoning_effort'], 'max');
+      expect(body['model'], 'gpt-5.2-codex');
       expect(body['client_message_id'], 'local-123');
     });
 

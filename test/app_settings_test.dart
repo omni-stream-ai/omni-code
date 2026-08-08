@@ -3,6 +3,23 @@ import 'package:omni_code/src/models.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 
 void main() {
+  test('AI approval provider selection persists without provider credentials',
+      () {
+    final json = AppSettings.defaults()
+        .copyWith(
+          aiApprovalProviderId: 'primary',
+          aiApprovalBaseUrl: 'https://example.test/v1',
+          aiApprovalApiKey: 'secret',
+          aiApprovalModel: 'gpt-test',
+        )
+        .toJson();
+
+    expect(json['ai_approval_provider_id'], 'primary');
+    expect(json['ai_approval_model'], 'gpt-test');
+    expect(json, isNot(contains('ai_approval_base_url')));
+    expect(json, isNot(contains('ai_approval_api_key')));
+  });
+
   test('autoSpeakReplies defaults to false', () {
     expect(AppSettings.defaults().autoSpeakReplies, isFalse);
   });

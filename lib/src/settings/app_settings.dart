@@ -47,6 +47,7 @@ class AppSettings {
     required this.aiApprovalEnabled,
     required this.aiApprovalBaseUrl,
     required this.aiApprovalApiKey,
+    required this.aiApprovalProviderId,
     required this.aiApprovalModel,
     required this.aiApprovalMaxRisk,
     required this.notificationMaxChars,
@@ -90,6 +91,7 @@ class AppSettings {
   final bool aiApprovalEnabled;
   final String aiApprovalBaseUrl;
   final String aiApprovalApiKey;
+  final String aiApprovalProviderId;
   final String aiApprovalModel;
   final String aiApprovalMaxRisk;
   final int notificationMaxChars;
@@ -133,9 +135,9 @@ class AppSettings {
   }
 
   factory AppSettings.defaults() {
-    const configuredUrl = String.fromEnvironment('ECHO_MATE_BRIDGE_URL');
+    const configuredUrl = String.fromEnvironment('OMNI_CODE_BRIDGE_URL');
     const updateManifestUrl = String.fromEnvironment(
-      'ECHO_MATE_UPDATE_MANIFEST_URL',
+      'OMNI_CODE_UPDATE_MANIFEST_URL',
       defaultValue: _defaultUpdateManifestUrl,
     );
     return AppSettings(
@@ -159,6 +161,7 @@ class AppSettings {
       aiApprovalEnabled: false,
       aiApprovalBaseUrl: 'https://api.openai.com/v1',
       aiApprovalApiKey: '',
+      aiApprovalProviderId: '',
       aiApprovalModel: 'gpt-4.1-mini',
       aiApprovalMaxRisk: 'low',
       notificationMaxChars: _defaultNotificationMaxChars,
@@ -211,6 +214,7 @@ class AppSettings {
     bool? aiApprovalEnabled,
     String? aiApprovalBaseUrl,
     String? aiApprovalApiKey,
+    String? aiApprovalProviderId,
     String? aiApprovalModel,
     String? aiApprovalMaxRisk,
     int? notificationMaxChars,
@@ -262,6 +266,7 @@ class AppSettings {
       aiApprovalEnabled: aiApprovalEnabled ?? this.aiApprovalEnabled,
       aiApprovalBaseUrl: aiApprovalBaseUrl ?? this.aiApprovalBaseUrl,
       aiApprovalApiKey: aiApprovalApiKey ?? this.aiApprovalApiKey,
+      aiApprovalProviderId: aiApprovalProviderId ?? this.aiApprovalProviderId,
       aiApprovalModel: aiApprovalModel ?? this.aiApprovalModel,
       aiApprovalMaxRisk: aiApprovalMaxRisk ?? this.aiApprovalMaxRisk,
       notificationMaxChars: notificationMaxChars ?? this.notificationMaxChars,
@@ -346,8 +351,7 @@ class AppSettings {
       'update_manifest_url': updateManifestUrl,
       'update_target_version': updateTargetVersion,
       'ai_approval_enabled': aiApprovalEnabled,
-      'ai_approval_base_url': aiApprovalBaseUrl,
-      'ai_approval_api_key': aiApprovalApiKey,
+      'ai_approval_provider_id': aiApprovalProviderId,
       'ai_approval_model': aiApprovalModel,
       'ai_approval_max_risk': aiApprovalMaxRisk,
       'auto_speak_replies': autoSpeakReplies,
@@ -421,6 +425,7 @@ class AppSettings {
         defaults.aiApprovalBaseUrl,
       ),
       aiApprovalApiKey: _readString(json, 'ai_approval_api_key'),
+      aiApprovalProviderId: _readString(json, 'ai_approval_provider_id'),
       aiApprovalModel:
           _readString(json, 'ai_approval_model', defaults.aiApprovalModel),
       aiApprovalMaxRisk: _normalizeRisk(
@@ -1003,6 +1008,10 @@ class AppSettingsController extends ChangeNotifier {
           shouldPersist = true;
         }
         if (json['ai_approval_enabled'] == null) {
+          shouldPersist = true;
+        }
+        if (json.containsKey('ai_approval_base_url') ||
+            json.containsKey('ai_approval_api_key')) {
           shouldPersist = true;
         }
         if (json.containsKey('notification_max_chars')) {

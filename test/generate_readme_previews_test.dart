@@ -1031,6 +1031,9 @@ class _FakeAudioRecordingService implements AudioRecordingService {
   Future<void> cancel() async {}
 
   @override
+  Future<void> dispose() async {}
+
+  @override
   Future<String> start() async => '/tmp/preview.wav';
 
   @override

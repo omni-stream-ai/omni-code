@@ -106,7 +106,36 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get enableAiApprovalSubtitle =>
-      'Use an OpenAI-compatible endpoint to approve low-risk commands';
+      'Use a configured model to approve low-risk commands';
+
+  @override
+  String get aiApprovalModel => 'Approval model';
+
+  @override
+  String get aiApprovalProvider => 'Approval model provider';
+
+  @override
+  String get loadingApprovalModels => 'Loading models...';
+
+  @override
+  String get approvalModelsLoadFailed =>
+      'Could not load models; configured defaults are shown';
+
+  @override
+  String get noApprovalModels => 'No models returned by this provider';
+
+  @override
+  String get loadingModelProviders => 'Loading configured models...';
+
+  @override
+  String get noConfiguredModels =>
+      'Configure and enable a model provider first';
+
+  @override
+  String get modelProvidersLoadFailed => 'Could not load configured models';
+
+  @override
+  String get selectAiApprovalModel => 'Select an approval model';
 
   @override
   String get aiApprovalMaxRisk => 'Highest auto-approval risk';
@@ -114,6 +143,54 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get aiApprovalHelp =>
       'Saved settings sync to the current Bridge. Keeping Low is recommended. High-risk commands, failed calls, or hard-blocked rules still fall back to manual approval on the phone.';
+
+  @override
+  String get aiApprovalPrompt => 'Global approval prompt';
+
+  @override
+  String get aiApprovalPromptHint => 'Add organization-wide approval guidance';
+
+  @override
+  String get aiApprovalPromptEntrySubtitle =>
+      'Edit the instructions used for automatic approval decisions';
+
+  @override
+  String get projectAiApprovalPrompt => 'Project approval prompt';
+
+  @override
+  String get projectAiApprovalPromptHint =>
+      'Add approval guidance for this project';
+
+  @override
+  String get alwaysAllowedCommands => 'Always allowed commands';
+
+  @override
+  String get alwaysAllow => 'Always allow';
+
+  @override
+  String get autoApprovalAiReviewTitle => 'AI recommends your review';
+
+  @override
+  String get autoApprovalRiskThresholdTitle =>
+      'Risk exceeds the automatic approval limit';
+
+  @override
+  String get autoApprovalHardBlockTitle => 'Blocked by a safety rule';
+
+  @override
+  String get autoApprovalReviewFailedTitle =>
+      'Automatic review was unavailable';
+
+  @override
+  String get autoApprovalHardBlockReason =>
+      'This command affects a protected or project-external resource, so it needs your confirmation.';
+
+  @override
+  String get autoApprovalReviewFailedReason =>
+      'The approval model could not complete its review, so this request was sent to you instead.';
+
+  @override
+  String get projectApprovalSettingsSaved => 'Project approval settings saved';
 
   @override
   String get riskLow => 'Low';

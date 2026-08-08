@@ -19,6 +19,7 @@ import '../widgets/create_session_dialog.dart';
 import '../widgets/copyable_message.dart';
 import '../widgets/new_session_flow.dart';
 import 'session_detail_screen.dart';
+import 'project_ai_approval_prompt_screen.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
   const ProjectDetailScreen({super.key, required this.project, this.client});
@@ -32,7 +33,8 @@ class ProjectDetailScreen extends StatefulWidget {
   State<ProjectDetailScreen> createState() => _ProjectDetailScreenState();
 }
 
-class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
+class _ProjectDetailScreenState extends State<ProjectDetailScreen>
+    with WidgetsBindingObserver {
   static const double _desktopRailWidth = 304;
   static const _pageSize = 7;
   static const _autoRefreshInterval = Duration(seconds: 5);
@@ -50,11 +52,13 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   int _visibleCount = _pageSize;
   Timer? _autoRefreshTimer;
   Timer? _searchDebounceTimer;
+  bool _appIsActive = true;
 
   BridgeClient get _client => widget.client ?? bridgeClient;
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _autoRefreshTimer?.cancel();
     _searchDebounceTimer?.cancel();
     _searchFocusNode.dispose();
@@ -65,14 +69,41 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _project = widget.project;
-    unawaited(_loadSessions());
+    final hasCachedProject = _client.peekProject(_project.id) != null;
+    final hasCachedSessions = _client.peekProjectSessions(_project.id) != null;
+    if (hasCachedProject && hasCachedSessions) {
+      unawaited(_loadCachedSessionsThenRefresh());
+    } else {
+      unawaited(_loadSessions(forceRefresh: true));
+    }
     _autoRefreshTimer = Timer.periodic(_autoRefreshInterval, (_) {
-      if (!mounted || _isRefreshing || _isLoading) {
+      if (!mounted || !_appIsActive || _isRefreshing || _isLoading) {
         return;
       }
       unawaited(_loadSessions(forceRefresh: true));
     });
+  }
+
+  Future<void> _loadCachedSessionsThenRefresh() async {
+    await _loadSessions();
+    if (mounted) {
+      await _loadSessions(forceRefresh: true);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final wasActive = _appIsActive;
+    _appIsActive = state == AppLifecycleState.resumed;
+    if (!wasActive &&
+        _appIsActive &&
+        mounted &&
+        !_isRefreshing &&
+        !_isLoading) {
+      unawaited(_loadSessions(forceRefresh: true));
+    }
   }
 
   Future<void> _loadSessions({bool forceRefresh = false}) async {
@@ -93,8 +124,11 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     });
     try {
       final results = await Future.wait<Object>([
-        _client.listProjectSessions(_project.id, forceRefresh: true),
-        _client.getProject(_project.id, forceRefresh: true),
+        _client.listProjectSessions(
+          _project.id,
+          forceRefresh: forceRefresh,
+        ),
+        _client.getProject(_project.id, forceRefresh: forceRefresh),
       ]);
       if (!mounted) {
         return;
@@ -350,6 +384,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               _buildHeader(context),
               const SizedBox(height: AppSpacing.card),
               _buildProjectSummaryCard(context),
+              const SizedBox(height: AppSpacing.card),
+              _buildAiApprovalSettingsCard(context),
               const SizedBox(height: AppSpacing.card),
               _buildSearchSection(context),
               const SizedBox(height: AppSpacing.tileY),
@@ -797,6 +833,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           ),
         ),
         const SizedBox(height: AppSpacing.card),
+        _buildAiApprovalSettingsCard(context),
+        const SizedBox(height: AppSpacing.card),
         _DesktopProjectRailCard(
           title: context.l10n.statusMix,
           child: Wrap(
@@ -838,6 +876,33 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     );
   }
 
+  Widget _buildAiApprovalSettingsCard(BuildContext context) {
+    return AppCard(
+      key: const Key('project-ai-approval-prompt-entry'),
+      onTap: () => showProjectAiApprovalPromptDialog(
+        context,
+        client: _client,
+        projectId: _project.id,
+      ),
+      padding: AppSpacing.tilePadding,
+      child: Row(
+        children: [
+          const Icon(Icons.rule_folder_outlined),
+          const SizedBox(width: AppSpacing.compact),
+          Expanded(
+            child: Text(
+              context.l10n.projectAiApprovalPrompt,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          ),
+          const Icon(Icons.chevron_right_rounded),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSearchBar(
     BuildContext context, {
     required TextEditingController controller,
@@ -865,6 +930,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 ),
                 child: Center(
                   child: TextField(
+                    key: const Key('project-session-search-field'),
                     focusNode: focusNode,
                     controller: controller,
                     onChanged: onChanged,

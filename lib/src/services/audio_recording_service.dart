@@ -64,4 +64,8 @@ class AudioRecordingService {
   Future<void> cancel() {
     return _recorder.cancel();
   }
+
+  Future<void> dispose() {
+    return _recorder.dispose();
+  }
 }

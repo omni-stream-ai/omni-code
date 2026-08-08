@@ -287,8 +287,62 @@ abstract class AppLocalizations {
   /// No description provided for @enableAiApprovalSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Use an OpenAI-compatible endpoint to approve low-risk commands'**
+  /// **'Use a configured model to approve low-risk commands'**
   String get enableAiApprovalSubtitle;
+
+  /// No description provided for @aiApprovalModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Approval model'**
+  String get aiApprovalModel;
+
+  /// No description provided for @aiApprovalProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Approval model provider'**
+  String get aiApprovalProvider;
+
+  /// No description provided for @loadingApprovalModels.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading models...'**
+  String get loadingApprovalModels;
+
+  /// No description provided for @approvalModelsLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load models; configured defaults are shown'**
+  String get approvalModelsLoadFailed;
+
+  /// No description provided for @noApprovalModels.
+  ///
+  /// In en, this message translates to:
+  /// **'No models returned by this provider'**
+  String get noApprovalModels;
+
+  /// No description provided for @loadingModelProviders.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading configured models...'**
+  String get loadingModelProviders;
+
+  /// No description provided for @noConfiguredModels.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure and enable a model provider first'**
+  String get noConfiguredModels;
+
+  /// No description provided for @modelProvidersLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load configured models'**
+  String get modelProvidersLoadFailed;
+
+  /// No description provided for @selectAiApprovalModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Select an approval model'**
+  String get selectAiApprovalModel;
 
   /// No description provided for @aiApprovalMaxRisk.
   ///
@@ -301,6 +355,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Saved settings sync to the current Bridge. Keeping Low is recommended. High-risk commands, failed calls, or hard-blocked rules still fall back to manual approval on the phone.'**
   String get aiApprovalHelp;
+
+  /// No description provided for @aiApprovalPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Global approval prompt'**
+  String get aiApprovalPrompt;
+
+  /// No description provided for @aiApprovalPromptHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add organization-wide approval guidance'**
+  String get aiApprovalPromptHint;
+
+  /// No description provided for @aiApprovalPromptEntrySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit the instructions used for automatic approval decisions'**
+  String get aiApprovalPromptEntrySubtitle;
+
+  /// No description provided for @projectAiApprovalPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Project approval prompt'**
+  String get projectAiApprovalPrompt;
+
+  /// No description provided for @projectAiApprovalPromptHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add approval guidance for this project'**
+  String get projectAiApprovalPromptHint;
+
+  /// No description provided for @alwaysAllowedCommands.
+  ///
+  /// In en, this message translates to:
+  /// **'Always allowed commands'**
+  String get alwaysAllowedCommands;
+
+  /// No description provided for @alwaysAllow.
+  ///
+  /// In en, this message translates to:
+  /// **'Always allow'**
+  String get alwaysAllow;
+
+  /// No description provided for @autoApprovalAiReviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI recommends your review'**
+  String get autoApprovalAiReviewTitle;
+
+  /// No description provided for @autoApprovalRiskThresholdTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Risk exceeds the automatic approval limit'**
+  String get autoApprovalRiskThresholdTitle;
+
+  /// No description provided for @autoApprovalHardBlockTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked by a safety rule'**
+  String get autoApprovalHardBlockTitle;
+
+  /// No description provided for @autoApprovalReviewFailedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic review was unavailable'**
+  String get autoApprovalReviewFailedTitle;
+
+  /// No description provided for @autoApprovalHardBlockReason.
+  ///
+  /// In en, this message translates to:
+  /// **'This command affects a protected or project-external resource, so it needs your confirmation.'**
+  String get autoApprovalHardBlockReason;
+
+  /// No description provided for @autoApprovalReviewFailedReason.
+  ///
+  /// In en, this message translates to:
+  /// **'The approval model could not complete its review, so this request was sent to you instead.'**
+  String get autoApprovalReviewFailedReason;
+
+  /// No description provided for @projectApprovalSettingsSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Project approval settings saved'**
+  String get projectApprovalSettingsSaved;
 
   /// No description provided for @riskLow.
   ///

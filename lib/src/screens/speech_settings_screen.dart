@@ -278,7 +278,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
   void dispose() {
     appSettingsController.removeListener(_onSettingsChanged);
     _speechPollingTimer?.cancel();
-    unawaited(_speakerEnrollmentRecorder.cancel());
+    unawaited(_speakerEnrollmentRecorder.dispose());
     unawaited(_speechInputService.cancel());
     unawaited(_ttsService.stop(notifyCancel: false));
     unawaited(_bridgeRealtimeAsrService.cancel());
@@ -1871,7 +1871,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
         );
       },
     );
-    await recorder.cancel();
+    await recorder.dispose();
   }
 
   Future<void> _showRealtimeAsrTestSheet(
@@ -2186,7 +2186,7 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     );
     await _speechInputService.cancel();
     await _bridgeRealtimeAsrService.cancel();
-    await recorder.cancel();
+    await recorder.dispose();
   }
 
   Widget _buildCapabilityChoiceTile(

@@ -26,6 +26,7 @@ import '../plugins/speech_plugin_models.dart';
 import '../plugins/speech_plugin_registry.dart';
 import '../services/cloud_speech_service.dart';
 import '../services/notification_service.dart';
+import '../services/push_service.dart';
 import '../services/audio_recording_service.dart';
 import '../services/bridge_realtime_asr_service.dart';
 import '../services/local_vad_service.dart';
@@ -40,6 +41,7 @@ import '../widgets/app_navigation_scaffold.dart';
 import '../widgets/app_skeleton.dart';
 import '../widgets/new_session_flow.dart';
 import '../widgets/session_call_mode_view.dart';
+import 'project_ai_approval_prompt_screen.dart';
 import '../../l10n/generated/app_localizations.dart';
 
 class SessionDetailScreen extends StatefulWidget {
@@ -137,11 +139,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   late final LocalVadService _localVadService;
   final Set<String> _autoSpokenAssistantMessageIds = <String>{};
   final Set<String> _notifiedAssistantMessageIds = <String>{};
+  final Map<String, Timer> _pendingAssistantNotificationTimers = {};
   final Set<String> _streamingAssistantMessageIds = <String>{};
   final Map<String, String> _transientLiveMessageTurnUserIds =
       <String, String>{};
   final Map<String, _LocalMessageDraft> _localMessageStates = {};
   final Map<String, Future<File>> _videoFileFutures = {};
+  final Map<String, _MessageImageReferencesCacheEntry> _imageReferencesCache =
+      {};
   late SessionSummary _session;
   final List<ChatMessage> _messages = [];
   late String _speechRouteSignature;
@@ -158,6 +163,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Timer? _refreshSessionSummaryDebounce;
   Timer? _refreshMessagesAfterIdleDebounce;
   Timer? _sessionIdCopiedResetTimer;
+  Timer? _streamingMessageCacheDebounce;
+  bool _callModeOrbAnimationSyncScheduled = false;
   bool _refreshSessionSummaryInFlight = false;
   bool _dispatchingQueuedLocalMessage = false;
   bool _returnFocusToComposerAfterReply = false;
@@ -245,6 +252,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   String? _overrideProviderId;
   ReasoningEffort? _overrideReasoningEffort;
   String? _overrideModel;
+  Future<void>? _pendingModelUpdate;
+  int _modelUpdateGeneration = 0;
   List<ModelProviderConfig> _providers = const [];
   List<String> _fetchedModels = const [];
   GitStatusDetail? _gitStatus;
@@ -599,7 +608,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _callModeOrbController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2600),
-    )..repeat(reverse: true);
+    );
     WidgetsBinding.instance.addObserver(this);
     _audioRecordingService =
         widget.audioRecordingService ?? AudioRecordingService();
@@ -642,6 +651,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   @override
   void dispose() {
+    _flushStreamingMessageCache();
     for (final future in _videoFileFutures.values) {
       unawaited(future.then((file) {
         if (file.existsSync()) {
@@ -659,8 +669,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _refreshSessionSummaryDebounce?.cancel();
     _refreshMessagesAfterIdleDebounce?.cancel();
     _sessionIdCopiedResetTimer?.cancel();
+    for (final timer in _pendingAssistantNotificationTimers.values) {
+      timer.cancel();
+    }
+    _pendingAssistantNotificationTimers.clear();
     _completeCallModeCommandAcceptedSpeech();
-    unawaited(_audioRecordingService.cancel());
+    if (widget.audioRecordingService == null) {
+      unawaited(_audioRecordingService.dispose());
+    } else {
+      unawaited(_audioRecordingService.cancel());
+    }
     unawaited(_speechInputService.cancel());
     unawaited(_bridgeRealtimeAsrService.cancel());
     unawaited(_localVadService.cancel());
@@ -703,6 +721,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     final sessionChanged = previousSession.id != nextSession.id;
+    if (sessionChanged) {
+      _flushStreamingMessageCache();
+    }
     setState(() {
       _session = nextSession;
       _overrideProviderId = nextSession.providerId;
@@ -733,6 +754,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _appInForeground = true;
+      _syncCallModeOrbAnimation();
       if (_creatingSession) {
         return;
       }
@@ -740,6 +762,33 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     _appInForeground = false;
+    _syncCallModeOrbAnimation();
+  }
+
+  void _syncCallModeOrbAnimation() {
+    final shouldAnimate = _callModeEnabled && _appInForeground;
+    if (shouldAnimate && !_callModeOrbController.isAnimating) {
+      _callModeOrbController.repeat(reverse: true);
+    } else if (!shouldAnimate && _callModeOrbController.isAnimating) {
+      _callModeOrbController.stop();
+    }
+  }
+
+  void _scheduleCallModeOrbAnimationSync() {
+    final shouldAnimate = _callModeEnabled && _appInForeground;
+    if (shouldAnimate == _callModeOrbController.isAnimating) {
+      return;
+    }
+    if (_callModeOrbAnimationSyncScheduled) {
+      return;
+    }
+    _callModeOrbAnimationSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _callModeOrbAnimationSyncScheduled = false;
+      if (mounted) {
+        _syncCallModeOrbAnimation();
+      }
+    });
   }
 
   void _syncSessionSummaryCache() {
@@ -1232,12 +1281,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
             )
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (var index = 0; index < itemCount; index += 1)
+          : ListView.builder(
+              shrinkWrap: true,
+              primary: false,
+              padding: EdgeInsets.zero,
+              itemCount: itemCount,
+              itemBuilder: (context, index) =>
                   itemBuilder(context, index, brightness),
-              ],
             ),
     );
   }
@@ -1371,6 +1421,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    _scheduleCallModeOrbAnimationSync();
     if (_callModeEnabled) {
       return _buildCallModeScaffold(context);
     }
@@ -2036,6 +2087,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       projectPathSummaryBuilder: _projectPathSummary,
       agentLabel: _client.agentLabelFor(_session.agentId),
       onCopySessionId: _copySessionId,
+      onEditProjectAiApprovalPrompt: () => showProjectAiApprovalPromptDialog(
+        context,
+        client: _client,
+        projectId: _session.projectId,
+      ),
       approvalCardBuilder: (maxHeight) => _buildPendingApprovalCard(
         maxHeight,
         margin: EdgeInsets.zero,
@@ -2129,7 +2185,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final deepSurface = AppColors.panelDeepFor(brightness);
     final outline = AppColors.outlineFor(brightness);
     final outlineStrong = AppColors.outlineStrongFor(brightness);
-    final bottomPadding = _isMobilePlatform ? 0.0 : AppSpacing.block;
+    final bottomPadding =
+        _isMobilePlatform ? AppSpacing.compact : AppSpacing.block;
 
     return Container(
       width: double.infinity,
@@ -3841,6 +3898,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   void _applyModelOverride(Object value) {
     final previous = _overrideModel;
     final nextValue = value == _defaultModelMenuValue ? null : value as String?;
+    final generation = ++_modelUpdateGeneration;
     setState(() {
       _overrideModel = nextValue;
       _session = _session.copyWith(
@@ -3851,32 +3909,32 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _composerSettingsOverlayController.hide();
     });
     _syncSessionSummaryCache();
-    unawaited(
-      _client
-          .updateSessionDefaults(
-        _session.id,
-        model: nextValue,
-        clearModel: nextValue == null,
-      )
-          .catchError((e) {
-        debugPrint('[session] updateSessionDefaults failed: $e');
-        if (!mounted) return;
-        setState(() {
-          _overrideModel = previous;
-          _session = _session.copyWith(
-            model: previous,
-            clearModel: previous == null,
-          );
-        });
-        _syncSessionSummaryCache();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.modelOverrideFailed),
-            duration: const Duration(seconds: 3),
-          ),
+    final update = _client
+        .updateSessionDefaults(
+      _session.id,
+      model: nextValue,
+      clearModel: nextValue == null,
+    )
+        .catchError((e) {
+      debugPrint('[session] updateSessionDefaults failed: $e');
+      if (!mounted || generation != _modelUpdateGeneration) return;
+      setState(() {
+        _overrideModel = previous;
+        _session = _session.copyWith(
+          model: previous,
+          clearModel: previous == null,
         );
-      }),
-    );
+      });
+      _syncSessionSummaryCache();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.modelOverrideFailed),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    });
+    _pendingModelUpdate = update;
+    unawaited(update);
   }
 
   String _reasoningEffortLabel(ReasoningEffort effort) {
@@ -4012,6 +4070,22 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                             ),
                           ),
                         ],
+                        if (approval.command?.trim().isNotEmpty == true) ...[
+                          const SizedBox(width: AppSpacing.compact),
+                          OutlinedButton.icon(
+                            key: const Key(
+                              'session-approval-always-allow-button',
+                            ),
+                            onPressed: approval.resolvable && !isSubmitting
+                                ? () => _submitApproval('always_allow')
+                                : null,
+                            icon: const Icon(Icons.verified_user_outlined),
+                            label: _buildApprovalButtonChild(
+                              'always_allow',
+                              context.l10n.alwaysAllow,
+                            ),
+                          ),
+                        ],
                         const SizedBox(width: AppSpacing.compact),
                         OutlinedButton(
                           onPressed: approval.resolvable && !isSubmitting
@@ -4057,6 +4131,23 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                       height: 1.4,
                     ),
                   ),
+                  if (approval.autoApprovalReason?.trim().isNotEmpty ==
+                      true) ...[
+                    const SizedBox(height: AppSpacing.compact),
+                    Text(
+                      _autoApprovalReasonTitle(approval),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: AppColors.warningTextFor(brightness),
+                        fontWeight: FontWeight.w700,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.micro),
+                    Text(
+                      _autoApprovalReasonBody(approval),
+                      style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
+                    ),
+                  ],
                   if (isAwaitingResolution) ...[
                     const SizedBox(height: AppSpacing.compact),
                     Text(
@@ -4318,7 +4409,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final canRestoreQueued = localState?.state == _LocalMessageState.queued;
     final brightness = Theme.of(context).brightness;
     final bubbleTextColor = AppColors.userMessageOnSurfaceFor(brightness);
-    final imageReferences = extractMessageImageReferences(message.content);
+    final imageReferences = _imageReferencesFor(message);
     final bubble = KeyedSubtree(
       key: _messageAnchorKeyFor(message),
       child: Container(
@@ -4524,7 +4615,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required Color textColor,
     required double maxWidth,
   }) {
-    final imageReferences = extractMessageImageReferences(message.content);
+    final imageReferences = _imageReferencesFor(message);
     return _buildMarkdownMessageBody(
       displayContent,
       textColor: textColor,
@@ -4539,6 +4630,23 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         imageIndex: index,
       ),
     );
+  }
+
+  List<MessageImageReference> _imageReferencesFor(ChatMessage message) {
+    final cached = _imageReferencesCache[message.id];
+    if (cached != null && cached.content == message.content) {
+      return cached.references;
+    }
+    final references = extractMessageImageReferences(message.content);
+    _imageReferencesCache.remove(message.id);
+    if (_imageReferencesCache.length >= 64) {
+      _imageReferencesCache.remove(_imageReferencesCache.keys.first);
+    }
+    _imageReferencesCache[message.id] = _MessageImageReferencesCacheEntry(
+      content: message.content,
+      references: references,
+    );
+    return references;
   }
 
   Widget _buildMarkdownMessageBody(
@@ -5888,6 +5996,28 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _client.cacheSessionMessages(_session.id, _messages);
   }
 
+  void _scheduleStreamingMessageCache() {
+    _streamingMessageCacheDebounce?.cancel();
+    _streamingMessageCacheDebounce = Timer(
+      const Duration(milliseconds: 200),
+      () {
+        _streamingMessageCacheDebounce = null;
+        if (mounted) {
+          _cacheCurrentSessionMessages();
+        }
+      },
+    );
+  }
+
+  void _flushStreamingMessageCache() {
+    final hadPendingWrite = _streamingMessageCacheDebounce != null;
+    _streamingMessageCacheDebounce?.cancel();
+    _streamingMessageCacheDebounce = null;
+    if (hadPendingWrite && _messages.isNotEmpty) {
+      _cacheCurrentSessionMessages();
+    }
+  }
+
   void _replaceMessagesFromServer(Iterable<ChatMessage> serverMessages) {
     final incomingServerMessages = _session.status == SessionStatus.running
         ? _withoutActiveStreamingTurnServerMessages(serverMessages)
@@ -6068,15 +6198,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _messages
       ..clear()
       ..addAll(_mergeMessages([...currentMessages, message]));
-    _pruneVideoFileFutures();
-    _cacheCurrentSessionMessages();
-  }
-
-  void _resortMessages() {
-    final currentMessages = List<ChatMessage>.of(_messages);
-    _messages
-      ..clear()
-      ..addAll(_mergeMessages(currentMessages));
     _pruneVideoFileFutures();
     _cacheCurrentSessionMessages();
   }
@@ -6551,11 +6672,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           if (index >= 0) {
             _messages[index] = _messages[index].copyWith(
               content: content,
-              createdAt: _createdAtForLiveAssistantEvent(
-                existingCreatedAt: _messages[index].createdAt,
-              ),
             );
-            _resortMessages();
           } else {
             _appendOrUpdateMessage(
               ChatMessage(
@@ -6568,6 +6685,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             );
           }
         });
+        _scheduleStreamingMessageCache();
         _maybeAutoSpeakAssistantMessage(messageId);
         _maybeNotifyAssistantMessage(messageId);
         if (shouldAutoScroll) {
@@ -6587,13 +6705,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               existing: _messages[index].content,
               incoming: delta,
             );
-            _messages[index] = _messages[index].copyWith(
-              content: nextContent,
-              createdAt: _createdAtForLiveAssistantEvent(
-                existingCreatedAt: _messages[index].createdAt,
-              ),
-            );
-            _resortMessages();
+            _messages[index] = _messages[index].copyWith(content: nextContent);
           } else {
             _appendOrUpdateMessage(
               ChatMessage(
@@ -6606,6 +6718,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             );
           }
         });
+        _scheduleStreamingMessageCache();
         _maybeAutoSpeakAssistantMessage(messageId);
         _maybeNotifyAssistantMessage(messageId);
         if (shouldAutoScroll) {
@@ -6641,16 +6754,21 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         });
         _syncSessionSummaryCache();
         _requestApprovalFocusAfterFrame();
-        if (!_appInForeground) {
+        if (!_appInForeground && !pushService.remoteNotificationsRegistered) {
+          for (final timer in _pendingAssistantNotificationTimers.values) {
+            timer.cancel();
+          }
+          _pendingAssistantNotificationTimers.clear();
+          final notificationTitle = context.l10n.waitingApprovalTitle;
+          final notificationBody = approval.reason?.trim().isNotEmpty == true
+              ? approval.reason!.trim()
+              : approval.command?.trim().isNotEmpty == true
+                  ? approval.command!.trim()
+                  : context.l10n.waitingApprovalBody;
           unawaited(
-            notificationService.showApprovalRequestNotification(
-              _session,
-              title: context.l10n.waitingApprovalTitle,
-              body: approval.reason?.trim().isNotEmpty == true
-                  ? approval.reason!.trim()
-                  : approval.command?.trim().isNotEmpty == true
-                      ? approval.command!.trim()
-                      : context.l10n.waitingApprovalBody,
+            _replaceReplyNotificationWithApproval(
+              title: notificationTitle,
+              body: notificationBody,
             ),
           );
         }
@@ -6714,6 +6832,23 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return existing;
     }
     return '$existing$incoming';
+  }
+
+  String _autoApprovalReasonTitle(ApprovalRequest approval) {
+    return switch (approval.autoApprovalReasonKind) {
+      'risk_threshold' => context.l10n.autoApprovalRiskThresholdTitle,
+      'hard_block' => context.l10n.autoApprovalHardBlockTitle,
+      'review_failed' => context.l10n.autoApprovalReviewFailedTitle,
+      _ => context.l10n.autoApprovalAiReviewTitle,
+    };
+  }
+
+  String _autoApprovalReasonBody(ApprovalRequest approval) {
+    return switch (approval.autoApprovalReasonKind) {
+      'hard_block' => context.l10n.autoApprovalHardBlockReason,
+      'review_failed' => context.l10n.autoApprovalReviewFailedReason,
+      _ => approval.autoApprovalReason!.trim(),
+    };
   }
 
   Future<void> _submitApproval(String choice) async {
@@ -7479,7 +7614,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   void _maybeNotifyAssistantMessage(String messageId) {
-    if (_appInForeground) {
+    if (_appInForeground || pushService.remoteNotificationsRegistered) {
       return;
     }
     final message = _firstMatchingMessage(
@@ -7489,21 +7624,51 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     final content = message.content.trim();
-    if (content.isEmpty || _notifiedAssistantMessageIds.contains(messageId)) {
+    if (content.isEmpty ||
+        _notifiedAssistantMessageIds.contains(messageId) ||
+        _pendingAssistantNotificationTimers.containsKey(messageId)) {
       return;
     }
-    if (_session.status == SessionStatus.running) {
+    if (_session.status == SessionStatus.running || _pendingApproval != null) {
       return;
     }
-    _notifiedAssistantMessageIds.add(messageId);
-    unawaited(
-      notificationService.showAssistantReplyNotification(
-        _session.copyWith(
-          updatedAt: message.createdAt,
-          lastMessagePreview: content,
-        ),
-        content,
-      ),
+    _pendingAssistantNotificationTimers[messageId] = Timer(
+      const Duration(milliseconds: 300),
+      () {
+        _pendingAssistantNotificationTimers.remove(messageId);
+        if (!mounted ||
+            _appInForeground ||
+            _pendingApproval != null ||
+            _session.status == SessionStatus.awaitingApproval) {
+          return;
+        }
+        _notifiedAssistantMessageIds.add(messageId);
+        unawaited(
+          notificationService.showAssistantReplyNotification(
+            _session.copyWith(
+              updatedAt: message.createdAt,
+              lastMessagePreview: content,
+            ),
+            content,
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _replaceReplyNotificationWithApproval({
+    required String title,
+    required String body,
+  }) async {
+    try {
+      await notificationService.cancelAssistantReplyNotification(_session.id);
+    } catch (_) {
+      // A failed cancellation must not hide the actionable approval request.
+    }
+    await notificationService.showApprovalRequestNotification(
+      _session,
+      title: title,
+      body: body,
     );
   }
 
@@ -8004,6 +8169,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _requestComposerFocusAfterFrame(consumeReturnRequest: false);
 
     try {
+      await _pendingModelUpdate;
       final result = await _client.sendMessage(
         _session.id,
         content,
@@ -8011,6 +8177,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         systemPrompt: _messageSystemPrompt(inputMode),
         providerId: _overrideProviderId,
         reasoningEffort: _overrideReasoningEffort,
+        model: _overrideModel,
         clientMessageId: messageId,
       );
       if (!mounted) {
@@ -8887,7 +9054,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       debugPrint('[call-mode] starting bridge realtime ASR');
       final audioStream =
           (await _audioRecordingService.startStream()).asBroadcastStream();
-      unawaited(_startLocalVadForCallMode(audioStream));
+      final localVadStart = _startLocalVadForCallMode(audioStream);
       await _bridgeRealtimeAsrService.start(
         audioStream: audioStream,
         config: _bridgeRealtimeAsrConfig(),
@@ -8994,6 +9161,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           debugPrint('[call-mode] bridge VAD speech_started');
         },
       );
+      await localVadStart;
       if (!mounted) {
         return;
       }
@@ -9918,6 +10086,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 }
 
+class _MessageImageReferencesCacheEntry {
+  const _MessageImageReferencesCacheEntry({
+    required this.content,
+    required this.references,
+  });
+
+  final String content;
+  final List<MessageImageReference> references;
+}
+
 enum _ImagePreviewBackdropMode { dark, light, checker }
 
 enum _CallModeSpeechHintState { speaking, waitingForPause }
@@ -10753,6 +10931,7 @@ class _SessionDesktopRail extends StatelessWidget {
     required this.projectPathSummaryBuilder,
     required this.agentLabel,
     required this.onCopySessionId,
+    required this.onEditProjectAiApprovalPrompt,
     required this.approvalCardBuilder,
   });
 
@@ -10772,6 +10951,7 @@ class _SessionDesktopRail extends StatelessWidget {
   final String Function(String rootPath) projectPathSummaryBuilder;
   final String agentLabel;
   final VoidCallback onCopySessionId;
+  final VoidCallback onEditProjectAiApprovalPrompt;
   final Widget Function(double maxHeight) approvalCardBuilder;
 
   String _copyAgentIdLabel(BuildContext context) =>
@@ -10912,6 +11092,29 @@ class _SessionDesktopRail extends StatelessWidget {
                         monospace: true,
                       ),
                     ],
+                    const SizedBox(height: AppSpacing.stack),
+                    TextButton(
+                      key: const Key(
+                        'session-project-ai-approval-prompt-entry',
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        alignment: Alignment.centerLeft,
+                      ),
+                      onPressed: onEditProjectAiApprovalPrompt,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.rule_folder_outlined),
+                          const SizedBox(width: AppSpacing.compact),
+                          Expanded(
+                            child: Text(
+                              context.l10n.projectAiApprovalPrompt,
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right_rounded),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
         ),

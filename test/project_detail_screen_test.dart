@@ -123,6 +123,14 @@ void main() {
     expect(find.text('Session 2'), findsWidgets);
     expect(find.text('Session 1'), findsNothing);
     expect(loadMore, findsOneWidget);
+    expect(
+      find.byKey(const Key('project-ai-approval-prompt-entry')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('project-ai-approval-prompt-field')),
+      findsNothing,
+    );
 
     await tester.ensureVisible(loadMore);
     await tester.tap(loadMore);
@@ -134,6 +142,108 @@ void main() {
 
     expect(requestCount, 1);
     expect(find.text(l10n.loadMoreSessionsLabel), findsNothing);
+  });
+
+  testWidgets('project detail shows cache then refreshes in background',
+      (tester) async {
+    var sessionRequests = 0;
+    final refreshResponse = Completer<http.Response>();
+    final project = _project(
+      id: 'project-1',
+      name: 'Project One',
+      updatedAt: DateTime(2026, 5, 5, 11),
+    );
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/projects/project-1/sessions') {
+          sessionRequests += 1;
+          if (sessionRequests == 1) {
+            return http.Response(
+              jsonEncode({
+                'data': [
+                  _sessionJson(
+                    id: 'cached-session',
+                    projectId: 'project-1',
+                    title: 'Cached Session',
+                    updatedAt: '2026-05-05T10:00:00.000',
+                    preview: 'Cached preview',
+                  ),
+                ],
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return refreshResponse.future;
+        }
+        if (request.method == 'GET' && request.url.path == '/projects') {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': project.id,
+                  'name': project.name,
+                  'root_path': project.rootPath,
+                  'updated_at': project.updatedAt.toIso8601String(),
+                  'session_count': 1,
+                  'last_session_preview': 'Fresh preview',
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    )..debugSeedProjects([project]);
+
+    await client.listProjectSessions(project.id, forceRefresh: true);
+    await tester.pumpWidget(
+      _TestApp(
+        home: ProjectDetailScreen(client: client, project: project),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Cached Session'), findsWidgets);
+    expect(sessionRequests, 2);
+
+    refreshResponse.complete(
+      http.Response(
+        jsonEncode({
+          'data': [
+            _sessionJson(
+              id: 'fresh-session',
+              projectId: 'project-1',
+              title: 'Fresh Session',
+              updatedAt: '2026-05-05T12:00:00.000',
+              preview: 'Fresh preview',
+            ),
+          ],
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Fresh Session'), findsWidgets);
+    expect(find.text('Cached Session'), findsNothing);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump();
+
+    expect(sessionRequests, 3);
   });
 
   testWidgets('project detail updates sidebar collapse immediately',
@@ -280,7 +390,10 @@ void main() {
     expect(find.text('Alpha Session'), findsWidgets);
     expect(find.text('Beta Session'), findsWidgets);
 
-    await tester.enterText(find.byType(TextField), 'alpha');
+    await tester.enterText(
+      find.byKey(const Key('project-session-search-field')),
+      'alpha',
+    );
     await tester.pump();
 
     expect(find.text('Alpha Session'), findsWidgets);

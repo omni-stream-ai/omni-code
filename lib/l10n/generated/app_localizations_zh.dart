@@ -105,8 +105,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get enableAiApproval => '启用 AI 辅助审批';
 
   @override
-  String get enableAiApprovalSubtitle =>
-      '通过 OpenAI-compatible endpoint 判断低风险命令';
+  String get enableAiApprovalSubtitle => '使用已配置的模型判断低风险命令';
+
+  @override
+  String get aiApprovalModel => '审批模型';
+
+  @override
+  String get aiApprovalProvider => '审批模型服务';
+
+  @override
+  String get loadingApprovalModels => '正在加载模型...';
+
+  @override
+  String get approvalModelsLoadFailed => '无法获取模型，已显示配置中的默认值';
+
+  @override
+  String get noApprovalModels => '该模型服务没有返回可用模型';
+
+  @override
+  String get loadingModelProviders => '正在加载已配置模型...';
+
+  @override
+  String get noConfiguredModels => '请先配置并启用一个模型服务';
+
+  @override
+  String get modelProvidersLoadFailed => '无法加载已配置模型';
+
+  @override
+  String get selectAiApprovalModel => '请选择审批模型';
 
   @override
   String get aiApprovalMaxRisk => '自动放行最高风险';
@@ -114,6 +140,48 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get aiApprovalHelp =>
       '保存后会同步到当前 Bridge。建议保持 Low；高风险、调用失败或命中硬阻断规则仍会回退到手机人工审批。';
+
+  @override
+  String get aiApprovalPrompt => '全局审批 Prompt';
+
+  @override
+  String get aiApprovalPromptHint => '添加适用于所有项目的审批判断规则';
+
+  @override
+  String get aiApprovalPromptEntrySubtitle => '修改自动审批判断使用的指令';
+
+  @override
+  String get projectAiApprovalPrompt => '项目级审批 Prompt';
+
+  @override
+  String get projectAiApprovalPromptHint => '添加仅适用于当前项目的审批判断规则';
+
+  @override
+  String get alwaysAllowedCommands => '始终允许的命令';
+
+  @override
+  String get alwaysAllow => '总是允许';
+
+  @override
+  String get autoApprovalAiReviewTitle => 'AI 建议由你确认';
+
+  @override
+  String get autoApprovalRiskThresholdTitle => '风险超过自动审批范围';
+
+  @override
+  String get autoApprovalHardBlockTitle => '命中安全阻断规则';
+
+  @override
+  String get autoApprovalReviewFailedTitle => '自动审批暂时不可用';
+
+  @override
+  String get autoApprovalHardBlockReason => '该命令会影响受保护或项目范围外的资源，需要由你确认。';
+
+  @override
+  String get autoApprovalReviewFailedReason => '审批模型未能完成判断，因此这次交由你确认。';
+
+  @override
+  String get projectApprovalSettingsSaved => '项目审批设置已保存';
 
   @override
   String get riskLow => 'Low';

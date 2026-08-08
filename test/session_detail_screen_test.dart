@@ -582,6 +582,12 @@ void main() {
     expect(find.text('3 changed'), findsOneWidget);
     expect(
         find.byKey(const Key('session-rail-copy-id-button')), findsOneWidget);
+    expect(
+      find.byKey(
+        const Key('session-project-ai-approval-prompt-entry'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -1545,6 +1551,12 @@ void main() {
                       'name': '/summarize',
                       'description': 'Summarize the current changes',
                     },
+                    for (var index = 0; index < 8; index += 1)
+                      {
+                        'name': '/command-$index',
+                        'description':
+                            'A detailed description for command $index.',
+                      },
                   ],
                 },
               ],
@@ -1579,6 +1591,12 @@ void main() {
     expect(find.text('/review'), findsOneWidget);
     expect(find.text('Review the diff'), findsOneWidget);
     expect(find.text('/summarize'), findsOneWidget);
+    final panel = find.byKey(const Key('session-command-suggestions'));
+    expect(tester.getSize(panel).height, lessThanOrEqualTo(280));
+    expect(
+      find.descendant(of: panel, matching: find.byType(Scrollable)),
+      findsOneWidget,
+    );
   });
 
   testWidgets('command suggestions overlay does not change composer height',
@@ -2656,6 +2674,13 @@ void main() {
     events.add(
       utf8.encode(
         _eventStreamBody([
+          {
+            'type': 'message_delta',
+            'payload': {
+              'message_id': 'assistant-1',
+              'delta': 'Reply received',
+            },
+          },
           {
             'type': 'message_delta',
             'payload': {
@@ -11728,6 +11753,16 @@ void main() {
           return http.Response(
             _eventStreamBody([
               {
+                'type': 'message_created',
+                'payload': _messageJson(
+                  id: 'assistant-before-approval-1',
+                  sessionId: 'session-1',
+                  role: 'assistant',
+                  content: 'I need permission before I can continue.',
+                  createdAt: '2026-05-09T10:00:01.000',
+                ),
+              },
+              {
                 'type': 'approval_requested',
                 'payload': {
                   'request': {
@@ -11767,7 +11802,7 @@ void main() {
     await tester.pump();
 
     eventGate.complete();
-    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 400));
 
     expect(notifications.shownNotifications, hasLength(1));
     final notification = notifications.shownNotifications.single;
@@ -11783,6 +11818,7 @@ void main() {
       requestId: 'approval-1',
       command: 'rm -rf /tmp/safe-test',
       reason: 'Needs escalation',
+      autoApprovalReason: 'Risk exceeds the configured threshold',
     );
 
     await tester.pumpWidget(
@@ -11800,6 +11836,15 @@ void main() {
     await tester.pump();
 
     expect(find.text('Needs escalation'), findsOneWidget);
+    expect(find.text('AI recommends your review'), findsOneWidget);
+    expect(
+      find.text('Risk exceeds the configured threshold'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('session-approval-always-allow-button')),
+      findsOneWidget,
+    );
     expect(find.text('Waiting to process approval...'), findsNothing);
     expect(find.widgetWithText(FilledButton, 'Approve'), findsOneWidget);
   });
@@ -12096,7 +12141,7 @@ void main() {
     );
   });
 
-  testWidgets('mobile error banner keeps the composer at the screen bottom',
+  testWidgets('mobile composer keeps compact spacing above the screen bottom',
       (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -12140,7 +12185,7 @@ void main() {
     );
     final screenBottom =
         tester.view.physicalSize.height / tester.view.devicePixelRatio;
-    expect(composerRect.bottom, screenBottom);
+    expect(composerRect.bottom, screenBottom - AppSpacing.compact);
   });
 
   testWidgets('session reasoning effort selector patches session default',
@@ -12650,12 +12695,16 @@ ApprovalRequest _approvalRequest({
   required String requestId,
   String? command,
   String? reason,
+  String? autoApprovalReason,
+  String? autoApprovalReasonKind,
 }) {
   return ApprovalRequest(
     requestId: requestId,
     kind: 'command',
     command: command,
     reason: reason,
+    autoApprovalReason: autoApprovalReason,
+    autoApprovalReasonKind: autoApprovalReasonKind,
     allowAcceptForSession: true,
     allowCancel: true,
     resolvable: true,

@@ -115,12 +115,65 @@ void main() {
     );
     await tester.pump();
 
+    final approvalToggle = find.text('Enable AI-assisted approval');
+    await tester.ensureVisible(approvalToggle);
+    await tester.tap(approvalToggle);
+    await tester.pump();
+    await tester.ensureVisible(find.text('Save'));
     await tester.tap(find.text('Save'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(tester.takeException(), isNull);
     expect(find.textContaining('Failed to save settings'), findsOneWidget);
+    expect(appSettingsController.settings.aiApprovalEnabled, isFalse);
+  });
+
+  testWidgets('selects a configured model for AI approval', (tester) async {
+    final client = _RecordingSettingsBridgeClient();
+    await tester.pumpWidget(
+      _TestApp(home: SettingsScreen(client: client)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Approval model'), findsOneWidget);
+    expect(find.text('Base URL'), findsNothing);
+    expect(find.text('API Key'), findsNothing);
+    expect(find.byKey(const Key('ai-approval-prompt-entry')), findsOneWidget);
+    expect(find.byKey(const Key('ai-approval-prompt-field')), findsNothing);
+
+    final approvalModel = find.byKey(
+      const ValueKey('ai-approval-provider-'),
+    );
+    await tester.ensureVisible(approvalModel);
+    await tester.tap(approvalModel);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Primary').last);
+    await tester.pumpAndSettle();
+    expect(find.text('gpt-test'), findsWidgets);
+    await tester.ensureVisible(find.text('Save'));
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(client.includeAiApproval, isTrue);
+    expect(client.aiApprovalProvider?.id, 'primary');
+    expect(client.aiApprovalProvider?.model, 'gpt-test');
+    expect(appSettingsController.settings.aiApprovalProviderId, 'primary');
+    expect(appSettingsController.settings.aiApprovalApiKey, isEmpty);
+  });
+
+  testWidgets('ordinary save does not overwrite bridge AI approval',
+      (tester) async {
+    final client = _RecordingSettingsBridgeClient();
+    await tester.pumpWidget(
+      _TestApp(home: SettingsScreen(client: client)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(client.updateCalls, 0);
   });
 }
 
@@ -150,11 +203,60 @@ class _TestApp extends StatelessWidget {
 
 class _FailingSettingsBridgeClient extends BridgeClient {
   @override
+  Future<List<ModelProviderConfig>> getModelProviders() async => [
+        const ModelProviderConfig(
+          id: 'primary',
+          name: 'Primary',
+          baseUrl: 'https://example.test/v1',
+        ),
+      ];
+
+  @override
+  Future<List<String>> getProviderModels(ModelProviderConfig provider) async =>
+      ['gpt-test'];
+
+  @override
   Future<void> updateBridgeSettings(
     AppSettings settings, {
     List<ModelProviderConfig>? modelProviders,
+    bool includeAiApproval = false,
+    ModelProviderConfig? aiApprovalProvider,
+    String? aiApprovalPrompt,
   }) async {
     throw Exception('bridge unavailable');
+  }
+}
+
+class _RecordingSettingsBridgeClient extends BridgeClient {
+  int updateCalls = 0;
+  bool? includeAiApproval;
+  ModelProviderConfig? aiApprovalProvider;
+
+  @override
+  Future<List<ModelProviderConfig>> getModelProviders() async => [
+        const ModelProviderConfig(
+          id: 'primary',
+          name: 'Primary',
+          baseUrl: 'https://example.test/v1',
+          apiKey: 'bridge-secret',
+        ),
+      ];
+
+  @override
+  Future<List<String>> getProviderModels(ModelProviderConfig provider) async =>
+      ['gpt-test'];
+
+  @override
+  Future<void> updateBridgeSettings(
+    AppSettings settings, {
+    List<ModelProviderConfig>? modelProviders,
+    bool includeAiApproval = false,
+    ModelProviderConfig? aiApprovalProvider,
+    String? aiApprovalPrompt,
+  }) async {
+    updateCalls++;
+    this.includeAiApproval = includeAiApproval;
+    this.aiApprovalProvider = aiApprovalProvider;
   }
 }
 
