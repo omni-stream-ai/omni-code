@@ -27,7 +27,7 @@ Include:
 ## Operational Guidance
 
 - Do not expose the desktop bridge directly to the public internet.
-- Use a strong `ECHO_MATE_BRIDGE_TOKEN`.
-- Restrict allowed mobile client IDs with `ECHO_MATE_ALLOWED_CLIENT_IDS`.
+- Use a strong `OMNI_CODE_BRIDGE_TOKEN`.
+- Restrict allowed mobile client IDs with `OMNI_CODE_ALLOWED_CLIENT_IDS`.
 - Keep `.env`, Firebase credentials, signing keys, and service account files out of Git.
 - Treat AI approval as a conservative helper, not as the only safety boundary.
