@@ -663,10 +663,12 @@ class SessionDetail {
   const SessionDetail({
     required this.session,
     this.gitStatus,
+    this.diffs = const <Map<String, dynamic>>[],
   });
 
   final SessionSummary session;
   final GitStatusDetail? gitStatus;
+  final List<Map<String, dynamic>> diffs;
 
   factory SessionDetail.fromJson(Map<String, dynamic> json) {
     final data = json['data'] as Map<String, dynamic>? ?? json;
@@ -676,6 +678,9 @@ class SessionDetail {
       gitStatus: gitStatus == null
           ? null
           : GitStatusDetail.fromJson(gitStatus as Map<String, dynamic>),
+      diffs: (data['diffs'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .toList(growable: false),
     );
   }
 }

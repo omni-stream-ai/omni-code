@@ -149,6 +149,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       {};
   late SessionSummary _session;
   final List<ChatMessage> _messages = [];
+  final List<_SessionDiffEntry> _sessionDiffs = <_SessionDiffEntry>[];
   late String _speechRouteSignature;
   List<_ConversationTurn>? _cachedTurns;
   int? _cachedTurnsFingerprint;
@@ -231,10 +232,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   int _fileCompletionRequestToken = 0;
   bool _loadingFileCompletions = false;
   bool _restoringSession = false;
+  String? _sessionRestoreError;
   bool _expandingHistory = false;
   bool _appInForeground = true;
   int _messageLoadRequestToken = 0;
   int _sessionDetailRequestToken = 0;
+  int _readStateUpdateGeneration = 0;
+  int _diffRevision = 0;
   bool _creatingSession = false;
   bool _submittingApproval = false;
   String? _submittingApprovalChoice;
@@ -1371,6 +1375,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     _refreshSessionSummaryInFlight = true;
+    final diffRevision = _diffRevision;
     try {
       final detail = await _client.getSession(_session.id);
       if (!mounted || detail.session.id != _session.id) {
@@ -1378,6 +1383,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
       setState(() {
         _session = detail.session;
+        if (diffRevision == _diffRevision) {
+          _sessionDiffs
+            ..clear()
+            ..addAll(detail.diffs.map((diff) => _SessionDiffEntry.fromJson(
+                  diff,
+                  turnId: diff['conversation_turn_id'] as String? ?? '',
+                )));
+        }
         _overrideProviderId = detail.session.providerId;
         _overrideReasoningEffort = detail.session.reasoningEffort;
         _overrideModel = detail.session.model;
@@ -1409,6 +1422,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
       setState(() {
         _session = detail.session;
+        _sessionRestoreError = null;
         _pendingApproval = detail.session.pendingApproval;
         _gitStatus = detail.gitStatus;
         _reconcileSubmittedApprovalState();
@@ -1572,15 +1586,22 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           ),
           const SizedBox(width: AppSpacing.compact),
           Expanded(
-            child: AppBackHeader(
-              key: const Key('session-header-back-title'),
-              title: _session.title,
-              subtitle: _gitStatusLabel,
-              onTap: _goBackFromSession,
-              showLeadingIcon: false,
-              titleStyle: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-                height: 1.1,
+            child: Tooltip(
+              message: _sessionRestoreError ?? '',
+              excludeFromSemantics: _sessionRestoreError == null,
+              child: AppBackHeader(
+                key: const Key('session-header-back-title'),
+                title: _session.title,
+                subtitle: _gitStatusLabel,
+                onTap: _goBackFromSession,
+                showLeadingIcon: false,
+                titleStyle: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  height: 1.1,
+                  color: _sessionRestoreError == null
+                      ? null
+                      : AppColors.errorTextFor(theme.brightness),
+                ),
               ),
             ),
           ),
@@ -1596,14 +1617,21 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Widget _buildDesktopSessionHeader(ThemeData theme) {
-    return AppBackHeader(
-      key: const Key('session-header-back-title'),
-      title: _session.title,
-      subtitle: _gitStatusLabel,
-      onTap: _goBackFromSession,
-      titleStyle: theme.textTheme.titleLarge?.copyWith(
-        fontWeight: FontWeight.w800,
-        height: 1.08,
+    return Tooltip(
+      message: _sessionRestoreError ?? '',
+      excludeFromSemantics: _sessionRestoreError == null,
+      child: AppBackHeader(
+        key: const Key('session-header-back-title'),
+        title: _session.title,
+        subtitle: _gitStatusLabel,
+        onTap: _goBackFromSession,
+        titleStyle: theme.textTheme.titleLarge?.copyWith(
+          fontWeight: FontWeight.w800,
+          height: 1.08,
+          color: _sessionRestoreError == null
+              ? null
+              : AppColors.errorTextFor(theme.brightness),
+        ),
       ),
     );
   }
@@ -4346,6 +4374,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     ),
                   ),
               ],
+              for (final diff in _sessionDiffs.where(
+                (diff) =>
+                    diff.turnId == turn.id ||
+                    (diff.turnId.isEmpty && turn.id == _activeTurnId),
+              ))
+                _buildDiffEntry(diff, maxWidth: messageBubbleMaxWidth),
             ],
           ),
         );
@@ -4485,6 +4519,108 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             canRestoreQueued ? () => _withdrawQueuedMessage(message.id) : null,
         onEdit: canRestoreQueued ? () => _editQueuedMessage(message.id) : null,
         onRetry: canRetry ? () => _retryLocalMessage(message.id) : null,
+      ),
+    );
+  }
+
+  Widget _buildDiffEntry(_SessionDiffEntry diff, {required double maxWidth}) {
+    final brightness = Theme.of(context).brightness;
+    final fileLabel = diff.files.isEmpty ? 'Changes' : diff.files.first;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: InkWell(
+          onTap: () => _showDiffDetail(diff),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: AppSpacing.stack),
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.compact, vertical: AppSpacing.micro),
+            child: Row(
+              children: [
+                Icon(Icons.difference_rounded,
+                    size: 15, color: AppColors.signalFor(brightness)),
+                const SizedBox(width: AppSpacing.compact),
+                Expanded(
+                  child: Text(fileLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.textFor(brightness),
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                      )),
+                ),
+                if (diff.added != null)
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    child: Text('+${diff.added}',
+                        key: ValueKey(diff.added),
+                        style: const TextStyle(color: Color(0xff3ca86b))),
+                  ),
+                if (diff.removed != null) ...[
+                  const SizedBox(width: AppSpacing.compact),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    child: Text('-${diff.removed}',
+                        key: ValueKey(diff.removed),
+                        style: const TextStyle(color: Color(0xffd05f5f))),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showDiffDetail(_SessionDiffEntry diff) async {
+    final brightness = Theme.of(context).brightness;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog.fullscreen(
+        backgroundColor: AppColors.panelFor(brightness),
+        child: SafeArea(
+          child: Padding(
+            padding: AppSpacing.tilePadding,
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.difference_rounded, size: 18),
+                    const SizedBox(width: AppSpacing.compact),
+                    Expanded(
+                      child: Text(
+                        diff.files.isEmpty
+                            ? 'View diff'
+                            : diff.files.join(', '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: context.l10n.close,
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.compact),
+                Expanded(
+                  child: _DiffViewer(
+                    patch: diff.patch.isEmpty
+                        ? (diff.summary ?? 'No diff details')
+                        : diff.patch,
+                    theme: Theme.of(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -5879,6 +6015,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         return;
       }
       setState(() {
+        _sessionRestoreError = null;
         _replaceMessagesFromServer(filteredMessages);
         _applyOlderPaginationState(
           page: page,
@@ -5916,16 +6053,34 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (latestAssistant == null) {
       return;
     }
+    final sessionId = _session.id;
+    final previousUnreadCount = _session.unreadCount;
+    final generation = ++_readStateUpdateGeneration;
+    setState(() {
+      _session = _session.copyWith(unreadCount: 0);
+    });
+    _syncSessionSummaryCache();
     try {
       final session = await _client.markSessionRead(
-        _session.id,
+        sessionId,
         latestAssistant.id,
       );
-      if (mounted && session.id == _session.id) {
+      if (mounted &&
+          generation == _readStateUpdateGeneration &&
+          session.id == _session.id) {
         setState(() => _session = session);
+        _syncSessionSummaryCache();
       }
     } catch (_) {
-      // A later refresh retries the acknowledgement; unread state is server-owned.
+      if (mounted &&
+          generation == _readStateUpdateGeneration &&
+          sessionId == _session.id &&
+          _session.unreadCount == 0) {
+        setState(() {
+          _session = _session.copyWith(unreadCount: previousUnreadCount);
+        });
+        _syncSessionSummaryCache();
+      }
     }
   }
 
@@ -6518,6 +6673,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       ).toList(growable: false);
 
       setState(() {
+        _sessionRestoreError = null;
         _replaceMessagesFromServer(filteredMessages);
         _applyOlderPaginationState(
           page: page,
@@ -6541,7 +6697,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         return;
       }
       setState(() {
-        _speechError = context.l10n.restoreSessionFailed('$error');
+        _sessionRestoreError = '$error';
       });
     } finally {
       _restoringSession = false;
@@ -6602,6 +6758,26 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     switch (type) {
+      case 'session_diff':
+        final turnId = _activeTurnId;
+        if (turnId == null) {
+          return;
+        }
+        final diff = _SessionDiffEntry.fromJson(payload, turnId: turnId);
+        setState(() {
+          _diffRevision += 1;
+          final existingIndex = _sessionDiffs.indexWhere(
+            (item) =>
+                item.turnId == diff.turnId && _diffKey(item) == _diffKey(diff),
+          );
+          if (existingIndex >= 0) {
+            _sessionDiffs[existingIndex] = diff;
+          } else {
+            _sessionDiffs.add(diff);
+          }
+        });
+        _maybeAutoScrollToBottom();
+        break;
       case 'sync_required':
         _lastSessionEventId = 0;
         _scheduleEventReconnect();
@@ -6873,6 +7049,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _requestComposerFocusWhileActiveTurnAfterFrame();
         break;
     }
+  }
+
+  String _diffKey(_SessionDiffEntry diff) {
+    return '${diff.turnId}:${diff.files.isEmpty ? '' : diff.files.first}';
   }
 
   ChatMessage _preserveStreamingAssistantContent({
@@ -11287,6 +11467,219 @@ class _SessionDesktopRail extends StatelessWidget {
   }
 }
 
+class _DiffViewer extends StatelessWidget {
+  const _DiffViewer({required this.patch, required this.theme});
+
+  static const int _virtualizedLineThreshold = 1000;
+
+  final String patch;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = theme.brightness;
+    final highlighter = _AssistantCodeSyntaxHighlighter(theme);
+    final lines = _parseDiffLines(patch);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.panelDeepFor(brightness),
+        border: Border.all(color: AppColors.outlineFor(brightness)),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.compact),
+        child: lines.length > _virtualizedLineThreshold
+            ? _buildVirtualizedView(lines, highlighter, brightness)
+            : _buildSelectableView(lines, highlighter, brightness),
+      ),
+    );
+  }
+
+  Widget _buildSelectableView(
+    List<_DiffDisplayLine> lines,
+    _AssistantCodeSyntaxHighlighter highlighter,
+    Brightness brightness,
+  ) =>
+      Scrollbar(
+        child: SingleChildScrollView(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 680),
+              child: SelectableText.rich(
+                TextSpan(
+                  children: [
+                    for (var index = 0; index < lines.length; index += 1)
+                      _buildLineSpan(
+                        lines[index],
+                        highlighter,
+                        brightness,
+                        index < lines.length - 1,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+  Widget _buildVirtualizedView(
+    List<_DiffDisplayLine> lines,
+    _AssistantCodeSyntaxHighlighter highlighter,
+    Brightness brightness,
+  ) =>
+      LayoutBuilder(
+        builder: (context, constraints) => Scrollbar(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: math.max(680, constraints.maxWidth),
+              height: constraints.maxHeight,
+              child: ListView.builder(
+                itemCount: lines.length,
+                itemExtent: 20,
+                itemBuilder: (context, index) => RichText(
+                  text: _buildLineSpan(
+                    lines[index],
+                    highlighter,
+                    brightness,
+                    false,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+  TextSpan _buildLineSpan(
+    _DiffDisplayLine diffLine,
+    _AssistantCodeSyntaxHighlighter highlighter,
+    Brightness brightness,
+    bool addNewline,
+  ) {
+    final line = diffLine.text;
+    final kind = _diffLineKind(line);
+    final baseStyle = TextStyle(
+      fontFamily: 'monospace',
+      fontSize: 12,
+      height: 1.45,
+      color: AppColors.textFor(brightness),
+    );
+    final prefixStyle = baseStyle.copyWith(color: kind.foreground(brightness));
+    final code = kind.isCode ? line.substring(1) : line;
+    final codeSpan = kind.isCode
+        ? highlighter.format(code)
+        : TextSpan(text: code, style: prefixStyle);
+    final lineStyle = baseStyle.copyWith(
+      backgroundColor: kind.background(brightness),
+    );
+    return TextSpan(
+      style: lineStyle,
+      children: [
+        if (diffLine.hasLineNumbers)
+          TextSpan(
+            text:
+                '${diffLine.oldLine?.toString().padLeft(4) ?? '    '} ${diffLine.newLine?.toString().padLeft(4) ?? '    '}  ',
+            style:
+                baseStyle.copyWith(color: AppColors.mutedSoftFor(brightness)),
+          ),
+        if (kind.isCode)
+          TextSpan(text: line.substring(0, 1), style: prefixStyle),
+        codeSpan,
+        if (addNewline) TextSpan(text: '\n', style: lineStyle),
+      ],
+    );
+  }
+}
+
+enum _DiffLineKind { header, hunk, added, removed, context }
+
+class _DiffDisplayLine {
+  const _DiffDisplayLine({this.oldLine, this.newLine, required this.text});
+
+  final int? oldLine;
+  final int? newLine;
+  final String text;
+
+  bool get hasLineNumbers => oldLine != null || newLine != null;
+}
+
+List<_DiffDisplayLine> _parseDiffLines(String patch) {
+  final lines = <_DiffDisplayLine>[];
+  final hunkPattern = RegExp(r'^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@');
+  int? oldLine;
+  int? newLine;
+  for (final text in patch.split('\n')) {
+    final hunk = hunkPattern.firstMatch(text);
+    if (hunk != null) {
+      oldLine = int.tryParse(hunk.group(1)!);
+      newLine = int.tryParse(hunk.group(2)!);
+      lines.add(_DiffDisplayLine(text: text));
+      continue;
+    }
+    if (text.startsWith('+++') ||
+        text.startsWith('---') ||
+        text.startsWith('diff --git')) {
+      lines.add(_DiffDisplayLine(text: text));
+      continue;
+    }
+    if (text.startsWith('+')) {
+      lines.add(_DiffDisplayLine(newLine: newLine, text: text));
+      newLine = newLine == null ? null : newLine + 1;
+      continue;
+    }
+    if (text.startsWith('-')) {
+      lines.add(_DiffDisplayLine(oldLine: oldLine, text: text));
+      oldLine = oldLine == null ? null : oldLine + 1;
+      continue;
+    }
+    if (oldLine != null || newLine != null) {
+      lines.add(
+          _DiffDisplayLine(oldLine: oldLine, newLine: newLine, text: text));
+      oldLine = oldLine == null ? null : oldLine + 1;
+      newLine = newLine == null ? null : newLine + 1;
+    } else {
+      lines.add(_DiffDisplayLine(text: text));
+    }
+  }
+  return lines;
+}
+
+_DiffLineKind _diffLineKind(String line) {
+  if (line.startsWith('diff --git') ||
+      line.startsWith('+++') ||
+      line.startsWith('---')) {
+    return _DiffLineKind.header;
+  }
+  if (line.startsWith('@@')) return _DiffLineKind.hunk;
+  if (line.startsWith('+')) return _DiffLineKind.added;
+  if (line.startsWith('-')) return _DiffLineKind.removed;
+  return _DiffLineKind.context;
+}
+
+extension on _DiffLineKind {
+  bool get isCode =>
+      this == _DiffLineKind.added || this == _DiffLineKind.removed;
+
+  Color? background(Brightness brightness) => switch (this) {
+        _DiffLineKind.added => const Color(0xff3ca86b)
+            .withValues(alpha: brightness == Brightness.dark ? 0.18 : 0.12),
+        _DiffLineKind.removed => const Color(0xffd05f5f)
+            .withValues(alpha: brightness == Brightness.dark ? 0.18 : 0.10),
+        _ => null,
+      };
+
+  Color foreground(Brightness brightness) => switch (this) {
+        _DiffLineKind.added => const Color(0xff3ca86b),
+        _DiffLineKind.removed => const Color(0xffd05f5f),
+        _DiffLineKind.header => AppColors.signalFor(brightness),
+        _DiffLineKind.hunk => AppColors.mutedFor(brightness),
+        _DiffLineKind.context => AppColors.textFor(brightness),
+      };
+}
+
 class _AssistantCodeSyntaxHighlighter extends SyntaxHighlighter {
   _AssistantCodeSyntaxHighlighter(this.theme);
 
@@ -11722,6 +12115,39 @@ class _ConversationTurn {
     }
     entries.add(_TurnEntry.tools(message));
   }
+}
+
+class _SessionDiffEntry {
+  const _SessionDiffEntry({
+    required this.turnId,
+    required this.files,
+    required this.patch,
+    this.added,
+    this.removed,
+    this.summary,
+  });
+
+  factory _SessionDiffEntry.fromJson(
+    Map<String, dynamic> json, {
+    required String turnId,
+  }) =>
+      _SessionDiffEntry(
+        turnId: turnId,
+        files: (json['files'] as List<dynamic>? ?? const <dynamic>[])
+            .whereType<String>()
+            .toList(growable: false),
+        added: (json['added'] as num?)?.toInt(),
+        removed: (json['removed'] as num?)?.toInt(),
+        patch: json['patch'] as String? ?? '',
+        summary: json['summary'] as String?,
+      );
+
+  final String turnId;
+  final List<String> files;
+  final int? added;
+  final int? removed;
+  final String patch;
+  final String? summary;
 }
 
 class _TurnEntry {
