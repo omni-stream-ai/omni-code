@@ -5734,7 +5734,7 @@ void main() {
 
     final toolChip = find
         .ancestor(
-          of: find.byIcon(Icons.build_outlined),
+          of: find.textContaining('ls'),
           matching: find.byType(InkWell),
         )
         .first;
@@ -5763,20 +5763,10 @@ void main() {
         )
         .first;
 
-    expect(
-      find.descendant(
-        of: firstMessageBubble,
-        matching: find.byIcon(Icons.build_outlined),
-      ),
-      findsNothing,
-    );
-    expect(
-      find.descendant(
-        of: secondMessageBubble,
-        matching: find.byIcon(Icons.build_outlined),
-      ),
-      findsNothing,
-    );
+    expect(find.descendant(of: firstMessageBubble, matching: toolChip),
+        findsNothing);
+    expect(find.descendant(of: secondMessageBubble, matching: toolChip),
+        findsNothing);
     expect(tester.getTopLeft(toolChip).dy, greaterThan(0));
 
     await events.close();
@@ -6885,13 +6875,182 @@ void main() {
     await tester.pump();
 
     final assistantReply = find.text('I checked the relevant files.');
-    final toolActivity = find.byIcon(Icons.build_outlined);
+    final toolActivity = find.textContaining('rg -n "tool" lib/src');
     expect(assistantReply, findsOneWidget);
     expect(toolActivity, findsOneWidget);
+    expect(find.byIcon(Icons.build_outlined), findsNothing);
+    expect(
+      find.byKey(const ValueKey('tool-entry-loading-indicator')),
+      findsNothing,
+    );
     expect(
       tester.getTopLeft(toolActivity.first).dy,
       greaterThan(tester.getBottomLeft(assistantReply).dy),
     );
+  });
+
+  testWidgets('tool activity follows message order within a turn',
+      (tester) async {
+    final client = _clientForMessages([
+      _messageJson(
+        id: 'user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'Inspect this project',
+        createdAt: '2026-05-09T10:00:00.000',
+      ),
+      _messageJson(
+        id: 'system-1',
+        sessionId: 'session-1',
+        role: 'system',
+        content: '[command:started] rg -n "tool" lib/src',
+        createdAt: '2026-05-09T10:00:01.000',
+      ),
+      _messageJson(
+        id: 'system-2',
+        sessionId: 'session-1',
+        role: 'system',
+        content: '[command:completed] rg -n "tool" lib/src (exit 0)',
+        createdAt: '2026-05-09T10:00:02.000',
+      ),
+      _messageJson(
+        id: 'assistant-1',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'I found the relevant files.',
+        createdAt: '2026-05-09T10:00:03.000',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final assistantReply = find.text('I found the relevant files.');
+    final toolActivity = find.textContaining('rg -n "tool" lib/src');
+    expect(assistantReply, findsOneWidget);
+    expect(toolActivity, findsOneWidget);
+    final toolActivityText = tester.widget<Text>(toolActivity);
+    expect(toolActivityText.maxLines, 1);
+    expect(toolActivityText.overflow, TextOverflow.ellipsis);
+    expect(find.textContaining('rg -n "tool" lib/src'), findsOneWidget);
+    expect(find.byIcon(Icons.build_outlined), findsNothing);
+    expect(find.text('2'), findsNothing);
+    final toolSurface = tester.widget<Material>(
+      find.ancestor(of: toolActivity, matching: find.byType(Material)).first,
+    );
+    expect(toolSurface.color, isNot(Colors.transparent));
+    expect(toolSurface.shape, isNull);
+    expect(
+      toolSurface.borderRadius,
+      BorderRadius.circular(AppSpacing.radiusCapsule),
+    );
+    expect(
+      tester.getBottomLeft(toolActivity).dy,
+      lessThan(tester.getTopLeft(assistantReply).dy),
+    );
+
+    await tester.tap(toolActivity);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Command · Started'), findsNothing);
+    expect(find.textContaining('Command · Completed'), findsNWidgets(2));
+  });
+
+  testWidgets('reasoning detail remains visible after completion',
+      (tester) async {
+    final client = _clientForMessages([
+      _messageJson(
+        id: 'user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'Inspect this project',
+        createdAt: '2026-05-09T10:00:00.000',
+      ),
+      _messageJson(
+        id: 'system-1',
+        sessionId: 'session-1',
+        role: 'system',
+        content: '[reasoning] Comparing the two implementations',
+        createdAt: '2026-05-09T10:00:01.000',
+      ),
+      _messageJson(
+        id: 'system-2',
+        sessionId: 'session-1',
+        role: 'system',
+        content: '[reasoning] complete',
+        createdAt: '2026-05-09T10:00:02.000',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.textContaining('Comparing the two implementations'),
+      findsOneWidget,
+    );
+    expect(find.text('Reasoning · complete'), findsNothing);
+  });
+
+  testWidgets('active tool activity shows a loading indicator', (tester) async {
+    final client = _clientForMessages([
+      _messageJson(
+        id: 'user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'Inspect this project',
+        createdAt: '2026-05-09T10:00:00.000',
+      ),
+      _messageJson(
+        id: 'assistant-1',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-05-09T10:00:00.500',
+      ),
+      _messageJson(
+        id: 'system-1',
+        sessionId: 'session-1',
+        role: 'system',
+        content: '[command:started] rg -n "tool" lib/src',
+        createdAt: '2026-05-09T10:00:01.000',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('rg -n "tool" lib/src'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('tool-entry-loading-indicator')),
+      findsOneWidget,
+    );
+    expect(find.text('Working...'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byIcon(Icons.build_outlined), findsNothing);
   });
 
   testWidgets('session initially shows only the most recent turns',

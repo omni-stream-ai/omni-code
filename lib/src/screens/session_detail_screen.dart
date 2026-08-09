@@ -2056,7 +2056,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final visibleMessageIds = <String>{
       for (final turn in turns) ...[
         if (turn.userMessage != null) turn.userMessage!.id,
-        for (final message in turn.assistantMessages) message.id,
+        for (final entry in turn.entries)
+          if (entry.assistantMessage case final message?) message.id,
       ],
     };
     _messageAnchorKeys.removeWhere(
@@ -4295,6 +4296,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final turnId = turn.id;
     final unreadCount = _unreadToolCounts[turnId] ?? 0;
     final hasHighlight = unreadCount > 0 && turnId == _activeTurnId;
+    final hasLoadingToolEntry = _session.status == SessionStatus.running &&
+        turnId == _activeTurnId &&
+        turn.entries.lastOrNull?.toolMessages.isNotEmpty == true;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -4311,26 +4315,37 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   turn.userMessage!,
                   maxWidth: messageBubbleMaxWidth,
                 ),
-              for (var index = 0;
-                  index < turn.assistantMessages.length;
-                  index += 1) ...[
-                if (index > 0)
-                  _buildAssistantMessageDivider(messageBubbleMaxWidth),
-                _buildAssistantMessage(
-                  turn.assistantMessages[index],
-                  maxWidth: messageBubbleMaxWidth,
-                  compactTopSpacing: index > 0,
-                  compactBottomSpacing:
-                      index < turn.assistantMessages.length - 1 ||
-                          turn.toolMessages.isNotEmpty,
-                ),
+              for (var index = 0; index < turn.entries.length; index += 1) ...[
+                if (turn.entries[index].assistantMessage != null &&
+                    !(hasLoadingToolEntry &&
+                        turn.entries[index].assistantMessage!.content
+                            .trim()
+                            .isEmpty)) ...[
+                  if (index > 0 &&
+                      turn.entries[index - 1].assistantMessage != null)
+                    _buildAssistantMessageDivider(messageBubbleMaxWidth),
+                  _buildAssistantMessage(
+                    turn.entries[index].assistantMessage!,
+                    maxWidth: messageBubbleMaxWidth,
+                    compactTopSpacing: index > 0,
+                    compactBottomSpacing: index < turn.entries.length - 1,
+                  ),
+                ] else if (turn.entries[index].toolMessages.isNotEmpty)
+                  _buildToolEntry(
+                    preview: _toolGroupPreview(
+                      turn.entries[index].toolMessages,
+                    ),
+                    maxWidth: messageBubbleMaxWidth,
+                    highlighted:
+                        hasHighlight && index == turn.entries.length - 1,
+                    loading:
+                        hasLoadingToolEntry && index == turn.entries.length - 1,
+                    onTap: () => _showAllSystemMessages(
+                      turnId: turn.id,
+                      systemMessages: turn.entries[index].toolMessages,
+                    ),
+                  ),
               ],
-              if (turn.toolMessages.isNotEmpty)
-                _buildToolEntry(
-                  count: turn.toolMessages.length,
-                  highlighted: hasHighlight,
-                  onTap: () => _showAllSystemMessages(turn),
-                ),
             ],
           ),
         );
@@ -4475,15 +4490,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Widget _buildToolEntry({
-    required int count,
+    required String preview,
+    required double maxWidth,
     required bool highlighted,
+    required bool loading,
     required VoidCallback onTap,
   }) {
     final brightness = Theme.of(context).brightness;
-    final iconColor = highlighted
-        ? AppColors.signalFor(brightness)
-        : AppColors.mutedSoftFor(brightness);
-    final countColor = highlighted
+    final textColor = highlighted
         ? AppColors.textFor(brightness)
         : AppColors.mutedFor(brightness);
 
@@ -4491,31 +4505,44 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       alignment: Alignment.centerLeft,
       child: Padding(
         padding: const EdgeInsets.only(bottom: AppSpacing.compact / 2),
-        child: _ToolEntryChip(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.iconTight,
-              vertical: 2,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.build_outlined,
-                  size: 14,
-                  color: iconColor,
-                ),
-                const SizedBox(width: 2),
-                Text(
-                  count > 99 ? '99+' : '$count',
-                  style: TextStyle(
-                    color: countColor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          child: _ToolEntryChip(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.compact,
+                vertical: AppSpacing.micro,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (loading) ...[
+                    SizedBox(
+                      key: const ValueKey('tool-entry-loading-indicator'),
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.8,
+                        color: AppColors.signalFor(brightness),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.compact),
+                  ],
+                  Flexible(
+                    child: Text(
+                      preview,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -5753,6 +5780,35 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     return parts.join(' · ');
+  }
+
+  String _toolGroupPreview(List<ChatMessage> messages) {
+    final visibleMessages = messages
+        .where((message) => !_isDebugToolMessage(message))
+        .toList(growable: false);
+    final candidates = visibleMessages.isEmpty ? messages : visibleMessages;
+
+    for (final message in candidates.reversed) {
+      if (!_isReasoningPlaceholder(message)) {
+        return _toolMessagePreview(message);
+      }
+    }
+    return _toolMessagePreview(candidates.last);
+  }
+
+  bool _isDebugToolMessage(ChatMessage message) {
+    return message.content.trimLeft().startsWith('[debug:');
+  }
+
+  bool _isReasoningPlaceholder(ChatMessage message) {
+    final content = message.content.trim();
+    if (!content.startsWith('[reasoning]')) {
+      return false;
+    }
+    final detail = content.substring('[reasoning]'.length).trim().toLowerCase();
+    return detail == 'thinking' ||
+        detail == 'complete' ||
+        detail == 'summary updated';
   }
 
   String _compactToolText(String text) {
@@ -9453,9 +9509,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
 
       if (message.role == MessageRole.system) {
-        currentTurn.toolMessages.add(message);
+        currentTurn.addToolMessage(message);
       } else {
-        currentTurn.assistantMessages.add(message);
+        currentTurn.addAssistantMessage(message);
       }
     }
     return turns;
@@ -9593,12 +9649,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return null;
   }
 
-  Future<void> _showAllSystemMessages(_ConversationTurn turn) async {
-    final systemMessages = turn.toolMessages;
+  Future<void> _showAllSystemMessages({
+    required String turnId,
+    required List<ChatMessage> systemMessages,
+  }) async {
     if (systemMessages.isEmpty) {
       return;
     }
     final brightness = Theme.of(context).brightness;
+    final displayMessages = _compactToolMessages(systemMessages);
 
     await showDialog<void>(
       context: context,
@@ -9609,9 +9668,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           width: 360,
           height: 420,
           child: ListView.separated(
-            itemCount: systemMessages.length,
+            itemCount: displayMessages.length,
             itemBuilder: (context, index) => InkWell(
-              onTap: () => _showToolMessageDetail(systemMessages[index]),
+              onTap: () => _showToolMessageDetail(displayMessages[index]),
               borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -9619,7 +9678,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   horizontal: AppSpacing.textStack,
                 ),
                 child: Text(
-                  _toolMessagePreview(systemMessages[index]),
+                  _toolMessagePreview(displayMessages[index]),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(height: 1.4),
@@ -9634,7 +9693,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           TextButton(
             onPressed: () {
               setState(() {
-                _unreadToolCounts.remove(turn.id);
+                _unreadToolCounts.remove(turnId);
               });
               Navigator.of(context).pop();
             },
@@ -9643,6 +9702,30 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ],
       ),
     );
+  }
+
+  List<ChatMessage> _compactToolMessages(List<ChatMessage> messages) {
+    final compacted = <ChatMessage>[];
+    for (final message in messages) {
+      final current = _parseToolMessage(message.content);
+      final previous =
+          compacted.isEmpty ? null : _parseToolMessage(compacted.last.content);
+      final currentCompleted =
+          current?.phaseLabel == context.l10n.phaseCompleted;
+      final previousInProgress =
+          previous?.phaseLabel == context.l10n.phaseStarted ||
+              previous?.phaseLabel == context.l10n.phaseRunning;
+      final sameActivity = current != null &&
+          previous != null &&
+          current.kindLabel == previous.kindLabel &&
+          current.primary == previous.primary;
+      if (currentCompleted && previousInProgress && sameActivity) {
+        compacted[compacted.length - 1] = message;
+      } else {
+        compacted.add(message);
+      }
+    }
+    return compacted;
   }
 
   Future<void> _showToolMessageDetail(ChatMessage message) async {
@@ -11595,6 +11678,8 @@ class _ToolEntryChipState extends State<_ToolEntryChip> {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final radius = BorderRadius.circular(AppSpacing.radiusCapsule);
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -11603,10 +11688,13 @@ class _ToolEntryChipState extends State<_ToolEntryChip> {
         curve: Curves.easeOutCubic,
         offset: _hovered ? const Offset(0, -0.04) : Offset.zero,
         child: Material(
-          color: Colors.transparent,
+          color: AppColors.panelDeepFor(brightness).withValues(
+            alpha: brightness == Brightness.dark ? 0.72 : 0.58,
+          ),
+          borderRadius: radius,
           child: InkWell(
             onTap: widget.onTap,
-            borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+            borderRadius: radius,
             child: widget.child,
           ),
         ),
@@ -11620,8 +11708,31 @@ class _ConversationTurn {
 
   final String id;
   final ChatMessage? userMessage;
-  final List<ChatMessage> assistantMessages = <ChatMessage>[];
-  final List<ChatMessage> toolMessages = <ChatMessage>[];
+  final List<_TurnEntry> entries = <_TurnEntry>[];
+
+  void addAssistantMessage(ChatMessage message) {
+    entries.add(_TurnEntry.assistant(message));
+  }
+
+  void addToolMessage(ChatMessage message) {
+    final lastEntry = entries.lastOrNull;
+    if (lastEntry != null && lastEntry.assistantMessage == null) {
+      lastEntry.toolMessages.add(message);
+      return;
+    }
+    entries.add(_TurnEntry.tools(message));
+  }
+}
+
+class _TurnEntry {
+  _TurnEntry.assistant(this.assistantMessage) : toolMessages = <ChatMessage>[];
+
+  _TurnEntry.tools(ChatMessage message)
+      : assistantMessage = null,
+        toolMessages = <ChatMessage>[message];
+
+  final ChatMessage? assistantMessage;
+  final List<ChatMessage> toolMessages;
 }
 
 class _ParsedToolMessage {
