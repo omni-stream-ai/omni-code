@@ -164,6 +164,7 @@ class NavigationPanel extends StatelessWidget {
                               unreadCount: session.unreadCount,
                               awaitingApproval: session.status ==
                                   SessionStatus.awaitingApproval,
+                              failed: session.status == SessionStatus.failed,
                               alwaysShowMenu: alwaysShowRecentMenus,
                               icon: Icons.chat_bubble_outline_rounded,
                               menuChildren: _recentSessionMenuChildren(
@@ -367,6 +368,7 @@ class NavigationRecentItem extends StatefulWidget {
     this.collapsed = false,
     this.unreadCount = 0,
     this.awaitingApproval = false,
+    this.failed = false,
     this.alwaysShowMenu = false,
     this.icon,
     this.menuChildren = const [],
@@ -378,6 +380,7 @@ class NavigationRecentItem extends StatefulWidget {
   final bool collapsed;
   final int unreadCount;
   final bool awaitingApproval;
+  final bool failed;
   final bool alwaysShowMenu;
   final IconData? icon;
   final List<Widget> menuChildren;
@@ -447,7 +450,9 @@ class _NavigationRecentItemState extends State<NavigationRecentItem> {
                                     fontSize: 10,
                                   ),
                         ),
-                        if (widget.awaitingApproval || widget.unreadCount > 0)
+                        if (widget.failed ||
+                            widget.awaitingApproval ||
+                            widget.unreadCount > 0)
                           Positioned(
                             top: -3,
                             right: -5,
@@ -455,9 +460,11 @@ class _NavigationRecentItemState extends State<NavigationRecentItem> {
                               width: 7,
                               height: 7,
                               decoration: BoxDecoration(
-                                color: widget.awaitingApproval
-                                    ? AppColors.warningFor(brightness)
-                                    : AppColors.accentBlueFor(brightness),
+                                color: widget.failed
+                                    ? AppColors.errorFor(brightness)
+                                    : widget.awaitingApproval
+                                        ? AppColors.warningFor(brightness)
+                                        : AppColors.accentBlueFor(brightness),
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -481,16 +488,19 @@ class _NavigationRecentItemState extends State<NavigationRecentItem> {
                                   ),
                         ),
                       ),
-                      if (widget.awaitingApproval ||
+                      if (widget.failed ||
+                          widget.awaitingApproval ||
                           widget.unreadCount > 0) ...[
                         const SizedBox(width: AppSpacing.micro),
                         Container(
                           width: 7,
                           height: 7,
                           decoration: BoxDecoration(
-                            color: widget.awaitingApproval
-                                ? AppColors.warningFor(brightness)
-                                : AppColors.accentBlueFor(brightness),
+                            color: widget.failed
+                                ? AppColors.errorFor(brightness)
+                                : widget.awaitingApproval
+                                    ? AppColors.warningFor(brightness)
+                                    : AppColors.accentBlueFor(brightness),
                             shape: BoxShape.circle,
                           ),
                         ),
