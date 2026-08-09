@@ -639,6 +639,23 @@ void main() {
       expect(body.containsKey('reasoning_effort'), isTrue);
       expect(body['reasoning_effort'], isNull);
     });
+
+    test('clears session provider with null patch value', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.method, 'PATCH');
+          expect(request.url.path, '/sessions/session-1');
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response('', 204);
+        }),
+      );
+
+      await client.updateSessionProvider('session-1', null);
+
+      expect(body.containsKey('provider_id'), isTrue);
+      expect(body['provider_id'], isNull);
+    });
   });
 
   group('BridgeClient cancelReply', () {

@@ -622,7 +622,11 @@ class BridgeClient {
     String sessionId,
     String? providerId,
   ) async {
-    await updateSessionDefaults(sessionId, providerId: providerId);
+    await updateSessionDefaults(
+      sessionId,
+      providerId: providerId,
+      clearProviderId: providerId == null,
+    );
   }
 
   Future<void> updateSessionDefaults(
