@@ -663,6 +663,28 @@ class BridgeClient {
     }
   }
 
+  Future<SessionSummary> markSessionRead(
+    String sessionId,
+    String lastMessageId,
+  ) async {
+    final response = await _httpClient.put(
+      Uri.parse('$baseUrl/sessions/$sessionId/read-state'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'last_message_id': lastMessageId}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = payload['data'] as Map<String, dynamic>;
+    final session = SessionSummary.fromJson(data);
+    syncSessionSummary(session);
+    return session;
+  }
+
   Future<bool> cancelReply(String sessionId) async {
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/sessions/$sessionId/cancel'),

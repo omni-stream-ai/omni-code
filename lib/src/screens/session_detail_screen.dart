@@ -5834,6 +5834,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       });
       _jumpToBottom();
       _scheduleAutoBackfillHistoryIfNeeded();
+      unawaited(_markVisibleBridgeReplyRead());
     } catch (error) {
       if (!mounted ||
           requestToken != _messageLoadRequestToken ||
@@ -5844,6 +5845,31 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _loadingMessages = false;
         _speechError = context.l10n.loadMessagesFailed('$error');
       });
+    }
+  }
+
+  Future<void> _markVisibleBridgeReplyRead() async {
+    if (_session.unreadCount == 0 || _messages.isEmpty) {
+      return;
+    }
+    final latestAssistant = _lastMatchingMessage(
+      (message) =>
+          message.role == MessageRole.assistant &&
+          message.content.trim().isNotEmpty,
+    );
+    if (latestAssistant == null) {
+      return;
+    }
+    try {
+      final session = await _client.markSessionRead(
+        _session.id,
+        latestAssistant.id,
+      );
+      if (mounted && session.id == _session.id) {
+        setState(() => _session = session);
+      }
+    } catch (_) {
+      // A later refresh retries the acknowledgement; unread state is server-owned.
     }
   }
 
@@ -6531,6 +6557,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           _reconcileSubmittedApprovalState();
         });
         _syncSessionSummaryCache();
+        unawaited(_markVisibleBridgeReplyRead());
         _maybeAutoScrollToBottom();
         break;
       case 'session_status':
@@ -6656,6 +6683,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           _maybeAutoSpeakAssistantMessage(message.id);
           _maybeNotifyAssistantMessage(message.id);
           _scheduleRefreshSessionSummary();
+          unawaited(_markVisibleBridgeReplyRead());
         }
         if (shouldAutoScroll) {
           _animateToBottom();

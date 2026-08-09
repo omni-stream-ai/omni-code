@@ -161,6 +161,9 @@ class NavigationPanel extends StatelessWidget {
                               label: session.title,
                               active: session.id == activeSessionId,
                               collapsed: collapsed,
+                              unreadCount: session.unreadCount,
+                              awaitingApproval: session.status ==
+                                  SessionStatus.awaitingApproval,
                               alwaysShowMenu: alwaysShowRecentMenus,
                               icon: Icons.chat_bubble_outline_rounded,
                               menuChildren: _recentSessionMenuChildren(
@@ -362,6 +365,8 @@ class NavigationRecentItem extends StatefulWidget {
     required this.label,
     required this.active,
     this.collapsed = false,
+    this.unreadCount = 0,
+    this.awaitingApproval = false,
     this.alwaysShowMenu = false,
     this.icon,
     this.menuChildren = const [],
@@ -371,6 +376,8 @@ class NavigationRecentItem extends StatefulWidget {
   final String label;
   final bool active;
   final bool collapsed;
+  final int unreadCount;
+  final bool awaitingApproval;
   final bool alwaysShowMenu;
   final IconData? icon;
   final List<Widget> menuChildren;
@@ -422,19 +429,40 @@ class _NavigationRecentItemState extends State<NavigationRecentItem> {
             ),
             child: widget.collapsed
                 ? Center(
-                    child: Text(
-                      _compactNavigationLabel(widget.label),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: textColor,
-                            fontWeight: widget.active
-                                ? FontWeight.w800
-                                : FontWeight.w600,
-                            height: 1.05,
-                            fontSize: 10,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Text(
+                          _compactNavigationLabel(widget.label),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: textColor,
+                                    fontWeight: widget.active
+                                        ? FontWeight.w800
+                                        : FontWeight.w600,
+                                    height: 1.05,
+                                    fontSize: 10,
+                                  ),
+                        ),
+                        if (widget.awaitingApproval || widget.unreadCount > 0)
+                          Positioned(
+                            top: -3,
+                            right: -5,
+                            child: Container(
+                              width: 7,
+                              height: 7,
+                              decoration: BoxDecoration(
+                                color: widget.awaitingApproval
+                                    ? AppColors.warningFor(brightness)
+                                    : AppColors.accentBlueFor(brightness),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
                           ),
+                      ],
                     ),
                   )
                 : Row(
@@ -453,6 +481,20 @@ class _NavigationRecentItemState extends State<NavigationRecentItem> {
                                   ),
                         ),
                       ),
+                      if (widget.awaitingApproval ||
+                          widget.unreadCount > 0) ...[
+                        const SizedBox(width: AppSpacing.micro),
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: widget.awaitingApproval
+                                ? AppColors.warningFor(brightness)
+                                : AppColors.accentBlueFor(brightness),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
                       if (widget.menuChildren.isNotEmpty) ...[
                         const SizedBox(width: AppSpacing.micro),
                         _NavigationRecentMoreButton(

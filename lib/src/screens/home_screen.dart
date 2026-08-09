@@ -701,6 +701,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ? null
                     : l10n.forkedFromSession(forkSource),
                 accentColor: _statusColor(session.status, brightness),
+                unreadCount: session.unreadCount,
+                awaitingApproval:
+                    session.status == SessionStatus.awaitingApproval,
                 onTap: () => _openSession(session),
               ),
             );
@@ -3575,6 +3578,8 @@ class _RecentSessionCard extends StatelessWidget {
     required this.metadata,
     required this.forkSource,
     required this.accentColor,
+    required this.unreadCount,
+    required this.awaitingApproval,
     required this.onTap,
   });
 
@@ -3583,6 +3588,8 @@ class _RecentSessionCard extends StatelessWidget {
   final String metadata;
   final String? forkSource;
   final Color accentColor;
+  final int unreadCount;
+  final bool awaitingApproval;
   final VoidCallback onTap;
 
   @override
@@ -3620,6 +3627,12 @@ class _RecentSessionCard extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                 ),
+                if (awaitingApproval || unreadCount > 0) ...[
+                  const SizedBox(height: AppSpacing.textTight),
+                  _SessionAttentionIndicator(
+                    awaitingApproval: awaitingApproval,
+                  ),
+                ],
                 if (preview?.trim().isNotEmpty == true) ...[
                   const SizedBox(height: AppSpacing.textStack),
                   Text(
@@ -3651,6 +3664,27 @@ class _RecentSessionCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SessionAttentionIndicator extends StatelessWidget {
+  const _SessionAttentionIndicator({required this.awaitingApproval});
+
+  final bool awaitingApproval;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Container(
+      width: 7,
+      height: 7,
+      decoration: BoxDecoration(
+        color: awaitingApproval
+            ? AppColors.warningFor(brightness)
+            : AppColors.accentBlueFor(brightness),
+        shape: BoxShape.circle,
       ),
     );
   }

@@ -1342,6 +1342,21 @@ class _SessionSummaryCard extends StatelessWidget {
                         color: statusColor,
                       ),
                     ),
+                    if (session.status == SessionStatus.awaitingApproval ||
+                        session.unreadCount > 0) ...[
+                      const SizedBox(width: AppSpacing.textTight),
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color:
+                              session.status == SessionStatus.awaitingApproval
+                                  ? AppColors.warningFor(theme.brightness)
+                                  : AppColors.accentBlueFor(theme.brightness),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: AppSpacing.textTight),
