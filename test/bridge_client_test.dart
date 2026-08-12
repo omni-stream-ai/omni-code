@@ -1717,6 +1717,78 @@ void main() {
       expect(body.containsKey('voice'), isFalse);
     });
   });
+
+  group('BridgeClient session domain', () {
+    test('loads the atomic v2 session snapshot', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.url.path, '/v2/sessions/session-1/state');
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'session': {
+                  'id': 'session-1',
+                  'project_id': 'project-1',
+                  'title': 'Session',
+                  'agent': 'codex',
+                  'status': 'awaiting_approval',
+                  'version': 4,
+                  'active_turn_id': 'turn-1',
+                  'pending_approval_id': 'approval-1',
+                  'unread_count': 0,
+                  'created_at': '2026-08-11T00:00:00Z',
+                  'updated_at': '2026-08-11T00:00:01Z',
+                },
+                'turns': <dynamic>[],
+                'cursor': 9,
+              },
+            }),
+            200,
+          );
+        }),
+      );
+
+      final state = await client.getDomainSessionState('session-1');
+
+      expect(state.cursor, 9);
+      expect(state.session.status, DomainSessionStatus.awaitingApproval);
+      expect(state.session.pendingApprovalId, 'approval-1');
+    });
+
+    test('submits stable command and entity ids with structured attachments',
+        () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(jsonEncode({'data': <String, dynamic>{}}), 202);
+        }),
+      );
+
+      await client.createDomainTurn(
+        'session-1',
+        'inspect this',
+        commandId: 'command-1',
+        turnId: 'turn-1',
+        userMessageId: 'message-1',
+        attachments: const [
+          DomainAttachment(
+            id: 'upload-1',
+            kind: 'image',
+            fileName: 'screen.png',
+            contentType: 'image/png',
+            sizeBytes: 42,
+            url: '/uploads/upload-1',
+          ),
+        ],
+      );
+
+      expect(body['command_id'], 'command-1');
+      expect(body['turn_id'], 'turn-1');
+      expect(body['user_message_id'], 'message-1');
+      expect((body['attachments'] as List).single['file_name'], 'screen.png');
+    });
+  });
 }
 
 ProjectSummary _project({

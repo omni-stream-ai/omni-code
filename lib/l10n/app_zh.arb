@@ -715,6 +715,7 @@
       "agent": {}
     }
   },
+  "copyResumeCommand": "复制 Resume 命令",
   "desktopSessionOverview": "会话概览",
   "desktopSessionOverviewSubtitle": "保持状态、上下文和操作可见，无需离开对话。",
   "desktopSessionUpdated": "更新",

@@ -22,6 +22,7 @@ import '../l10n/app_locale.dart';
 import '../message_image_paths.dart';
 import '../models.dart';
 import '../responsive/app_responsive_layout.dart';
+import '../session_controller.dart';
 import '../plugins/speech_plugin_models.dart';
 import '../plugins/speech_plugin_registry.dart';
 import '../services/cloud_speech_service.dart';
@@ -43,6 +44,8 @@ import '../widgets/new_session_flow.dart';
 import '../widgets/session_call_mode_view.dart';
 import 'project_ai_approval_prompt_screen.dart';
 import '../../l10n/generated/app_localizations.dart';
+
+String _shellQuote(String value) => "'${value.replaceAll("'", "'\\''")}'";
 
 class SessionDetailScreen extends StatefulWidget {
   const SessionDetailScreen({
@@ -148,6 +151,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   final Map<String, _MessageImageReferencesCacheEntry> _imageReferencesCache =
       {};
   late SessionSummary _session;
+  SessionController? _domainController;
   final List<ChatMessage> _messages = [];
   final List<_SessionDiffEntry> _sessionDiffs = <_SessionDiffEntry>[];
   late String _speechRouteSignature;
@@ -177,6 +181,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _composerTextHasSendableDraft = false;
   bool _markNextComposerChangeAsVoice = false;
   final List<_PendingAttachment> _pendingAttachments = <_PendingAttachment>[];
+  final List<DomainAttachment> _retainedDraftAttachments = <DomainAttachment>[];
 
   String? _recordingPath;
   String _recognizedSpeech = '';
@@ -218,6 +223,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Completer<void>? _callModeCommandAcceptedSpeechCompleter;
   _CallModeSpeechHintState? _callModeSpeechHintState;
   final Map<String, int> _unreadToolCounts = <String, int>{};
+  final Set<String> _expandedDiffTurnIds = <String>{};
   String? _speechStatus;
   String? _speechError;
   ApprovalRequest? _pendingApproval;
@@ -244,6 +250,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   String? _submittingApprovalChoice;
   String? _submittedApprovalRequestId;
   bool _sessionIdCopied = false;
+  bool _resumeCommandCopied = false;
   bool _cancellingReply = false;
   bool _showScrollToBottomAction = false;
   bool? _pendingShowScrollToBottomAction;
@@ -645,12 +652,193 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _loadingMessages = false;
       unawaited(_createSessionAndHydrate());
     } else {
-      _loadMessages();
-      _subscribeToEvents();
+      _startDomainController();
       unawaited(_loadSessionDetail());
     }
     _loadProviders();
     _loadAgentCommands();
+  }
+
+  void _startDomainController() {
+    _disposeDomainController();
+    final controller =
+        SessionController(client: _client, sessionId: _session.id)
+          ..addListener(_handleDomainStateChanged);
+    _domainController = controller;
+    unawaited(controller.start());
+  }
+
+  void _disposeDomainController() {
+    final controller = _domainController;
+    if (controller == null) return;
+    controller.removeListener(_handleDomainStateChanged);
+    controller.dispose();
+    _domainController = null;
+  }
+
+  void _handleDomainStateChanged() {
+    final controller = _domainController;
+    final state = controller?.state;
+    if (!mounted) return;
+    if (state == null) {
+      final error = controller?.error;
+      if (error != null) {
+        setState(() {
+          _sessionRestoreError = error.toString();
+          _loadingMessages = false;
+        });
+      }
+      return;
+    }
+    if (state.session.id != _session.id) return;
+    final messages = <ChatMessage>[];
+    final diffsByKey = <String, _SessionDiffEntry>{};
+    ApprovalRequest? pendingApproval;
+    for (final turn in state.turns) {
+      messages.add(_domainMessageToChat(turn.userMessage, MessageRole.user));
+      final projectedAssistantSegments = <String, DomainSegment>{};
+      for (final segment in turn.segments) {
+        final message = segment.message;
+        if (message != null) {
+          final baseId = message.id.replaceFirst(RegExp(r':\d+$'), '');
+          final key = message.purpose == DomainMessagePurpose.finalReply &&
+                  message.state == DomainEntityState.completed
+              ? '$baseId:final'
+              : '$baseId:stream';
+          final existing = projectedAssistantSegments[key]?.message;
+          if (existing == null ||
+              message.content.length >= existing.content.length) {
+            projectedAssistantSegments[key] = segment;
+          }
+        }
+      }
+      final visibleAssistantSegmentIds = projectedAssistantSegments.values
+          .map((segment) => segment.id)
+          .toSet();
+      for (final segment in turn.segments) {
+        final message = segment.message;
+        if (message != null &&
+            visibleAssistantSegmentIds.contains(segment.id)) {
+          final projected =
+              _domainMessageToChat(message, MessageRole.assistant);
+          if (projected.content.trim().isNotEmpty) messages.add(projected);
+        }
+        final visibleActivities = segment.activities.where((activity) {
+          final isActive = activity.state == DomainEntityState.pending ||
+              activity.state == DomainEntityState.running ||
+              activity.state == DomainEntityState.awaitingApproval;
+          return isActive || activity.id == segment.latestActivityId;
+        });
+        for (final activity in segment.activities) {
+          if (activity.id == state.session.pendingApprovalId &&
+              activity.payload.isNotEmpty) {
+            pendingApproval = ApprovalRequest.fromJson(activity.payload);
+          }
+        }
+        for (final activity in visibleActivities) {
+          messages.add(ChatMessage(
+            id: activity.id,
+            sessionId: _session.id,
+            role: MessageRole.system,
+            content: activity.title,
+            createdAt: activity.createdAt,
+          ));
+        }
+      }
+      for (final artifact in turn.artifacts) {
+        if (artifact.kind == DomainArtifactKind.turnCumulativeDiff) {
+          final cumulativeDiff = _SessionDiffEntry.fromJson(
+            artifact.payload,
+            // Artifacts are already nested under their owning domain turn.
+            // Provider message IDs are not stable UI turn identifiers.
+            turnId: turn.userMessage.id,
+          );
+          for (final diff in _splitSessionDiffByFile(cumulativeDiff)) {
+            final key = _diffKey(diff);
+            // A cumulative diff may have several historical provider snapshots.
+            // Keep only the latest snapshot for each file in this domain turn.
+            diffsByKey.remove(key);
+            diffsByKey[key] = diff;
+          }
+        }
+      }
+    }
+    final status = switch (state.session.status) {
+      DomainSessionStatus.running => SessionStatus.running,
+      DomainSessionStatus.awaitingApproval => SessionStatus.awaitingApproval,
+      DomainSessionStatus.failed => SessionStatus.failed,
+      DomainSessionStatus.idle => SessionStatus.idle,
+    };
+    final serverMessageIds = messages.map((message) => message.id).toSet();
+    final localMessages = _messages.where((message) {
+      final local = _localMessageStates[message.id];
+      return local != null && !serverMessageIds.contains(message.id);
+    });
+    messages.addAll(localMessages);
+    final previousStatus = _session.status;
+    setState(() {
+      for (final messageId in serverMessageIds) {
+        _localMessageStates.remove(messageId);
+      }
+      _messages
+        ..clear()
+        ..addAll(messages);
+      _sessionDiffs
+        ..clear()
+        ..addAll(diffsByKey.values);
+      _session = _session.copyWith(
+        status: status,
+        updatedAt: state.session.updatedAt,
+        unreadCount: state.session.unreadCount,
+        lastMessagePreview: state.session.lastMessagePreview,
+        pendingApproval: pendingApproval,
+        clearPendingApproval: pendingApproval == null,
+      );
+      _pendingApproval = pendingApproval;
+      _loadingMessages = false;
+      _sessionRestoreError = controller?.error?.toString();
+      _reconcileSubmittedApprovalState();
+    });
+    _cacheCurrentSessionMessages();
+    _syncSessionSummaryCache();
+    unawaited(_markVisibleBridgeReplyRead());
+    if (previousStatus != status && status == SessionStatus.idle) {
+      final finalMessage = _lastMatchingMessage(
+        (message) => message.role == MessageRole.assistant,
+      );
+      if (finalMessage != null) {
+        _maybeAutoSpeakAssistantMessage(finalMessage.id);
+        _maybeNotifyAssistantMessage(finalMessage.id);
+      }
+    }
+    _maybeAutoScrollToBottom();
+  }
+
+  ChatMessage _domainMessageToChat(
+    DomainMessage message,
+    MessageRole role,
+  ) {
+    final attachmentMarkdown = message.attachments.map((attachment) {
+      final label =
+          attachment.fileName.isEmpty ? 'attachment' : attachment.fileName;
+      final image = attachment.kind == 'image' ||
+          attachment.contentType.startsWith('image/');
+      return image
+          ? '![$label](${attachment.url})'
+          : '[$label](${attachment.url})';
+    }).join('\n\n');
+    final content = attachmentMarkdown.isEmpty
+        ? message.content
+        : message.content.trim().isEmpty
+            ? attachmentMarkdown
+            : '${message.content}\n\n$attachmentMarkdown';
+    return ChatMessage(
+      id: message.id,
+      sessionId: _session.id,
+      role: role,
+      content: content,
+      createdAt: message.createdAt,
+    );
   }
 
   @override
@@ -667,6 +855,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     WidgetsBinding.instance.removeObserver(this);
     _eventsSubscriptionGeneration += 1;
     _eventsSubscription?.cancel();
+    _disposeDomainController();
     _eventsReconnectTimer?.cancel();
     _speechStatusAutoDismissTimer?.cancel();
     _callModeSpeechHintTimer?.cancel();
@@ -718,6 +907,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         previousSession.lastMessagePreview == nextSession.lastMessagePreview &&
         previousSession.pendingApproval?.requestId ==
             nextSession.pendingApproval?.requestId &&
+        previousSession.runtimeSessionRef == nextSession.runtimeSessionRef &&
         previousSession.providerId == nextSession.providerId &&
         previousSession.reasoningEffort == nextSession.reasoningEffort &&
         previousSession.model == nextSession.model) {
@@ -748,8 +938,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     });
 
     if (sessionChanged) {
-      _subscribeToEvents();
-      unawaited(_loadMessages());
+      _startDomainController();
     }
     unawaited(_loadSessionDetail());
   }
@@ -762,7 +951,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       if (_creatingSession) {
         return;
       }
-      unawaited(_restoreSessionAfterResume());
+      unawaited(_domainController?.recover());
       return;
     }
     _appInForeground = false;
@@ -1782,6 +1971,19 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 : Icons.content_copy_rounded,
             onTap: _copySessionId,
           ),
+          if (_session.agentId == 'codex') ...[
+            const SizedBox(height: AppSpacing.micro),
+            _buildSessionHeaderActionTile(
+              key: const Key('session-header-copy-resume-command-button'),
+              label: _resumeCommandCopied
+                  ? context.l10n.copied
+                  : context.l10n.copyResumeCommand,
+              icon: _resumeCommandCopied
+                  ? Icons.check_rounded
+                  : Icons.terminal_rounded,
+              onTap: _copyResumeCommand,
+            ),
+          ],
         ],
       ],
     );
@@ -1851,6 +2053,28 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       setState(() {
         _sessionIdCopied = false;
       });
+    });
+  }
+
+  Future<void> _copyResumeCommand() async {
+    final runtimeSessionRef = _session.runtimeSessionRef;
+    if (runtimeSessionRef == null || runtimeSessionRef.isEmpty) return;
+    final projectRoot = _client.peekProject(_session.projectId)?.rootPath;
+    final parts = <String>['codex', 'resume'];
+    if (projectRoot != null && projectRoot.trim().isNotEmpty) {
+      parts.addAll(['-C', _shellQuote(projectRoot.trim())]);
+    }
+    final model = _session.model?.trim();
+    if (model != null && model.isNotEmpty) {
+      parts.addAll(['-m', _shellQuote(model)]);
+    }
+    parts.add(_shellQuote(runtimeSessionRef));
+    await Clipboard.setData(ClipboardData(text: parts.join(' ')));
+    if (!mounted) return;
+    _sessionHeaderMenuController.close();
+    setState(() => _resumeCommandCopied = true);
+    Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _resumeCommandCopied = false);
     });
   }
 
@@ -4374,12 +4598,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     ),
                   ),
               ],
-              for (final diff in _sessionDiffs.where(
-                (diff) =>
-                    diff.turnId == turn.id ||
-                    (diff.turnId.isEmpty && turn.id == _activeTurnId),
-              ))
-                _buildDiffEntry(diff, maxWidth: messageBubbleMaxWidth),
+              _buildTurnDiffs(turn, maxWidth: messageBubbleMaxWidth),
             ],
           ),
         );
@@ -4524,6 +4743,76 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Widget _buildDiffEntry(_SessionDiffEntry diff, {required double maxWidth}) {
+    return _buildDiffEntryWithTrailing(diff, maxWidth: maxWidth);
+  }
+
+  Widget _buildTurnDiffs(_ConversationTurn turn, {required double maxWidth}) {
+    final diffs = _sessionDiffs
+        .where(
+          (diff) =>
+              diff.turnId == turn.id ||
+              (diff.turnId.isEmpty && turn.id == _activeTurnId),
+        )
+        .toList(growable: false);
+    if (diffs.isEmpty) return const SizedBox.shrink();
+    if (diffs.length == 1) {
+      return _buildDiffEntry(diffs.single, maxWidth: maxWidth);
+    }
+    final expanded = _expandedDiffTurnIds.contains(turn.id);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildDiffEntryWithTrailing(
+          diffs.first,
+          maxWidth: maxWidth,
+          trailing: IconButton(
+            key: ValueKey('turn-diffs-toggle-${turn.id}'),
+            tooltip: expanded ? 'Collapse file changes' : 'Expand file changes',
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+            padding: EdgeInsets.zero,
+            onPressed: () {
+              setState(() {
+                if (expanded) {
+                  _expandedDiffTurnIds.remove(turn.id);
+                } else {
+                  _expandedDiffTurnIds.add(turn.id);
+                }
+              });
+            },
+            icon: AnimatedRotation(
+              turns: expanded ? 0.5 : 0,
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              child: const Icon(Icons.keyboard_arrow_down_rounded, size: 19),
+            ),
+          ),
+        ),
+        ClipRect(
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: expanded
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final diff in diffs.skip(1))
+                        _buildDiffEntry(diff, maxWidth: maxWidth),
+                    ],
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDiffEntryWithTrailing(
+    _SessionDiffEntry diff, {
+    required double maxWidth,
+    Widget? trailing,
+  }) {
     final brightness = Theme.of(context).brightness;
     final fileLabel = diff.files.isEmpty ? 'Changes' : diff.files.first;
     return Align(
@@ -4568,6 +4857,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                         style: const TextStyle(color: Color(0xffd05f5f))),
                   ),
                 ],
+                if (trailing != null) ...[
+                  const SizedBox(width: AppSpacing.micro),
+                  trailing,
+                ],
               ],
             ),
           ),
@@ -4578,6 +4871,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Future<void> _showDiffDetail(_SessionDiffEntry diff) async {
     final brightness = Theme.of(context).brightness;
+    final title = diff.files.isEmpty ? 'View diff' : diff.files.first;
     await showDialog<void>(
       context: context,
       builder: (context) => Dialog.fullscreen(
@@ -4593,9 +4887,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     const SizedBox(width: AppSpacing.compact),
                     Expanded(
                       child: Text(
-                        diff.files.isEmpty
-                            ? 'View diff'
-                            : diff.files.join(', '),
+                        title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w600),
@@ -5000,11 +5292,117 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
 
+    final file = href == null ? null : _resolveMarkdownFile(href);
+    if (file != null) {
+      unawaited(_showFilePreview(file));
+      return;
+    }
+
     final uri = href == null ? null : Uri.tryParse(href);
     if (uri == null) {
       return;
     }
     unawaited(launchUrl(uri));
+  }
+
+  File? _resolveMarkdownFile(String href) {
+    final uri = Uri.tryParse(href);
+    if (uri == null || (uri.hasScheme && uri.scheme != 'file')) return null;
+    final decodedPath = uri.scheme == 'file'
+        ? uri.toFilePath()
+        : Uri.decodeComponent(uri.path).trim();
+    if (decodedPath.isEmpty) return null;
+    final projectRoot = _client.peekProject(_session.projectId)?.rootPath;
+    final path = decodedPath.startsWith('/')
+        ? decodedPath
+        : projectRoot == null
+            ? null
+            : '$projectRoot/$decodedPath';
+    if (path == null) return null;
+    final file = File(path);
+    return file.existsSync() ? file : null;
+  }
+
+  Future<void> _showFilePreview(File file) async {
+    const maxPreviewBytes = 2 * 1024 * 1024;
+    final length = await file.length();
+    if (!mounted) return;
+    if (length > maxPreviewBytes) {
+      _showFilePreviewError('File is too large to preview');
+      return;
+    }
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    if (bytes.contains(0)) {
+      _showFilePreviewError('Binary files cannot be previewed');
+      return;
+    }
+    final content = utf8.decode(bytes, allowMalformed: true);
+    final brightness = Theme.of(context).brightness;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog.fullscreen(
+        backgroundColor: AppColors.panelFor(brightness),
+        child: SafeArea(
+          child: Padding(
+            padding: AppSpacing.tilePadding,
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.description_outlined, size: 18),
+                    const SizedBox(width: AppSpacing.compact),
+                    Expanded(
+                      child: Text(
+                        file.path.split(Platform.pathSeparator).last,
+                        key: const ValueKey('markdown-file-preview-title'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: context.l10n.close,
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.compact),
+                Expanded(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppColors.panelDeepFor(brightness),
+                      border:
+                          Border.all(color: AppColors.outlineFor(brightness)),
+                      borderRadius:
+                          BorderRadius.circular(AppSpacing.radiusControl),
+                    ),
+                    child: SingleChildScrollView(
+                      padding: AppSpacing.tilePadding,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SelectableText.rich(
+                          _AssistantCodeSyntaxHighlighter(Theme.of(context))
+                              .format(content),
+                          key: const ValueKey('markdown-file-preview-content'),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showFilePreviewError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   Widget _buildAssistantImageCard(
@@ -5980,8 +6378,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _creatingSession = false;
         _loadingMessages = true;
       });
-      _subscribeToEvents();
-      await _loadMessages();
+      _startDomainController();
       unawaited(_loadSessionDetail());
     } catch (error) {
       if (!mounted) {
@@ -6061,16 +6458,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     });
     _syncSessionSummaryCache();
     try {
-      final session = await _client.markSessionRead(
-        sessionId,
-        latestAssistant.id,
-      );
-      if (mounted &&
-          generation == _readStateUpdateGeneration &&
-          session.id == _session.id) {
-        setState(() => _session = session);
-        _syncSessionSummaryCache();
-      }
+      await _client.markDomainSessionRead(sessionId);
     } catch (_) {
       if (mounted &&
           generation == _readStateUpdateGeneration &&
@@ -8221,9 +8609,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
 
-    final String content;
+    final ({String content, List<DomainAttachment> attachments}) outgoing;
     try {
-      content = await _buildOutgoingMessageContent();
+      outgoing = await _buildOutgoingMessageContent();
     } catch (error) {
       if (!mounted) {
         return;
@@ -8236,7 +8624,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (!mounted) {
       return;
     }
-    if (content.isEmpty) {
+    if (outgoing.content.isEmpty && outgoing.attachments.isEmpty) {
       setState(() {
         _speechError = context.l10n.messageInputRequired;
       });
@@ -8246,7 +8634,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final inputMode = _speechStatus == context.l10n.voiceTranscriptionComplete
         ? 'voice'
         : 'text';
-    await _enqueueOrSubmitLocalMessage(content, inputMode: inputMode);
+    await _enqueueOrSubmitLocalMessage(
+      outgoing.content,
+      inputMode: inputMode,
+      attachments: outgoing.attachments,
+    );
   }
 
   Future<void> _retryLocalMessage(String messageId) async {
@@ -8260,15 +8652,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     await _submitLocalMessage(
-      message.content,
+      draft.content,
       inputMode: draft.inputMode,
       localMessageId: messageId,
+      attachments: draft.attachments,
     );
   }
 
   Future<void> _enqueueOrSubmitLocalMessage(
     String content, {
     required String inputMode,
+    List<DomainAttachment> attachments = const [],
   }) async {
     final status = _session.status;
     final shouldQueue = status == SessionStatus.running ||
@@ -8276,20 +8670,32 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _pendingApproval != null ||
         _hasPendingLocalMessage;
     if (shouldQueue) {
-      _queueLocalMessage(content, inputMode: inputMode);
+      _queueLocalMessage(
+        content,
+        inputMode: inputMode,
+        attachments: attachments,
+      );
       return;
     }
-    await _submitLocalMessage(content, inputMode: inputMode);
+    await _submitLocalMessage(
+      content,
+      inputMode: inputMode,
+      attachments: attachments,
+    );
   }
 
-  void _queueLocalMessage(String content, {required String inputMode}) {
+  void _queueLocalMessage(
+    String content, {
+    required String inputMode,
+    List<DomainAttachment> attachments = const [],
+  }) {
     final createdAt = DateTime.now();
     final messageId = 'local-${createdAt.microsecondsSinceEpoch}';
     final localMessage = ChatMessage(
       id: messageId,
       sessionId: _session.id,
       role: MessageRole.user,
-      content: content,
+      content: _contentWithDomainAttachments(content, attachments),
       createdAt: createdAt,
     );
     setState(() {
@@ -8298,12 +8704,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _composerDraftFromVoice = false;
       _markNextComposerChangeAsVoice = false;
       _pendingAttachments.clear();
+      _retainedDraftAttachments.clear();
       _messages.add(localMessage);
       _localMessageStates[messageId] = _LocalMessageDraft(
         state: _LocalMessageState.queued,
         inputMode: inputMode,
         createdAt: createdAt,
         clientMessageId: messageId,
+        content: content,
+        attachments: attachments,
       );
     });
     _jumpToBottom();
@@ -8336,9 +8745,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _dispatchingQueuedLocalMessage = true;
     try {
       await _submitLocalMessage(
-        message.content,
+        entry.value.content,
         inputMode: entry.value.inputMode,
         localMessageId: entry.key,
+        attachments: entry.value.attachments,
       );
     } finally {
       _dispatchingQueuedLocalMessage = false;
@@ -8354,11 +8764,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (index < 0) {
       return;
     }
-    final message = _messages[index];
     setState(() {
       _messages.removeAt(index);
       _localMessageStates.remove(messageId);
-      _controller.text = message.content;
+      _controller.text = draft.content;
+      _retainedDraftAttachments
+        ..clear()
+        ..addAll(draft.attachments);
       _controller.selection = TextSelection.collapsed(
         offset: _controller.text.length,
       );
@@ -8390,6 +8802,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     String content, {
     required String inputMode,
     String? localMessageId,
+    List<DomainAttachment> attachments = const [],
   }) async {
     final createdAt = DateTime.now();
     final messageId =
@@ -8398,7 +8811,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       id: messageId,
       sessionId: _session.id,
       role: MessageRole.user,
-      content: content,
+      content: _contentWithDomainAttachments(content, attachments),
       createdAt: createdAt,
     );
     setState(() {
@@ -8408,6 +8821,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _composerDraftFromVoice = false;
         _markNextComposerChangeAsVoice = false;
         _pendingAttachments.clear();
+        _retainedDraftAttachments.clear();
         _messages.add(localMessage);
       } else {
         final index = _messages.indexWhere((item) => item.id == localMessageId);
@@ -8420,6 +8834,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         inputMode: inputMode,
         createdAt: createdAt,
         clientMessageId: messageId,
+        content: content,
+        attachments: attachments,
       );
       _session = _session.copyWith(
         status: SessionStatus.waiting,
@@ -8433,17 +8849,24 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _requestComposerFocusAfterFrame(consumeReturnRequest: false);
 
     try {
-      await _pendingModelUpdate;
-      final result = await _client.sendMessage(
-        _session.id,
-        content,
-        inputMode: inputMode,
-        systemPrompt: _messageSystemPrompt(inputMode),
-        providerId: _overrideProviderId,
-        reasoningEffort: _overrideReasoningEffort,
-        model: _overrideModel,
-        clientMessageId: messageId,
-      );
+      await _pendingModelUpdate?.timeout(const Duration(seconds: 15));
+      final domainController = _domainController;
+      if (domainController == null) {
+        throw StateError('Session controller is not ready');
+      }
+      await domainController
+          .send(
+            content,
+            inputMode: inputMode,
+            systemPrompt: _messageSystemPrompt(inputMode),
+            providerId: _overrideProviderId,
+            reasoningEffort: _overrideReasoningEffort,
+            model: _overrideModel,
+            commandId: messageId,
+            userMessageId: messageId,
+            attachments: attachments,
+          )
+          .timeout(const Duration(seconds: 30));
       if (!mounted) {
         return false;
       }
@@ -8459,21 +8882,22 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           (message) => message.id == messageId,
         );
         if (localIndex >= 0) {
-          _messages[localIndex] = result.userMessage;
-          _localMessageStates.remove(messageId);
+          _messages[localIndex] = localMessage;
         }
         if (draft != null) {
-          _localMessageStates[result.userMessage.id] = _LocalMessageDraft(
+          _localMessageStates[messageId] = _LocalMessageDraft(
             state: _LocalMessageState.submitted,
             inputMode: draft.inputMode,
             createdAt: draft.createdAt,
             clientMessageId: draft.clientMessageId,
+            content: draft.content,
+            attachments: draft.attachments,
+          );
+          _session = _session.copyWith(
+            status: SessionStatus.running,
+            clearPendingApproval: true,
           );
         }
-        _session = _session.copyWith(
-          status: SessionStatus.running,
-          clearPendingApproval: true,
-        );
         _callModeInterruptedCurrentReply = false;
       });
       _returnFocusToComposerAfterReply = true;
@@ -8498,6 +8922,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           inputMode: inputMode,
           createdAt: localMessage.createdAt,
           clientMessageId: messageId,
+          content: content,
+          attachments: attachments,
         );
         _speechError = context.l10n.sendFailed('$error');
       });
@@ -8526,40 +8952,45 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return prompts.isEmpty ? null : prompts.join('\n\n');
   }
 
-  Future<String> _buildOutgoingMessageContent() async {
+  Future<({String content, List<DomainAttachment> attachments})>
+      _buildOutgoingMessageContent() async {
     final trimmedText = _controller.text.trim();
-    final attachmentMarkdown = await _buildAttachmentMarkdown();
-    if (trimmedText.isEmpty) {
-      return attachmentMarkdown;
-    }
-    if (attachmentMarkdown.isEmpty) {
-      return trimmedText;
-    }
-    return '$trimmedText\n\n$attachmentMarkdown';
+    final attachments = <DomainAttachment>[
+      ..._retainedDraftAttachments,
+      ...await _uploadDomainAttachments(),
+    ];
+    return (content: trimmedText, attachments: attachments);
   }
 
-  Future<String> _buildAttachmentMarkdown() async {
+  Future<List<DomainAttachment>> _uploadDomainAttachments() async {
     if (_pendingAttachments.isEmpty) {
-      return '';
+      return const [];
     }
     setState(() {
       _uploadingAttachments = true;
     });
     try {
-      final markdown = <String>[];
+      final attachments = <DomainAttachment>[];
       for (final attachment in _pendingAttachments) {
         final uploaded = await _client.uploadFile(attachment.path);
         final url = _attachmentMarkdownUrl(uploaded);
         final fileName = uploaded.fileName.isNotEmpty
             ? uploaded.fileName
             : attachment.fileName;
-        markdown.add(
-          attachment.isImage || uploaded.contentType.startsWith('image/')
-              ? '![${_escapeMarkdownLabel(fileName)}]($url)'
-              : '[${_escapeMarkdownLabel(fileName)}]($url)',
+        final isImage =
+            attachment.isImage || uploaded.contentType.startsWith('image/');
+        attachments.add(
+          DomainAttachment(
+            id: uploaded.id,
+            kind: isImage ? 'image' : 'file',
+            fileName: fileName,
+            contentType: uploaded.contentType,
+            sizeBytes: uploaded.sizeBytes,
+            url: url,
+          ),
         );
       }
-      return markdown.join('\n');
+      return attachments;
     } finally {
       if (mounted) {
         setState(() {
@@ -8579,8 +9010,22 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return uploaded.url;
   }
 
-  String _escapeMarkdownLabel(String label) {
-    return _PendingAttachment.escapeMarkdownLabel(label);
+  String _contentWithDomainAttachments(
+    String content,
+    List<DomainAttachment> attachments,
+  ) {
+    final markdown = attachments.map((attachment) {
+      final label = _PendingAttachment.escapeMarkdownLabel(
+        attachment.fileName.isEmpty ? 'attachment' : attachment.fileName,
+      );
+      return attachment.kind == 'image' ||
+              attachment.contentType.startsWith('image/')
+          ? '![$label](${attachment.url})'
+          : '[$label](${attachment.url})';
+    }).join('\n\n');
+    if (content.trim().isEmpty) return markdown;
+    if (markdown.isEmpty) return content;
+    return '$content\n\n$markdown';
   }
 
   String? _speechPlaybackSystemPrompt(String inputMode) {
@@ -8805,7 +9250,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         setState(() {
           _cancellingReply = false;
         });
-        unawaited(_restoreSessionAfterResume());
+        unawaited(_domainController?.recover());
         return;
       }
       setState(() {
@@ -8831,7 +9276,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       setState(() {
         _cancellingReply = false;
       });
-      unawaited(_restoreSessionAfterResume());
+      unawaited(_domainController?.recover());
     }
   }
 
@@ -11766,12 +12211,16 @@ class _LocalMessageDraft {
     required this.inputMode,
     required this.createdAt,
     required this.clientMessageId,
+    required this.content,
+    required this.attachments,
   });
 
   final _LocalMessageState state;
   final String inputMode;
   final DateTime createdAt;
   final String clientMessageId;
+  final String content;
+  final List<DomainAttachment> attachments;
 
   String label(BuildContext context) {
     return switch (state) {
@@ -12148,6 +12597,35 @@ class _SessionDiffEntry {
   final int? removed;
   final String patch;
   final String? summary;
+}
+
+List<_SessionDiffEntry> _splitSessionDiffByFile(_SessionDiffEntry diff) {
+  final headers = RegExp(r'^diff --git a/(.+?) b/(.+)$', multiLine: true)
+      .allMatches(diff.patch)
+      .toList(growable: false);
+  if (headers.isEmpty) return [diff];
+
+  return List.generate(headers.length, (index) {
+    final match = headers[index];
+    final patchEnd = index + 1 < headers.length
+        ? headers[index + 1].start
+        : diff.patch.length;
+    final patch = diff.patch.substring(match.start, patchEnd).trimRight();
+    var added = 0;
+    var removed = 0;
+    for (final line in patch.split('\n')) {
+      if (line.startsWith('+') && !line.startsWith('+++')) added += 1;
+      if (line.startsWith('-') && !line.startsWith('---')) removed += 1;
+    }
+    return _SessionDiffEntry(
+      turnId: diff.turnId,
+      files: [match.group(2)!],
+      added: added,
+      removed: removed,
+      patch: patch,
+      summary: diff.summary,
+    );
+  });
 }
 
 class _TurnEntry {

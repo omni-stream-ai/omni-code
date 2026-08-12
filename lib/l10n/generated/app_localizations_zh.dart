@@ -1449,6 +1449,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get copyResumeCommand => '复制 Resume 命令';
+
+  @override
   String get desktopSessionOverview => '会话概览';
 
   @override

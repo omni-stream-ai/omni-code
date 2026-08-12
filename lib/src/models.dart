@@ -125,6 +125,335 @@ enum SessionStatus {
 
 enum MessageRole { user, assistant, system }
 
+enum DomainSessionStatus { idle, running, awaitingApproval, failed }
+
+enum DomainTurnStatus {
+  accepted,
+  running,
+  awaitingApproval,
+  completed,
+  cancelled,
+  failed,
+}
+
+enum DomainSegmentKind { assistantMessage, execution }
+
+enum DomainMessagePurpose { user, commentary, finalReply }
+
+enum DomainEntityState {
+  pending,
+  running,
+  awaitingApproval,
+  completed,
+  cancelled,
+  failed,
+}
+
+enum DomainActivityKind { reasoning, progress, toolCall, toolResult, approval }
+
+enum DomainArtifactKind { turnCumulativeDiff, generatedFile, otherResult }
+
+DomainSessionStatus parseDomainSessionStatus(String value) => switch (value) {
+      'running' => DomainSessionStatus.running,
+      'awaiting_approval' => DomainSessionStatus.awaitingApproval,
+      'failed' => DomainSessionStatus.failed,
+      _ => DomainSessionStatus.idle,
+    };
+
+DomainTurnStatus parseDomainTurnStatus(String value) => switch (value) {
+      'running' => DomainTurnStatus.running,
+      'awaiting_approval' => DomainTurnStatus.awaitingApproval,
+      'completed' => DomainTurnStatus.completed,
+      'cancelled' => DomainTurnStatus.cancelled,
+      'failed' => DomainTurnStatus.failed,
+      _ => DomainTurnStatus.accepted,
+    };
+
+DomainSegmentKind parseDomainSegmentKind(String value) =>
+    value == 'assistant_message'
+        ? DomainSegmentKind.assistantMessage
+        : DomainSegmentKind.execution;
+
+DomainEntityState parseDomainEntityState(String value) => switch (value) {
+      'running' => DomainEntityState.running,
+      'awaiting_approval' => DomainEntityState.awaitingApproval,
+      'completed' => DomainEntityState.completed,
+      'cancelled' => DomainEntityState.cancelled,
+      'failed' => DomainEntityState.failed,
+      _ => DomainEntityState.pending,
+    };
+
+DomainActivityKind parseDomainActivityKind(String value) => switch (value) {
+      'reasoning' => DomainActivityKind.reasoning,
+      'tool_call' => DomainActivityKind.toolCall,
+      'tool_result' => DomainActivityKind.toolResult,
+      'approval' => DomainActivityKind.approval,
+      _ => DomainActivityKind.progress,
+    };
+
+DomainArtifactKind parseDomainArtifactKind(String value) => switch (value) {
+      'turn_cumulative_diff' => DomainArtifactKind.turnCumulativeDiff,
+      'generated_file' => DomainArtifactKind.generatedFile,
+      _ => DomainArtifactKind.otherResult,
+    };
+
+class DomainAttachment {
+  const DomainAttachment(
+      {required this.id,
+      required this.kind,
+      required this.fileName,
+      required this.contentType,
+      required this.sizeBytes,
+      required this.url});
+  final String id;
+  final String kind;
+  final String fileName;
+  final String contentType;
+  final int sizeBytes;
+  final String url;
+  factory DomainAttachment.fromJson(Map<String, dynamic> json) =>
+      DomainAttachment(
+        id: json['id'] as String,
+        kind: json['kind'] as String? ?? 'file',
+        fileName: json['file_name'] as String? ?? '',
+        contentType:
+            json['content_type'] as String? ?? 'application/octet-stream',
+        sizeBytes: (json['size_bytes'] as num?)?.toInt() ?? 0,
+        url: json['url'] as String? ?? '',
+      );
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'kind': kind,
+        'file_name': fileName,
+        'content_type': contentType,
+        'size_bytes': sizeBytes,
+        'url': url,
+      };
+}
+
+class DomainMessage {
+  const DomainMessage(
+      {required this.id,
+      required this.turnId,
+      required this.sequence,
+      required this.revision,
+      required this.purpose,
+      required this.state,
+      required this.content,
+      required this.attachments,
+      required this.createdAt,
+      required this.updatedAt});
+  final String id, turnId, content;
+  final int sequence, revision;
+  final DomainMessagePurpose purpose;
+  final DomainEntityState state;
+  final List<DomainAttachment> attachments;
+  final DateTime createdAt, updatedAt;
+  factory DomainMessage.fromJson(Map<String, dynamic> json) => DomainMessage(
+        id: json['id'] as String,
+        turnId: json['turn_id'] as String,
+        sequence: (json['sequence'] as num?)?.toInt() ?? 0,
+        revision: (json['revision'] as num?)?.toInt() ?? 0,
+        purpose: switch (json['purpose'] as String? ?? 'commentary') {
+          'user' => DomainMessagePurpose.user,
+          'final' => DomainMessagePurpose.finalReply,
+          _ => DomainMessagePurpose.commentary,
+        },
+        state: parseDomainEntityState(json['state'] as String? ?? 'pending'),
+        content: json['content'] as String? ?? '',
+        attachments: (json['attachments'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(DomainAttachment.fromJson)
+            .toList(growable: false),
+        createdAt: DateTime.parse(json['created_at'] as String),
+        updatedAt: DateTime.parse(json['updated_at'] as String),
+      );
+}
+
+class DomainActivity {
+  const DomainActivity(
+      {required this.id,
+      required this.segmentId,
+      required this.revision,
+      required this.kind,
+      required this.state,
+      required this.title,
+      this.primary,
+      required this.secondary,
+      required this.payload,
+      required this.createdAt});
+  final String id, segmentId, title;
+  final int revision;
+  final DomainActivityKind kind;
+  final DomainEntityState state;
+  final String? primary;
+  final List<String> secondary;
+  final Map<String, dynamic> payload;
+  final DateTime createdAt;
+  factory DomainActivity.fromJson(Map<String, dynamic> json) => DomainActivity(
+        id: json['id'] as String,
+        segmentId: json['segment_id'] as String,
+        revision: (json['revision'] as num?)?.toInt() ?? 0,
+        kind: parseDomainActivityKind(json['kind'] as String? ?? 'progress'),
+        state: parseDomainEntityState(json['state'] as String? ?? 'pending'),
+        title: json['title'] as String? ?? '',
+        primary: json['primary'] as String?,
+        secondary: (json['secondary'] as List<dynamic>? ?? const [])
+            .whereType<String>()
+            .toList(growable: false),
+        payload: json['payload'] as Map<String, dynamic>? ?? const {},
+        createdAt: DateTime.parse(json['created_at'] as String),
+      );
+}
+
+class DomainSegment {
+  const DomainSegment(
+      {required this.id,
+      required this.sequence,
+      required this.revision,
+      required this.kind,
+      required this.state,
+      this.message,
+      required this.activities,
+      this.latestActivityId});
+  final String id;
+  final int sequence, revision;
+  final DomainSegmentKind kind;
+  final DomainEntityState state;
+  final DomainMessage? message;
+  final List<DomainActivity> activities;
+  final String? latestActivityId;
+  factory DomainSegment.fromJson(Map<String, dynamic> json) => DomainSegment(
+        id: json['id'] as String,
+        sequence: (json['sequence'] as num?)?.toInt() ?? 0,
+        revision: (json['revision'] as num?)?.toInt() ?? 0,
+        kind: parseDomainSegmentKind(json['kind'] as String? ?? 'execution'),
+        state: parseDomainEntityState(json['state'] as String? ?? 'pending'),
+        message: json['message'] == null
+            ? null
+            : DomainMessage.fromJson(json['message'] as Map<String, dynamic>),
+        activities: (json['activities'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(DomainActivity.fromJson)
+            .toList(growable: false),
+        latestActivityId: json['latest_activity_id'] as String?,
+      );
+}
+
+class DomainArtifact {
+  const DomainArtifact(
+      {required this.id,
+      required this.revision,
+      required this.kind,
+      required this.state,
+      required this.payload});
+  final String id;
+  final int revision;
+  final DomainArtifactKind kind;
+  final DomainEntityState state;
+  final Map<String, dynamic> payload;
+  factory DomainArtifact.fromJson(Map<String, dynamic> json) => DomainArtifact(
+        id: json['id'] as String,
+        revision: (json['revision'] as num?)?.toInt() ?? 0,
+        kind:
+            parseDomainArtifactKind(json['kind'] as String? ?? 'other_result'),
+        state: parseDomainEntityState(json['state'] as String? ?? 'pending'),
+        payload: json['payload'] as Map<String, dynamic>? ?? const {},
+      );
+}
+
+class DomainTurn {
+  const DomainTurn(
+      {required this.id,
+      required this.sequence,
+      required this.version,
+      required this.status,
+      required this.inputMode,
+      required this.userMessage,
+      required this.segments,
+      required this.artifacts,
+      this.finalAssistantMessageId});
+  final String id;
+  final int sequence, version;
+  final DomainTurnStatus status;
+  final String inputMode;
+  final DomainMessage userMessage;
+  final List<DomainSegment> segments;
+  final List<DomainArtifact> artifacts;
+  final String? finalAssistantMessageId;
+  factory DomainTurn.fromJson(Map<String, dynamic> json) => DomainTurn(
+        id: json['id'] as String,
+        sequence: (json['sequence'] as num?)?.toInt() ?? 0,
+        version: (json['version'] as num?)?.toInt() ?? 0,
+        status: parseDomainTurnStatus(json['status'] as String? ?? 'accepted'),
+        inputMode: json['input_mode'] as String? ?? 'text',
+        userMessage: DomainMessage.fromJson(
+            json['user_message'] as Map<String, dynamic>),
+        segments: (json['segments'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(DomainSegment.fromJson)
+            .toList(growable: false),
+        artifacts: (json['artifacts'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(DomainArtifact.fromJson)
+            .toList(growable: false),
+        finalAssistantMessageId: json['final_assistant_message_id'] as String?,
+      );
+}
+
+class DomainSession {
+  const DomainSession(
+      {required this.id,
+      required this.projectId,
+      required this.title,
+      required this.agentId,
+      required this.status,
+      required this.version,
+      this.activeTurnId,
+      this.pendingApprovalId,
+      required this.unreadCount,
+      this.lastMessagePreview,
+      required this.createdAt,
+      required this.updatedAt});
+  final String id, projectId, title, agentId;
+  final DomainSessionStatus status;
+  final int version, unreadCount;
+  final String? activeTurnId, pendingApprovalId, lastMessagePreview;
+  final DateTime createdAt, updatedAt;
+  factory DomainSession.fromJson(Map<String, dynamic> json) => DomainSession(
+        id: json['id'] as String,
+        projectId: json['project_id'] as String,
+        title: json['title'] as String,
+        agentId: json['agent'] as String,
+        status: parseDomainSessionStatus(json['status'] as String? ?? 'idle'),
+        version: (json['version'] as num?)?.toInt() ?? 0,
+        activeTurnId: json['active_turn_id'] as String?,
+        pendingApprovalId: json['pending_approval_id'] as String?,
+        unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
+        lastMessagePreview: json['last_message_preview'] as String?,
+        createdAt: DateTime.parse(json['created_at'] as String),
+        updatedAt: DateTime.parse(json['updated_at'] as String),
+      );
+}
+
+class DomainSessionState {
+  const DomainSessionState(
+      {required this.session, required this.turns, required this.cursor});
+  final DomainSession session;
+  final List<DomainTurn> turns;
+  final int cursor;
+  factory DomainSessionState.fromJson(Map<String, dynamic> json) =>
+      DomainSessionState(
+        session:
+            DomainSession.fromJson(json['session'] as Map<String, dynamic>),
+        turns: (json['turns'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(DomainTurn.fromJson)
+            .toList(growable: false),
+        cursor: (json['cursor'] as num?)?.toInt() ?? 0,
+      );
+}
+
 enum ReasoningEffort {
   low('low'),
   medium('medium'),

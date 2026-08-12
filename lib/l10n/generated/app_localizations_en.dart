@@ -1503,6 +1503,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get copyResumeCommand => 'Copy resume command';
+
+  @override
   String get desktopSessionOverview => 'Session overview';
 
   @override

@@ -715,6 +715,7 @@
       "agent": {}
     }
   },
+  "copyResumeCommand": "Copy resume command",
   "desktopSessionOverview": "Session overview",
   "desktopSessionOverviewSubtitle": "Keep status, context, and actions visible without leaving the conversation.",
   "desktopSessionUpdated": "Updated",

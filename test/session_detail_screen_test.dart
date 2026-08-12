@@ -118,6 +118,284 @@ void main() {
     expect(find.text('Test Session'), findsOneWidget);
   });
 
+  testWidgets('shows diff counts on the owning domain turn', (tester) async {
+    final state = _domainStateJson([
+      _messageJson(
+        id: 'local-user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'Change the file',
+        createdAt: '2026-05-09T10:00:00.000Z',
+      ),
+    ]);
+    final turn = (state['turns'] as List<Map<String, dynamic>>).single;
+    (turn['artifacts'] as List<Map<String, dynamic>>).addAll([
+      {
+        'id': 'diff-1',
+        'turn_id': turn['id'],
+        'kind': 'turn_cumulative_diff',
+        'revision': 1,
+        'payload': {
+          'conversation_turn_id': 'provider-user-xyz',
+          'files': [
+            'lib/example.dart',
+            'lib/second.dart',
+            'test/example_test.dart'
+          ],
+          'added': 4,
+          'removed': 1,
+          'patch': '@@ -1 +1 @@\n-old\n+new',
+        },
+        'created_at': '2026-05-09T10:00:01.000Z',
+        'updated_at': '2026-05-09T10:00:01.000Z',
+      },
+      {
+        'id': 'diff-2',
+        'turn_id': turn['id'],
+        'kind': 'turn_cumulative_diff',
+        'revision': 1,
+        'payload': {
+          'conversation_turn_id': 'provider-user-abc',
+          'files': [
+            'lib/example.dart',
+            'lib/second.dart',
+            'test/example_test.dart'
+          ],
+          'added': 10,
+          'removed': 3,
+          'patch': 'diff --git a/lib/example.dart b/lib/example.dart\n'
+              '--- a/lib/example.dart\n+++ b/lib/example.dart\n'
+              '@@ -1 +1 @@\n-old\n+new\n'
+              'diff --git a/lib/second.dart b/lib/second.dart\n'
+              '--- a/lib/second.dart\n+++ b/lib/second.dart\n'
+              '@@ -0,0 +1,2 @@\n+first\n+second\n'
+              'diff --git a/test/example_test.dart b/test/example_test.dart\n'
+              '--- a/test/example_test.dart\n+++ b/test/example_test.dart\n'
+              '@@ -1 +0,0 @@\n-old test',
+        },
+        'created_at': '2026-05-09T10:00:02.000Z',
+        'updated_at': '2026-05-09T10:00:02.000Z',
+      }
+    ]);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForDomainState(state),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('lib/example.dart'), findsOneWidget);
+    expect(find.text('+1'), findsOneWidget);
+    expect(find.text('-1'), findsOneWidget);
+    expect(find.text('lib/second.dart'), findsNothing);
+    expect(find.text('test/example_test.dart'), findsNothing);
+    expect(find.text('+4'), findsNothing);
+
+    final toggle = find.byKey(const ValueKey('turn-diffs-toggle-local-user-1'));
+    expect(toggle, findsOneWidget);
+    await tester.tap(toggle);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 220));
+
+    expect(find.text('lib/second.dart'), findsOneWidget);
+    expect(find.text('test/example_test.dart'), findsOneWidget);
+    expect(find.text('-1'), findsNWidgets(2));
+    expect(find.text('+2'), findsOneWidget);
+    expect(find.text('+0'), findsOneWidget);
+
+    await tester.tap(find.text('lib/example.dart'));
+    await tester.pumpAndSettle();
+    expect(find.text('lib/example.dart'), findsNWidgets(2));
+    expect(
+        find.textContaining('diff --git a/lib/example.dart'), findsOneWidget);
+    expect(find.textContaining('diff --git a/lib/second.dart'), findsNothing);
+    await tester.tap(find.byIcon(Icons.close_rounded));
+    await tester.pump();
+
+    await tester.tap(toggle);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 220));
+    expect(find.text('lib/second.dart'), findsNothing);
+    expect(find.text('test/example_test.dart'), findsNothing);
+  });
+
+  testWidgets('marks a visible v2 assistant reply as read', (tester) async {
+    final state = _domainStateJson([
+      _messageJson(
+        id: 'user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'Question',
+        createdAt: '2026-05-09T10:00:00.000Z',
+      ),
+      _messageJson(
+        id: 'assistant-1',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'Answer',
+        createdAt: '2026-05-09T10:00:01.000Z',
+      ),
+    ]);
+    (state['session'] as Map<String, dynamic>)['unread_count'] = 1;
+    var readRequests = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/v2/sessions/session-1/state') {
+          return http.Response(
+            jsonEncode({'data': state}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/v2/sessions/session-1/events') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }
+        if (request.method == 'PUT' &&
+            request.url.path == '/v2/sessions/session-1/read-state') {
+          readRequests += 1;
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(unreadCount: 1),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(readRequests, 1);
+  });
+
+  testWidgets('v2 tools stay between the assistant segments that surround them',
+      (tester) async {
+    final state = _domainStateJson([
+      _messageJson(
+        id: 'user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'Inspect it',
+        createdAt: '2026-05-09T10:00:00.000Z',
+      ),
+    ]);
+    final turn = (state['turns'] as List<Map<String, dynamic>>).single;
+    turn['segments'] = [
+      {
+        'id': 'assistant-before-segment',
+        'turn_id': turn['id'],
+        'sequence': 1,
+        'revision': 1,
+        'kind': 'assistant_message',
+        'state': 'completed',
+        'message': {
+          ..._domainMessageJson(
+            _messageJson(
+              id: 'assistant-before',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'I will inspect the file.',
+              createdAt: '2026-05-09T10:00:01.000Z',
+            ),
+            purpose: 'commentary',
+          ),
+        },
+        'activities': <Map<String, dynamic>>[],
+        'created_at': '2026-05-09T10:00:01.000Z',
+        'updated_at': '2026-05-09T10:00:01.000Z',
+      },
+      {
+        'id': 'tool-segment',
+        'turn_id': turn['id'],
+        'sequence': 2,
+        'revision': 1,
+        'kind': 'execution',
+        'state': 'completed',
+        'activities': [
+          {
+            'id': 'tool-1',
+            'turn_id': turn['id'],
+            'segment_id': 'tool-segment',
+            'sequence': 1,
+            'revision': 1,
+            'kind': 'tool_result',
+            'state': 'completed',
+            'title': '[command:completed] rg source (exit 0)',
+            'secondary': <String>[],
+            'payload': <String, dynamic>{},
+            'created_at': '2026-05-09T10:00:02.000Z',
+            'updated_at': '2026-05-09T10:00:02.000Z',
+          }
+        ],
+        'latest_activity_id': 'tool-1',
+        'created_at': '2026-05-09T10:00:02.000Z',
+        'updated_at': '2026-05-09T10:00:02.000Z',
+      },
+      {
+        'id': 'assistant-after-segment',
+        'turn_id': turn['id'],
+        'sequence': 3,
+        'revision': 1,
+        'kind': 'assistant_message',
+        'state': 'completed',
+        'message': {
+          ..._domainMessageJson(
+            _messageJson(
+              id: 'assistant-after',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'Inspection is complete.',
+              createdAt: '2026-05-09T10:00:03.000Z',
+            ),
+            purpose: 'final',
+          ),
+        },
+        'activities': <Map<String, dynamic>>[],
+        'created_at': '2026-05-09T10:00:03.000Z',
+        'updated_at': '2026-05-09T10:00:03.000Z',
+      },
+    ];
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(),
+          client: _clientForDomainState(state),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final before = find.text('I will inspect the file.');
+    final tool = find.textContaining('rg source');
+    final after = find.text('Inspection is complete.');
+    expect(before, findsOneWidget);
+    expect(tool, findsOneWidget);
+    expect(after, findsOneWidget);
+    expect(tester.getTopLeft(tool).dy,
+        greaterThan(tester.getBottomLeft(before).dy));
+    expect(tester.getTopLeft(after).dy,
+        greaterThan(tester.getBottomLeft(tool).dy));
+  });
+
   testWidgets('session header title pops to previous route', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -682,6 +960,65 @@ void main() {
     );
   });
 
+  testWidgets('shows copy agent id when runtime session ref arrives later',
+      (tester) async {
+    final session = ValueNotifier<SessionSummary>(_session());
+    addTearDown(session.dispose);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: ValueListenableBuilder<SessionSummary>(
+          valueListenable: session,
+          builder: (context, value, child) => SessionDetailScreen(
+            session: value,
+            client: _clientForMessages(const []),
+            enableSpeechServices: false,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await _openSessionHeaderMenu(tester);
+    expect(
+      find.byKey(const Key('session-header-copy-id-button')),
+      findsNothing,
+    );
+    await tester.tap(find.byKey(const Key('session-header-more-button')));
+    await tester.pump();
+
+    session.value = _session(runtimeSessionRef: 'agent-thread-1');
+    await tester.pump();
+    await _openSessionHeaderMenu(tester);
+
+    expect(
+      find.byKey(const Key('session-header-copy-id-button')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('shows copy resume command for a Codex runtime session',
+      (tester) async {
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(
+            runtimeSessionRef: 'thread-123',
+            model: 'gpt-5.6-sol',
+          ),
+          client: _clientForMessages(const []),
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await _openSessionHeaderMenu(tester);
+
+    expect(
+      find.byKey(const Key('session-header-copy-resume-command-button')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('navigation new session asks for project on session page',
       (tester) async {
     tester.view.physicalSize = const Size(1600, 1200);
@@ -996,7 +1333,7 @@ void main() {
     expect(find.text('Same text'), findsNWidgets(2));
 
     await events.close();
-  });
+  }, skip: true); // Replaced by stable v2 turn and user-message IDs.
 
   testWidgets('image picker sends image markdown without text', (tester) async {
     final photo = await tester.runAsync(() async {
@@ -2460,7 +2797,7 @@ void main() {
     );
 
     await events.close();
-  });
+  }, skip: true); // Legacy message_snapshot fixture; v2 applies atomic turns.
 
   testWidgets(
       'session_status without assistant messages does not break later updates',
@@ -12734,7 +13071,9 @@ SessionSummary _session({
   bool briefReplyMode = false,
   String title = 'Test Session',
   ReasoningEffort? reasoningEffort,
+  String? model,
   String? runtimeSessionRef,
+  int unreadCount = 0,
 }) {
   return SessionSummary(
     id: id,
@@ -12744,10 +13083,11 @@ SessionSummary _session({
     briefReplyMode: briefReplyMode,
     status: status,
     updatedAt: DateTime(2026, 5, 9, 10),
-    unreadCount: 0,
+    unreadCount: unreadCount,
     lastMessagePreview: null,
     pendingApproval: null,
     reasoningEffort: reasoningEffort,
+    model: model,
     runtimeSessionRef: runtimeSessionRef,
   );
 }
@@ -12780,21 +13120,15 @@ BridgeClient _clientForMessages(List<Map<String, dynamic>> messages) {
   return BridgeClient(
     httpClient: _FakeHttpClient((request) async {
       if (request.method == 'GET' &&
-          request.url.path == '/sessions/session-1/messages') {
+          request.url.path == '/v2/sessions/session-1/state') {
         return http.Response(
-          jsonEncode({
-            'data': {
-              'messages': messages,
-              'has_more': false,
-              'next_cursor': null,
-            },
-          }),
+          jsonEncode({'data': _domainStateJson(messages)}),
           200,
           headers: {'content-type': 'application/json'},
         );
       }
       if (request.method == 'GET' &&
-          request.url.path == '/sessions/session-1/events') {
+          request.url.path == '/v2/sessions/session-1/events') {
         return http.Response(
           '',
           200,
@@ -12805,6 +13139,146 @@ BridgeClient _clientForMessages(List<Map<String, dynamic>> messages) {
     }),
   );
 }
+
+BridgeClient _clientForDomainState(Map<String, dynamic> state) {
+  return BridgeClient(
+    httpClient: _FakeHttpClient((request) async {
+      if (request.method == 'GET' &&
+          request.url.path == '/v2/sessions/session-1/state') {
+        return http.Response(
+          jsonEncode({'data': state}),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/v2/sessions/session-1/events') {
+        return http.Response(
+          '',
+          200,
+          headers: {'content-type': 'text/event-stream'},
+        );
+      }
+      return http.Response('not found', 404);
+    }),
+  );
+}
+
+Map<String, dynamic> _domainStateJson(
+  List<Map<String, dynamic>> messages, {
+  int cursor = 0,
+  String status = 'idle',
+  String sessionId = 'session-1',
+}) {
+  final turns = <Map<String, dynamic>>[];
+  Map<String, dynamic>? currentTurn;
+  var turnSequence = 0;
+  for (final message in messages) {
+    final role = message['role'] as String? ?? 'system';
+    if (role == 'user' || currentTurn == null) {
+      turnSequence += 1;
+      final user = role == 'user'
+          ? message
+          : _messageJson(
+              id: 'synthetic-user-$turnSequence',
+              sessionId: sessionId,
+              role: 'user',
+              content: '',
+              createdAt: message['created_at'] as String,
+            );
+      currentTurn = {
+        'id': 'turn-$turnSequence',
+        'session_id': sessionId,
+        'sequence': turnSequence,
+        'version': 1,
+        'status': status == 'running' ? 'running' : 'completed',
+        'input_mode': 'text',
+        'user_message': _domainMessageJson(user, purpose: 'user'),
+        'segments': <Map<String, dynamic>>[],
+        'artifacts': <Map<String, dynamic>>[],
+        'created_at': user['created_at'],
+      };
+      turns.add(currentTurn);
+      if (role == 'user') continue;
+    }
+    final segments = currentTurn['segments'] as List<Map<String, dynamic>>;
+    if (role == 'assistant') {
+      segments.add({
+        'id': 'segment-${message['id']}',
+        'turn_id': currentTurn['id'],
+        'sequence': segments.length + 1,
+        'revision': 1,
+        'kind': 'assistant_message',
+        'state': 'completed',
+        'message': _domainMessageJson(message, purpose: 'final'),
+        'activities': <Map<String, dynamic>>[],
+        'created_at': message['created_at'],
+        'updated_at': message['created_at'],
+      });
+    } else {
+      final last = segments.lastOrNull;
+      final segment = last != null && last['kind'] == 'execution'
+          ? last
+          : <String, dynamic>{
+              'id': 'segment-execution-${message['id']}',
+              'turn_id': currentTurn['id'],
+              'sequence': segments.length + 1,
+              'revision': 1,
+              'kind': 'execution',
+              'state': 'completed',
+              'activities': <Map<String, dynamic>>[],
+              'created_at': message['created_at'],
+              'updated_at': message['created_at'],
+            };
+      if (!identical(segment, last)) segments.add(segment);
+      final activities = segment['activities'] as List<Map<String, dynamic>>;
+      activities.add({
+        'id': message['id'],
+        'turn_id': currentTurn['id'],
+        'segment_id': segment['id'],
+        'sequence': activities.length + 1,
+        'revision': 1,
+        'kind': 'progress',
+        'state': 'completed',
+        'title': message['content'],
+        'secondary': <String>[],
+        'payload': <String, dynamic>{},
+        'created_at': message['created_at'],
+        'updated_at': message['created_at'],
+      });
+      segment['latest_activity_id'] = message['id'];
+    }
+  }
+  return {
+    'session': {
+      ..._sessionJson(id: sessionId, status: status),
+      'version': 1,
+      'active_turn_id':
+          status == 'running' && turns.isNotEmpty ? turns.last['id'] : null,
+      'pending_approval_id': null,
+      'created_at': '2026-05-09T10:00:00.000Z',
+    },
+    'turns': turns,
+    'cursor': cursor,
+  };
+}
+
+Map<String, dynamic> _domainMessageJson(
+  Map<String, dynamic> message, {
+  required String purpose,
+}) =>
+    {
+      'id': message['id'],
+      'turn_id': 'turn-${message['id']}',
+      'sequence': 1,
+      'revision': 1,
+      'purpose': purpose,
+      'state': 'completed',
+      'content': message['content'],
+      'attachments': <Map<String, dynamic>>[],
+      'created_at': message['created_at'],
+      'updated_at': message['created_at'],
+    };
 
 BridgeClient _clientForPaginatedMessages(
   List<Map<String, dynamic>> messages, {
@@ -12958,7 +13432,11 @@ class _FakeHttpClient extends http.BaseClient {
       nextRequest.body = request.body;
       nextRequest.encoding = request.encoding;
     }
-    final response = await _handler(nextRequest);
+    var response = await _handler(nextRequest);
+    if (response.statusCode == 404 &&
+        request.url.path.startsWith('/v2/sessions/')) {
+      response = await _bridgeLegacyFixture(nextRequest);
+    }
     return http.StreamedResponse(
       Stream.value(response.bodyBytes),
       response.statusCode,
@@ -12966,6 +13444,104 @@ class _FakeHttpClient extends http.BaseClient {
       reasonPhrase: response.reasonPhrase,
       request: request,
     );
+  }
+
+  Future<http.Response> _bridgeLegacyFixture(http.Request request) async {
+    final segments = request.url.pathSegments;
+    final sessionId = segments[2];
+    if (request.method == 'GET' && segments.last == 'state') {
+      final legacy = http.Request(
+        'GET',
+        request.url.replace(path: '/sessions/$sessionId/messages'),
+      );
+      final response = await _handler(legacy);
+      if (response.statusCode == 404) return response;
+      final payload = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = payload['data'];
+      final messages = data is List
+          ? data.cast<Map<String, dynamic>>()
+          : ((data as Map<String, dynamic>?)?['messages'] as List<dynamic>? ??
+                  const [])
+              .cast<Map<String, dynamic>>();
+      messages.removeWhere((message) => message['session_id'] != sessionId);
+      if (data is Map<String, dynamic> && data['has_more'] == true) {
+        var cursor = data['next_cursor'] as String?;
+        while (cursor != null) {
+          final page = await _handler(http.Request(
+            'GET',
+            request.url.replace(
+              path: '/sessions/$sessionId/messages',
+              queryParameters: {'before_id': cursor},
+            ),
+          ));
+          if (page.statusCode == 404) break;
+          final pageData = (jsonDecode(page.body)
+              as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+          messages.insertAll(
+            0,
+            (pageData['messages'] as List<dynamic>)
+                .cast<Map<String, dynamic>>()
+                .where((message) => message['session_id'] == sessionId),
+          );
+          if (pageData['has_more'] != true) break;
+          cursor = pageData['next_cursor'] as String?;
+        }
+      }
+      return http.Response(
+        jsonEncode({
+          'data': _domainStateJson(messages, sessionId: sessionId),
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    }
+    if (request.method == 'GET' && segments.last == 'events') {
+      return _handler(http.Request(
+        'GET',
+        request.url.replace(path: '/sessions/$sessionId/events'),
+      ));
+    }
+    if (request.method == 'POST' && segments.last == 'turns') {
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      final links = <String>[];
+      for (final item in body['attachments'] as List<dynamic>? ?? const []) {
+        final attachment = item as Map<String, dynamic>;
+        final name = attachment['file_name'] as String;
+        final path = attachment['url'] as String;
+        final mime = attachment['content_type'] as String? ?? '';
+        links.add(
+            mime.startsWith('image/') ? '![$name]($path)' : '[$name]($path)');
+      }
+      final plainContent = body['content'] as String? ?? '';
+      final content = [
+        if (plainContent.isNotEmpty) plainContent,
+        if (links.isNotEmpty) links.join('\n'),
+      ].join('\n\n');
+      final legacy = http.Request(
+        'POST',
+        request.url.replace(path: '/sessions/$sessionId/messages'),
+      )
+        ..headers.addAll(request.headers)
+        ..body = jsonEncode({
+          ...body,
+          'content': content,
+          'client_message_id': body['user_message_id'],
+        });
+      final response = await _handler(legacy);
+      if (response.statusCode == 404) return response;
+      return http.Response(
+        jsonEncode({
+          'data': {
+            'command_id': body['command_id'],
+            'turn_id': body['turn_id'],
+            'accepted': true,
+          },
+        }),
+        202,
+        headers: {'content-type': 'application/json'},
+      );
+    }
+    return http.Response('not found', 404);
   }
 }
 
@@ -12993,7 +13569,8 @@ class _StreamingEventHttpClient extends http.BaseClient {
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     if (request.method == 'GET' &&
-        request.url.path == '/sessions/session-1/events') {
+        (request.url.path == '/sessions/session-1/events' ||
+            request.url.path == '/v2/sessions/session-1/events')) {
       return http.StreamedResponse(
         events,
         200,
@@ -13008,7 +13585,46 @@ class _StreamingEventHttpClient extends http.BaseClient {
       nextRequest.body = request.body;
       nextRequest.encoding = request.encoding;
     }
-    final response = await handler(nextRequest);
+    var response = await handler(nextRequest);
+    if (response.statusCode == 404 &&
+        request.method == 'GET' &&
+        request.url.path == '/v2/sessions/session-1/state') {
+      final legacy = await handler(http.Request(
+          'GET', request.url.replace(path: '/sessions/session-1/messages')));
+      final data = (jsonDecode(legacy.body) as Map<String, dynamic>)['data'];
+      final messages = data is List
+          ? data.cast<Map<String, dynamic>>()
+          : ((data as Map<String, dynamic>)['messages'] as List<dynamic>)
+              .cast<Map<String, dynamic>>();
+      response = http.Response(
+        jsonEncode({'data': _domainStateJson(messages)}),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    } else if (response.statusCode == 404 &&
+        request.method == 'POST' &&
+        request.url.path == '/v2/sessions/session-1/turns') {
+      final body = jsonDecode(nextRequest.body) as Map<String, dynamic>;
+      final legacy = http.Request(
+        'POST',
+        request.url.replace(path: '/sessions/session-1/messages'),
+      )..body = jsonEncode({
+          ...body,
+          'client_message_id': body['user_message_id'],
+        });
+      final legacyResponse = await handler(legacy);
+      response = http.Response(
+        jsonEncode({
+          'data': {
+            'command_id': body['command_id'],
+            'turn_id': body['turn_id'],
+            'accepted': true,
+          }
+        }),
+        legacyResponse.statusCode < 300 ? 202 : legacyResponse.statusCode,
+        headers: {'content-type': 'application/json'},
+      );
+    }
     return http.StreamedResponse(
       Stream.value(response.bodyBytes),
       response.statusCode,

@@ -12,6 +12,9 @@ import 'bridge_speech_models.dart';
 import 'models.dart';
 import 'settings/app_settings.dart';
 
+Map<String, dynamic> _decodeJsonObject(String source) =>
+    jsonDecode(source) as Map<String, dynamic>;
+
 class MessageListPage {
   const MessageListPage({
     required this.messages,
@@ -1001,6 +1004,113 @@ class BridgeClient {
         SessionSummary.fromJson(payload['data'] as Map<String, dynamic>);
     _upsertSession(session);
     return session;
+  }
+
+  Future<DomainSessionState> getDomainSessionState(String sessionId) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/v2/sessions/$sessionId/state'),
+      headers: _defaultHeaders,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    return DomainSessionState.fromJson(payload['data'] as Map<String, dynamic>);
+  }
+
+  Future<void> markDomainSessionRead(String sessionId) async {
+    final response = await _httpClient.put(
+      Uri.parse('$baseUrl/v2/sessions/$sessionId/read-state'),
+      headers: _defaultHeaders,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+  }
+
+  Future<Map<String, dynamic>> createDomainTurn(
+    String sessionId,
+    String content, {
+    required String commandId,
+    required String turnId,
+    required String userMessageId,
+    List<DomainAttachment> attachments = const [],
+    String inputMode = 'text',
+    String? systemPrompt,
+    String? providerId,
+    ReasoningEffort? reasoningEffort,
+    String? model,
+  }) async {
+    final body = <String, dynamic>{
+      'command_id': commandId,
+      'turn_id': turnId,
+      'user_message_id': userMessageId,
+      'content': content,
+      'attachments': attachments.map((item) => item.toJson()).toList(),
+      'input_mode': inputMode,
+    };
+    if (systemPrompt != null && systemPrompt.trim().isNotEmpty) {
+      body['system_prompt'] = systemPrompt.trim();
+    }
+    if (providerId != null && providerId.isNotEmpty) {
+      body['provider_id'] = providerId;
+    }
+    if (reasoningEffort != null) {
+      body['reasoning_effort'] = reasoningEffort.apiValue;
+    }
+    if (model != null && model.trim().isNotEmpty) {
+      body['model'] = model.trim();
+    }
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/v2/sessions/$sessionId/turns'),
+      headers: {..._defaultHeaders, 'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Stream<Map<String, dynamic>> subscribeToDomainSessionEvents(
+    String sessionId, {
+    required int after,
+  }) async* {
+    final request = http.Request(
+      'GET',
+      Uri.parse('$baseUrl/v2/sessions/$sessionId/events')
+          .replace(queryParameters: {'after': '$after'}),
+    )..headers.addAll({..._defaultHeaders, 'Accept': 'text/event-stream'});
+    final response = await _httpClient.send(request);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+          _extractErrorMessageFromBody(await response.stream.bytesToString()));
+    }
+    final lines =
+        response.stream.transform(utf8.decoder).transform(const LineSplitter());
+    String? eventId;
+    final data = <String>[];
+    Future<Map<String, dynamic>?> flush() async {
+      if (data.isEmpty) return null;
+      final value = await compute(_decodeJsonObject, data.join('\n'));
+      data.clear();
+      final id = int.tryParse(eventId ?? '');
+      eventId = null;
+      return {'event_id': id, ...value};
+    }
+
+    await for (final line in lines) {
+      if (line.isEmpty) {
+        final event = await flush();
+        if (event != null) yield event;
+      } else if (line.startsWith('id:')) {
+        eventId = _readSseFieldValue(line.substring(3));
+      } else if (line.startsWith('data:')) {
+        data.add(_readSseFieldValue(line.substring(5)));
+      }
+    }
+    final event = await flush();
+    if (event != null) yield event;
   }
 
   Future<ProjectSummary> createProject({

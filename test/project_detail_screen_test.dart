@@ -861,7 +861,7 @@ void main() {
   });
 
   testWidgets(
-      'create session dialog defaults to auto when project has no saved provider',
+      'create session dialog defaults to default when project has no saved provider',
       (tester) async {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
@@ -960,7 +960,11 @@ void main() {
     await tester.pumpAndSettle();
 
     final l10n = AppLocalizations.of(tester.element(find.byType(AlertDialog)))!;
-    expect(find.text(l10n.providerAuto), findsOneWidget);
+    final providerField = tester.widget<DropdownButtonFormField<String>>(
+      find.byType(DropdownButtonFormField<String>).at(1),
+    );
+    expect(providerField.initialValue, '__default_provider__');
+    expect(find.text(l10n.providerDefault), findsWidgets);
   });
 
   testWidgets('create session dialog uses selectable agents and server default',

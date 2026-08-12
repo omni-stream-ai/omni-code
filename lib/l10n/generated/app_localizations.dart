@@ -2714,6 +2714,12 @@ abstract class AppLocalizations {
   /// **'Copy {agent} ID'**
   String copySessionId(Object agent);
 
+  /// No description provided for @copyResumeCommand.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy resume command'**
+  String get copyResumeCommand;
+
   /// No description provided for @desktopSessionOverview.
   ///
   /// In en, this message translates to:

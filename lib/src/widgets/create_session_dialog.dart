@@ -82,14 +82,11 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
       return;
     }
     if (_providerId == null || _providerId!.isEmpty) {
-      if (_providers.isNotEmpty) {
-        _providerId = autoProviderId;
-      }
       return;
     }
     final stillValid = _providers.any((p) => p.id == _providerId);
     if (!stillValid) {
-      _providerId = _providers.isNotEmpty ? autoProviderId : null;
+      _providerId = null;
     }
   }
 
