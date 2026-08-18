@@ -86,6 +86,97 @@ Future<void> _enterCallModeFromHeader(WidgetTester tester) async {
 }
 
 void main() {
+  test('history refresh resolves only SSE messages present on the server', () {
+    final createdAt = DateTime.parse('2026-05-09T10:00:00.000Z');
+    final resolved = resolveTransientLiveMessageIdsForServerRefresh(
+      isSessionRunning: false,
+      transientMessageTurnUserIds: const {
+        'live-progress-1': 'user-1',
+        'live-progress-2': 'user-1',
+        'live-final': 'user-1',
+      },
+      liveMessages: [
+        ChatMessage(
+          id: 'live-progress-1',
+          sessionId: 'session-1',
+          role: MessageRole.assistant,
+          content: 'Progress one',
+          createdAt: createdAt,
+        ),
+        ChatMessage(
+          id: 'live-progress-2',
+          sessionId: 'session-1',
+          role: MessageRole.assistant,
+          content: 'Progress two',
+          createdAt: createdAt,
+        ),
+        ChatMessage(
+          id: 'live-final',
+          sessionId: 'session-1',
+          role: MessageRole.assistant,
+          content: 'Final result',
+          createdAt: createdAt,
+        ),
+      ],
+      serverMessages: [
+        ChatMessage(
+          id: 'user-1',
+          sessionId: 'session-1',
+          role: MessageRole.user,
+          content: 'Inspect it',
+          createdAt: createdAt,
+        ),
+        ChatMessage(
+          id: 'server-final',
+          sessionId: 'session-1',
+          role: MessageRole.assistant,
+          content: 'Final result',
+          createdAt: createdAt,
+        ),
+      ],
+      contentsAreEquivalent: (existing, incoming) => existing == incoming,
+    );
+
+    expect(resolved, {'live-final'});
+  });
+
+  test('history refresh does not resolve a prefix-only SSE message', () {
+    final createdAt = DateTime.parse('2026-05-09T10:00:00.000Z');
+    final resolved = resolveTransientLiveMessageIdsForServerRefresh(
+      isSessionRunning: false,
+      transientMessageTurnUserIds: const {'live-commentary': 'user-1'},
+      liveMessages: [
+        ChatMessage(
+          id: 'live-commentary',
+          sessionId: 'session-1',
+          role: MessageRole.assistant,
+          content: 'I will inspect the workspace.',
+          createdAt: createdAt,
+        ),
+      ],
+      serverMessages: [
+        ChatMessage(
+          id: 'user-1',
+          sessionId: 'session-1',
+          role: MessageRole.user,
+          content: 'Inspect it',
+          createdAt: createdAt,
+        ),
+        ChatMessage(
+          id: 'server-final',
+          sessionId: 'session-1',
+          role: MessageRole.assistant,
+          content: 'I will inspect the workspace. Inspection complete.',
+          createdAt: createdAt,
+        ),
+      ],
+      contentsAreEquivalent: (existing, incoming) =>
+          existing.trim() == incoming.trim() && existing.trim().isNotEmpty,
+    );
+
+    expect(resolved, isEmpty);
+  });
+
   setUp(() {
     appSettingsController.debugReplaceStore(_MemoryAppSettingsStore());
     appSettingsController.debugReplaceSettings(AppSettings.defaults());
@@ -394,6 +485,50 @@ void main() {
         greaterThan(tester.getBottomLeft(before).dy));
     expect(tester.getTopLeft(after).dy,
         greaterThan(tester.getBottomLeft(tool).dy));
+  });
+
+  testWidgets('shorter v2 snapshot preserves cached streamed assistant reply',
+      (tester) async {
+    final state = _domainStateJson([
+      _messageJson(
+        id: 'user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'Inspect it',
+        createdAt: '2026-05-09T10:00:00.000Z',
+      ),
+      _messageJson(
+        id: 'assistant-1',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'Complete reply',
+        createdAt: '2026-05-09T10:00:01.000Z',
+      ),
+    ]);
+    final client = _clientForDomainState(state);
+    client.cacheSessionMessages('session-1', [
+      ChatMessage(
+        id: 'assistant-1',
+        sessionId: 'session-1',
+        role: MessageRole.assistant,
+        content: 'Complete reply with the final tail',
+        createdAt: DateTime.parse('2026-05-09T10:00:01.000Z'),
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: SessionDetailScreen(
+          session: _session(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Complete reply with the final tail'), findsOneWidget);
+    expect(find.text('Complete reply'), findsNothing);
   });
 
   testWidgets('session header title pops to previous route', (tester) async {

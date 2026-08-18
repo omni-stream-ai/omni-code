@@ -23,11 +23,6 @@ set(ENV{NO_XIPH_LIBS} "1")
 
 # flutter_soloud uses find_library() for system audio libs (ALSA), which does
 # not search Nix profile paths on its own. Point CMake at the profile lib dir.
-if(NOT DEFINED CMAKE_LIBRARY_PATH AND DEFINED ENV{HOME})
-  list(APPEND CMAKE_LIBRARY_PATH
-    "$ENV{HOME}/.local/state/nix/profiles/profile/lib")
-endif()
-
 # Root filesystem for cross-building.
 if(FLUTTER_TARGET_PLATFORM_SYSROOT)
   set(CMAKE_SYSROOT ${FLUTTER_TARGET_PLATFORM_SYSROOT})

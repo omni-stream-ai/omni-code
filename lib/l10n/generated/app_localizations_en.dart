@@ -2153,6 +2153,95 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get notificationSound => 'Notification sound';
+
+  @override
+  String get notificationSoundAll => 'All notifications';
+
+  @override
+  String get notificationSoundImportantOnly => 'Important only';
+
+  @override
+  String get notificationSoundMuted => 'Muted';
+
+  @override
+  String get piPluginsTitle => 'Pi plugins';
+
+  @override
+  String get piPluginsSubtitle =>
+      'Install and control extensions loaded by Pi sessions';
+
+  @override
+  String get piPluginEmpty => 'No Pi plugins installed';
+
+  @override
+  String get piPluginAdd => 'Install plugin';
+
+  @override
+  String get piPluginSource => 'Source';
+
+  @override
+  String get piPluginSourceNpm => 'npm package';
+
+  @override
+  String get piPluginSourceUrl => 'Direct URL';
+
+  @override
+  String get piPluginSourceGit => 'Git repository';
+
+  @override
+  String get piPluginSourceUpload => 'Upload file';
+
+  @override
+  String get piPluginSourceLocal => 'Bridge local path';
+
+  @override
+  String get piPluginId => 'Plugin ID (optional)';
+
+  @override
+  String get piPluginChecksum => 'SHA-256 (recommended)';
+
+  @override
+  String get piPluginScope => 'Scope';
+
+  @override
+  String get piPluginGlobal => 'All projects';
+
+  @override
+  String get piPluginSelectedProjects => 'Selected projects';
+
+  @override
+  String get piPluginConfig => 'Configuration (JSON)';
+
+  @override
+  String get piPluginValidate => 'Validate';
+
+  @override
+  String get piPluginValidationFailed => 'Validation failed';
+
+  @override
+  String piPluginLoadFailed(Object error) {
+    return 'Could not load Pi plugins: $error';
+  }
+
+  @override
+  String piPluginOperationFailed(Object error) {
+    return 'Plugin operation failed: $error';
+  }
+
+  @override
+  String get piPluginPermissionWarning =>
+      'Extensions run on the Bridge host with Pi\'s permissions. Only install code you trust.';
+
+  @override
+  String piPluginRemoveConfirm(Object name) {
+    return 'Uninstall $name?';
+  }
+
+  @override
+  String get piPluginNextTurnHint => 'Changes apply to the next Pi turn.';
+
+  @override
   String gitUntrackedCount(int count) {
     return '$count untracked';
   }

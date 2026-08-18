@@ -39,6 +39,26 @@ void main() {
     },
   );
 
+  testWidgets('saves notification sound preference', (tester) async {
+    await tester.pumpWidget(const _TestApp(home: SettingsScreen()));
+    await tester.pump();
+
+    final dropdown = find.byKey(const Key('notification-sound-mode'));
+    await tester.ensureVisible(dropdown);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Muted').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Save'));
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(
+      appSettingsController.settings.notificationSoundMode,
+      NotificationSoundMode.muted,
+    );
+  });
+
   testWidgets('does not restore target update version from saved settings',
       (tester) async {
     appSettingsController.debugReplaceSettings(

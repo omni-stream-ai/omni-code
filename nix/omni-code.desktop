@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Omni Code
+Comment=Client for managing coding agent sessions
+Exec=omni-code
+Icon=com.omnistreamai.code
+Terminal=false
+Type=Application
+Categories=Development;Utility;
+StartupNotify=true
+StartupWMClass=omni_code

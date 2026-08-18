@@ -56,6 +56,18 @@ brew install --cask omni-code
 yay -S omni-code-bin
 ```
 
+**Nix / NixOS（x86_64 Linux）：**
+
+```bash
+nix run github:omni-stream-ai/omni-code
+```
+
+也可以安装到当前用户的 profile：
+
+```bash
+nix profile install github:omni-stream-ai/omni-code
+```
+
 ## 开发
 
 ```bash

@@ -3,7 +3,6 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
@@ -64,12 +63,12 @@ class BridgeClient {
   }) : _httpClient = httpClient ?? http.Client();
 
   final http.Client _httpClient;
+  final ValueNotifier<int> sessionCacheRevision = ValueNotifier<int>(0);
   _CacheEntry<List<ProjectSummary>>? _projectsCache;
   _CacheEntry<List<SessionSummary>>? _sessionsCache;
   _CacheEntry<List<AgentSummary>>? _agentsCache;
   final Map<String, _CacheEntry<List<SessionSummary>>> _projectSessionsCache =
       {};
-  final Map<String, String> _lastSessionEventIds = {};
   final LinkedHashMap<String, List<ChatMessage>> _sessionMessagesCache =
       LinkedHashMap<String, List<ChatMessage>>();
   Map<String, AgentDescriptor> _agentDescriptors = {};
@@ -141,11 +140,96 @@ class BridgeClient {
     final settings = appSettingsController.settings;
     final headers = <String, String>{
       'X-Omni-Code-Client-Id': settings.clientId,
+      'Accept-Language': _preferredLanguage(settings.appLanguage),
     };
     if (settings.bridgeToken.trim().isNotEmpty) {
       headers['Authorization'] = 'Bearer ${settings.bridgeToken.trim()}';
     }
     return headers;
+  }
+
+  Future<List<PiPlugin>> getPiPlugins({String? projectId}) async {
+    final uri = Uri.parse('$baseUrl/v2/pi/plugins').replace(queryParameters: {
+      if (projectId?.isNotEmpty == true) 'project_id': projectId,
+    });
+    final response = await _httpClient.get(uri, headers: _defaultHeaders);
+    _assertJsonResponse(response);
+    return _decodeApiListData(response.body)
+        .whereType<Map<String, dynamic>>()
+        .map(PiPlugin.fromJson)
+        .toList();
+  }
+
+  Future<PiPlugin> installPiPlugin(
+      {required PiPluginSource source,
+      String? id,
+      String? sha256,
+      String? contentBase64,
+      String? fileName,
+      bool enabled = true,
+      List<String> projectIds = const [],
+      Map<String, dynamic> config = const {}}) async {
+    final response = await _httpClient.post(Uri.parse('$baseUrl/v2/pi/plugins'),
+        headers: {..._defaultHeaders, 'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'source': source.toJson(),
+          if (id?.trim().isNotEmpty == true) 'id': id!.trim(),
+          if (sha256?.trim().isNotEmpty == true) 'sha256': sha256!.trim(),
+          if (contentBase64 != null) 'content_base64': contentBase64,
+          if (fileName != null) 'file_name': fileName,
+          'enabled': enabled,
+          'project_ids': projectIds,
+          'config': config,
+        }));
+    _assertJsonResponse(response);
+    return PiPlugin.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<PiPlugin> updatePiPlugin(String id,
+      {bool? enabled,
+      List<String>? projectIds,
+      Map<String, dynamic>? config}) async {
+    final response = await _httpClient.patch(
+        Uri.parse('$baseUrl/v2/pi/plugins/${Uri.encodeComponent(id)}'),
+        headers: {..._defaultHeaders, 'Content-Type': 'application/json'},
+        body: jsonEncode({
+          if (enabled != null) 'enabled': enabled,
+          if (projectIds != null) 'project_ids': projectIds,
+          if (config != null) 'config': config,
+        }));
+    _assertJsonResponse(response);
+    return PiPlugin.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<PiPlugin> validatePiPlugin(String id) async {
+    final response = await _httpClient.post(
+        Uri.parse('$baseUrl/v2/pi/plugins/${Uri.encodeComponent(id)}/validate'),
+        headers: _defaultHeaders);
+    _assertJsonResponse(response);
+    return PiPlugin.fromJson(_decodeApiData(response.body));
+  }
+
+  Future<void> removePiPlugin(String id) async {
+    final response = await _httpClient.delete(
+        Uri.parse('$baseUrl/v2/pi/plugins/${Uri.encodeComponent(id)}'),
+        headers: _defaultHeaders);
+    if (response.statusCode != 204) {
+      throw Exception(_extractErrorMessage(response));
+    }
+  }
+
+  String _preferredLanguage(String configured) {
+    switch (configured) {
+      case 'zh':
+        return 'zh-CN';
+      case 'en':
+        return 'en';
+      default:
+        final locale = PlatformDispatcher.instance.locale;
+        return locale.countryCode?.isNotEmpty == true
+            ? '${locale.languageCode}-${locale.countryCode}'
+            : locale.languageCode;
+    }
   }
 
   bool _isUnauthorized(http.Response response) {
@@ -239,7 +323,7 @@ class BridgeClient {
       }
     }
     final response = await _httpClient.get(
-      Uri.parse('$baseUrl/sessions'),
+      Uri.parse('$baseUrl/v2/sessions'),
       headers: _defaultHeaders,
     );
     if (_isUnauthorized(response)) {
@@ -253,6 +337,51 @@ class BridgeClient {
           .map((item) => SessionSummary.fromJson(item as Map<String, dynamic>)),
     );
     _sessionsCache = _CacheEntry(sessions);
+    sessionCacheRevision.value++;
+    for (final session in sessions) {
+      _upsertProjectSessionCache(session);
+    }
+    return sessions;
+  }
+
+  Future<List<SessionSummary>> listDomainSessions({
+    String? projectId,
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh) {
+      final cache =
+          projectId == null ? _sessionsCache : _projectSessionsCache[projectId];
+      if (cache != null && cache.isFresh) {
+        return cache.value;
+      }
+    }
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/v2/sessions').replace(
+        queryParameters: projectId == null ? null : {'project_id': projectId},
+      ),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final sessions = sortSessionsForDisplay(
+      (payload['data'] as List<dynamic>)
+          .map((item) => SessionSummary.fromJson(item as Map<String, dynamic>)),
+    );
+    if (projectId == null) {
+      _sessionsCache = _CacheEntry(sessions);
+    } else {
+      _projectSessionsCache[projectId] = _CacheEntry(sessions);
+      _sessionsCache = _CacheEntry(
+        _mergeSessions(
+          cached: _sessionsCache?.value ?? const <SessionSummary>[],
+          incoming: sessions,
+        ),
+      );
+    }
+    sessionCacheRevision.value++;
     for (final session in sessions) {
       _upsertProjectSessionCache(session);
     }
@@ -367,10 +496,10 @@ class BridgeClient {
   }
 
   /// Fetches the full session detail (including optional git_status)
-  /// from `GET /sessions/{id}`.
+  /// from `GET /v2/sessions/{id}`.
   Future<SessionDetail> getSession(String sessionId) async {
     final response = await _httpClient.get(
-      Uri.parse('$baseUrl/sessions/$sessionId'),
+      Uri.parse('$baseUrl/v2/sessions/$sessionId'),
       headers: _defaultHeaders,
     );
     if (_isUnauthorized(response)) {
@@ -378,10 +507,7 @@ class BridgeClient {
     }
     _assertJsonResponse(response);
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    final detail = SessionDetail.fromJson(payload);
-    // Keep the session summary cache in sync.
-    _upsertSession(detail.session);
-    return detail;
+    return SessionDetail.fromJson(payload);
   }
 
   Future<ProjectSummary> getProject(
@@ -419,7 +545,7 @@ class BridgeClient {
       if (afterId != null) 'after_id': afterId,
     };
     final response = await _httpClient.get(
-      Uri.parse('$baseUrl/sessions/$sessionId/messages').replace(
+      Uri.parse('$baseUrl/v2/sessions/$sessionId/messages').replace(
         queryParameters: queryParameters,
       ),
       headers: _defaultHeaders,
@@ -528,7 +654,9 @@ class BridgeClient {
       }
     }
     final response = await _httpClient.get(
-      Uri.parse('$baseUrl/projects/$projectId/sessions'),
+      Uri.parse('$baseUrl/v2/sessions').replace(
+        queryParameters: {'project_id': projectId},
+      ),
       headers: _defaultHeaders,
     );
     if (_isUnauthorized(response)) {
@@ -565,60 +693,6 @@ class BridgeClient {
       throw StateError('Session not found: $sessionId');
     }
     return session;
-  }
-
-  Future<SendMessageResult> sendMessage(
-    String sessionId,
-    String content, {
-    String inputMode = 'text',
-    String? systemPrompt,
-    String? providerId,
-    ReasoningEffort? reasoningEffort,
-    String? model,
-    String? clientMessageId,
-  }) async {
-    final body = <String, dynamic>{
-      'content': content,
-      'input_mode': inputMode,
-    };
-    final trimmedSystemPrompt = systemPrompt?.trim();
-    if (trimmedSystemPrompt != null && trimmedSystemPrompt.isNotEmpty) {
-      body['system_prompt'] = trimmedSystemPrompt;
-    }
-    if (providerId != null && providerId.isNotEmpty) {
-      body['provider_id'] = providerId;
-    }
-    if (reasoningEffort != null) {
-      body['reasoning_effort'] = reasoningEffort.apiValue;
-    }
-    if (model != null && model.trim().isNotEmpty) {
-      body['model'] = model.trim();
-    }
-    if (clientMessageId != null && clientMessageId.isNotEmpty) {
-      body['client_message_id'] = clientMessageId;
-    }
-
-    final response = await _httpClient.post(
-      Uri.parse('$baseUrl/sessions/$sessionId/messages'),
-      headers: {
-        ..._defaultHeaders,
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(body),
-    );
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(_extractErrorMessage(response));
-    }
-
-    final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    final data = payload['data'] as Map<String, dynamic>;
-    return SendMessageResult(
-      userMessage: ChatMessage.fromJson(
-        data['user_message'] as Map<String, dynamic>,
-      ),
-      reply: ChatMessage.fromJson(data['reply'] as Map<String, dynamic>),
-    );
   }
 
   Future<void> updateSessionProvider(
@@ -658,7 +732,7 @@ class BridgeClient {
       body['model'] = model;
     }
     final response = await _httpClient.patch(
-      Uri.parse('$baseUrl/sessions/$sessionId'),
+      Uri.parse('$baseUrl/v2/sessions/$sessionId'),
       headers: {
         ..._defaultHeaders,
         'Content-Type': 'application/json',
@@ -670,31 +744,9 @@ class BridgeClient {
     }
   }
 
-  Future<SessionSummary> markSessionRead(
-    String sessionId,
-    String lastMessageId,
-  ) async {
-    final response = await _httpClient.put(
-      Uri.parse('$baseUrl/sessions/$sessionId/read-state'),
-      headers: {
-        ..._defaultHeaders,
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({'last_message_id': lastMessageId}),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(_extractErrorMessage(response));
-    }
-    final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    final data = payload['data'] as Map<String, dynamic>;
-    final session = SessionSummary.fromJson(data);
-    syncSessionSummary(session);
-    return session;
-  }
-
   Future<bool> cancelReply(String sessionId) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/sessions/$sessionId/cancel'),
+      Uri.parse('$baseUrl/v2/sessions/$sessionId/cancel'),
       headers: _defaultHeaders,
     );
 
@@ -714,7 +766,7 @@ class BridgeClient {
     String choice,
   ) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/sessions/$sessionId/approvals/$requestId'),
+      Uri.parse('$baseUrl/v2/sessions/$sessionId/approvals/$requestId'),
       headers: {
         ..._defaultHeaders,
         'Content-Type': 'application/json',
@@ -976,6 +1028,7 @@ class BridgeClient {
     bool? briefReplyMode,
     String? providerId,
     ReasoningEffort? reasoningEffort,
+    String? model,
   }) async {
     final body = <String, dynamic>{
       'project_id': projectId,
@@ -991,8 +1044,11 @@ class BridgeClient {
     if (reasoningEffort != null) {
       body['reasoning_effort'] = reasoningEffort.apiValue;
     }
+    if (model != null && model.trim().isNotEmpty) {
+      body['model'] = model.trim();
+    }
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/sessions'),
+      Uri.parse('$baseUrl/v2/sessions'),
       headers: {
         ..._defaultHeaders,
         'Content-Type': 'application/json',
@@ -1006,9 +1062,18 @@ class BridgeClient {
     return session;
   }
 
-  Future<DomainSessionState> getDomainSessionState(String sessionId) async {
+  Future<DomainSessionState> getDomainSessionState(
+    String sessionId, {
+    int limit = 50,
+    int? beforeSequence,
+  }) async {
     final response = await _httpClient.get(
-      Uri.parse('$baseUrl/v2/sessions/$sessionId/state'),
+      Uri.parse('$baseUrl/v2/sessions/$sessionId/state').replace(
+        queryParameters: {
+          'limit': '$limit',
+          if (beforeSequence != null) 'before_sequence': '$beforeSequence',
+        },
+      ),
       headers: _defaultHeaders,
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -1086,17 +1151,33 @@ class BridgeClient {
       throw Exception(
           _extractErrorMessageFromBody(await response.stream.bytesToString()));
     }
+    yield* _decodeSseResponse(response);
+  }
+
+  Stream<Map<String, dynamic>> _decodeSseResponse(
+    http.StreamedResponse response,
+  ) async* {
     final lines =
         response.stream.transform(utf8.decoder).transform(const LineSplitter());
     String? eventId;
+    String? eventName;
     final data = <String>[];
     Future<Map<String, dynamic>?> flush() async {
       if (data.isEmpty) return null;
-      final value = await compute(_decodeJsonObject, data.join('\n'));
+      final value = _decodeJsonObject(data.join('\n'));
       data.clear();
-      final id = int.tryParse(eventId ?? '');
+      final rawEventId = eventId;
+      final id = int.tryParse(rawEventId ?? '');
       eventId = null;
-      return {'event_id': id, ...value};
+      final result = {
+        ...value,
+        'data': value,
+        'event_id': id,
+        if (rawEventId != null) 'id': rawEventId,
+        if (eventName != null) 'event': eventName,
+      };
+      eventName = null;
+      return result;
     }
 
     await for (final line in lines) {
@@ -1105,6 +1186,8 @@ class BridgeClient {
         if (event != null) yield event;
       } else if (line.startsWith('id:')) {
         eventId = _readSseFieldValue(line.substring(3));
+      } else if (line.startsWith('event:')) {
+        eventName = _readSseFieldValue(line.substring(6));
       } else if (line.startsWith('data:')) {
         data.add(_readSseFieldValue(line.substring(5)));
       }
@@ -1459,88 +1542,18 @@ class BridgeClient {
     return Uri.parse(baseUrl).resolveUri(uri).toString();
   }
 
-  Stream<Map<String, dynamic>> subscribeToSessionEvents(
-    String sessionId, {
-    String? lastEventId,
-  }) async* {
+  Stream<Map<String, dynamic>> subscribeToAllDomainSessionEvents() async* {
     final request = http.Request(
       'GET',
-      Uri.parse('$baseUrl/sessions/$sessionId/events'),
-    );
-    request.headers['Accept'] = 'text/event-stream';
-    request.headers.addAll(_defaultHeaders);
-    final resumeEventId = lastEventId ?? _lastSessionEventIds[sessionId];
-    if (resumeEventId != null && resumeEventId.isNotEmpty) {
-      request.headers['Last-Event-ID'] = resumeEventId;
-    }
-
+      Uri.parse('$baseUrl/v2/sessions/events'),
+    )..headers.addAll({..._defaultHeaders, 'Accept': 'text/event-stream'});
     final response = await _httpClient.send(request);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      final body = await response.stream.bytesToString();
-      if (response.statusCode == 401 || response.statusCode == 403) {
-        throw ClientUnauthorizedException(body);
-      }
-      throw Exception(_extractErrorMessageFromBody(body));
-    }
-    final contentType = response.headers['content-type'] ?? '';
-    if (!contentType.contains('text/event-stream')) {
-      final body = await response.stream.bytesToString();
       throw Exception(
-        body.isEmpty ? 'Invalid SSE response: $contentType' : body,
+        _extractErrorMessageFromBody(await response.stream.bytesToString()),
       );
     }
-    final lines =
-        response.stream.transform(utf8.decoder).transform(const LineSplitter());
-
-    String? eventName;
-    String? eventId;
-    final dataBuffer = <String>[];
-
-    Map<String, dynamic>? flushEvent() {
-      if (dataBuffer.isEmpty) {
-        eventName = null;
-        eventId = null;
-        return null;
-      }
-      final event = {
-        'event': eventName ?? 'message',
-        if (eventId != null) 'id': eventId,
-        'data': jsonDecode(dataBuffer.join('\n')) as Map<String, dynamic>,
-      };
-      final data = event['data'] as Map<String, dynamic>;
-      if (data['type'] == 'sync_required') {
-        _lastSessionEventIds.remove(sessionId);
-      } else if (eventId != null && eventId!.isNotEmpty) {
-        _lastSessionEventIds[sessionId] = eventId!;
-      }
-      eventName = null;
-      eventId = null;
-      dataBuffer.clear();
-      return event;
-    }
-
-    await for (final line in lines) {
-      if (line.isEmpty) {
-        final event = flushEvent();
-        if (event != null) {
-          yield event;
-        }
-        continue;
-      }
-
-      if (line.startsWith('event:')) {
-        eventName = _readSseFieldValue(line.substring(6));
-      } else if (line.startsWith('id:')) {
-        eventId = _readSseFieldValue(line.substring(3));
-      } else if (line.startsWith('data:')) {
-        dataBuffer.add(_readSseFieldValue(line.substring(5)));
-      }
-    }
-
-    final event = flushEvent();
-    if (event != null) {
-      yield event;
-    }
+    yield* _decodeSseResponse(response);
   }
 
   static String _readSseFieldValue(String value) {
@@ -1553,14 +1566,20 @@ class BridgeClient {
     _projectsCache = _CacheEntry(next);
   }
 
-  void _upsertSession(SessionSummary session) {
+  void _upsertSession(
+    SessionSummary session, {
+    bool authoritative = false,
+  }) {
     final current = _sessionsCache?.value ?? const <SessionSummary>[];
-    final next = _mergeSessions(
-      cached: current,
-      incoming: [session],
-    );
+    final next = authoritative
+        ? sortSessionsForDisplay([
+            ...current.where((item) => item.id != session.id),
+            session,
+          ])
+        : _mergeSessions(cached: current, incoming: [session]);
     _sessionsCache = _CacheEntry(next);
-    _upsertProjectSessionCache(session);
+    sessionCacheRevision.value++;
+    _upsertProjectSessionCache(session, authoritative: authoritative);
 
     ProjectSummary? project;
     for (final item in _projectsCache?.value ?? const <ProjectSummary>[]) {
@@ -1584,18 +1603,26 @@ class BridgeClient {
     );
   }
 
-  void _upsertProjectSessionCache(SessionSummary session) {
+  void _upsertProjectSessionCache(
+    SessionSummary session, {
+    bool authoritative = false,
+  }) {
     final current = _projectSessionsCache[session.projectId]?.value ??
         const <SessionSummary>[];
-    final next = _mergeSessions(
-      cached: current,
-      incoming: [session],
-    );
+    final next = authoritative
+        ? sortSessionsForDisplay([
+            ...current.where((item) => item.id != session.id),
+            session,
+          ])
+        : _mergeSessions(cached: current, incoming: [session]);
     _projectSessionsCache[session.projectId] = _CacheEntry(next);
   }
 
-  void syncSessionSummary(SessionSummary session) {
-    _upsertSession(session);
+  void syncSessionSummary(
+    SessionSummary session, {
+    bool authoritative = false,
+  }) {
+    _upsertSession(session, authoritative: authoritative);
   }
 
   @visibleForTesting
@@ -1607,6 +1634,7 @@ class BridgeClient {
   void debugSeedSessions(Iterable<SessionSummary> sessions) {
     final sorted = sortSessionsForDisplay(sessions);
     _sessionsCache = _CacheEntry(sorted);
+    sessionCacheRevision.value++;
     for (final session in sorted) {
       _upsertProjectSessionCache(session);
     }
@@ -1885,16 +1913,6 @@ class BridgeUploadResponse {
   final String url;
   final String absoluteUrl;
   final String localPath;
-}
-
-class SendMessageResult {
-  const SendMessageResult({
-    required this.userMessage,
-    required this.reply,
-  });
-
-  final ChatMessage userMessage;
-  final ChatMessage reply;
 }
 
 class ClientUnauthorizedException implements Exception {

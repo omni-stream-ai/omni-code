@@ -9,12 +9,7 @@ import '../settings/app_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 
-typedef CreateSessionDialogResult = (
-  String?,
-  String,
-  String?,
-  ReasoningEffort?
-);
+typedef CreateSessionDialogResult = (String?, String, String?, String?);
 
 const _defaultProviderValue = '__default_provider__';
 const _autoProviderValue = '__auto_provider__';
@@ -37,10 +32,12 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
   final _titleController = TextEditingController();
   String _agent = appSettingsController.settings.lastSelectedAgent;
   late String? _providerId = widget.initialProviderId;
-  ReasoningEffort? _reasoningEffort;
+  String? _model;
   List<ModelProviderConfig> _allProviders = const [];
+  List<String> _providerModels = const [];
   List<AgentSummary> _agentOptions = const [];
   bool _loadingProviders = true;
+  bool _loadingModels = false;
   bool _loadingAgents = true;
   bool _installingAgent = false;
   String? _agentError;
@@ -158,12 +155,60 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
         _normalizeProviderSelection();
         _loadingProviders = false;
       });
+      unawaited(_loadModelsForSelectedProvider());
     } catch (_) {
       if (!mounted) {
         return;
       }
       setState(() {
         _loadingProviders = false;
+      });
+    }
+  }
+
+  Future<void> _loadModelsForSelectedProvider() async {
+    final providerId = _providerId;
+    final provider =
+        _providers.where((candidate) => candidate.id == providerId).firstOrNull;
+    if (provider == null || isAutoProviderId(providerId)) {
+      if (mounted) {
+        setState(() {
+          _providerModels = const [];
+          _model = null;
+          _loadingModels = false;
+        });
+      }
+      return;
+    }
+    setState(() {
+      _loadingModels = true;
+    });
+    try {
+      final fetchedModels = await _client.getProviderModels(provider);
+      if (!mounted || _providerId != providerId) {
+        return;
+      }
+      setState(() {
+        _providerModels = {
+          ...fetchedModels,
+          if (provider.model != null) provider.model!,
+        }.toList()
+          ..sort();
+        if (!_providerModels.contains(_model)) {
+          _model = null;
+        }
+        _loadingModels = false;
+      });
+    } catch (_) {
+      if (!mounted || _providerId != providerId) {
+        return;
+      }
+      setState(() {
+        _providerModels = provider.model == null ? const [] : [provider.model!];
+        if (!_providerModels.contains(_model)) {
+          _model = null;
+        }
+        _loadingModels = false;
       });
     }
   }
@@ -280,7 +325,9 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
                       _agent = value;
                       _agentError = null;
                       _normalizeProviderSelection();
+                      _model = null;
                     });
+                    unawaited(_loadModelsForSelectedProvider());
                   },
             decoration: InputDecoration(labelText: context.l10n.agentLabel),
           ),
@@ -342,6 +389,7 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
           if (!_loadingProviders) ...[
             const SizedBox(height: AppSpacing.stack),
             DropdownButtonFormField<String>(
+              key: const Key('new-session-provider-selector'),
               initialValue: _selectedProviderValue,
               items: [
                 if (_providers.isNotEmpty)
@@ -367,36 +415,48 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
                     _defaultProviderValue || null => null,
                     _ => value,
                   };
+                  _model = null;
                 });
+                unawaited(_loadModelsForSelectedProvider());
               },
               decoration: InputDecoration(
                 labelText: context.l10n.providerSessionLabel,
               ),
             ),
             const SizedBox(height: AppSpacing.stack),
-            DropdownButtonFormField<ReasoningEffort?>(
-              initialValue: _reasoningEffort,
+            DropdownButtonFormField<String?>(
+              key: const Key('new-session-model-selector'),
+              initialValue: _model,
               items: [
-                DropdownMenuItem<ReasoningEffort?>(
+                DropdownMenuItem<String?>(
                   value: null,
-                  child: Text(context.l10n.reasoningEffortDefault),
+                  child: Text(context.l10n.modelDefault),
                 ),
-                ...selectableReasoningEfforts.map(
-                  (effort) => DropdownMenuItem<ReasoningEffort?>(
-                    value: effort,
-                    child: Text(_reasoningEffortLabel(context, effort)),
+                ..._providerModels.map(
+                  (model) => DropdownMenuItem<String?>(
+                    value: model,
+                    child: Text(model),
                   ),
                 ),
               ],
-              onChanged: (value) {
-                setState(() {
-                  _reasoningEffort = value;
-                });
-              },
+              onChanged: _loadingModels
+                  ? null
+                  : (value) {
+                      setState(() {
+                        _model = value;
+                      });
+                    },
               decoration: InputDecoration(
-                labelText: context.l10n.reasoningEffortSessionLabel,
+                labelText: context.l10n.modelSessionLabel,
               ),
             ),
+            if (_loadingModels) ...[
+              const SizedBox(height: AppSpacing.micro),
+              const LinearProgressIndicator(
+                key: Key('new-session-model-loading'),
+                minHeight: 2,
+              ),
+            ],
           ],
         ],
       ),
@@ -417,7 +477,7 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
                         title.isEmpty ? null : title,
                         _agent,
                         _providerId,
-                        _reasoningEffort,
+                        _model,
                       ));
                     },
           child: Text(
@@ -430,18 +490,5 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
         ),
       ],
     );
-  }
-
-  String _reasoningEffortLabel(
-    BuildContext context,
-    ReasoningEffort effort,
-  ) {
-    return switch (effort) {
-      ReasoningEffort.low => context.l10n.reasoningEffortLow,
-      ReasoningEffort.medium => context.l10n.reasoningEffortMedium,
-      ReasoningEffort.high => context.l10n.reasoningEffortHigh,
-      ReasoningEffort.xhigh => context.l10n.reasoningEffortXhigh,
-      ReasoningEffort.max => context.l10n.reasoningEffortMax,
-    };
   }
 }

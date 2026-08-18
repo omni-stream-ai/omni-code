@@ -526,6 +526,29 @@ jobs:
             release-assets/omni-code-macos-arm64.zip
             release-assets/update.json
 
+      - name: Update Nix package metadata
+        env:
+          VERSION: ${{ needs.detect-version-bump.outputs.version_name }}
+          BRANCH_NAME: ${{ needs.detect-version-bump.outputs.branch_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          bash scripts/update-nix-package.sh \
+            "${VERSION}" \
+            release-assets/omni-code-linux-x86_64.tar.gz
+
+          git add nix/omni-code-bin.nix
+          if git diff --cached --quiet; then
+            echo "Nix package metadata is already current."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(nix): update omni-code to ${VERSION} [skip ci]"
+          git push origin "HEAD:${BRANCH_NAME}"
+
       - name: Checkout Homebrew tap repository
         if: needs.detect-version-bump.outputs.stable == 'true' && env.HOMEBREW_TAP_TOKEN != ''
         uses: actions/checkout@v4

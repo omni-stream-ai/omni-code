@@ -22,6 +22,7 @@ import '../widgets/app_navigation_scaffold.dart';
 import '../widgets/copyable_message.dart';
 import '../widgets/new_session_flow.dart';
 import 'model_provider_screen.dart';
+import 'pi_plugins_screen.dart';
 import 'ai_approval_prompt_screen.dart';
 import 'speech_settings_screen.dart';
 import '../../l10n/generated/app_localizations.dart';
@@ -60,6 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late AppThemeModeSetting _themeMode;
   late bool _autoSpeakReplies;
   late bool _compressAssistantReplies;
+  late NotificationSoundMode _notificationSoundMode;
   late String _appLanguage;
   String _currentVersion = '';
   bool _saving = false;
@@ -103,6 +105,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _themeMode = settings.themeMode;
     _autoSpeakReplies = settings.autoSpeakReplies;
     _compressAssistantReplies = settings.compressAssistantReplies;
+    _notificationSoundMode = settings.notificationSoundMode;
   }
 
   Future<void> _loadModelProviders() async {
@@ -371,6 +374,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: AppSpacing.fieldGap),
           _buildSpeechSection(context, l10n),
           const SizedBox(height: AppSpacing.fieldGap),
+          _buildPiPluginsSection(context, l10n),
+          const SizedBox(height: AppSpacing.fieldGap),
           _buildAiApprovalSection(context, l10n, formValueTextStyle),
           const SizedBox(height: AppSpacing.fieldGap),
           _buildModelProvidersSection(context, l10n),
@@ -556,6 +561,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         _buildSpeechSection(context, l10n),
         const SizedBox(height: AppSpacing.fieldGap),
+        _buildPiPluginsSection(context, l10n),
+        const SizedBox(height: AppSpacing.fieldGap),
         _buildModelProvidersSection(context, l10n),
         const SizedBox(height: AppSpacing.fieldGap),
         _buildReplyBehaviorSection(context, l10n, formValueTextStyle),
@@ -613,6 +620,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPiPluginsSection(BuildContext context, AppLocalizations l10n) {
+    final theme = Theme.of(context);
+    return AppCard(
+      onTap: () => Navigator.of(context).pushNamed(PiPluginsScreen.routeName),
+      padding: AppSpacing.cardPadding,
+      child: Row(children: [
+        Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: AppColors.panelDeepFor(theme.brightness),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+            ),
+            child: Icon(Icons.extension_rounded,
+                size: 18, color: AppColors.accentBlueFor(theme.brightness))),
+        const SizedBox(width: AppSpacing.stack),
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(l10n.piPluginsTitle.toUpperCase(),
+              style: theme.textTheme.labelLarge
+                  ?.copyWith(fontSize: 12, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 2),
+          Text(l10n.piPluginsSubtitle, style: theme.textTheme.bodySmall),
+        ])),
+        const Icon(Icons.chevron_right_rounded),
+      ]),
     );
   }
 
@@ -962,6 +999,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context,
       title: l10n.replyBehaviorSection.toUpperCase(),
       children: [
+        DropdownButtonFormField<NotificationSoundMode>(
+          key: const Key('notification-sound-mode'),
+          initialValue: _notificationSoundMode,
+          style: formValueTextStyle,
+          decoration: InputDecoration(
+            labelText: l10n.notificationSound,
+          ),
+          items: [
+            DropdownMenuItem(
+              value: NotificationSoundMode.all,
+              child: Text(l10n.notificationSoundAll),
+            ),
+            DropdownMenuItem(
+              value: NotificationSoundMode.importantOnly,
+              child: Text(l10n.notificationSoundImportantOnly),
+            ),
+            DropdownMenuItem(
+              value: NotificationSoundMode.muted,
+              child: Text(l10n.notificationSoundMuted),
+            ),
+          ],
+          onChanged: _saving
+              ? null
+              : (value) {
+                  if (value != null) {
+                    setState(() => _notificationSoundMode = value);
+                  }
+                },
+        ),
+        const SizedBox(height: AppSpacing.stackTight),
         SwitchListTile(
           value: _autoSpeakReplies,
           onChanged: _saving
@@ -1251,6 +1318,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         aiApprovalModel: _aiApprovalModel.trim(),
         aiApprovalMaxRisk: _aiApprovalMaxRisk,
         autoSpeakReplies: _autoSpeakReplies,
+        notificationSoundMode: _notificationSoundMode,
         compressAssistantReplies: _compressAssistantReplies,
         compressAssistantReplyMaxChars: _parsePositiveIntInput(
           _compressAssistantReplyMaxCharsController.text,

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.omnistreamai.code</id>
+  <name>Omni Code</name>
+  <summary>Client for managing coding agent sessions</summary>
+  <description><p>Cross-platform client for desktop coding agents and voice interaction.</p></description>
+  <launchable type="desktop-id">omni-code.desktop</launchable>
+  <url type="homepage">https://github.com/omni-stream-ai/omni-code</url>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+</component>

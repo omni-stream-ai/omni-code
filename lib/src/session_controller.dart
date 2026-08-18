@@ -34,6 +34,8 @@ class SessionController extends ChangeNotifier {
   int _generation = 0;
   bool _disposed = false;
   bool _recoveryInFlight = false;
+  bool _loadingOlderTurns = false;
+  bool get loadingOlderTurns => _loadingOlderTurns;
 
   Future<void> start() async {
     final generation = ++_generation;
@@ -131,6 +133,8 @@ class SessionController extends ChangeNotifier {
         session: DomainSession.fromJson(sessionJson),
         turns: current.turns,
         cursor: eventId,
+        hasMoreTurns: current.hasMoreTurns,
+        nextBeforeSequence: current.nextBeforeSequence,
       );
       _markConnectionHealthy();
       notifyListeners();
@@ -153,6 +157,8 @@ class SessionController extends ChangeNotifier {
       session: DomainSession.fromJson(sessionJson),
       turns: turns,
       cursor: eventId,
+      hasMoreTurns: current.hasMoreTurns,
+      nextBeforeSequence: current.nextBeforeSequence,
     );
     queuedCommands.removeWhere((command) => command.turnId == incoming.id);
     _markConnectionHealthy();
@@ -216,6 +222,40 @@ class SessionController extends ChangeNotifier {
       rethrow;
     }
     return command;
+  }
+
+  Future<void> loadOlderTurns() async {
+    final current = _state;
+    final before = current?.nextBeforeSequence;
+    if (_disposed || current == null || !current.hasMoreTurns ||
+        before == null || _loadingOlderTurns) {
+      return;
+    }
+    _loadingOlderTurns = true;
+    notifyListeners();
+    try {
+      final page = await _client.getDomainSessionState(
+        sessionId,
+        beforeSequence: before,
+      );
+      if (_disposed || _state == null) return;
+      final byId = <String, DomainTurn>{
+        for (final turn in page.turns) turn.id: turn,
+        for (final turn in _state!.turns) turn.id: turn,
+      };
+      final turns = byId.values.toList()
+        ..sort((left, right) => left.sequence.compareTo(right.sequence));
+      _state = DomainSessionState(
+        session: _state!.session,
+        turns: turns,
+        cursor: _state!.cursor,
+        hasMoreTurns: page.hasMoreTurns,
+        nextBeforeSequence: page.nextBeforeSequence,
+      );
+    } finally {
+      _loadingOlderTurns = false;
+      if (!_disposed) notifyListeners();
+    }
   }
 
   @override

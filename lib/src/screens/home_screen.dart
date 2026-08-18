@@ -20,6 +20,7 @@ import '../widgets/app_navigation_scaffold.dart';
 import '../widgets/app_skeleton.dart';
 import '../widgets/copyable_message.dart';
 import '../widgets/new_session_flow.dart';
+import '../widgets/session_cache_scope.dart';
 import 'project_detail_screen.dart';
 import 'settings_screen.dart';
 
@@ -157,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       List<SessionSummary>? sessions;
       Object? sessionsError;
       try {
-        sessions = await _client.listSessions(forceRefresh: true);
+        sessions = await _client.listDomainSessions(forceRefresh: true);
       } on ClientUnauthorizedException {
         rethrow;
       } catch (error) {
@@ -554,6 +555,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    SessionCacheScope.watch(context);
     final brightness = Theme.of(context).brightness;
     final desktopSidebarCollapsed =
         appSettingsController.settings.desktopNavigationCollapsed;
@@ -1533,6 +1535,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    SessionCacheScope.watch(context);
     final brightness = Theme.of(context).brightness;
     final allProjects = _projects ?? const <ProjectSummary>[];
     final projects = allProjects.where((project) {

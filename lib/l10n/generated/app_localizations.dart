@@ -3818,6 +3818,168 @@ abstract class AppLocalizations {
   /// **'{count} modified'**
   String gitUnstagedCount(int count);
 
+  /// No description provided for @notificationSound.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification sound'**
+  String get notificationSound;
+
+  /// No description provided for @notificationSoundAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All notifications'**
+  String get notificationSoundAll;
+
+  /// No description provided for @notificationSoundImportantOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Important only'**
+  String get notificationSoundImportantOnly;
+
+  /// No description provided for @notificationSoundMuted.
+  ///
+  /// In en, this message translates to:
+  /// **'Muted'**
+  String get notificationSoundMuted;
+
+  /// No description provided for @piPluginsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pi plugins'**
+  String get piPluginsTitle;
+
+  /// No description provided for @piPluginsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Install and control extensions loaded by Pi sessions'**
+  String get piPluginsSubtitle;
+
+  /// No description provided for @piPluginEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No Pi plugins installed'**
+  String get piPluginEmpty;
+
+  /// No description provided for @piPluginAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Install plugin'**
+  String get piPluginAdd;
+
+  /// No description provided for @piPluginSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get piPluginSource;
+
+  /// No description provided for @piPluginSourceNpm.
+  ///
+  /// In en, this message translates to:
+  /// **'npm package'**
+  String get piPluginSourceNpm;
+
+  /// No description provided for @piPluginSourceUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Direct URL'**
+  String get piPluginSourceUrl;
+
+  /// No description provided for @piPluginSourceGit.
+  ///
+  /// In en, this message translates to:
+  /// **'Git repository'**
+  String get piPluginSourceGit;
+
+  /// No description provided for @piPluginSourceUpload.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload file'**
+  String get piPluginSourceUpload;
+
+  /// No description provided for @piPluginSourceLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Bridge local path'**
+  String get piPluginSourceLocal;
+
+  /// No description provided for @piPluginId.
+  ///
+  /// In en, this message translates to:
+  /// **'Plugin ID (optional)'**
+  String get piPluginId;
+
+  /// No description provided for @piPluginChecksum.
+  ///
+  /// In en, this message translates to:
+  /// **'SHA-256 (recommended)'**
+  String get piPluginChecksum;
+
+  /// No description provided for @piPluginScope.
+  ///
+  /// In en, this message translates to:
+  /// **'Scope'**
+  String get piPluginScope;
+
+  /// No description provided for @piPluginGlobal.
+  ///
+  /// In en, this message translates to:
+  /// **'All projects'**
+  String get piPluginGlobal;
+
+  /// No description provided for @piPluginSelectedProjects.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected projects'**
+  String get piPluginSelectedProjects;
+
+  /// No description provided for @piPluginConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'Configuration (JSON)'**
+  String get piPluginConfig;
+
+  /// No description provided for @piPluginValidate.
+  ///
+  /// In en, this message translates to:
+  /// **'Validate'**
+  String get piPluginValidate;
+
+  /// No description provided for @piPluginValidationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Validation failed'**
+  String get piPluginValidationFailed;
+
+  /// No description provided for @piPluginLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load Pi plugins: {error}'**
+  String piPluginLoadFailed(Object error);
+
+  /// No description provided for @piPluginOperationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Plugin operation failed: {error}'**
+  String piPluginOperationFailed(Object error);
+
+  /// No description provided for @piPluginPermissionWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Extensions run on the Bridge host with Pi\'s permissions. Only install code you trust.'**
+  String get piPluginPermissionWarning;
+
+  /// No description provided for @piPluginRemoveConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Uninstall {name}?'**
+  String piPluginRemoveConfirm(Object name);
+
+  /// No description provided for @piPluginNextTurnHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Changes apply to the next Pi turn.'**
+  String get piPluginNextTurnHint;
+
   /// No description provided for @gitUntrackedCount.
   ///
   /// In en, this message translates to:

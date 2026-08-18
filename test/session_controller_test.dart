@@ -134,7 +134,11 @@ class _DomainClient extends BridgeClient {
   final events = StreamController<Map<String, dynamic>>.broadcast();
 
   @override
-  Future<DomainSessionState> getDomainSessionState(String sessionId) async {
+  Future<DomainSessionState> getDomainSessionState(
+    String sessionId, {
+    int limit = 50,
+    int? beforeSequence,
+  }) async {
     snapshotLoads += 1;
     return nextState;
   }

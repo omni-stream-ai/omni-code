@@ -47,7 +47,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           return http.Response(
             jsonEncode({'data': []}),
             200,
@@ -125,7 +125,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           return http.Response(
             jsonEncode({
               'data': [
@@ -191,7 +191,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           return http.Response(
             jsonEncode({
               'data': [
@@ -281,7 +281,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           return http.Response(
             jsonEncode({
               'data': [
@@ -360,7 +360,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           return http.Response(
             jsonEncode({
               'data': [
@@ -418,7 +418,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           return http.Response(
             jsonEncode({
               'data': [
@@ -503,7 +503,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           return http.Response(
             jsonEncode({'data': []}),
             200,
@@ -548,7 +548,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           return http.Response(
             jsonEncode({'data': []}),
             200,
@@ -598,7 +598,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           return http.Response(
             jsonEncode({
               'data': [
@@ -815,7 +815,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           return http.Response(
             jsonEncode({
               'data': [
@@ -882,7 +882,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           return http.Response(
             jsonEncode({
               'data': [
@@ -942,7 +942,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           sessionsRequestCount += 1;
           return http.Response(
             jsonEncode({
@@ -1016,7 +1016,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           sessionsRequestCount += 1;
           return http.Response(
             jsonEncode({
@@ -1078,7 +1078,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           sessionsRequestCount += 1;
           return http.Response(
             jsonEncode({
@@ -1154,7 +1154,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           sessionsRequestCount += 1;
           return http.Response(
             jsonEncode({
@@ -1216,7 +1216,7 @@ void main() {
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'GET' && request.url.path == '/sessions') {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
           return http.Response(
             jsonEncode({
               'data': [

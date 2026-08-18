@@ -3,6 +3,28 @@ import 'package:omni_code/src/models.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 
 void main() {
+  test('notification sound defaults to important only', () {
+    expect(
+      AppSettings.defaults().notificationSoundMode,
+      NotificationSoundMode.importantOnly,
+    );
+  });
+
+  test('notification sound mode round-trips and rejects unknown values', () {
+    final restored = AppSettings.fromJson(
+      AppSettings.defaults()
+          .copyWith(notificationSoundMode: NotificationSoundMode.muted)
+          .toJson(),
+    );
+    expect(restored.notificationSoundMode, NotificationSoundMode.muted);
+    expect(
+      AppSettings.fromJson(const {
+        'notification_sound_mode': 'unknown',
+      }).notificationSoundMode,
+      NotificationSoundMode.importantOnly,
+    );
+  });
+
   test('AI approval provider selection persists without provider credentials',
       () {
     final json = AppSettings.defaults()

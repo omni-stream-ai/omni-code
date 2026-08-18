@@ -104,7 +104,7 @@ Future<void> startNewSessionFlow(
     updatedAt: DateTime.now(),
     unreadCount: 0,
     providerId: sessionResult.$3,
-    reasoningEffort: sessionResult.$4,
+    model: sessionResult.$4,
   );
   final sessionFuture = resolvedClient.createSession(
     projectId: project.id,
@@ -113,7 +113,7 @@ Future<void> startNewSessionFlow(
     clientSessionId: clientSessionId,
     briefReplyMode: appSettingsController.settings.compressAssistantReplies,
     providerId: sessionResult.$3,
-    reasoningEffort: sessionResult.$4,
+    model: sessionResult.$4,
   );
 
   await Navigator.of(context).push(

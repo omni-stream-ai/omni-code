@@ -12,14 +12,17 @@ import 'screens/project_detail_screen.dart';
 import 'screens/session_detail_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/model_provider_screen.dart';
+import 'screens/pi_plugins_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/speech_settings_screen.dart';
 import 'services/notification_service.dart';
+import 'services/session_event_service.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_spacing.dart';
 import 'theme/app_theme.dart';
 import 'settings/app_settings.dart';
 import 'widgets/app_skeleton.dart';
+import 'widgets/session_cache_scope.dart';
 
 class OmniCodeApp extends StatefulWidget {
   const OmniCodeApp({super.key});
@@ -34,6 +37,7 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       notificationService.flushPendingNavigation();
+      sessionEventService.start();
     });
   }
 
@@ -54,6 +58,7 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
           onGenerateTitle: (context) => context.l10n.appTitle,
           debugShowCheckedModeBanner: false,
           navigatorKey: notificationService.navigatorKey,
+          navigatorObservers: [sessionEventService],
           locale: locale,
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: const [
@@ -65,6 +70,10 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: themeMode,
+          builder: (context, child) => SessionCacheScope(
+            notifier: bridgeClient.sessionCacheRevision,
+            child: child ?? const SizedBox.shrink(),
+          ),
           onGenerateInitialRoutes: _generateInitialRoutes,
           onGenerateRoute: _buildRoute,
           onUnknownRoute: _buildUnknownRoute,
@@ -114,6 +123,9 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
     }
     if (settings.name == ModelProviderScreen.routeName) {
       return _pageRoute(settings, const ModelProviderScreen());
+    }
+    if (settings.name == PiPluginsScreen.routeName) {
+      return _pageRoute(settings, const PiPluginsScreen());
     }
 
     final match = AppRoutes.parse(settings.name);

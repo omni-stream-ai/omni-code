@@ -58,7 +58,8 @@ void main() {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
         if (request.method == 'GET' &&
-            request.url.path == '/projects/project-1/sessions') {
+            request.url.path == '/v2/sessions' &&
+            request.url.queryParameters['project_id'] == 'project-1') {
           requestCount += 1;
           return http.Response(
             jsonEncode({
@@ -156,7 +157,8 @@ void main() {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
         if (request.method == 'GET' &&
-            request.url.path == '/projects/project-1/sessions') {
+            request.url.path == '/v2/sessions' &&
+            request.url.queryParameters['project_id'] == 'project-1') {
           sessionRequests += 1;
           if (sessionRequests == 1) {
             return http.Response(
@@ -199,7 +201,10 @@ void main() {
       }),
     )..debugSeedProjects([project]);
 
-    await client.listProjectSessions(project.id, forceRefresh: true);
+    await client.listDomainSessions(
+      projectId: project.id,
+      forceRefresh: true,
+    );
     await tester.pumpWidget(
       _TestApp(
         home: ProjectDetailScreen(client: client, project: project),
@@ -258,7 +263,8 @@ void main() {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
         if (request.method == 'GET' &&
-            request.url.path == '/projects/project-1/sessions') {
+            request.url.path == '/v2/sessions' &&
+            request.url.queryParameters['project_id'] == 'project-1') {
           return http.Response(
             jsonEncode({
               'data': [
@@ -326,7 +332,8 @@ void main() {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
         if (request.method == 'GET' &&
-            request.url.path == '/projects/project-1/sessions') {
+            request.url.path == '/v2/sessions' &&
+            request.url.queryParameters['project_id'] == 'project-1') {
           return http.Response(
             jsonEncode({
               'data': [
@@ -471,6 +478,7 @@ void main() {
                     'format': 'codex',
                     'enabled': true,
                     'priority': 0,
+                    'model': 'gpt-5.4',
                   },
                 ],
               },
@@ -509,14 +517,20 @@ void main() {
 
     final l10n = AppLocalizations.of(tester.element(find.byType(AlertDialog)))!;
     expect(find.text(l10n.providerSessionLabel), findsOneWidget);
-    expect(find.text(l10n.providerAuto), findsOneWidget);
+    expect(find.text(l10n.modelSessionLabel), findsOneWidget);
+    expect(find.text(l10n.reasoningEffortSessionLabel), findsNothing);
     expect(find.text(l10n.agentInstalledStatus), findsNothing);
 
-    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+    await tester.tap(find.byKey(const Key('new-session-provider-selector')));
     await tester.pumpAndSettle();
     expect(find.text(l10n.providerAuto).last, findsOneWidget);
     expect(find.text(l10n.providerDefault).last, findsOneWidget);
     await tester.tap(find.text('Codex Provider').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('new-session-model-selector')));
+    await tester.pumpAndSettle();
+    expect(find.text('gpt-5.4'), findsOneWidget);
+    await tester.tap(find.text('gpt-5.4'));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField).first, 'New Session');

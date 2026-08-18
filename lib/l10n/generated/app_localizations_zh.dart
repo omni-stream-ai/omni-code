@@ -2065,6 +2065,93 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get notificationSound => '通知声音';
+
+  @override
+  String get notificationSoundAll => '全部通知';
+
+  @override
+  String get notificationSoundImportantOnly => '仅重要消息';
+
+  @override
+  String get notificationSoundMuted => '静音';
+
+  @override
+  String get piPluginsTitle => 'Pi 插件';
+
+  @override
+  String get piPluginsSubtitle => '安装和管理 Pi 会话加载的扩展';
+
+  @override
+  String get piPluginEmpty => '尚未安装 Pi 插件';
+
+  @override
+  String get piPluginAdd => '安装插件';
+
+  @override
+  String get piPluginSource => '来源';
+
+  @override
+  String get piPluginSourceNpm => 'npm 包';
+
+  @override
+  String get piPluginSourceUrl => '直接 URL';
+
+  @override
+  String get piPluginSourceGit => 'Git 仓库';
+
+  @override
+  String get piPluginSourceUpload => '上传文件';
+
+  @override
+  String get piPluginSourceLocal => 'Bridge 本地路径';
+
+  @override
+  String get piPluginId => '插件 ID（可选）';
+
+  @override
+  String get piPluginChecksum => 'SHA-256（建议填写）';
+
+  @override
+  String get piPluginScope => '作用范围';
+
+  @override
+  String get piPluginGlobal => '所有项目';
+
+  @override
+  String get piPluginSelectedProjects => '指定项目';
+
+  @override
+  String get piPluginConfig => '配置（JSON）';
+
+  @override
+  String get piPluginValidate => '重新校验';
+
+  @override
+  String get piPluginValidationFailed => '校验失败';
+
+  @override
+  String piPluginLoadFailed(Object error) {
+    return '无法加载 Pi 插件：$error';
+  }
+
+  @override
+  String piPluginOperationFailed(Object error) {
+    return '插件操作失败：$error';
+  }
+
+  @override
+  String get piPluginPermissionWarning => '扩展会以 Pi 的权限在 Bridge 主机运行。请只安装可信代码。';
+
+  @override
+  String piPluginRemoveConfirm(Object name) {
+    return '卸载 $name？';
+  }
+
+  @override
+  String get piPluginNextTurnHint => '更改会从下一轮 Pi 会话起生效。';
+
+  @override
   String gitUntrackedCount(int count) {
     return '$count 个未跟踪';
   }

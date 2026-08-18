@@ -27,6 +27,8 @@ enum AsrProvider {
 
 enum AppThemeModeSetting { system, light, dark }
 
+enum NotificationSoundMode { all, importantOnly, muted }
+
 @immutable
 class AppSettings {
   const AppSettings({
@@ -51,6 +53,7 @@ class AppSettings {
     required this.aiApprovalModel,
     required this.aiApprovalMaxRisk,
     required this.notificationMaxChars,
+    required this.notificationSoundMode,
     required this.autoSpeakReplies,
     required this.speechPlaybackPromptEnabled,
     required this.compressAssistantReplies,
@@ -95,6 +98,7 @@ class AppSettings {
   final String aiApprovalModel;
   final String aiApprovalMaxRisk;
   final int notificationMaxChars;
+  final NotificationSoundMode notificationSoundMode;
   final bool autoSpeakReplies;
   final bool speechPlaybackPromptEnabled;
   final bool compressAssistantReplies;
@@ -165,6 +169,7 @@ class AppSettings {
       aiApprovalModel: 'gpt-4.1-mini',
       aiApprovalMaxRisk: 'low',
       notificationMaxChars: _defaultNotificationMaxChars,
+      notificationSoundMode: NotificationSoundMode.importantOnly,
       autoSpeakReplies: false,
       speechPlaybackPromptEnabled: true,
       compressAssistantReplies: false,
@@ -218,6 +223,7 @@ class AppSettings {
     String? aiApprovalModel,
     String? aiApprovalMaxRisk,
     int? notificationMaxChars,
+    NotificationSoundMode? notificationSoundMode,
     bool? autoSpeakReplies,
     bool? speechPlaybackPromptEnabled,
     bool? compressAssistantReplies,
@@ -270,6 +276,8 @@ class AppSettings {
       aiApprovalModel: aiApprovalModel ?? this.aiApprovalModel,
       aiApprovalMaxRisk: aiApprovalMaxRisk ?? this.aiApprovalMaxRisk,
       notificationMaxChars: notificationMaxChars ?? this.notificationMaxChars,
+      notificationSoundMode:
+          notificationSoundMode ?? this.notificationSoundMode,
       autoSpeakReplies: autoSpeakReplies ?? this.autoSpeakReplies,
       speechPlaybackPromptEnabled:
           speechPlaybackPromptEnabled ?? this.speechPlaybackPromptEnabled,
@@ -354,6 +362,7 @@ class AppSettings {
       'ai_approval_provider_id': aiApprovalProviderId,
       'ai_approval_model': aiApprovalModel,
       'ai_approval_max_risk': aiApprovalMaxRisk,
+      'notification_sound_mode': notificationSoundMode.name,
       'auto_speak_replies': autoSpeakReplies,
       'speech_playback_prompt_enabled': speechPlaybackPromptEnabled,
       'compress_assistant_replies': compressAssistantReplies,
@@ -433,6 +442,10 @@ class AppSettings {
         defaults.aiApprovalMaxRisk,
       ),
       notificationMaxChars: defaults.notificationMaxChars,
+      notificationSoundMode: _parseNotificationSoundMode(
+        _readNullableString(json, 'notification_sound_mode'),
+        defaults.notificationSoundMode,
+      ),
       autoSpeakReplies:
           _readBool(json, 'auto_speak_replies', defaults.autoSpeakReplies),
       speechPlaybackPromptEnabled: _readBool(
@@ -547,6 +560,16 @@ class AppSettings {
   static String? _readNullableString(Map<String, dynamic> json, String key) {
     final value = json[key];
     return value is String ? value : null;
+  }
+
+  static NotificationSoundMode _parseNotificationSoundMode(
+    String? value,
+    NotificationSoundMode fallback,
+  ) {
+    return NotificationSoundMode.values
+            .where((mode) => mode.name == value)
+            .firstOrNull ??
+        fallback;
   }
 
   static Map<String, String?> _readNullableStringMap(

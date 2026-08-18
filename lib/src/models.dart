@@ -21,6 +21,69 @@ enum ApiFormat {
   }
 }
 
+enum PiPluginSourceKind { npm, url, git, upload, local }
+
+class PiPluginSource {
+  const PiPluginSource({required this.kind, required this.value});
+  final PiPluginSourceKind kind;
+  final String value;
+  Map<String, dynamic> toJson() => {'kind': kind.name, 'value': value};
+  factory PiPluginSource.fromJson(Map<String, dynamic> json) => PiPluginSource(
+        kind: PiPluginSourceKind.values.firstWhere(
+          (value) => value.name == json['kind'],
+          orElse: () => PiPluginSourceKind.local,
+        ),
+        value: json['value'] as String? ?? '',
+      );
+}
+
+class PiPlugin {
+  const PiPlugin(
+      {required this.id,
+      required this.name,
+      required this.source,
+      required this.entryPath,
+      required this.sha256,
+      required this.enabled,
+      required this.projectIds,
+      required this.config,
+      required this.installedAt,
+      required this.permissions,
+      this.version,
+      this.validationError});
+  final String id;
+  final String name;
+  final String? version;
+  final PiPluginSource source;
+  final String entryPath;
+  final String sha256;
+  final bool enabled;
+  final List<String> projectIds;
+  final Map<String, dynamic> config;
+  final DateTime installedAt;
+  final String? validationError;
+  final List<String> permissions;
+  factory PiPlugin.fromJson(Map<String, dynamic> json) => PiPlugin(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      version: json['version'] as String?,
+      source: PiPluginSource.fromJson(
+          json['source'] as Map<String, dynamic>? ?? const {}),
+      entryPath: json['entry_path'] as String? ?? '',
+      sha256: json['sha256'] as String? ?? '',
+      enabled: json['enabled'] as bool? ?? false,
+      projectIds: (json['project_ids'] as List<dynamic>? ?? const [])
+          .whereType<String>()
+          .toList(),
+      config: Map<String, dynamic>.from(json['config'] as Map? ?? const {}),
+      installedAt: DateTime.tryParse(json['installed_at'] as String? ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      validationError: json['validation_error'] as String?,
+      permissions: (json['permissions'] as List<dynamic>? ?? const [])
+          .whereType<String>()
+          .toList());
+}
+
 List<ApiFormat> parseApiFormats(Iterable<dynamic>? values) {
   if (values == null) {
     return const [];
@@ -438,10 +501,16 @@ class DomainSession {
 
 class DomainSessionState {
   const DomainSessionState(
-      {required this.session, required this.turns, required this.cursor});
+      {required this.session,
+      required this.turns,
+      required this.cursor,
+      this.hasMoreTurns = false,
+      this.nextBeforeSequence});
   final DomainSession session;
   final List<DomainTurn> turns;
   final int cursor;
+  final bool hasMoreTurns;
+  final int? nextBeforeSequence;
   factory DomainSessionState.fromJson(Map<String, dynamic> json) =>
       DomainSessionState(
         session:
@@ -451,6 +520,8 @@ class DomainSessionState {
             .map(DomainTurn.fromJson)
             .toList(growable: false),
         cursor: (json['cursor'] as num?)?.toInt() ?? 0,
+        hasMoreTurns: json['has_more_turns'] as bool? ?? false,
+        nextBeforeSequence: (json['next_before_sequence'] as num?)?.toInt(),
       );
 }
 
@@ -580,7 +651,9 @@ class ApprovalRequest {
 
   factory ApprovalRequest.fromJson(Map<String, dynamic> json) {
     return ApprovalRequest(
-      requestId: json['request_id'] as String,
+      // JSON-RPC ids may be numbers (for example Codex app-server uses 0).
+      // Keep the UI and approval endpoint on the same string representation.
+      requestId: '${json['request_id']}',
       kind: json['kind'] as String,
       command: json['command'] as String?,
       reason: json['reason'] as String?,

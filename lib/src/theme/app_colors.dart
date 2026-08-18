@@ -28,9 +28,9 @@ class AppColors {
   static const Color darkDanger = Color(0xFFFF7A7A);
   static const Color darkIdle = Color(0xFF7F92A3);
 
-  static const Color lightBoard = Color(0xFFFDFDFC);
+  static const Color lightBoard = Colors.white;
   static const Color lightBoardAlt = Color(0xFFE8EEF3);
-  static const Color lightScreen = Color(0xFFFCFCFB);
+  static const Color lightScreen = Colors.white;
   static const Color lightPanel = Color(0xFFF7F9FC);
   static const Color lightPanelAlt = Color(0xFFE7EDF3);
   static const Color lightPanelDeep = Color(0xFFE7EDF3);
@@ -313,6 +313,9 @@ class AppColors {
   }
 
   static LinearGradient boardGradientFor(Brightness brightness) {
+    if (brightness == Brightness.light) {
+      return const LinearGradient(colors: [Colors.white, Colors.white]);
+    }
     return LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,

@@ -24,7 +24,8 @@ String truncateNotificationBody(String body, int maxChars) {
 }
 
 class NotificationService {
-  static const _replyChannelId = 'omni_code_replies';
+  static const _replyChannelId = 'omni_code_replies_v2';
+  static const _silentReplyChannelId = 'omni_code_replies_silent_v2';
   static const _replyChannelName = 'Agent Replies';
   static const _replyChannelDescription =
       'Omni Code assistant reply notifications';
@@ -87,6 +88,16 @@ class NotificationService {
         importance: Importance.max,
         playSound: true,
         enableVibration: true,
+      ),
+    );
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _silentReplyChannelId,
+        'Silent Agent Replies',
+        description: _replyChannelDescription,
+        importance: Importance.high,
+        playSound: false,
+        enableVibration: false,
       ),
     );
     final iosPlugin = _plugin.resolvePlatformSpecificImplementation<
@@ -155,45 +166,17 @@ class NotificationService {
     if (trimmedBody.isEmpty) {
       return;
     }
+    final playSound = shouldPlayNotificationSound(
+      appSettingsController.settings.notificationSoundMode,
+      important: false,
+    );
     await _plugin.show(
       id: session.id.hashCode,
       title: session.title,
       body: trimmedBody,
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          _replyChannelId,
-          _replyChannelName,
-          channelDescription: _replyChannelDescription,
-          importance: Importance.max,
-          priority: Priority.high,
-          playSound: true,
-          enableVibration: true,
-          ticker: 'Omni Code',
-          category: AndroidNotificationCategory.message,
-          visibility: NotificationVisibility.public,
-          autoCancel: true,
-          ongoing: false,
-        ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-          presentBanner: true,
-          presentList: true,
-          threadIdentifier: _replyThreadId,
-        ),
-        macOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-          presentBanner: true,
-          presentList: true,
-          threadIdentifier: _replyThreadId,
-        ),
-        linux: LinuxNotificationDetails(
-          defaultActionName: _defaultActionName,
-        ),
-        windows: WindowsNotificationDetails(),
+      notificationDetails: _notificationDetails(
+        playSound: playSound,
+        approval: false,
       ),
       payload: jsonEncode({
         'session': {
@@ -272,45 +255,17 @@ class NotificationService {
     if (trimmedBody.isEmpty) {
       return;
     }
+    final playSound = shouldPlayNotificationSound(
+      appSettingsController.settings.notificationSoundMode,
+      important: true,
+    );
     await _plugin.show(
       id: '${session.id}::approval'.hashCode,
       title: title,
       body: trimmedBody,
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          _replyChannelId,
-          _replyChannelName,
-          channelDescription: _replyChannelDescription,
-          importance: Importance.max,
-          priority: Priority.high,
-          playSound: true,
-          enableVibration: true,
-          ticker: 'Omni Code',
-          category: AndroidNotificationCategory.status,
-          visibility: NotificationVisibility.public,
-          autoCancel: true,
-          ongoing: false,
-        ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-          presentBanner: true,
-          presentList: true,
-          threadIdentifier: _replyThreadId,
-        ),
-        macOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-          presentBanner: true,
-          presentList: true,
-          threadIdentifier: _replyThreadId,
-        ),
-        linux: LinuxNotificationDetails(
-          defaultActionName: _defaultActionName,
-        ),
-        windows: WindowsNotificationDetails(),
+      notificationDetails: _notificationDetails(
+        playSound: playSound,
+        approval: true,
       ),
       payload: jsonEncode({
         'session': {
@@ -324,6 +279,90 @@ class NotificationService {
           'last_message_preview': session.lastMessagePreview,
         },
       }),
+    );
+  }
+
+  Future<void> showSessionErrorNotification(
+    SessionSummary session,
+    String body, {
+    required String title,
+  }) async {
+    final trimmedBody = truncateNotificationBody(
+      body,
+      appSettingsController.settings.notificationMaxChars,
+    );
+    if (trimmedBody.isEmpty) return;
+    await _plugin.show(
+      id: '${session.id}::error'.hashCode,
+      title: title,
+      body: trimmedBody,
+      notificationDetails: _notificationDetails(
+        playSound: shouldPlayNotificationSound(
+          appSettingsController.settings.notificationSoundMode,
+          important: true,
+        ),
+        approval: false,
+      ),
+      payload: jsonEncode({
+        'session': {
+          'id': session.id,
+          'project_id': session.projectId,
+          'title': session.title,
+          'agent': session.agentId,
+          'status': _statusName(session.status),
+          'updated_at': session.updatedAt.toIso8601String(),
+          'unread_count': session.unreadCount,
+          'last_message_preview': session.lastMessagePreview,
+        },
+      }),
+    );
+  }
+
+  NotificationDetails _notificationDetails({
+    required bool playSound,
+    required bool approval,
+  }) {
+    return NotificationDetails(
+      android: AndroidNotificationDetails(
+        playSound ? _replyChannelId : _silentReplyChannelId,
+        playSound ? _replyChannelName : 'Silent Agent Replies',
+        channelDescription: _replyChannelDescription,
+        importance: playSound ? Importance.max : Importance.high,
+        priority: Priority.high,
+        playSound: playSound,
+        enableVibration: playSound,
+        ticker: 'Omni Code',
+        category: approval
+            ? AndroidNotificationCategory.status
+            : AndroidNotificationCategory.message,
+        visibility: NotificationVisibility.public,
+        autoCancel: true,
+        ongoing: false,
+      ),
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: playSound,
+        presentBanner: true,
+        presentList: true,
+        threadIdentifier: _replyThreadId,
+      ),
+      macOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: playSound,
+        presentBanner: true,
+        presentList: true,
+        threadIdentifier: _replyThreadId,
+      ),
+      linux: LinuxNotificationDetails(
+        defaultActionName: _defaultActionName,
+        sound: playSound ? ThemeLinuxSound('message-new-instant') : null,
+        suppressSound: !playSound,
+      ),
+      windows: WindowsNotificationDetails(
+        audio: playSound ? null : WindowsNotificationAudio.silent(),
+      ),
     );
   }
 
@@ -346,3 +385,14 @@ class NotificationService {
 }
 
 final notificationService = NotificationService();
+
+bool shouldPlayNotificationSound(
+  NotificationSoundMode mode, {
+  required bool important,
+}) {
+  return switch (mode) {
+    NotificationSoundMode.all => true,
+    NotificationSoundMode.importantOnly => important,
+    NotificationSoundMode.muted => false,
+  };
+}

@@ -233,7 +233,7 @@ void main() {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
           expect(request.method, 'POST');
-          expect(request.url.path, '/sessions');
+          expect(request.url.path, '/v2/sessions');
           body = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response(
             jsonEncode({
@@ -277,7 +277,7 @@ void main() {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
           expect(request.method, 'POST');
-          expect(request.url.path, '/sessions');
+          expect(request.url.path, '/v2/sessions');
           body = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response(
             jsonEncode({
@@ -317,7 +317,7 @@ void main() {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
           expect(request.method, 'POST');
-          expect(request.url.path, '/sessions');
+          expect(request.url.path, '/v2/sessions');
           body = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response(
             jsonEncode({
@@ -357,7 +357,7 @@ void main() {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
           expect(request.method, 'POST');
-          expect(request.url.path, '/sessions');
+          expect(request.url.path, '/v2/sessions');
           body = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response(
             jsonEncode({
@@ -390,6 +390,56 @@ void main() {
 
       expect(body['reasoning_effort'], 'high');
       expect(session.reasoningEffort, ReasoningEffort.high);
+    });
+
+    test('includes model when specified', () async {
+      late Map<String, dynamic> body;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'id': 'session-5',
+                'project_id': 'project-1',
+                'title': 'Model Session',
+                'agent': 'codex',
+                'brief_reply_mode': false,
+                'status': 'idle',
+                'updated_at': '2026-05-05T11:00:00.000',
+                'unread_count': 0,
+                'last_message_preview': null,
+                'pending_approval': null,
+                'model': 'gpt-5.4',
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final session = await client.createSession(
+        projectId: 'project-1',
+        title: 'Model Session',
+        agent: 'codex',
+        model: 'gpt-5.4',
+      );
+
+      expect(body['model'], 'gpt-5.4');
+      expect(session.model, 'gpt-5.4');
+    });
+  });
+
+  group('ApprovalRequest', () {
+    test('normalizes numeric JSON-RPC request ids', () {
+      final approval = ApprovalRequest.fromJson({
+        'request_id': 0,
+        'kind': 'command',
+        'command': 'git status',
+      });
+
+      expect(approval.requestId, '0');
     });
   });
 
@@ -470,7 +520,7 @@ void main() {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
           expect(request.method, 'GET');
-          expect(request.url.path, '/sessions/session-1/messages');
+          expect(request.url.path, '/v2/sessions/session-1/messages');
           expect(request.url.queryParameters, {
             'limit': '25',
             'before_id': 'message-50',
@@ -509,97 +559,27 @@ void main() {
       expect(page.nextCursor, 'message-1');
     });
 
-    test('parses SSE event ID and sends Last-Event-ID', () async {
+    test('lists domain sessions with optional project filter', () async {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
-          expect(request.method, 'GET');
-          expect(request.url.path, '/sessions/session-1/events');
-          expect(request.headers['last-event-id'], '42');
-          return http.Response(
-            'id: 43\n'
-            'event: session\n'
-            'data: {"type":"message_delta","payload":{"message_id":"m1","delta":"hello"}}',
-            200,
-            headers: {'content-type': 'text/event-stream'},
-          );
-        }),
-      );
-
-      final events = await client
-          .subscribeToSessionEvents('session-1', lastEventId: '42')
-          .toList();
-
-      expect(events, hasLength(1));
-      expect(events.single['event'], 'session');
-      expect(events.single['id'], '43');
-      expect(events.single['data'], {
-        'type': 'message_delta',
-        'payload': {'message_id': 'm1', 'delta': 'hello'},
-      });
-    });
-
-    test('reuses the last SSE event id when reconnecting', () async {
-      var requestCount = 0;
-      final client = BridgeClient(
-        httpClient: _FakeHttpClient((request) async {
-          requestCount += 1;
-          expect(request.method, 'GET');
-          expect(request.url.path, '/sessions/session-1/events');
-          if (requestCount == 1) {
-            expect(request.headers['last-event-id'], isNull);
-            return http.Response(
-              'id: 41\n'
-              'event: message.snapshot\n'
-              'data: {"type":"message_snapshot","payload":{"session_id":"session-1","message_id":"m1","content":"hello"}}\n\n',
-              200,
-              headers: {'content-type': 'text/event-stream'},
-            );
-          }
-          expect(request.headers['last-event-id'], '41');
-          return http.Response(
-            'id: 42\n'
-            'event: session.status\n'
-            'data: {"type":"session_status","payload":{"session_id":"session-1","status":"idle"}}\n\n',
-            200,
-            headers: {'content-type': 'text/event-stream'},
-          );
-        }),
-      );
-
-      final first = await client.subscribeToSessionEvents('session-1').toList();
-      final second =
-          await client.subscribeToSessionEvents('session-1').toList();
-
-      expect(first.single['id'], '41');
-      expect(second.single['id'], '42');
-      expect(requestCount, 2);
-    });
-
-    test('sends reasoning effort when posting a message', () async {
-      late Map<String, dynamic> body;
-      final client = BridgeClient(
-        httpClient: _FakeHttpClient((request) async {
-          expect(request.method, 'POST');
-          expect(request.url.path, '/sessions/session-1/messages');
-          body = jsonDecode(request.body) as Map<String, dynamic>;
+          expect(request.url.path, '/v2/sessions');
+          expect(request.url.queryParameters['project_id'], 'project-1');
           return http.Response(
             jsonEncode({
-              'data': {
-                'user_message': {
-                  'id': 'user-1',
-                  'session_id': 'session-1',
-                  'role': 'user',
-                  'content': 'Hello',
-                  'created_at': '2026-05-05T11:00:00.000',
+              'data': [
+                {
+                  'id': 'session-domain',
+                  'project_id': 'project-1',
+                  'title': 'Domain session',
+                  'agent': 'codex',
+                  'brief_reply_mode': false,
+                  'status': 'idle',
+                  'updated_at': '2026-08-13T03:21:53.326Z',
+                  'unread_count': 0,
+                  'last_message_preview': 'Complete',
+                  'pending_approval': null,
                 },
-                'reply': {
-                  'id': 'assistant-1',
-                  'session_id': 'session-1',
-                  'role': 'assistant',
-                  'content': 'Hi',
-                  'created_at': '2026-05-05T11:00:01.000',
-                },
-              },
+              ],
             }),
             200,
             headers: {'content-type': 'application/json'},
@@ -607,17 +587,76 @@ void main() {
         }),
       );
 
-      await client.sendMessage(
-        'session-1',
-        'Hello',
-        reasoningEffort: ReasoningEffort.max,
-        model: 'gpt-5.2-codex',
-        clientMessageId: 'local-123',
+      final sessions = await client.listDomainSessions(
+        projectId: 'project-1',
+        forceRefresh: true,
       );
 
-      expect(body['reasoning_effort'], 'max');
-      expect(body['model'], 'gpt-5.2-codex');
-      expect(body['client_message_id'], 'local-123');
+      expect(sessions.single.id, 'session-domain');
+      expect(sessions.single.status, SessionStatus.idle);
+      expect(
+          client.peekProjectSessions('project-1')!.single.id, 'session-domain');
+    });
+
+    test('parses global domain session SSE', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.url.path, '/v2/sessions/events');
+          return http.Response(
+            'id: 9\n'
+            'event: session.status_changed\n'
+            'data: {"event_id":9,"session_id":"session-2","session_version":3,"event_type":"session.status_changed","payload":{}}\n\n',
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        }),
+      );
+
+      final events = await client.subscribeToAllDomainSessionEvents().toList();
+
+      expect(events.single['event_type'], 'session.status_changed');
+      expect(events.single['session_id'], 'session-2');
+    });
+
+    test('session cache revision changes when a summary is synchronized', () {
+      final client = BridgeClient(
+          httpClient: _FakeHttpClient((_) async => http.Response('', 500)));
+      final before = client.sessionCacheRevision.value;
+
+      client.syncSessionSummary(
+        _session(
+          id: 'session-revision',
+          projectId: 'project-1',
+          updatedAt: DateTime(2026),
+        ),
+      );
+
+      expect(client.sessionCacheRevision.value, before + 1);
+      expect(client.peekSessions()!.single.id, 'session-revision');
+    });
+
+    test('authoritative session snapshot replaces a newer cached title', () {
+      final client = BridgeClient();
+      client.debugSeedSessions([
+        _session(
+          id: 'session-renamed',
+          projectId: 'project-1',
+          title: 'Old title',
+          updatedAt: DateTime(2026, 5, 5, 12),
+        ),
+      ]);
+
+      client.syncSessionSummary(
+        _session(
+          id: 'session-renamed',
+          projectId: 'project-1',
+          title: 'Renamed title',
+          updatedAt: DateTime(2026, 5, 5, 11),
+        ),
+        authoritative: true,
+      );
+
+      expect(client.peekSessions()!.single.title, 'Renamed title');
     });
 
     test('clears session reasoning effort with null patch value', () async {
@@ -625,7 +664,7 @@ void main() {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
           expect(request.method, 'PATCH');
-          expect(request.url.path, '/sessions/session-1');
+          expect(request.url.path, '/v2/sessions/session-1');
           body = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response('', 204);
         }),
@@ -645,7 +684,7 @@ void main() {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
           expect(request.method, 'PATCH');
-          expect(request.url.path, '/sessions/session-1');
+          expect(request.url.path, '/v2/sessions/session-1');
           body = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response('', 204);
         }),
@@ -663,7 +702,7 @@ void main() {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
           expect(request.method, 'POST');
-          expect(request.url.path, '/sessions/session-1/cancel');
+          expect(request.url.path, '/v2/sessions/session-1/cancel');
           return http.Response(
             jsonEncode({
               'data': {'cancelled': true},
@@ -684,7 +723,7 @@ void main() {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
           expect(request.method, 'POST');
-          expect(request.url.path, '/sessions/session-1/cancel');
+          expect(request.url.path, '/v2/sessions/session-1/cancel');
           return http.Response(
             jsonEncode({
               'data': {'cancelled': false},
@@ -704,7 +743,7 @@ void main() {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
           expect(request.method, 'POST');
-          expect(request.url.path, '/sessions/session-1/cancel');
+          expect(request.url.path, '/v2/sessions/session-1/cancel');
           return http.Response('', 204);
         }),
       );
@@ -934,7 +973,7 @@ void main() {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
           expect(request.method, 'POST');
-          expect(request.url.path, '/sessions');
+          expect(request.url.path, '/v2/sessions');
           body = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response(
             jsonEncode({
@@ -974,7 +1013,7 @@ void main() {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
           expect(request.method, 'POST');
-          expect(request.url.path, '/sessions');
+          expect(request.url.path, '/v2/sessions');
           body = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response(
             jsonEncode({
@@ -1109,7 +1148,7 @@ void main() {
     test('sorts sessions by updatedAt descending and seeds cache', () async {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
-          expect(request.url.path, '/sessions');
+          expect(request.url.path, '/v2/sessions');
           return http.Response(
             jsonEncode({
               'data': [
@@ -1173,7 +1212,7 @@ void main() {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
           expect(request.method, 'GET');
-          expect(request.url.path, '/sessions');
+          expect(request.url.path, '/v2/sessions');
           return http.Response(
             jsonEncode({
               'data': [
@@ -1209,7 +1248,7 @@ void main() {
       var requestCount = 0;
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
-          expect(request.url.path, '/sessions');
+          expect(request.url.path, '/v2/sessions');
           requestCount += 1;
           if (requestCount == 1) {
             return http.Response(
@@ -1296,7 +1335,8 @@ void main() {
         () async {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
-          expect(request.url.path, '/projects/project-1/sessions');
+          expect(request.url.path, '/v2/sessions');
+          expect(request.url.queryParameters['project_id'], 'project-1');
           return http.Response(
             jsonEncode({
               'data': [
@@ -1331,7 +1371,8 @@ void main() {
     test('reports an unauthorized project session request', () async {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
-          expect(request.url.path, '/projects/project-1/sessions');
+          expect(request.url.path, '/v2/sessions');
+          expect(request.url.queryParameters['project_id'], 'project-1');
           return http.Response(
             jsonEncode({'error': 'Invalid client token'}),
             401,
@@ -1352,7 +1393,8 @@ void main() {
         var requestCount = 0;
         final client = BridgeClient(
           httpClient: _FakeHttpClient((request) async {
-            expect(request.url.path, '/projects/project-1/sessions');
+            expect(request.url.path, '/v2/sessions');
+            expect(request.url.queryParameters['project_id'], 'project-1');
             requestCount += 1;
             if (requestCount == 1) {
               return http.Response(
@@ -1809,13 +1851,14 @@ SessionSummary _session({
   required String id,
   required String projectId,
   required DateTime updatedAt,
+  String? title,
   String? lastMessagePreview,
   ReasoningEffort? reasoningEffort,
 }) {
   return SessionSummary(
     id: id,
     projectId: projectId,
-    title: id,
+    title: title ?? id,
     agentId: 'codex',
     briefReplyMode: false,
     status: SessionStatus.idle,

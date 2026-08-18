@@ -18,6 +18,7 @@ import '../widgets/app_skeleton.dart';
 import '../widgets/create_session_dialog.dart';
 import '../widgets/copyable_message.dart';
 import '../widgets/new_session_flow.dart';
+import '../widgets/session_cache_scope.dart';
 import 'session_detail_screen.dart';
 import 'project_ai_approval_prompt_screen.dart';
 
@@ -124,8 +125,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
     });
     try {
       final results = await Future.wait<Object>([
-        _client.listProjectSessions(
-          _project.id,
+        _client.listDomainSessions(
+          projectId: _project.id,
           forceRefresh: forceRefresh,
         ),
         _client.getProject(_project.id, forceRefresh: forceRefresh),
@@ -260,6 +261,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    SessionCacheScope.watch(context);
     final theme = Theme.of(context);
     final brightness = theme.brightness;
     final sessions = _sessions ?? const <SessionSummary>[];
@@ -1029,7 +1031,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
       updatedAt: DateTime.now(),
       unreadCount: 0,
       providerId: result.$3,
-      reasoningEffort: result.$4,
+      model: result.$4,
     );
     final sessionFuture = _client.createSession(
       projectId: _project.id,
@@ -1038,7 +1040,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
       clientSessionId: clientSessionId,
       briefReplyMode: appSettingsController.settings.compressAssistantReplies,
       providerId: result.$3,
-      reasoningEffort: result.$4,
+      model: result.$4,
     );
 
     await navigator.push(
