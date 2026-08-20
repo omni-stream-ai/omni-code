@@ -334,6 +334,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   String? _speechStatus;
   String? _speechError;
   ApprovalRequest? _pendingApproval;
+  final Set<String> _handledPiUiRequestIds = <String>{};
   List<AgentCommand> _agentCommands = const [];
   List<FileCompletionItem> _fileCompletions = const [];
   int _selectedCommandSuggestionIndex = 0;
@@ -764,6 +765,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       unawaited(_createSessionAndHydrate());
     } else {
       _startDomainController();
+      _subscribeToPiExtensionEvents();
       unawaited(_loadSessionDetail());
     }
     _loadProviders();
@@ -783,6 +785,83 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           ..addListener(_handleDomainStateChanged);
     _domainController = controller;
     unawaited(controller.start());
+  }
+
+  void _subscribeToPiExtensionEvents() {
+    _eventsReconnectTimer?.cancel();
+    unawaited(_eventsSubscription?.cancel());
+    _eventsSubscription = null;
+    if (_session.agentId != 'pi') return;
+    _eventsSubscription = _client.subscribeToSessionEvents(_session.id).listen(
+      (event) {
+        final data = event['data'];
+        if (data is! Map<String, dynamic>) return;
+        final type = data['type'];
+        if (type == 'pi_extension_ui_requested' ||
+            type == 'pi_extension_ui_resolved' ||
+            type == 'pi_extension_commands_updated') {
+          _handleBridgeEvent(event);
+        }
+      },
+      onError: (_) => _schedulePiExtensionEventsReconnect(),
+      onDone: _schedulePiExtensionEventsReconnect,
+      cancelOnError: true,
+    );
+    unawaited(_loadPendingPiExtensionUi());
+    unawaited(_loadPiExtensionCommands());
+  }
+
+  Future<void> _loadPiExtensionCommands() async {
+    final sessionId = _session.id;
+    try {
+      final commands = await _client.listPiExtensionCommands(sessionId);
+      if (!mounted || _session.id != sessionId || _session.agentId != 'pi') {
+        return;
+      }
+      _mergePiExtensionCommands(commands);
+    } catch (_) {
+      // The live command snapshot event remains the fallback.
+    }
+  }
+
+  void _mergePiExtensionCommands(List<AgentCommand> commands) {
+    if (commands.isEmpty) return;
+    final names = commands.map((item) => item.name).toSet();
+    setState(() {
+      _agentCommands = [
+        ..._agentCommands.where(
+          (item) => item.agentId != 'pi' || !names.contains(item.name),
+        ),
+        ...commands,
+      ];
+    });
+    _syncComposerSuggestionsOverlayAfterFrame();
+  }
+
+  Future<void> _loadPendingPiExtensionUi() async {
+    final sessionId = _session.id;
+    try {
+      final requests = await _client.listPendingPiExtensionUi(sessionId);
+      if (!mounted || _session.id != sessionId || _session.agentId != 'pi') {
+        return;
+      }
+      for (final request in requests) {
+        if (_handledPiUiRequestIds.add(request.requestId)) {
+          unawaited(_showPiExtensionUi(request));
+        }
+      }
+    } catch (_) {
+      // A live event still delivers new requests when recovery is unavailable.
+    }
+  }
+
+  void _schedulePiExtensionEventsReconnect() {
+    if (!mounted || _creatingSession || _session.agentId != 'pi') return;
+    _eventsReconnectTimer?.cancel();
+    _eventsReconnectTimer = Timer(
+      const Duration(seconds: 2),
+      _subscribeToPiExtensionEvents,
+    );
   }
 
   void _disposeDomainController() {
@@ -1073,6 +1152,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     if (sessionChanged) {
       _startDomainController();
+      _subscribeToPiExtensionEvents();
     }
     unawaited(_loadSessionDetail());
   }
@@ -6506,6 +6586,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _loadingMessages = true;
       });
       _startDomainController();
+      _subscribeToPiExtensionEvents();
       unawaited(_loadSessionDetail());
     } catch (error) {
       if (!mounted) {
@@ -7461,6 +7542,225 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _syncSessionSummaryCache();
         _requestComposerFocusWhileActiveTurnAfterFrame();
         break;
+      case 'pi_extension_ui_requested':
+      case 'pi_ui_requested':
+        final requestPayload = payload['request'] is Map<String, dynamic>
+            ? payload['request'] as Map<String, dynamic>
+            : payload;
+        final request = PiExtensionUiRequest.fromJson(requestPayload);
+        if (_handledPiUiRequestIds.add(request.requestId)) {
+          unawaited(_showPiExtensionUi(request));
+        }
+        break;
+      case 'pi_extension_ui_resolved':
+      case 'pi_ui_resolved':
+        _handledPiUiRequestIds.remove('${payload['request_id']}');
+        break;
+      case 'pi_extension_commands_updated':
+      case 'pi_commands_updated':
+        final rawCommands = payload['commands'];
+        if (rawCommands is! List) break;
+        final pluginCommands = rawCommands
+            .whereType<Map<String, dynamic>>()
+            .map((item) => AgentCommand.fromJson({...item, 'agent_id': 'pi'}))
+            .where((item) => item.name.isNotEmpty)
+            .toList(growable: false);
+        _mergePiExtensionCommands(pluginCommands);
+        break;
+    }
+  }
+
+  Future<void> _showPiExtensionUi(PiExtensionUiRequest request) async {
+    Object? value;
+    var cancelled = false;
+    try {
+      final method = request.method
+          .replaceAllMapped(
+            RegExp(r'[A-Z]'),
+            (match) => '_${match.group(0)!.toLowerCase()}',
+          )
+          .toLowerCase();
+      switch (method) {
+        case 'notify':
+        case 'notification':
+        case 'set_status':
+        case 'set_title':
+        case 'set_widget':
+        case 'spinner':
+        case 'show_spinner':
+        case 'progress':
+          if (!mounted) return;
+          final message =
+              '${request.payload['message'] ?? request.payload['text'] ?? request.payload['label'] ?? request.payload['title'] ?? ''}'
+                  .trim();
+          if (message.isNotEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(message)),
+            );
+          }
+          value = true;
+          break;
+        case 'dismiss':
+          value = true;
+          break;
+        case 'set_editor_text':
+          final nextText =
+              '${request.payload['text'] ?? request.payload['value'] ?? ''}';
+          _controller
+            ..text = nextText
+            ..selection = TextSelection.collapsed(offset: nextText.length);
+          value = true;
+          break;
+        case 'get_editor_text':
+          value = _controller.text;
+          break;
+        case 'get_theme':
+          value = Theme.of(context).brightness.name;
+          break;
+        case 'get_all_themes':
+          value = const ['light', 'dark'];
+          break;
+        case 'set_theme':
+          value = const {
+            'success': false,
+            'error': 'Theme switching is not supported'
+          };
+          break;
+        case 'confirm':
+          value = await _showPiConfirm(request);
+          cancelled = value == null;
+          break;
+        case 'select':
+          value = await _showPiSelect(request);
+          cancelled = value == null;
+          break;
+        case 'input':
+        case 'editor':
+          value = await _showPiTextInput(request);
+          cancelled = value == null;
+          break;
+        case 'custom':
+          value = await _showPiConfirm(request);
+          cancelled = value == null;
+          break;
+        default:
+          cancelled = true;
+          break;
+      }
+      await _client.submitPiExtensionUiResponse(
+        _session.id,
+        request.requestId,
+        value: value,
+        cancelled: cancelled,
+      );
+    } catch (_) {
+      // The request may have timed out while the dialog was open.
+    } finally {
+      _handledPiUiRequestIds.remove(request.requestId);
+    }
+  }
+
+  Future<Object?> _showPiConfirm(PiExtensionUiRequest request) async {
+    if (!mounted) return null;
+    final payload = request.payload;
+    final title = '${payload['title'] ?? request.extensionId ?? 'Pi plugin'}';
+    final message = '${payload['message'] ?? payload['description'] ?? ''}';
+    final isCapability = payload.containsKey('capability') ||
+        payload.containsKey('permission') ||
+        payload['persist'] != null;
+    return showDialog<Object?>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: message.trim().isEmpty ? null : SelectableText(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(dialogContext.l10n.reject),
+          ),
+          if (isCapability)
+            TextButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                const {'allow': true, 'persist': true},
+              ),
+              child: Text(dialogContext.l10n.alwaysAllow),
+            ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              dialogContext,
+              isCapability ? const {'allow': true, 'persist': false} : true,
+            ),
+            child: Text(dialogContext.l10n.approve),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<Object?> _showPiSelect(PiExtensionUiRequest request) async {
+    if (!mounted) return null;
+    final rawOptions = request.payload['options'];
+    final options = rawOptions is List ? rawOptions : const [];
+    return showDialog<Object?>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text(
+            '${request.payload['title'] ?? request.extensionId ?? 'Pi plugin'}'),
+        children: [
+          for (final option in options)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                option is Map ? option['value'] ?? option['label'] : option,
+              ),
+              child: Text(
+                option is Map
+                    ? '${option['label'] ?? option['value'] ?? ''}'
+                    : '$option',
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _showPiTextInput(PiExtensionUiRequest request) async {
+    if (!mounted) return null;
+    final controller = TextEditingController(
+      text:
+          '${request.payload['value'] ?? request.payload['default'] ?? request.payload['defaultValue'] ?? ''}',
+    );
+    try {
+      return await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(
+              '${request.payload['title'] ?? request.extensionId ?? 'Pi plugin'}'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            minLines: request.method == 'editor' ? 6 : 1,
+            maxLines: request.method == 'editor' ? 16 : 1,
+            decoration: InputDecoration(
+              hintText: request.payload['placeholder'] as String?,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(dialogContext.l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, controller.text),
+              child: Text(dialogContext.l10n.confirm),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      controller.dispose();
     }
   }
 
@@ -10195,7 +10495,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Future<void> _loadOlderMessages() async {
     final domainController = _domainController;
-    if (_expandingHistory || !_hasMoreOlderMessages ||
+    if (_expandingHistory ||
+        !_hasMoreOlderMessages ||
         domainController == null) {
       return;
     }

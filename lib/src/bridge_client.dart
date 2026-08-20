@@ -779,6 +779,58 @@ class BridgeClient {
     }
   }
 
+  Future<void> submitPiExtensionUiResponse(
+    String sessionId,
+    String requestId, {
+    Object? value,
+    bool cancelled = false,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/v2/sessions/$sessionId/pi-ui/$requestId'),
+      headers: {
+        ..._defaultHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        if (value != null) 'value': value,
+        'cancelled': cancelled,
+      }),
+    );
+    if (response.statusCode != 204) {
+      throw Exception(_extractErrorMessage(response));
+    }
+  }
+
+  Future<List<PiExtensionUiRequest>> listPendingPiExtensionUi(
+    String sessionId,
+  ) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/v2/sessions/$sessionId/pi-ui'),
+      headers: _defaultHeaders,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+    return _decodeApiListData(response.body)
+        .whereType<Map<String, dynamic>>()
+        .map(PiExtensionUiRequest.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<List<AgentCommand>> listPiExtensionCommands(String sessionId) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/v2/sessions/$sessionId/pi-commands'),
+      headers: _defaultHeaders,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+    return _decodeApiListData(response.body)
+        .whereType<Map<String, dynamic>>()
+        .map((item) => AgentCommand.fromJson({...item, 'agent_id': 'pi'}))
+        .toList(growable: false);
+  }
+
   Future<void> updateBridgeSettings(
     AppSettings settings, {
     List<ModelProviderConfig>? modelProviders,
@@ -1145,6 +1197,20 @@ class BridgeClient {
       'GET',
       Uri.parse('$baseUrl/v2/sessions/$sessionId/events')
           .replace(queryParameters: {'after': '$after'}),
+    )..headers.addAll({..._defaultHeaders, 'Accept': 'text/event-stream'});
+    final response = await _httpClient.send(request);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+          _extractErrorMessageFromBody(await response.stream.bytesToString()));
+    }
+    yield* _decodeSseResponse(response);
+  }
+
+  Stream<Map<String, dynamic>> subscribeToSessionEvents(
+      String sessionId) async* {
+    final request = http.Request(
+      'GET',
+      Uri.parse('$baseUrl/sessions/$sessionId/events'),
     )..headers.addAll({..._defaultHeaders, 'Accept': 'text/event-stream'});
     final response = await _httpClient.send(request);
     if (response.statusCode < 200 || response.statusCode >= 300) {

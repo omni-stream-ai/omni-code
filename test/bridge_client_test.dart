@@ -443,6 +443,101 @@ void main() {
     });
   });
 
+  group('Pi extension UI protocol', () {
+    test('parses request provenance and payload', () {
+      final request = PiExtensionUiRequest.fromJson({
+        'request_id': 'ui-1',
+        'method': 'select',
+        'payload': {
+          'title': 'Choose',
+          'options': ['a', 'b'],
+        },
+        'extension_id': 'example-plugin',
+        'timeout_ms': 30000,
+      });
+
+      expect(request.requestId, 'ui-1');
+      expect(request.method, 'select');
+      expect(request.extensionId, 'example-plugin');
+      expect(request.payload['options'], ['a', 'b']);
+    });
+
+    test('submits structured capability decisions', () async {
+      late http.Request captured;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          captured = request;
+          return http.Response('', 204);
+        }),
+      );
+
+      await client.submitPiExtensionUiResponse(
+        'session-1',
+        'ui-1',
+        value: const {'allow': true, 'persist': false},
+      );
+
+      expect(captured.method, 'POST');
+      expect(captured.url.path, '/v2/sessions/session-1/pi-ui/ui-1');
+      expect(jsonDecode(captured.body), {
+        'value': {'allow': true, 'persist': false},
+        'cancelled': false,
+      });
+    });
+
+    test('recovers pending requests after reconnect', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'request_id': 'ui-pending',
+                  'method': 'input',
+                  'payload': {'title': 'Name'},
+                  'extension_id': 'example-plugin',
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final requests = await client.listPendingPiExtensionUi('session-1');
+
+      expect(requests, hasLength(1));
+      expect(requests.single.requestId, 'ui-pending');
+      expect(requests.single.method, 'input');
+    });
+
+    test('loads the session plugin command snapshot', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'name': '/mcp',
+                  'description': 'Manage MCP servers',
+                  'source': 'pi-mcp-adapter',
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final commands = await client.listPiExtensionCommands('session-1');
+
+      expect(commands.single.name, '/mcp');
+      expect(commands.single.agentId, 'pi');
+    });
+  });
+
   group('BridgeClient session defaults and messaging', () {
     test('keeps cached streamed messages available after session navigation',
         () {

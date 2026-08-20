@@ -666,6 +666,34 @@ class ApprovalRequest {
   }
 }
 
+class PiExtensionUiRequest {
+  const PiExtensionUiRequest({
+    required this.requestId,
+    required this.method,
+    required this.payload,
+    this.extensionId,
+    this.timeoutMs,
+  });
+
+  final String requestId;
+  final String method;
+  final Map<String, dynamic> payload;
+  final String? extensionId;
+  final int? timeoutMs;
+
+  factory PiExtensionUiRequest.fromJson(Map<String, dynamic> json) {
+    return PiExtensionUiRequest(
+      requestId: '${json['request_id']}',
+      method: json['method'] as String? ?? '',
+      payload: json['payload'] is Map<String, dynamic>
+          ? json['payload'] as Map<String, dynamic>
+          : const <String, dynamic>{},
+      extensionId: json['extension_id'] as String?,
+      timeoutMs: (json['timeout_ms'] as num?)?.toInt(),
+    );
+  }
+}
+
 class ProjectAiApprovalSettings {
   const ProjectAiApprovalSettings({
     this.prompt = '',
