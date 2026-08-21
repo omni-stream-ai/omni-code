@@ -919,19 +919,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               _domainMessageToChat(message, MessageRole.assistant);
           if (projected.content.trim().isNotEmpty) messages.add(projected);
         }
-        final visibleActivities = segment.activities.where((activity) {
-          final isActive = activity.state == DomainEntityState.pending ||
-              activity.state == DomainEntityState.running ||
-              activity.state == DomainEntityState.awaitingApproval;
-          return isActive || activity.id == segment.latestActivityId;
-        });
         for (final activity in segment.activities) {
           if (activity.id == state.session.pendingApprovalId &&
               activity.payload.isNotEmpty) {
             pendingApproval = ApprovalRequest.fromJson(activity.payload);
           }
         }
-        for (final activity in visibleActivities) {
+        // Keep the complete activity history in the local message projection.
+        // The conversation view still groups these into one compact tool entry,
+        // while the activity dialog can show every call/result after a reload.
+        for (final activity in segment.activities) {
           messages.add(ChatMessage(
             id: activity.id,
             sessionId: _session.id,
