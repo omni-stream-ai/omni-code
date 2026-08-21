@@ -10579,7 +10579,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     final brightness = Theme.of(context).brightness;
-    final displayMessages = _compactToolMessages(systemMessages);
+    final displayMessages = _compactToolMessages(
+      systemMessages
+          .where((message) => !_isPiLifecycleMessage(message))
+          .toList(),
+    );
 
     await showDialog<void>(
       context: context,
@@ -10624,6 +10628,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ],
       ),
     );
+  }
+
+  bool _isPiLifecycleMessage(ChatMessage message) {
+    final content = message.content.trimLeft();
+    return content.startsWith('[pi]') || content.startsWith('[pi:turn');
   }
 
   List<ChatMessage> _compactToolMessages(List<ChatMessage> messages) {
@@ -10706,7 +10715,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         if (toolName != null && toolName.isNotEmpty)
           _detailRow(context.l10n.detailType, toolName),
         if (args != null)
-          _detailBlock(context.l10n.detailContent, formatValue(args)),
+          _detailBlock(
+            context.l10n.detailContent,
+            _formatPiToolArguments(toolName, args, formatValue),
+          ),
         if (partial != null) ...[
           const SizedBox(height: AppSpacing.fieldGap),
           _detailBlock(context.l10n.detailExtra, formatValue(partial)),
@@ -10736,6 +10748,56 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         SelectableText(rawContent, style: const TextStyle(height: 1.5)),
       ],
     );
+  }
+
+  String _formatPiToolArguments(
+    String? toolName,
+    Object? args,
+    String Function(Object?) formatValue,
+  ) {
+    if (args is! Map) return formatValue(args);
+    String value(String key) => '${args[key] ?? ''}'.trim();
+    switch (toolName) {
+      case 'grep':
+        final pattern = value('pattern');
+        final path = value('path');
+        final glob = value('glob');
+        final limit = value('limit');
+        return [
+          if (pattern.isNotEmpty) 'pattern: $pattern',
+          if (path.isNotEmpty) 'path: $path',
+          if (glob.isNotEmpty) 'glob: $glob',
+          if (limit.isNotEmpty) 'limit: $limit',
+        ].join('\n');
+      case 'find':
+        final pattern = value('pattern');
+        final path = value('path');
+        return [
+          if (pattern.isNotEmpty) 'pattern: $pattern',
+          if (path.isNotEmpty) 'path: $path',
+        ].join('\n');
+      case 'ls':
+      case 'read':
+        final path = value('path');
+        final offset = value('offset');
+        final limit = value('limit');
+        return [
+          if (path.isNotEmpty) 'path: $path',
+          if (offset.isNotEmpty) 'offset: $offset',
+          if (limit.isNotEmpty) 'limit: $limit',
+        ].join('\n');
+      case 'bash':
+        final command = value('command');
+        return command.isEmpty ? formatValue(args) : command;
+      case 'todo':
+        final items = args['items'];
+        return items == null ? formatValue(args) : formatValue(items);
+      case 'hashline_edit':
+        final edits = args['edits'];
+        return edits is List ? '${edits.length} edits' : formatValue(args);
+      default:
+        return formatValue(args);
+    }
   }
 
   Widget _buildStructuredToolDetail(
@@ -10877,6 +10939,18 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     final tag = text.substring(1, end);
     final remainder = text.substring(end + 1).trim();
+
+    if (tag.startsWith('pi:')) {
+      final parts = tag.split(':');
+      final tool = parts.length > 1 ? parts[1] : 'pi';
+      final phase = parts.length > 2 ? parts.sublist(2).join(':') : null;
+      return _ParsedToolMessage(
+        kindLabel: _piToolLabel(tool),
+        phaseLabel: phase == null ? null : _phaseLabel(phase),
+        primaryLabel: context.l10n.detailContent,
+        primary: remainder,
+      );
+    }
 
     if (tag.startsWith('command:')) {
       final phase = tag.split(':').skip(1).join(':');
@@ -11023,6 +11097,30 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         return 'MCP';
       default:
         return kind;
+    }
+  }
+
+  String _piToolLabel(String tool) {
+    final isChinese = Localizations.localeOf(context).languageCode == 'zh';
+    switch (tool) {
+      case 'grep':
+        return isChinese ? '搜索 · grep' : 'Grep';
+      case 'find':
+        return isChinese ? '查找 · find' : 'Find';
+      case 'ls':
+        return isChinese ? '目录 · ls' : 'List';
+      case 'read':
+        return isChinese ? '读取 · read' : 'Read';
+      case 'bash':
+        return isChinese ? '命令 · bash' : 'Bash';
+      case 'hashline_edit':
+        return isChinese ? '编辑 · hashline' : 'Edit';
+      case 'todo':
+        return context.l10n.toolKindTodo;
+      case 'thinking':
+        return context.l10n.toolKindReasoning;
+      default:
+        return tool;
     }
   }
 
