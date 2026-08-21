@@ -1192,6 +1192,7 @@ class ChatMessage {
     required this.role,
     required this.content,
     required this.createdAt,
+    this.activityPayload,
   });
 
   final String id;
@@ -1200,12 +1201,17 @@ class ChatMessage {
   final String content;
   final DateTime createdAt;
 
+  /// Provider activity data kept on local/domain-projected system messages.
+  /// Compatibility API messages do not include this field.
+  final Map<String, dynamic>? activityPayload;
+
   ChatMessage copyWith({
     String? id,
     String? sessionId,
     MessageRole? role,
     String? content,
     DateTime? createdAt,
+    Map<String, dynamic>? activityPayload,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -1213,6 +1219,7 @@ class ChatMessage {
       role: role ?? this.role,
       content: content ?? this.content,
       createdAt: createdAt ?? this.createdAt,
+      activityPayload: activityPayload ?? this.activityPayload,
     );
   }
 

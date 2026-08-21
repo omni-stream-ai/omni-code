@@ -938,6 +938,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             role: MessageRole.system,
             content: activity.title,
             createdAt: activity.createdAt,
+            activityPayload: activity.payload,
           ));
         }
       }
@@ -10663,12 +10664,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         content: SizedBox(
           width: 360,
           child: SingleChildScrollView(
-            child: parsed == null
-                ? SelectableText(
-                    message.content,
-                    style: const TextStyle(height: 1.5),
-                  )
-                : _buildStructuredToolDetail(parsed, message.content),
+            child: message.activityPayload != null &&
+                    message.activityPayload!.isNotEmpty
+                ? _buildActivityPayloadDetail(
+                    message.activityPayload!, message.content)
+                : parsed == null
+                    ? SelectableText(
+                        message.content,
+                        style: const TextStyle(height: 1.5),
+                      )
+                    : _buildStructuredToolDetail(parsed, message.content),
           ),
         ),
         actions: [
@@ -10678,6 +10683,61 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildActivityPayloadDetail(
+    Map<String, dynamic> payload,
+    String rawContent,
+  ) {
+    final brightness = Theme.of(context).brightness;
+    final toolName = payload['tool_name'] as String?;
+    final args = payload['args'];
+    final partial = payload['partial_result'];
+    final result = payload['result'];
+    final isError = payload['is_error'] == true;
+
+    String formatValue(Object? value) {
+      if (value == null) return '';
+      if (value is String) return value;
+      return const JsonEncoder.withIndent('  ').convert(value);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (toolName != null && toolName.isNotEmpty)
+          _detailRow(context.l10n.detailType, toolName),
+        if (args != null)
+          _detailBlock(context.l10n.detailContent, formatValue(args)),
+        if (partial != null) ...[
+          const SizedBox(height: AppSpacing.fieldGap),
+          _detailBlock(context.l10n.detailExtra, formatValue(partial)),
+        ],
+        if (result != null) ...[
+          const SizedBox(height: AppSpacing.fieldGap),
+          _detailBlock(
+            isError
+                ? context.l10n.detailExtra
+                : context.l10n.toolSecondaryResult,
+            formatValue(result),
+          ),
+        ],
+        if (payload['error'] != null) ...[
+          const SizedBox(height: AppSpacing.fieldGap),
+          _detailBlock(context.l10n.detailExtra, formatValue(payload['error'])),
+        ],
+        const SizedBox(height: AppSpacing.block),
+        Text(
+          context.l10n.detailRawContent,
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: AppColors.mutedSoftFor(brightness),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.compact),
+        SelectableText(rawContent, style: const TextStyle(height: 1.5)),
+      ],
     );
   }
 
