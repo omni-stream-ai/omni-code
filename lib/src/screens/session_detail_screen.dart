@@ -6497,6 +6497,23 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   String _toolMessagePreview(ChatMessage message) {
+    final payload = message.activityPayload;
+    final payloadTool = payload?['tool_name'] as String?;
+    if (payload != null && payloadTool != null && payloadTool.isNotEmpty) {
+      final parsed = _parseToolMessage(message.content);
+      final phase = parsed?.phaseLabel;
+      final args = payload['args'];
+      final argumentSummary = args == null
+          ? ''
+          : _compactToolText(
+              _formatPiToolArguments(payloadTool, args, _formatToolValue),
+            );
+      return [
+        _piToolLabel(payloadTool),
+        if (phase != null && phase.isNotEmpty) phase,
+        if (argumentSummary.isNotEmpty) argumentSummary,
+      ].join(' · ');
+    }
     final parsed = _parseToolMessage(message.content);
     if (parsed == null) {
       return _compactToolText(message.content);
@@ -6519,6 +6536,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     return parts.join(' · ');
+  }
+
+  String _formatToolValue(Object? value) {
+    if (value == null) return '';
+    if (value is String) return value;
+    return const JsonEncoder.withIndent('  ').convert(value);
   }
 
   String _toolGroupPreview(List<ChatMessage> messages) {
