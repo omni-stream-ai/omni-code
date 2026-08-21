@@ -84,7 +84,7 @@ class _PiPluginsScreenState extends State<PiPluginsScreen> {
     if (result == null) return;
     setState(() => _busy.add('__install__'));
     try {
-      final plugin = await _client.installPiPlugin(
+      await _client.installPiPlugin(
           source: result.source,
           id: result.id,
           sha256: result.sha256,
@@ -92,7 +92,12 @@ class _PiPluginsScreenState extends State<PiPluginsScreen> {
           fileName: result.fileName,
           projectIds: result.projectIds,
           config: result.config);
-      if (mounted) setState(() => _plugins = [..._plugins, plugin]);
+      // The install response is only the initial acknowledgement. Refresh
+      // from the bridge so generated bundle metadata and validation state are
+      // visible before the install button leaves its loading state.
+      if (mounted) {
+        await _load();
+      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -150,7 +155,12 @@ class _PiPluginsScreenState extends State<PiPluginsScreen> {
       ]),
       floatingActionButton: FloatingActionButton.extended(
           onPressed: _busy.contains('__install__') ? null : _install,
-          icon: const Icon(Icons.add_rounded),
+          icon: _busy.contains('__install__')
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.add_rounded),
           label: Text(l10n.piPluginAdd)),
       body: SafeArea(
           child: RefreshIndicator(
