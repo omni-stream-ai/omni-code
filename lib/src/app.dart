@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import '../l10n/generated/app_localizations.dart';
 import 'app_routes.dart';
@@ -32,6 +33,9 @@ class OmniCodeApp extends StatefulWidget {
 }
 
 class _OmniCodeAppState extends State<OmniCodeApp> {
+  final SentryNavigatorObserver _sentryNavigatorObserver =
+      SentryNavigatorObserver();
+
   @override
   void initState() {
     super.initState();
@@ -58,7 +62,10 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
           onGenerateTitle: (context) => context.l10n.appTitle,
           debugShowCheckedModeBanner: false,
           navigatorKey: notificationService.navigatorKey,
-          navigatorObservers: [sessionEventService],
+          navigatorObservers: [
+            sessionEventService,
+            _sentryNavigatorObserver,
+          ],
           locale: locale,
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: const [

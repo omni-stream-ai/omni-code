@@ -3842,6 +3842,18 @@ abstract class AppLocalizations {
   /// **'Muted'**
   String get notificationSoundMuted;
 
+  /// No description provided for @errorReportingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Error diagnostics'**
+  String get errorReportingTitle;
+
+  /// No description provided for @errorReportingDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload anonymous diagnostics when the app encounters an error to help us identify issues and improve stability. Conversations, input text, and credentials are never included.'**
+  String get errorReportingDescription;
+
   /// No description provided for @piPluginsTitle.
   ///
   /// In en, this message translates to:

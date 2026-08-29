@@ -3,6 +3,15 @@ import 'package:omni_code/src/models.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 
 void main() {
+  test('error reporting defaults to enabled and round-trips', () {
+    expect(AppSettings.defaults().errorReportingEnabled, isTrue);
+
+    final restored = AppSettings.fromJson(
+      AppSettings.defaults().copyWith(errorReportingEnabled: false).toJson(),
+    );
+    expect(restored.errorReportingEnabled, isFalse);
+  });
+
   test('notification sound defaults to important only', () {
     expect(
       AppSettings.defaults().notificationSoundMode,

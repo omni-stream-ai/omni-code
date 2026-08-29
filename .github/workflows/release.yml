@@ -13,6 +13,11 @@ permissions:
 env:
   HOMEBREW_TAP_REPO: omni-stream-ai/homebrew-omni-code
   AUR_REPO: omni-code-bin
+  SENTRY_DSN: ${{ vars.SENTRY_DSN }}
+  SENTRY_ENVIRONMENT: production
+  SENTRY_TRACES_SAMPLE_RATE: ${{ vars.SENTRY_TRACES_SAMPLE_RATE || '0.1' }}
+  SENTRY_PROFILES_SAMPLE_RATE: ${{ vars.SENTRY_PROFILES_SAMPLE_RATE || '0.1' }}
+  SENTRY_MEMORY_THRESHOLD_MB: ${{ vars.SENTRY_MEMORY_THRESHOLD_MB || '1024' }}
 
 jobs:
   detect-version-bump:
@@ -266,10 +271,22 @@ jobs:
         run: flutter pub get
 
       - name: Build release APK
-        run: flutter build apk --release
+        run: >-
+          flutter build apk --release
+          --dart-define=SENTRY_DSN="$SENTRY_DSN"
+          --dart-define=SENTRY_ENVIRONMENT="$SENTRY_ENVIRONMENT"
+          --dart-define=SENTRY_TRACES_SAMPLE_RATE="$SENTRY_TRACES_SAMPLE_RATE"
+          --dart-define=SENTRY_PROFILES_SAMPLE_RATE="$SENTRY_PROFILES_SAMPLE_RATE"
+          --dart-define=SENTRY_MEMORY_THRESHOLD_MB="$SENTRY_MEMORY_THRESHOLD_MB"
 
       - name: Build split-per-abi APKs
-        run: flutter build apk --release --split-per-abi
+        run: >-
+          flutter build apk --release --split-per-abi
+          --dart-define=SENTRY_DSN="$SENTRY_DSN"
+          --dart-define=SENTRY_ENVIRONMENT="$SENTRY_ENVIRONMENT"
+          --dart-define=SENTRY_TRACES_SAMPLE_RATE="$SENTRY_TRACES_SAMPLE_RATE"
+          --dart-define=SENTRY_PROFILES_SAMPLE_RATE="$SENTRY_PROFILES_SAMPLE_RATE"
+          --dart-define=SENTRY_MEMORY_THRESHOLD_MB="$SENTRY_MEMORY_THRESHOLD_MB"
 
       - name: Upload release APK
         uses: actions/upload-artifact@v4
@@ -346,12 +363,24 @@ jobs:
           CMAKE_POLICY_VERSION_MINIMUM: 3.5
           CXXFLAGS: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
           CMAKE_CXX_FLAGS: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
-        run: flutter build windows --release
+        run: >-
+          flutter build windows --release
+          --dart-define=SENTRY_DSN="$env:SENTRY_DSN"
+          --dart-define=SENTRY_ENVIRONMENT="$env:SENTRY_ENVIRONMENT"
+          --dart-define=SENTRY_TRACES_SAMPLE_RATE="$env:SENTRY_TRACES_SAMPLE_RATE"
+          --dart-define=SENTRY_PROFILES_SAMPLE_RATE="$env:SENTRY_PROFILES_SAMPLE_RATE"
+          --dart-define=SENTRY_MEMORY_THRESHOLD_MB="$env:SENTRY_MEMORY_THRESHOLD_MB"
 
       - name: Build Linux desktop bundle
         if: runner.os == 'Linux'
         shell: bash
-        run: flutter build linux --release
+        run: >-
+          flutter build linux --release
+          --dart-define=SENTRY_DSN="$SENTRY_DSN"
+          --dart-define=SENTRY_ENVIRONMENT="$SENTRY_ENVIRONMENT"
+          --dart-define=SENTRY_TRACES_SAMPLE_RATE="$SENTRY_TRACES_SAMPLE_RATE"
+          --dart-define=SENTRY_PROFILES_SAMPLE_RATE="$SENTRY_PROFILES_SAMPLE_RATE"
+          --dart-define=SENTRY_MEMORY_THRESHOLD_MB="$SENTRY_MEMORY_THRESHOLD_MB"
 
       - name: Patch speech_to_text macOS deployment target
         if: runner.os == 'macOS'
@@ -366,7 +395,13 @@ jobs:
       - name: Build macOS desktop bundle
         if: runner.os == 'macOS'
         shell: bash
-        run: flutter build macos --release
+        run: >-
+          flutter build macos --release
+          --dart-define=SENTRY_DSN="$SENTRY_DSN"
+          --dart-define=SENTRY_ENVIRONMENT="$SENTRY_ENVIRONMENT"
+          --dart-define=SENTRY_TRACES_SAMPLE_RATE="$SENTRY_TRACES_SAMPLE_RATE"
+          --dart-define=SENTRY_PROFILES_SAMPLE_RATE="$SENTRY_PROFILES_SAMPLE_RATE"
+          --dart-define=SENTRY_MEMORY_THRESHOLD_MB="$SENTRY_MEMORY_THRESHOLD_MB"
 
       - name: Package Windows desktop bundle
         if: runner.os == 'Windows'

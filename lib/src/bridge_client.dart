@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import 'bridge_speech_models.dart';
 import 'models.dart';
 import 'settings/app_settings.dart';
+import 'services/sentry_service.dart';
 
 Map<String, dynamic> _decodeJsonObject(String source) =>
     jsonDecode(source) as Map<String, dynamic>;
@@ -544,18 +545,25 @@ class BridgeClient {
       if (beforeId != null) 'before_id': beforeId,
       if (afterId != null) 'after_id': afterId,
     };
-    final response = await _httpClient.get(
-      Uri.parse('$baseUrl/v2/sessions/$sessionId/messages').replace(
-        queryParameters: queryParameters,
-      ),
-      headers: _defaultHeaders,
+    return traceSentryOperation(
+      'bridge.list_messages_page',
+      'http.client',
+      () async {
+        final response = await _httpClient.get(
+          Uri.parse('$baseUrl/v2/sessions/$sessionId/messages').replace(
+            queryParameters: queryParameters,
+          ),
+          headers: _defaultHeaders,
+        );
+        if (_isUnauthorized(response)) {
+          throw ClientUnauthorizedException(response.body);
+        }
+        _assertJsonResponse(response);
+        final payload = jsonDecode(response.body) as Map<String, dynamic>;
+        return MessageListPage.fromJson(payload);
+      },
+      measurements: {'message.page_limit': limit},
     );
-    if (_isUnauthorized(response)) {
-      throw ClientUnauthorizedException(response.body);
-    }
-    _assertJsonResponse(response);
-    final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    return MessageListPage.fromJson(payload);
   }
 
   Future<List<ChatMessage>> listMessages(String sessionId) async {
@@ -1178,15 +1186,22 @@ class BridgeClient {
     if (model != null && model.trim().isNotEmpty) {
       body['model'] = model.trim();
     }
-    final response = await _httpClient.post(
-      Uri.parse('$baseUrl/v2/sessions/$sessionId/turns'),
-      headers: {..._defaultHeaders, 'Content-Type': 'application/json'},
-      body: jsonEncode(body),
+    return traceSentryOperation(
+      'bridge.create_turn',
+      'http.client',
+      () async {
+        final response = await _httpClient.post(
+          Uri.parse('$baseUrl/v2/sessions/$sessionId/turns'),
+          headers: {..._defaultHeaders, 'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        );
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw Exception(_extractErrorMessage(response));
+        }
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      },
+      measurements: {'attachment.count': attachments.length},
     );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(_extractErrorMessage(response));
-    }
-    return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
   Stream<Map<String, dynamic>> subscribeToDomainSessionEvents(

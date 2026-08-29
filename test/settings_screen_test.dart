@@ -59,6 +59,21 @@ void main() {
     );
   });
 
+  testWidgets('can disable anonymous error diagnostics', (tester) async {
+    await tester.pumpWidget(const _TestApp(home: SettingsScreen()));
+    await tester.pump();
+
+    final toggle = find.byKey(const Key('error-reporting-toggle'));
+    await tester.ensureVisible(toggle);
+    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+
+    await tester.tap(toggle);
+    await tester.pump();
+
+    expect(appSettingsController.settings.errorReportingEnabled, isFalse);
+    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+  });
+
   testWidgets('does not restore target update version from saved settings',
       (tester) async {
     appSettingsController.debugReplaceSettings(

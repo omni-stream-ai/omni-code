@@ -952,6 +952,8 @@
   "notificationSoundAll": "全部通知",
   "notificationSoundImportantOnly": "仅重要消息",
   "notificationSoundMuted": "静音",
+  "errorReportingTitle": "错误诊断上报",
+  "errorReportingDescription": "在程序发生错误时上传匿名诊断信息，帮助我们定位问题并改进稳定性。不会上传对话内容、输入文本或凭据。",
   "piPluginsTitle": "Pi 插件",
   "piPluginsSubtitle": "安装和管理 Pi 会话加载的扩展",
   "piPluginEmpty": "尚未安装 Pi 插件",

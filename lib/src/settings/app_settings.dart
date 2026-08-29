@@ -54,6 +54,7 @@ class AppSettings {
     required this.aiApprovalMaxRisk,
     required this.notificationMaxChars,
     required this.notificationSoundMode,
+    required this.errorReportingEnabled,
     required this.autoSpeakReplies,
     required this.speechPlaybackPromptEnabled,
     required this.compressAssistantReplies,
@@ -99,6 +100,7 @@ class AppSettings {
   final String aiApprovalMaxRisk;
   final int notificationMaxChars;
   final NotificationSoundMode notificationSoundMode;
+  final bool errorReportingEnabled;
   final bool autoSpeakReplies;
   final bool speechPlaybackPromptEnabled;
   final bool compressAssistantReplies;
@@ -170,6 +172,7 @@ class AppSettings {
       aiApprovalMaxRisk: 'low',
       notificationMaxChars: _defaultNotificationMaxChars,
       notificationSoundMode: NotificationSoundMode.importantOnly,
+      errorReportingEnabled: true,
       autoSpeakReplies: false,
       speechPlaybackPromptEnabled: true,
       compressAssistantReplies: false,
@@ -224,6 +227,7 @@ class AppSettings {
     String? aiApprovalMaxRisk,
     int? notificationMaxChars,
     NotificationSoundMode? notificationSoundMode,
+    bool? errorReportingEnabled,
     bool? autoSpeakReplies,
     bool? speechPlaybackPromptEnabled,
     bool? compressAssistantReplies,
@@ -278,6 +282,8 @@ class AppSettings {
       notificationMaxChars: notificationMaxChars ?? this.notificationMaxChars,
       notificationSoundMode:
           notificationSoundMode ?? this.notificationSoundMode,
+      errorReportingEnabled:
+          errorReportingEnabled ?? this.errorReportingEnabled,
       autoSpeakReplies: autoSpeakReplies ?? this.autoSpeakReplies,
       speechPlaybackPromptEnabled:
           speechPlaybackPromptEnabled ?? this.speechPlaybackPromptEnabled,
@@ -363,6 +369,7 @@ class AppSettings {
       'ai_approval_model': aiApprovalModel,
       'ai_approval_max_risk': aiApprovalMaxRisk,
       'notification_sound_mode': notificationSoundMode.name,
+      'error_reporting_enabled': errorReportingEnabled,
       'auto_speak_replies': autoSpeakReplies,
       'speech_playback_prompt_enabled': speechPlaybackPromptEnabled,
       'compress_assistant_replies': compressAssistantReplies,
@@ -445,6 +452,11 @@ class AppSettings {
       notificationSoundMode: _parseNotificationSoundMode(
         _readNullableString(json, 'notification_sound_mode'),
         defaults.notificationSoundMode,
+      ),
+      errorReportingEnabled: _readBool(
+        json,
+        'error_reporting_enabled',
+        defaults.errorReportingEnabled,
       ),
       autoSpeakReplies:
           _readBool(json, 'auto_speak_replies', defaults.autoSpeakReplies),
@@ -1044,6 +1056,9 @@ class AppSettingsController extends ChangeNotifier {
           shouldPersist = true;
         }
         if (json.containsKey('notification_max_chars')) {
+          shouldPersist = true;
+        }
+        if (json['error_reporting_enabled'] == null) {
           shouldPersist = true;
         }
         if (json['compress_assistant_reply_max_chars'] == null) {

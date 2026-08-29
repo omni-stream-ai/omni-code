@@ -952,6 +952,8 @@
   "notificationSoundAll": "All notifications",
   "notificationSoundImportantOnly": "Important only",
   "notificationSoundMuted": "Muted",
+  "errorReportingTitle": "Error diagnostics",
+  "errorReportingDescription": "Upload anonymous diagnostics when the app encounters an error to help us identify issues and improve stability. Conversations, input text, and credentials are never included.",
   "piPluginsTitle": "Pi plugins",
   "piPluginsSubtitle": "Install and control extensions loaded by Pi sessions",
   "piPluginEmpty": "No Pi plugins installed",

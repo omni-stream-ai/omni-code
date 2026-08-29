@@ -38,3 +38,4 @@ ios/Runner/GoogleService-Info.plist
 *.mobileprovision
 *.orig
 .tmp_flutter_test
+.sentry-native/

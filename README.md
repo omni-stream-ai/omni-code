@@ -74,6 +74,30 @@ flutter pub get
 flutter run
 ```
 
+Sentry error and performance monitoring is enabled only when a DSN is supplied:
+
+```bash
+flutter run \
+  --dart-define=SENTRY_DSN=https://examplePublicKey@o0.ingest.sentry.io/0 \
+  --dart-define=SENTRY_ENVIRONMENT=development \
+  --dart-define=SENTRY_TRACES_SAMPLE_RATE=0.1 \
+  --dart-define=SENTRY_PROFILES_SAMPLE_RATE=0.1 \
+  --dart-define=SENTRY_MEMORY_THRESHOLD_MB=1024
+```
+
+Request bodies, console breadcrumbs, UI text, credentials, URL query strings,
+and project/session identifiers are excluded from Sentry events.
+
+Release builds read `SENTRY_DSN` from the GitHub repository variable with the
+same name. `SENTRY_TRACES_SAMPLE_RATE` controls transaction sampling and
+`SENTRY_PROFILES_SAMPLE_RATE` controls profiling; both default to `0.1`.
+`SENTRY_MEMORY_THRESHOLD_MB` controls the sustained-memory alert threshold and
+defaults to `1024`. The app samples process CPU and memory once per minute and
+reports only sustained threshold breaches or recovered main-isolate stalls.
+Configure these under **Settings > Secrets and variables > Actions > Variables**;
+no Sentry auth token is needed. All monitoring stops when error reporting is
+disabled in the app settings.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). The project TODO board is at [GitHub Projects](https://github.com/orgs/omni-stream-ai/projects/2).

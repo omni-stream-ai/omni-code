@@ -2077,6 +2077,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get notificationSoundMuted => '静音';
 
   @override
+  String get errorReportingTitle => '错误诊断上报';
+
+  @override
+  String get errorReportingDescription =>
+      '在程序发生错误时上传匿名诊断信息，帮助我们定位问题并改进稳定性。不会上传对话内容、输入文本或凭据。';
+
+  @override
   String get piPluginsTitle => 'Pi 插件';
 
   @override

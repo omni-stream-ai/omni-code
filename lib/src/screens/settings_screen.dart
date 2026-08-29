@@ -12,6 +12,7 @@ import '../l10n/app_locale.dart';
 import '../models.dart';
 import '../responsive/app_responsive_layout.dart';
 import '../services/app_update_service.dart';
+import '../services/sentry_service.dart';
 import '../app_routes.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_colors.dart';
@@ -60,6 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _aiApprovalDirty = false;
   late AppThemeModeSetting _themeMode;
   late bool _autoSpeakReplies;
+  late bool _errorReportingEnabled;
   late bool _compressAssistantReplies;
   late NotificationSoundMode _notificationSoundMode;
   late String _appLanguage;
@@ -104,6 +106,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         settings.compressAssistantReplyMaxChars.toString();
     _themeMode = settings.themeMode;
     _autoSpeakReplies = settings.autoSpeakReplies;
+    _errorReportingEnabled = settings.errorReportingEnabled;
     _compressAssistantReplies = settings.compressAssistantReplies;
     _notificationSoundMode = settings.notificationSoundMode;
   }
@@ -782,6 +785,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             }
           },
         ),
+        SwitchListTile(
+          key: const Key('error-reporting-toggle'),
+          value: _errorReportingEnabled,
+          onChanged: _saving ? null : _saveErrorReportingToggle,
+          title: Text(l10n.errorReportingTitle),
+          subtitle: Text(l10n.errorReportingDescription),
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          contentPadding: EdgeInsets.zero,
+        ),
         TextField(
           controller: _bridgeUrlController,
           style: formValueTextStyle,
@@ -1374,6 +1387,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _autoSpeakReplies = current.autoSpeakReplies;
         _compressAssistantReplies = current.compressAssistantReplies;
       });
+      _showCopyableErrorSnackBar(context.l10n.settingsSaveFailed('$error'));
+    }
+  }
+
+  Future<void> _saveErrorReportingToggle(bool value) async {
+    final previous = appSettingsController.settings;
+    setState(() => _errorReportingEnabled = value);
+    try {
+      await appSettingsController.save(
+        previous.copyWith(errorReportingEnabled: value),
+      );
+      await setSentryReportingEnabled(value);
+    } catch (error) {
+      await appSettingsController.save(previous);
+      if (!mounted) return;
+      setState(() => _errorReportingEnabled = previous.errorReportingEnabled);
       _showCopyableErrorSnackBar(context.l10n.settingsSaveFailed('$error'));
     }
   }

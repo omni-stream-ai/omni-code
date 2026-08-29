@@ -2165,6 +2165,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notificationSoundMuted => 'Muted';
 
   @override
+  String get errorReportingTitle => 'Error diagnostics';
+
+  @override
+  String get errorReportingDescription =>
+      'Upload anonymous diagnostics when the app encounters an error to help us identify issues and improve stability. Conversations, input text, and credentials are never included.';
+
+  @override
   String get piPluginsTitle => 'Pi plugins';
 
   @override
