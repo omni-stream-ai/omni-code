@@ -441,6 +441,15 @@ void main() {
 
       expect(approval.requestId, '0');
     });
+
+    test('uses a fallback kind for partial approval payloads', () {
+      final approval = ApprovalRequest.fromJson({
+        'request_id': 'approval-1',
+        'kind': null,
+      });
+
+      expect(approval.kind, 'approval');
+    });
   });
 
   group('Pi extension UI protocol', () {

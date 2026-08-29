@@ -51,6 +51,38 @@ void main() {
     ]);
   });
 
+  test('coalesces refreshes while a session refresh is in flight', () async {
+    final client = _DelayedSessionClient();
+    final service = SessionEventService(client: client);
+    addTearDown(service.dispose);
+
+    service.refreshSessionForTest('session-1');
+    await Future<void>.delayed(Duration.zero);
+    service.refreshSessionForTest('session-1');
+    service.refreshSessionForTest('session-1');
+
+    expect(client.sessionLoadCount, 1);
+    client.completeNextLoad();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(client.sessionLoadCount, 2);
+    client.completeNextLoad();
+  });
+
+  test('does not start overlapping global synchronizations', () async {
+    final client = _DelayedSessionClient();
+    final service = SessionEventService(client: client);
+    addTearDown(service.dispose);
+
+    final first = service.synchronizeForTest();
+    final second = service.synchronizeForTest();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(client.sessionLoadCount, 1);
+    client.completeNextLoad();
+    await Future.wait([first, second]);
+  });
+
   testWidgets('pending approval opens an in-app dialog and submits the choice',
       (tester) async {
     final client = _SessionClient(
@@ -91,6 +123,40 @@ void main() {
     expect(client.approvalSubmissions, [
       ('session-1', 'approval-1', 'accept'),
     ]);
+  });
+
+  testWidgets('current session approval does not open a global dialog',
+      (tester) async {
+    final client = _SessionClient([_waitingSession('approval-1')]);
+    final notifications = _RecordingNotifications();
+    final service = SessionEventService(
+      client: client,
+      notifications: notifications,
+    );
+    addTearDown(() async {
+      service.dispose();
+      await client.close();
+    });
+    service.didPush(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(
+          name: '/projects/project-1/sessions/session-1',
+        ),
+        builder: (_) => const SizedBox.shrink(),
+      ),
+      null,
+    );
+    await tester.pumpWidget(MaterialApp(
+      navigatorKey: notifications.navigatorKey,
+      localizationsDelegates: const [AppLocalizations.delegate],
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const Scaffold(body: Text('Session detail')),
+    ));
+
+    await service.synchronizeForTest();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
   });
 }
 
@@ -169,6 +235,30 @@ class _SessionClient extends BridgeClient {
   }
 
   Future<void> close() => _events.close();
+}
+
+class _DelayedSessionClient extends BridgeClient {
+  int sessionLoadCount = 0;
+  final List<Completer<List<SessionSummary>>> _pendingLoads = [];
+
+  @override
+  Future<List<SessionSummary>> listDomainSessions({
+    String? projectId,
+    bool forceRefresh = false,
+  }) {
+    sessionLoadCount += 1;
+    final completer = Completer<List<SessionSummary>>();
+    _pendingLoads.add(completer);
+    return completer.future;
+  }
+
+  void completeNextLoad() {
+    _pendingLoads.removeAt(0).complete(const <SessionSummary>[]);
+  }
+
+  @override
+  Stream<Map<String, dynamic>> subscribeToAllDomainSessionEvents() =>
+      const Stream<Map<String, dynamic>>.empty();
 }
 
 class _RecordingNotifications extends NotificationService {

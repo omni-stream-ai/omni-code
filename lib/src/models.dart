@@ -654,7 +654,9 @@ class ApprovalRequest {
       // JSON-RPC ids may be numbers (for example Codex app-server uses 0).
       // Keep the UI and approval endpoint on the same string representation.
       requestId: '${json['request_id']}',
-      kind: json['kind'] as String,
+      // Older/partial approval payloads may omit the request kind. Keep the
+      // request renderable instead of failing while projecting session state.
+      kind: json['kind'] as String? ?? 'approval',
       command: json['command'] as String?,
       reason: json['reason'] as String?,
       autoApprovalReason: json['auto_approval_reason'] as String?,

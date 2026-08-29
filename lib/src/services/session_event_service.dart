@@ -20,7 +20,10 @@ class SessionEventService extends NavigatorObserver {
   final NotificationService _notifications;
   StreamSubscription<Map<String, dynamic>>? _subscription;
   Timer? _reconnectTimer;
+  Future<void>? _synchronizeInFlight;
   final Map<String, Timer> _refreshTimers = {};
+  final Set<String> _refreshesInFlight = {};
+  final Set<String> _refreshesPending = {};
   final Map<String, String> _notifiedApprovalRequestIds = {};
   final Map<String, (SessionSummary, ApprovalRequest)> _approvalDialogQueue =
       {};
@@ -38,7 +41,20 @@ class SessionEventService extends NavigatorObserver {
     unawaited(_synchronizeAndSubscribe());
   }
 
-  Future<void> _synchronizeAndSubscribe() async {
+  Future<void> _synchronizeAndSubscribe() {
+    final inFlight = _synchronizeInFlight;
+    if (inFlight != null) return inFlight;
+
+    final future = _synchronizeAndSubscribeOnce();
+    _synchronizeInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_synchronizeInFlight, future)) {
+        _synchronizeInFlight = null;
+      }
+    });
+  }
+
+  Future<void> _synchronizeAndSubscribeOnce() async {
     try {
       final previousById = {
         for (final session
@@ -73,8 +89,29 @@ class SessionEventService extends NavigatorObserver {
     _refreshTimers.remove(sessionId)?.cancel();
     _refreshTimers[sessionId] = Timer(const Duration(milliseconds: 100), () {
       _refreshTimers.remove(sessionId);
-      unawaited(_refreshSession(sessionId));
+      _enqueueSessionRefresh(sessionId);
     });
+  }
+
+  void _enqueueSessionRefresh(String sessionId) {
+    if (_disposed) return;
+    if (!_refreshesInFlight.add(sessionId)) {
+      _refreshesPending.add(sessionId);
+      return;
+    }
+    unawaited(_refreshSessionSerially(sessionId));
+  }
+
+  Future<void> _refreshSessionSerially(String sessionId) async {
+    try {
+      do {
+        _refreshesPending.remove(sessionId);
+        await _refreshSession(sessionId);
+      } while (!_disposed && _refreshesPending.contains(sessionId));
+    } finally {
+      _refreshesInFlight.remove(sessionId);
+      _refreshesPending.remove(sessionId);
+    }
   }
 
   Future<void> _refreshSession(String sessionId) async {
@@ -122,7 +159,11 @@ class SessionEventService extends NavigatorObserver {
     );
     final request = current.pendingApproval;
     if (current.status == SessionStatus.awaitingApproval && request != null) {
-      _queueApprovalDialog(current, request);
+      if (current.id == _activeSessionId) {
+        _removeQueuedApprovalDialogs(current.id);
+      } else {
+        _queueApprovalDialog(current, request);
+      }
       final lastRequestId = _notifiedApprovalRequestIds[current.id];
       if (lastRequestId != request.requestId) {
         _notifiedApprovalRequestIds[current.id] = request.requestId;
@@ -404,6 +445,10 @@ class SessionEventService extends NavigatorObserver {
 
   void _trackRoute(Route<dynamic>? route) {
     _activeSessionId = AppRoutes.parse(route?.settings.name).sessionId;
+    final activeSessionId = _activeSessionId;
+    if (activeSessionId != null) {
+      _removeQueuedApprovalDialogs(activeSessionId);
+    }
   }
 
   @override
@@ -427,6 +472,8 @@ class SessionEventService extends NavigatorObserver {
       timer.cancel();
     }
     _refreshTimers.clear();
+    _refreshesInFlight.clear();
+    _refreshesPending.clear();
     _notifiedApprovalRequestIds.clear();
     _approvalDialogQueue.clear();
     _shownApprovalDialogKeys.clear();
@@ -434,6 +481,10 @@ class SessionEventService extends NavigatorObserver {
 
   @visibleForTesting
   Future<void> synchronizeForTest() => _synchronizeAndSubscribe();
+
+  @visibleForTesting
+  void refreshSessionForTest(String sessionId) =>
+      _enqueueSessionRefresh(sessionId);
 }
 
 final sessionEventService = SessionEventService();

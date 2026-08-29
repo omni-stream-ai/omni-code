@@ -3096,6 +3096,83 @@ void main() {
     await events.close();
   });
 
+  testWidgets('hovering assistant message shows raw markdown copy button',
+      (tester) async {
+    String? copiedText;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copiedText =
+              (call.arguments as Map<Object?, Object?>)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
+    });
+    const markdown = '**Bold**\n\n- first\n- second';
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'messages': [
+                  _messageJson(
+                    id: 'assistant-1',
+                    sessionId: 'session-1',
+                    role: 'assistant',
+                    content: markdown,
+                    createdAt: '2026-05-09T10:00:00.000',
+                  ),
+                ],
+                'has_more': false,
+                'next_cursor': null,
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(_TestApp(
+      home: SessionDetailScreen(
+        session: _session(),
+        client: client,
+        enableSpeechServices: false,
+      ),
+    ));
+    await tester.pump();
+    await tester.pump();
+
+    final bubble = find.byKey(
+      const ValueKey('assistant-message-bubble-assistant-1'),
+    );
+    final copyButton = find.byKey(
+      const ValueKey('assistant-message-copy-markdown-assistant-1'),
+    );
+    expect(copyButton, findsNothing);
+
+    final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await pointer.addPointer(location: tester.getCenter(bubble));
+    await tester.pump();
+
+    expect(copyButton, findsOneWidget);
+    await tester.tap(copyButton);
+    await tester.pump();
+
+    expect(copiedText, markdown);
+  });
+
   testWidgets('reopening a session keeps a streamed reply absent from history',
       (tester) async {
     final events = StreamController<List<int>>.broadcast();

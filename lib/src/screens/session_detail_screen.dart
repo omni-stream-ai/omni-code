@@ -250,6 +250,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   late final LocalVadService _localVadService;
   final Set<String> _autoSpokenAssistantMessageIds = <String>{};
   final Set<String> _notifiedAssistantMessageIds = <String>{};
+  final Set<String> _hoveredAssistantMessageIds = <String>{};
   final Map<String, Timer> _pendingAssistantNotificationTimers = {};
   final Set<String> _streamingAssistantMessageIds = <String>{};
   final Map<String, String> _transientLiveMessageTurnUserIds =
@@ -5196,77 +5197,124 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final brightness = theme.brightness;
     final isSpeakingThisMessage =
         _isSpeaking && _speakingMessageId == message.id;
+    final showCopyMarkdown = message.content.trim().isNotEmpty;
+    final isHovering = _hoveredAssistantMessageIds.contains(message.id);
     return Align(
       alignment: Alignment.centerLeft,
       child: KeyedSubtree(
         key: _messageAnchorKeyFor(message),
-        child: Container(
-          key: ValueKey('assistant-message-bubble-${message.id}'),
-          margin: EdgeInsets.only(
-            bottom: compactBottomSpacing ? 0 : AppSpacing.stack,
-          ),
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.card,
-            compactTopSpacing ? AppSpacing.micro : AppSpacing.card,
-            AppSpacing.card,
-            compactBottomSpacing ? AppSpacing.micro : AppSpacing.card,
-          ),
-          constraints: BoxConstraints(maxWidth: maxWidth),
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (isLoadingReply)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    const SizedBox(width: AppSpacing.tileY),
-                    Text(
-                      context.l10n.working,
-                      style: TextStyle(
-                        height: 1.45,
-                        color: AppColors.mutedSoftFor(brightness),
-                      ),
-                    ),
-                  ],
-                )
-              else ...[
-                _buildAssistantMessageBody(
-                  message,
-                  displayContent: displayContent,
-                  textColor: AppColors.textFor(brightness),
-                  maxWidth: maxWidth,
-                ),
-                if (isSpeakingThisMessage) ...[
-                  const SizedBox(height: AppSpacing.tileY),
-                  OutlinedButton(
-                    onPressed: _stopSpeaking,
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(
-                        color: AppColors.outlineStrongFor(brightness),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.tileX,
-                        vertical: AppSpacing.tileY,
-                      ),
-                    ),
-                    child: Text(context.l10n.stopPlayback),
+        child: MouseRegion(
+          onEnter: (_) => _setAssistantMessageHover(message.id, true),
+          onExit: (_) => _setAssistantMessageHover(message.id, false),
+          child: Container(
+            key: ValueKey('assistant-message-bubble-${message.id}'),
+            margin: EdgeInsets.only(
+              bottom: compactBottomSpacing ? 0 : AppSpacing.stack,
+            ),
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.card,
+              compactTopSpacing ? AppSpacing.micro : AppSpacing.card,
+              AppSpacing.card,
+              compactBottomSpacing ? AppSpacing.micro : AppSpacing.card,
+            ),
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            decoration: BoxDecoration(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+            ),
+            child: Stack(
+              children: [
+                Padding(
+                  padding: EdgeInsets.only(right: showCopyMarkdown ? 32 : 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isLoadingReply)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            const SizedBox(width: AppSpacing.tileY),
+                            Text(
+                              context.l10n.working,
+                              style: TextStyle(
+                                height: 1.45,
+                                color: AppColors.mutedSoftFor(brightness),
+                              ),
+                            ),
+                          ],
+                        )
+                      else ...[
+                        _buildAssistantMessageBody(
+                          message,
+                          displayContent: displayContent,
+                          textColor: AppColors.textFor(brightness),
+                          maxWidth: maxWidth,
+                        ),
+                        if (isSpeakingThisMessage) ...[
+                          const SizedBox(height: AppSpacing.tileY),
+                          OutlinedButton(
+                            onPressed: _stopSpeaking,
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(
+                                color: AppColors.outlineStrongFor(brightness),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.tileX,
+                                vertical: AppSpacing.tileY,
+                              ),
+                            ),
+                            child: Text(context.l10n.stopPlayback),
+                          ),
+                        ],
+                      ],
+                    ],
                   ),
-                ],
+                ),
+                if (showCopyMarkdown)
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: Visibility(
+                      visible: isHovering,
+                      child: IconButton(
+                        key: ValueKey(
+                          'assistant-message-copy-markdown-${message.id}',
+                        ),
+                        tooltip: context.l10n.copy,
+                        visualDensity: VisualDensity.compact,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 32,
+                          height: 32,
+                        ),
+                        padding: EdgeInsets.zero,
+                        onPressed: () =>
+                            _copyAssistantMarkdown(message.content),
+                        icon: const Icon(Icons.content_copy_outlined, size: 16),
+                      ),
+                    ),
+                  ),
               ],
-            ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  void _setAssistantMessageHover(String messageId, bool isHovering) {
+    if (_hoveredAssistantMessageIds.contains(messageId) == isHovering) return;
+    setState(() {
+      if (isHovering) {
+        _hoveredAssistantMessageIds.add(messageId);
+      } else {
+        _hoveredAssistantMessageIds.remove(messageId);
+      }
+    });
   }
 
   Widget _buildAssistantMessageBody(
@@ -5487,6 +5535,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ],
       ],
     );
+  }
+
+  Future<void> _copyAssistantMarkdown(String markdown) {
+    return Clipboard.setData(ClipboardData(text: markdown));
   }
 
   void _handleAssistantMarkdownLinkTap(String? href) {
