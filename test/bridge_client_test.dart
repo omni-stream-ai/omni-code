@@ -975,6 +975,7 @@ void main() {
         httpClient: _FakeHttpClient((request) async {
           expect(request.method, 'GET');
           expect(request.url.path, '/agents/commands');
+          expect(request.url.queryParameters['session_id'], 'session-1');
           return http.Response(
             jsonEncode({
               'data': [
@@ -996,7 +997,7 @@ void main() {
         }),
       );
 
-      final commands = await client.listAgentCommands();
+      final commands = await client.listAgentCommands(sessionId: 'session-1');
 
       expect(commands, hasLength(1));
       expect(commands.first.name, '/review');

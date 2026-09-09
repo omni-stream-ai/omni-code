@@ -2147,6 +2147,78 @@ void main() {
     );
   });
 
+  testWidgets('dollar input shows and applies Codex skill suggestions',
+      (tester) async {
+    var commandRequestCount = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/messages') {
+          return http.Response(jsonEncode({'data': []}), 200,
+              headers: {'content-type': 'application/json'});
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/sessions/session-1/events') {
+          return http.Response('', 200,
+              headers: {'content-type': 'text/event-stream'});
+        }
+        if (request.method == 'GET' && request.url.path == '/agents/commands') {
+          commandRequestCount += 1;
+          expect(request.url.queryParameters['session_id'], 'session-1');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'kind': 'codex',
+                  'commands': [
+                    if (commandRequestCount > 1)
+                      {
+                        'name': r'$skill-creator',
+                        'description': 'Create or update a Codex skill',
+                      },
+                    {
+                      'name': '/review',
+                      'description': 'Review changes',
+                    },
+                  ],
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(_TestApp(
+      home: SessionDetailScreen(
+        session: _session(),
+        client: client,
+        enableSpeechServices: false,
+      ),
+    ));
+    await tester.pump();
+
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.tap(input);
+    await tester.enterText(input, r'$skill');
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    expect(commandRequestCount, 2);
+    expect(find.text(r'$skill-creator'), findsOneWidget);
+    expect(find.text('/review'), findsNothing);
+    await tester.tap(find.text(r'$skill-creator'));
+    await tester.pump();
+    expect(
+      tester.widget<TextField>(input).controller!.text,
+      r'$skill-creator ',
+    );
+  });
+
   testWidgets('anchored overlay flips above when bottom space is tight',
       (tester) async {
     final targetKey = GlobalKey();

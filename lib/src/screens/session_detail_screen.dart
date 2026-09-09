@@ -337,6 +337,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   ApprovalRequest? _pendingApproval;
   final Set<String> _handledPiUiRequestIds = <String>{};
   List<AgentCommand> _agentCommands = const [];
+  bool _loadingAgentCommands = false;
   List<FileCompletionItem> _fileCompletions = const [];
   int _selectedCommandSuggestionIndex = 0;
   int _selectedFileCompletionIndex = 0;
@@ -1226,8 +1227,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Future<void> _loadAgentCommands() async {
+    if (_loadingAgentCommands) {
+      return;
+    }
+    _loadingAgentCommands = true;
     try {
-      final commands = await _client.listAgentCommands();
+      final commands = await _client.listAgentCommands(sessionId: _session.id);
       if (!mounted) {
         return;
       }
@@ -1238,6 +1243,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _syncComposerSuggestionsOverlayAfterFrame();
     } catch (_) {
       // Suggestions are optional; keep composer usable if this endpoint fails.
+    } finally {
+      _loadingAgentCommands = false;
     }
   }
 
@@ -1265,6 +1272,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _commandSuggestionsDismissed = false;
       _selectedCommandSuggestionIndex = 0;
       needsRebuild = true;
+      if (query.startsWith(r'$') &&
+          !_agentCommands.any((command) => command.name.startsWith(r'$'))) {
+        unawaited(_loadAgentCommands());
+      }
     }
     final fileQuery = _fileCompletionQuery;
     final fileQueryChanged = fileQuery != _lastFileCompletionQuery;
@@ -1299,7 +1310,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   String get _commandQuery {
     final text = _controller.text;
-    if (!text.startsWith('/')) {
+    if (!text.startsWith('/') && !text.startsWith(r'$')) {
       return '';
     }
     final firstWhitespace = text.indexOf(RegExp(r'\s'));
@@ -1319,9 +1330,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           agentId.isNotEmpty &&
           agentId != _session.agentId) {
         return false;
-      }
-      if (query == '/') {
-        return true;
       }
       if (command.name.toLowerCase().startsWith(query)) {
         return true;

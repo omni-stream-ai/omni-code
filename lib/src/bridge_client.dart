@@ -993,9 +993,14 @@ class BridgeClient {
     return agents;
   }
 
-  Future<List<AgentCommand>> listAgentCommands() async {
+  Future<List<AgentCommand>> listAgentCommands({String? sessionId}) async {
+    final uri = Uri.parse('$baseUrl/agents/commands').replace(
+      queryParameters: sessionId == null || sessionId.trim().isEmpty
+          ? null
+          : {'session_id': sessionId.trim()},
+    );
     final response = await _httpClient.get(
-      Uri.parse('$baseUrl/agents/commands'),
+      uri,
       headers: _defaultHeaders,
     );
     if (_isUnauthorized(response)) {
