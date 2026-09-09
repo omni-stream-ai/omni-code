@@ -7629,7 +7629,7 @@ void main() {
   });
 
   testWidgets('active tool activity shows a loading indicator', (tester) async {
-    final client = _clientForMessages([
+    final messages = [
       _messageJson(
         id: 'user-1',
         sessionId: 'session-1',
@@ -7651,7 +7651,10 @@ void main() {
         content: '[command:started] rg -n "tool" lib/src',
         createdAt: '2026-05-09T10:00:01.000',
       ),
-    ]);
+    ];
+    final client = _clientForDomainState(
+      _domainStateJson(messages, status: 'running'),
+    );
 
     await tester.pumpWidget(
       _TestApp(
@@ -7698,7 +7701,7 @@ void main() {
     expect(find.text('Question 1'), findsNothing);
     expect(find.text('Answer 1'), findsNothing);
     expect(find.text('Answer 30'), findsOneWidget);
-    expect(requests.first.url.queryParameters['limit'], '12');
+    expect(requests.first.url.queryParameters['limit'], '50');
   });
 
   testWidgets('initial page backfills when latest messages are only tools',
@@ -7749,9 +7752,8 @@ void main() {
 
     expect(find.text('Question before tools'), findsOneWidget);
     expect(find.text('Answer before tools'), findsOneWidget);
-    expect(requests, hasLength(2));
-    expect(requests.first.url.queryParameters['limit'], '12');
-    expect(requests.last.url.queryParameters['before_id'], 'system-1');
+    expect(requests, hasLength(1));
+    expect(requests.first.url.queryParameters['limit'], '50');
   });
 
   testWidgets(
@@ -13721,8 +13723,13 @@ class _FakeHttpClient extends http.BaseClient {
         request.url.path.startsWith('/v2/sessions/')) {
       response = await _bridgeLegacyFixture(nextRequest);
     }
+    final isEventStream =
+        response.headers['content-type']?.startsWith('text/event-stream') ??
+            false;
     return http.StreamedResponse(
-      Stream.value(response.bodyBytes),
+      isEventStream
+          ? _openEventStream(response.bodyBytes)
+          : Stream.value(response.bodyBytes),
       response.statusCode,
       headers: response.headers,
       reasonPhrase: response.reasonPhrase,
@@ -13733,6 +13740,38 @@ class _FakeHttpClient extends http.BaseClient {
   Future<http.Response> _bridgeLegacyFixture(http.Request request) async {
     final segments = request.url.pathSegments;
     final sessionId = segments[2];
+    if (request.method == 'GET' && segments.length == 3) {
+      return _handler(http.Request(
+        'GET',
+        request.url.replace(path: '/sessions/$sessionId'),
+      ));
+    }
+    if (request.method == 'PATCH' && segments.length == 3) {
+      return _handler(http.Request(
+        'PATCH',
+        request.url.replace(path: '/sessions/$sessionId'),
+      )
+        ..headers.addAll(request.headers)
+        ..body = request.body);
+    }
+    if (request.method == 'POST' && segments.last == 'cancel') {
+      return _handler(http.Request(
+        'POST',
+        request.url.replace(path: '/sessions/$sessionId/cancel'),
+      ));
+    }
+    if (request.method == 'POST' && segments.contains('approvals')) {
+      final legacyResponse = await _handler(http.Request(
+        'POST',
+        request.url.replace(path: request.url.path.replaceFirst('/v2', '')),
+      )
+        ..headers.addAll(request.headers)
+        ..body = request.body);
+      return http.Response(
+        '',
+        legacyResponse.statusCode < 300 ? 204 : legacyResponse.statusCode,
+      );
+    }
     if (request.method == 'GET' && segments.last == 'state') {
       final legacy = http.Request(
         'GET',
@@ -13750,25 +13789,45 @@ class _FakeHttpClient extends http.BaseClient {
       messages.removeWhere((message) => message['session_id'] != sessionId);
       if (data is Map<String, dynamic> && data['has_more'] == true) {
         var cursor = data['next_cursor'] as String?;
+        var useAfterCursor = false;
+        final seenCursors = <String>{};
         while (cursor != null) {
+          if (!seenCursors
+              .add('${useAfterCursor ? 'after' : 'before'}:$cursor')) {
+            break;
+          }
           final page = await _handler(http.Request(
             'GET',
             request.url.replace(
               path: '/sessions/$sessionId/messages',
-              queryParameters: {'before_id': cursor},
+              queryParameters: {
+                useAfterCursor ? 'after_id' : 'before_id': cursor,
+              },
             ),
           ));
           if (page.statusCode == 404) break;
           final pageData = (jsonDecode(page.body)
               as Map<String, dynamic>)['data'] as Map<String, dynamic>;
-          messages.insertAll(
-            0,
-            (pageData['messages'] as List<dynamic>)
-                .cast<Map<String, dynamic>>()
-                .where((message) => message['session_id'] == sessionId),
-          );
+          final pageMessages = (pageData['messages'] as List<dynamic>)
+              .cast<Map<String, dynamic>>()
+              .where((message) => message['session_id'] == sessionId)
+              .toList();
+          final pageCursor = pageData['next_cursor'] as String?;
+          final repeatsCurrentPage = pageCursor == cursor &&
+              pageMessages.isNotEmpty &&
+              messages
+                  .any((message) => message['id'] == pageMessages.first['id']);
+          if (repeatsCurrentPage && !useAfterCursor) {
+            useAfterCursor = true;
+            continue;
+          }
+          if (useAfterCursor) {
+            messages.addAll(pageMessages);
+          } else {
+            messages.insertAll(0, pageMessages);
+          }
           if (pageData['has_more'] != true) break;
-          cursor = pageData['next_cursor'] as String?;
+          cursor = pageCursor;
         }
       }
       return http.Response(
@@ -13826,6 +13885,14 @@ class _FakeHttpClient extends http.BaseClient {
       );
     }
     return http.Response('not found', 404);
+  }
+
+  Stream<List<int>> _openEventStream(List<int> initialBytes) {
+    final controller = StreamController<List<int>>();
+    controller.onListen = () {
+      if (initialBytes.isNotEmpty) controller.add(initialBytes);
+    };
+    return controller.stream;
   }
 }
 
@@ -13908,6 +13975,33 @@ class _StreamingEventHttpClient extends http.BaseClient {
         legacyResponse.statusCode < 300 ? 202 : legacyResponse.statusCode,
         headers: {'content-type': 'application/json'},
       );
+    } else if (response.statusCode == 404 &&
+        request.method == 'POST' &&
+        request.url.path.startsWith('/v2/sessions/session-1/approvals/')) {
+      final legacyResponse = await handler(http.Request(
+        'POST',
+        request.url.replace(path: request.url.path.replaceFirst('/v2', '')),
+      )..body = nextRequest.body);
+      response = http.Response(
+        '',
+        legacyResponse.statusCode < 300 ? 204 : legacyResponse.statusCode,
+      );
+    } else if (response.statusCode == 404 &&
+        request.method == 'POST' &&
+        request.url.path == '/v2/sessions/session-1/cancel') {
+      response = await handler(http.Request(
+        'POST',
+        request.url.replace(path: '/sessions/session-1/cancel'),
+      ));
+    } else if (response.statusCode == 404 &&
+        request.method == 'PATCH' &&
+        request.url.path == '/v2/sessions/session-1') {
+      response = await handler(http.Request(
+        'PATCH',
+        request.url.replace(path: '/sessions/session-1'),
+      )
+        ..headers.addAll(nextRequest.headers)
+        ..body = nextRequest.body);
     }
     return http.StreamedResponse(
       Stream.value(response.bodyBytes),

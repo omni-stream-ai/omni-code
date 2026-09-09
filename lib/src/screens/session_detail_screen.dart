@@ -959,12 +959,28 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         }
       }
     }
-    final status = switch (state.session.status) {
+    final domainStatus = switch (state.session.status) {
       DomainSessionStatus.running => SessionStatus.running,
       DomainSessionStatus.awaitingApproval => SessionStatus.awaitingApproval,
       DomainSessionStatus.failed => SessionStatus.failed,
       DomainSessionStatus.idle => SessionStatus.idle,
     };
+    final hasPendingLocalMessage = _localMessageStates.values.any(
+      (draft) =>
+          draft.state == _LocalMessageState.pending ||
+          draft.state == _LocalMessageState.submitted,
+    );
+    final effectivePendingApproval = pendingApproval ?? _pendingApproval;
+    final preserveActiveSessionStatus = domainStatus == SessionStatus.idle &&
+        (_session.status == SessionStatus.running ||
+            _session.status == SessionStatus.waiting);
+    final status = effectivePendingApproval != null
+        ? SessionStatus.awaitingApproval
+        : domainStatus == SessionStatus.idle && hasPendingLocalMessage
+            ? SessionStatus.waiting
+            : preserveActiveSessionStatus
+                ? _session.status
+                : domainStatus;
     final existingMessagesById = <String, ChatMessage>{
       for (final message
           in _client.peekSessionMessages(_session.id) ?? const <ChatMessage>[])
@@ -1005,10 +1021,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         updatedAt: state.session.updatedAt,
         unreadCount: state.session.unreadCount,
         lastMessagePreview: state.session.lastMessagePreview,
-        pendingApproval: pendingApproval,
-        clearPendingApproval: pendingApproval == null,
+        pendingApproval: effectivePendingApproval,
+        clearPendingApproval: effectivePendingApproval == null,
       );
-      _pendingApproval = pendingApproval;
+      _pendingApproval = effectivePendingApproval;
       _loadingMessages = false;
       _sessionRestoreError = controller?.error?.toString();
       _reconcileSubmittedApprovalState();
@@ -8504,13 +8520,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   bool _supportsCallModeAsrProvider() {
     return _shouldUseSystemSpeechForInput() ||
+        appSettingsController.settings.asrProvider == AsrProvider.bridgeLocal ||
         _selectedRealtimeAsrPluginSupportsStreaming();
   }
 
   bool _usesSystemSpeechForCallMode() => _useSystemSpeech();
 
   bool _usesBridgeRealtimeSpeechForCallMode() {
-    return _selectedRealtimeAsrPluginSupportsStreaming();
+    return appSettingsController.settings.asrProvider ==
+            AsrProvider.bridgeLocal ||
+        _selectedRealtimeAsrPluginSupportsStreaming();
   }
 
   bool _usesWakeWordForBridgeCallMode() {
@@ -9260,19 +9279,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       if (domainController == null) {
         throw StateError('Session controller is not ready');
       }
-      await domainController
-          .send(
-            content,
-            inputMode: inputMode,
-            systemPrompt: _messageSystemPrompt(inputMode),
-            providerId: _overrideProviderId,
-            reasoningEffort: _overrideReasoningEffort,
-            model: _overrideModel,
-            commandId: messageId,
-            userMessageId: messageId,
-            attachments: attachments,
-          )
-          .timeout(const Duration(seconds: 30));
+      await domainController.send(
+        content,
+        inputMode: inputMode,
+        systemPrompt: _messageSystemPrompt(inputMode),
+        providerId: _overrideProviderId,
+        reasoningEffort: _overrideReasoningEffort,
+        model: _overrideModel,
+        commandId: messageId,
+        userMessageId: messageId,
+        attachments: attachments,
+      );
       if (!mounted) {
         return false;
       }
