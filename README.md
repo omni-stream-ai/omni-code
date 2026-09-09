@@ -55,16 +55,25 @@ brew install omni-stream-ai/omni-code/omni-code
 yay -S omni-code-bin
 ```
 
-**Nix / NixOS (x86_64 Linux):**
+**Nix / NixOS (x86_64 Linux, built from source by default):**
 
 ```bash
 nix run github:omni-stream-ai/omni-code
 ```
 
-Install it into your profile with:
+Select either package explicitly:
 
 ```bash
-nix profile install github:omni-stream-ai/omni-code
+nix run github:omni-stream-ai/omni-code#omni-code-bin
+nix run github:omni-stream-ai/omni-code#omni-code
+```
+
+Install either package into your profile:
+
+```bash
+nix profile install github:omni-stream-ai/omni-code#omni-code-bin
+# Or build and install from source
+nix profile install github:omni-stream-ai/omni-code#omni-code
 ```
 
 ## Development
