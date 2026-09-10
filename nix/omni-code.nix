@@ -2,10 +2,12 @@
   lib,
   flutter,
   alsa-lib,
+  cmake,
   gtk3,
   gst_all_1,
-  jdk17_headless,
   makeWrapper,
+  writeShellScriptBin,
+  zlib,
 }:
 
 let
@@ -16,6 +18,14 @@ let
   version = builtins.head (
     lib.splitString "+" (lib.removePrefix "version: " versionLine)
   );
+  cmakeWithoutJni = writeShellScriptBin "cmake" ''
+    sourceDir="''${!#}"
+    pluginsFile="$sourceDir/flutter/generated_plugins.cmake"
+    if [[ -f "$pluginsFile" ]]; then
+      sed -i '/^  jni$/d' "$pluginsFile"
+    fi
+    exec ${cmake}/bin/cmake "$@"
+  '';
 in
 flutter.buildFlutterApplication {
   pname = "omni-code";
@@ -38,9 +48,14 @@ flutter.buildFlutterApplication {
   };
 
   pubspecLock = lib.importJSON ./pubspec.lock.json;
+  dontUseCmakeConfigure = true;
+
+  preBuild = ''
+    export PATH="${cmakeWithoutJni}/bin:$PATH"
+  '';
 
   nativeBuildInputs = [
-    jdk17_headless
+    cmake
     makeWrapper
   ];
   buildInputs = [
@@ -48,7 +63,12 @@ flutter.buildFlutterApplication {
     gtk3
     gst_all_1.gstreamer
     gst_all_1.gst-plugins-base
+    zlib.out
+    zlib.dev
   ];
+
+  CMAKE_LIBRARY_PATH = "${zlib.out}/lib";
+  CMAKE_INCLUDE_PATH = "${zlib.dev}/include";
 
   postInstall = ''
     makeWrapper $out/app/$pname/omni_code $out/bin/omni-code \
