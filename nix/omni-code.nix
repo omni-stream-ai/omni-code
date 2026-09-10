@@ -4,6 +4,7 @@
   alsa-lib,
   gtk3,
   gst_all_1,
+  jdk17_headless,
   makeWrapper,
 }:
 
@@ -38,7 +39,10 @@ flutter.buildFlutterApplication {
 
   pubspecLock = lib.importJSON ./pubspec.lock.json;
 
-  nativeBuildInputs = [ makeWrapper ];
+  nativeBuildInputs = [
+    jdk17_headless
+    makeWrapper
+  ];
   buildInputs = [
     alsa-lib
     gtk3
@@ -65,6 +69,8 @@ flutter.buildFlutterApplication {
   meta = {
     description = "Flutter desktop client for managing coding agent sessions";
     homepage = "https://github.com/omni-stream-ai/omni-code";
+    changelog = "https://github.com/omni-stream-ai/omni-code/releases/tag/v${version}";
+    downloadPage = "https://github.com/omni-stream-ai/omni-code/releases";
     license = lib.licenses.mit;
     mainProgram = "omni-code";
     platforms = [ "x86_64-linux" ];

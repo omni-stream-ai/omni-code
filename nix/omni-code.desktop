@@ -5,6 +5,6 @@ Exec=omni-code
 Icon=com.omnistreamai.code
 Terminal=false
 Type=Application
-Categories=Development;Utility;
+Categories=Development;
 StartupNotify=true
 StartupWMClass=omni_code

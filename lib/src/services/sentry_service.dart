@@ -123,7 +123,6 @@ void _configureSentryOptions(
     ..dsn = configuration.dsn
     ..environment = configuration.environment
     ..tracesSampleRate = configuration.tracesSampleRate
-    // Sentry 8.x still marks profiling configuration as experimental.
     // ignore: experimental_member_use
     ..profilesSampleRate = configuration.profilesSampleRate
     ..sendDefaultPii = false
@@ -173,42 +172,38 @@ Future<void> captureHandledException(
 
 SentryEvent sanitizeSentryEvent(SentryEvent event, Hint _) {
   final request = event.request;
-  return event.copyWith(
-    request: request == null
-        ? null
-        : SentryRequest(
-            url: sanitizeSentryUrl(request.url),
-            method: request.method,
-          ),
-    breadcrumbs: event.breadcrumbs
-        ?.map((breadcrumb) => sanitizeSentryBreadcrumb(breadcrumb, Hint())!)
-        .toList(growable: false),
-    exceptions: event.exceptions
-        ?.map(
-          (exception) => exception.copyWith(
-            value: redactSensitiveText(exception.value),
-          ),
-        )
-        .toList(growable: false),
-  );
+  event.request = request == null
+      ? null
+      : SentryRequest(
+          url: sanitizeSentryUrl(request.url),
+          method: request.method,
+        );
+  event.breadcrumbs = event.breadcrumbs
+      ?.map((breadcrumb) => sanitizeSentryBreadcrumb(breadcrumb, Hint())!)
+      .toList(growable: false);
+  for (final exception in event.exceptions ?? const <SentryException>[]) {
+    exception.value = redactSensitiveText(exception.value);
+  }
+  return event;
 }
 
-SentryTransaction sanitizeSentryTransaction(SentryTransaction transaction) {
-  return transaction.copyWith(
-    transaction: sanitizeSentryUrl(transaction.transaction),
-  );
+SentryTransaction sanitizeSentryTransaction(
+  SentryTransaction transaction,
+  Hint _,
+) {
+  transaction.transaction = sanitizeSentryUrl(transaction.transaction);
+  return transaction;
 }
 
 Breadcrumb? sanitizeSentryBreadcrumb(Breadcrumb? breadcrumb, Hint _) {
   if (breadcrumb == null) return null;
   final data = breadcrumb.data;
   if (data == null) return breadcrumb;
-  return breadcrumb.copyWith(
-    data: <String, dynamic>{
-      for (final entry in data.entries)
-        entry.key: _sanitizeBreadcrumbValue(entry.key, entry.value),
-    },
-  );
+  breadcrumb.data = <String, dynamic>{
+    for (final entry in data.entries)
+      entry.key: _sanitizeBreadcrumbValue(entry.key, entry.value),
+  };
+  return breadcrumb;
 }
 
 dynamic _sanitizeBreadcrumbValue(String key, dynamic value) {

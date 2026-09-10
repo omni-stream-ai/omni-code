@@ -35,7 +35,7 @@ dependencies:
   video_player: ^2.9.2
   super_clipboard: ^0.9.1
   encrypt: ^5.0.3
-  sentry_flutter: ^8.14.2
+  sentry_flutter: ^9.29.0
 
 dev_dependencies:
   flutter_test:

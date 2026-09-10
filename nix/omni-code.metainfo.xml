@@ -3,9 +3,22 @@
   <id>com.omnistreamai.code</id>
   <name>Omni Code</name>
   <summary>Client for managing coding agent sessions</summary>
-  <description><p>Cross-platform client for desktop coding agents and voice interaction.</p></description>
+  <description>
+    <p>
+      Omni Code is a cross-platform client for managing coding agent sessions
+      from desktop and mobile devices. It supports project and session
+      management, voice interaction, and remote agent workflows through the
+      Omni Code bridge.
+    </p>
+  </description>
   <launchable type="desktop-id">omni-code.desktop</launchable>
   <url type="homepage">https://github.com/omni-stream-ai/omni-code</url>
+  <url type="bugtracker">https://github.com/omni-stream-ai/omni-code/issues</url>
+  <url type="vcs-browser">https://github.com/omni-stream-ai/omni-code</url>
+  <developer id="com.omnistreamai">
+    <name>Omni Stream AI</name>
+  </developer>
+  <content_rating type="oars-1.1" />
   <metadata_license>MIT</metadata_license>
   <project_license>MIT</project_license>
 </component>
