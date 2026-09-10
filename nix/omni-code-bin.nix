@@ -2,11 +2,11 @@
 
 stdenv.mkDerivation rec {
   pname = "omni-code";
-  version = "0.7.0";
+  version = "0.7.1";
 
   src = fetchurl {
     url = "https://github.com/omni-stream-ai/omni-code/releases/download/v${version}/omni-code-linux-x86_64.tar.gz";
-    hash = "sha256-4V/89zdWo8H198dxOj2XVbZUMfWJO6Ysz+roDDIDbzI=";
+    hash = "sha256-ZQ1hUu0IMwOyUVX1aIJUpqifVYdbZa1VYsjO6QaIDII=";
   };
 
   nativeBuildInputs = [ autoPatchelfHook makeWrapper ];
