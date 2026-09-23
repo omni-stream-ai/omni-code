@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'src/app.dart';
 import 'src/services/notification_service.dart';
@@ -21,7 +22,7 @@ Future<void> main() async {
 }
 
 void _bootstrapApplication() {
-  runApp(SentryWidget(child: const OmniCodeApp()));
+  runApp(ProviderScope(child: SentryWidget(child: const OmniCodeApp())));
   unawaited(_initializeServices());
 }
 

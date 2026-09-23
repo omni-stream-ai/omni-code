@@ -1,7 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import '../l10n/generated/app_localizations.dart';
@@ -9,6 +8,7 @@ import 'app_routes.dart';
 import 'bridge_client.dart';
 import 'l10n/app_locale.dart';
 import 'models.dart';
+import 'providers/api_providers.dart';
 import 'screens/project_detail_screen.dart';
 import 'screens/session_detail_screen.dart';
 import 'screens/home_screen.dart';
@@ -186,75 +186,29 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
   }
 }
 
-class _ProjectRouteLoaderScreen extends StatefulWidget {
+class _ProjectRouteLoaderScreen extends ConsumerWidget {
   const _ProjectRouteLoaderScreen({required this.projectId});
 
   final String projectId;
 
   @override
-  State<_ProjectRouteLoaderScreen> createState() =>
-      _ProjectRouteLoaderScreenState();
-}
-
-class _ProjectRouteLoaderScreenState extends State<_ProjectRouteLoaderScreen> {
-  ProjectSummary? _project;
-  Object? _error;
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_loadProject());
-  }
-
-  Future<void> _loadProject() async {
-    setState(() {
-      _error = null;
-      _isLoading = true;
-    });
-    try {
-      final project = await bridgeClient.getProject(widget.projectId);
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _project = project;
-        _isLoading = false;
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _error = error;
-        _isLoading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final project = _project;
-    if (project != null) {
-      return ProjectDetailScreen(project: project);
-    }
-
-    if (_isLoading) {
-      return _RouteStateScreen(
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ref.watch(projectProvider(projectId)).when(
+      loading: () => _RouteStateScreen(
         title: context.l10n.projectsTitle,
         progress: true,
-      );
-    }
-
-    return _RouteStateScreen(
-      title: context.l10n.projectsTitle,
-      message: context.l10n.loadProjectsFailed(_error ?? widget.projectId),
-      onRetry: _loadProject,
+      ),
+      error: (error, _) => _RouteStateScreen(
+        title: context.l10n.projectsTitle,
+        message: context.l10n.loadProjectsFailed(error),
+        onRetry: () => ref.invalidate(projectProvider(projectId)),
+      ),
+      data: (project) => ProjectDetailScreen(project: project),
     );
   }
 }
 
-class _SessionRouteLoaderScreen extends StatefulWidget {
+class _SessionRouteLoaderScreen extends ConsumerWidget {
   const _SessionRouteLoaderScreen({
     required this.projectId,
     required this.sessionId,
@@ -264,67 +218,19 @@ class _SessionRouteLoaderScreen extends StatefulWidget {
   final String sessionId;
 
   @override
-  State<_SessionRouteLoaderScreen> createState() =>
-      _SessionRouteLoaderScreenState();
-}
-
-class _SessionRouteLoaderScreenState extends State<_SessionRouteLoaderScreen> {
-  SessionSummary? _session;
-  Object? _error;
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_loadSession());
-  }
-
-  Future<void> _loadSession() async {
-    setState(() {
-      _error = null;
-      _isLoading = true;
-    });
-    try {
-      final session = await bridgeClient.getProjectSession(
-        widget.projectId,
-        widget.sessionId,
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _session = session;
-        _isLoading = false;
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _error = error;
-        _isLoading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final session = _session;
-    if (session != null) {
-      return SessionDetailScreen(session: session);
-    }
-
-    if (_isLoading) {
-      return _RouteStateScreen(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final key = (projectId: projectId, sessionId: sessionId);
+    return ref.watch(sessionProvider(key)).when(
+      loading: () => _RouteStateScreen(
         title: context.l10n.sessionsTitle,
         progress: true,
-      );
-    }
-
-    return _RouteStateScreen(
-      title: context.l10n.sessionsTitle,
-      message: context.l10n.loadSessionsFailed(_error ?? widget.sessionId),
-      onRetry: _loadSession,
+      ),
+      error: (error, _) => _RouteStateScreen(
+        title: context.l10n.sessionsTitle,
+        message: context.l10n.loadSessionsFailed(error),
+        onRetry: () => ref.invalidate(sessionProvider(key)),
+      ),
+      data: (session) => SessionDetailScreen(session: session),
     );
   }
 }
