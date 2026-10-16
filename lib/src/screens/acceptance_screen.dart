@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -298,6 +299,7 @@ class AcceptanceDetailScreen extends StatefulWidget {
 
 class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen> {
   late AcceptanceRun run = widget.run;
+  Uint8List? preview;
   Timer? timer;
   Object? error;
   bool busy = false, refreshing = false;
@@ -305,7 +307,7 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen> {
   void initState() {
     super.initState();
     timer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (!run.terminal && !busy) unawaited(refresh());
+      if (!run.terminal && !busy && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) { unawaited(refresh()); }
     });
   }
 
@@ -320,9 +322,11 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen> {
     refreshing = true;
     try {
       final value = await widget.client.getAcceptanceRun(run.id);
+      final image = value.running ? await widget.client.acceptancePreview(run.id) : null;
       if (mounted) {
         setState(() {
           run = value;
+          if (image != null) preview = image;
           error = null;
         });
       }
@@ -429,6 +433,8 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen> {
               style: Theme.of(context).textTheme.titleLarge),
           SelectableText(run.revision),
           Text(run.command),
+          if (preview != null) SizedBox(height: 360, child: InteractiveViewer(
+            child: Image.memory(preview!, gaplessPlayback: true, fit: BoxFit.contain))),
           if (busy) const LinearProgressIndicator(),
           if (error != null || run.error != null)
             SelectableText(error?.toString() ?? run.error!,

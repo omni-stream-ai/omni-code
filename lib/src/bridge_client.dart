@@ -234,6 +234,14 @@ class BridgeClient {
             'notes': notes,
           }) as Map<String, dynamic>);
 
+  Future<Uint8List> acceptancePreview(String id) async {
+    final response = await _httpClient.get(Uri.parse(
+      '$baseUrl/v2/acceptance/${Uri.encodeComponent(id)}/preview'),
+      headers: _defaultHeaders).timeout(const Duration(seconds: 45));
+    if (response.statusCode != 200) { throw Exception(_extractErrorMessage(response)); }
+    return response.bodyBytes;
+  }
+
   Future<Uint8List> acceptanceArtifact(String id, String name) async {
     final response = await _httpClient
         .get(
