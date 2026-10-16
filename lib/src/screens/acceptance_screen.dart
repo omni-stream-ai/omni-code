@@ -608,8 +608,13 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
                 .showSnackBar(SnackBar(content: Text(error.description)));
           }
         },
-      ))
-      ..loadRequest(widget.url);
+      ));
+    // Desktop tickets are single use. Clear a stale desktop cookie left by a
+    // previous WebView session before following the fresh ticket redirect.
+    Future<void>(() async {
+      await WebViewCookieManager().clearCookies();
+      await controller.loadRequest(widget.url);
+    });
   }
 
   Future<void> close() async {
