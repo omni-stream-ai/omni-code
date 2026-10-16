@@ -996,5 +996,34 @@
     "placeholders": {
       "count": { "type": "int" }
     }
-  }
+  },
+  "acceptanceTitle": "应用验收",
+  "acceptancePlugin": "x11box 验收插件",
+  "acceptancePluginDescription": "在 Bridge 服务器安装隔离桌面，用于验收应用和远程操作。",
+  "acceptanceInstall": "安装验收环境",
+  "acceptanceStart": "开始验收",
+  "acceptanceEmpty": "暂无验收记录",
+  "acceptanceProject": "项目",
+  "acceptanceCommand": "应用启动命令",
+  "acceptanceCommitHint": "验收环境使用项目最新提交版本。请先提交需要验收的改动。",
+  "acceptanceSize": "窗口尺寸",
+  "acceptanceTakeControl": "打开远程桌面",
+  "acceptanceReleaseControl": "交还自动化控制权",
+  "acceptanceCapture": "保存截图",
+  "acceptanceStop": "停止验收",
+  "acceptancePass": "验收通过",
+  "acceptanceFail": "报告问题",
+  "acceptanceNotes": "验收说明",
+  "acceptanceEvidence": "验收证据",
+  "acceptanceNotInstalled": "未安装",
+  "acceptanceChecking": "正在检查环境",
+  "acceptancePreparing": "正在准备环境",
+  "acceptanceVerifying": "正在验证桌面",
+  "acceptanceReady": "已就绪",
+  "acceptanceFailed": "失败",
+  "acceptanceStarting": "正在启动",
+  "acceptanceRunning": "验收中",
+  "acceptanceStopping": "正在停止",
+  "acceptanceCompleted": "已结束",
+  "acceptanceOpenFailed": "无法打开远程桌面浏览器"
 }

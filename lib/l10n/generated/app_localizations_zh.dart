@@ -2183,4 +2183,91 @@ class AppLocalizationsZh extends AppLocalizations {
   String gitUntrackedCount(int count) {
     return '$count 个未跟踪';
   }
+
+  @override
+  String get acceptanceTitle => '应用验收';
+
+  @override
+  String get acceptancePlugin => 'x11box 验收插件';
+
+  @override
+  String get acceptancePluginDescription => '在 Bridge 服务器安装隔离桌面，用于验收应用和远程操作。';
+
+  @override
+  String get acceptanceInstall => '安装验收环境';
+
+  @override
+  String get acceptanceStart => '开始验收';
+
+  @override
+  String get acceptanceEmpty => '暂无验收记录';
+
+  @override
+  String get acceptanceProject => '项目';
+
+  @override
+  String get acceptanceCommand => '应用启动命令';
+
+  @override
+  String get acceptanceCommitHint => '验收环境使用项目最新提交版本。请先提交需要验收的改动。';
+
+  @override
+  String get acceptanceSize => '窗口尺寸';
+
+  @override
+  String get acceptanceTakeControl => '打开远程桌面';
+
+  @override
+  String get acceptanceReleaseControl => '交还自动化控制权';
+
+  @override
+  String get acceptanceCapture => '保存截图';
+
+  @override
+  String get acceptanceStop => '停止验收';
+
+  @override
+  String get acceptancePass => '验收通过';
+
+  @override
+  String get acceptanceFail => '报告问题';
+
+  @override
+  String get acceptanceNotes => '验收说明';
+
+  @override
+  String get acceptanceEvidence => '验收证据';
+
+  @override
+  String get acceptanceNotInstalled => '未安装';
+
+  @override
+  String get acceptanceChecking => '正在检查环境';
+
+  @override
+  String get acceptancePreparing => '正在准备环境';
+
+  @override
+  String get acceptanceVerifying => '正在验证桌面';
+
+  @override
+  String get acceptanceReady => '已就绪';
+
+  @override
+  String get acceptanceFailed => '失败';
+
+  @override
+  String get acceptanceStarting => '正在启动';
+
+  @override
+  String get acceptanceRunning => '验收中';
+
+  @override
+  String get acceptanceStopping => '正在停止';
+
+  @override
+  String get acceptanceCompleted => '已结束';
+
+  @override
+  String get acceptanceOpenFailed => '无法打开远程桌面浏览器';
 }

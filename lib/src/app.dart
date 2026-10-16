@@ -14,6 +14,7 @@ import 'screens/session_detail_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/model_provider_screen.dart';
 import 'screens/pi_plugins_screen.dart';
+import 'screens/acceptance_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/speech_settings_screen.dart';
 import 'services/notification_service.dart';
@@ -131,6 +132,9 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
     if (settings.name == ModelProviderScreen.routeName) {
       return _pageRoute(settings, const ModelProviderScreen());
     }
+    if (settings.name == AcceptanceScreen.routeName) {
+      return _pageRoute(settings, const AcceptanceScreen());
+    }
     if (settings.name == PiPluginsScreen.routeName) {
       return _pageRoute(settings, const PiPluginsScreen());
     }
@@ -194,17 +198,17 @@ class _ProjectRouteLoaderScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return ref.watch(projectProvider(projectId)).when(
-      loading: () => _RouteStateScreen(
-        title: context.l10n.projectsTitle,
-        progress: true,
-      ),
-      error: (error, _) => _RouteStateScreen(
-        title: context.l10n.projectsTitle,
-        message: context.l10n.loadProjectsFailed(error),
-        onRetry: () => ref.invalidate(projectProvider(projectId)),
-      ),
-      data: (project) => ProjectDetailScreen(project: project),
-    );
+          loading: () => _RouteStateScreen(
+            title: context.l10n.projectsTitle,
+            progress: true,
+          ),
+          error: (error, _) => _RouteStateScreen(
+            title: context.l10n.projectsTitle,
+            message: context.l10n.loadProjectsFailed(error),
+            onRetry: () => ref.invalidate(projectProvider(projectId)),
+          ),
+          data: (project) => ProjectDetailScreen(project: project),
+        );
   }
 }
 
@@ -221,17 +225,17 @@ class _SessionRouteLoaderScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final key = (projectId: projectId, sessionId: sessionId);
     return ref.watch(sessionProvider(key)).when(
-      loading: () => _RouteStateScreen(
-        title: context.l10n.sessionsTitle,
-        progress: true,
-      ),
-      error: (error, _) => _RouteStateScreen(
-        title: context.l10n.sessionsTitle,
-        message: context.l10n.loadSessionsFailed(error),
-        onRetry: () => ref.invalidate(sessionProvider(key)),
-      ),
-      data: (session) => SessionDetailScreen(session: session),
-    );
+          loading: () => _RouteStateScreen(
+            title: context.l10n.sessionsTitle,
+            progress: true,
+          ),
+          error: (error, _) => _RouteStateScreen(
+            title: context.l10n.sessionsTitle,
+            message: context.l10n.loadSessionsFailed(error),
+            onRetry: () => ref.invalidate(sessionProvider(key)),
+          ),
+          data: (session) => SessionDetailScreen(session: session),
+        );
   }
 }
 

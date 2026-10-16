@@ -2275,4 +2275,93 @@ class AppLocalizationsEn extends AppLocalizations {
   String gitUntrackedCount(int count) {
     return '$count untracked';
   }
+
+  @override
+  String get acceptanceTitle => 'Application acceptance';
+
+  @override
+  String get acceptancePlugin => 'x11box acceptance plugin';
+
+  @override
+  String get acceptancePluginDescription =>
+      'Install an isolated desktop on your Bridge server to test applications and control them remotely.';
+
+  @override
+  String get acceptanceInstall => 'Install environment';
+
+  @override
+  String get acceptanceStart => 'Start acceptance';
+
+  @override
+  String get acceptanceEmpty => 'No acceptance runs yet';
+
+  @override
+  String get acceptanceProject => 'Project';
+
+  @override
+  String get acceptanceCommand => 'Application launch command';
+
+  @override
+  String get acceptanceCommitHint =>
+      'The environment uses the project’s latest committed version. Commit your changes before starting.';
+
+  @override
+  String get acceptanceSize => 'Window size';
+
+  @override
+  String get acceptanceTakeControl => 'Open remote desktop';
+
+  @override
+  String get acceptanceReleaseControl => 'Return control to automation';
+
+  @override
+  String get acceptanceCapture => 'Capture screenshot';
+
+  @override
+  String get acceptanceStop => 'Stop acceptance';
+
+  @override
+  String get acceptancePass => 'Accept';
+
+  @override
+  String get acceptanceFail => 'Report issues';
+
+  @override
+  String get acceptanceNotes => 'Acceptance notes';
+
+  @override
+  String get acceptanceEvidence => 'Evidence';
+
+  @override
+  String get acceptanceNotInstalled => 'Not installed';
+
+  @override
+  String get acceptanceChecking => 'Checking environment';
+
+  @override
+  String get acceptancePreparing => 'Preparing environment';
+
+  @override
+  String get acceptanceVerifying => 'Verifying desktop';
+
+  @override
+  String get acceptanceReady => 'Ready';
+
+  @override
+  String get acceptanceFailed => 'Failed';
+
+  @override
+  String get acceptanceStarting => 'Starting';
+
+  @override
+  String get acceptanceRunning => 'Running';
+
+  @override
+  String get acceptanceStopping => 'Stopping';
+
+  @override
+  String get acceptanceCompleted => 'Completed';
+
+  @override
+  String get acceptanceOpenFailed => 'Could not open the desktop browser';
 }

@@ -4033,6 +4033,180 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} untracked'**
   String gitUntrackedCount(int count);
+
+  /// No description provided for @acceptanceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Application acceptance'**
+  String get acceptanceTitle;
+
+  /// No description provided for @acceptancePlugin.
+  ///
+  /// In en, this message translates to:
+  /// **'x11box acceptance plugin'**
+  String get acceptancePlugin;
+
+  /// No description provided for @acceptancePluginDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Install an isolated desktop on your Bridge server to test applications and control them remotely.'**
+  String get acceptancePluginDescription;
+
+  /// No description provided for @acceptanceInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Install environment'**
+  String get acceptanceInstall;
+
+  /// No description provided for @acceptanceStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start acceptance'**
+  String get acceptanceStart;
+
+  /// No description provided for @acceptanceEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No acceptance runs yet'**
+  String get acceptanceEmpty;
+
+  /// No description provided for @acceptanceProject.
+  ///
+  /// In en, this message translates to:
+  /// **'Project'**
+  String get acceptanceProject;
+
+  /// No description provided for @acceptanceCommand.
+  ///
+  /// In en, this message translates to:
+  /// **'Application launch command'**
+  String get acceptanceCommand;
+
+  /// No description provided for @acceptanceCommitHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The environment uses the project’s latest committed version. Commit your changes before starting.'**
+  String get acceptanceCommitHint;
+
+  /// No description provided for @acceptanceSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Window size'**
+  String get acceptanceSize;
+
+  /// No description provided for @acceptanceTakeControl.
+  ///
+  /// In en, this message translates to:
+  /// **'Open remote desktop'**
+  String get acceptanceTakeControl;
+
+  /// No description provided for @acceptanceReleaseControl.
+  ///
+  /// In en, this message translates to:
+  /// **'Return control to automation'**
+  String get acceptanceReleaseControl;
+
+  /// No description provided for @acceptanceCapture.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture screenshot'**
+  String get acceptanceCapture;
+
+  /// No description provided for @acceptanceStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop acceptance'**
+  String get acceptanceStop;
+
+  /// No description provided for @acceptancePass.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept'**
+  String get acceptancePass;
+
+  /// No description provided for @acceptanceFail.
+  ///
+  /// In en, this message translates to:
+  /// **'Report issues'**
+  String get acceptanceFail;
+
+  /// No description provided for @acceptanceNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Acceptance notes'**
+  String get acceptanceNotes;
+
+  /// No description provided for @acceptanceEvidence.
+  ///
+  /// In en, this message translates to:
+  /// **'Evidence'**
+  String get acceptanceEvidence;
+
+  /// No description provided for @acceptanceNotInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Not installed'**
+  String get acceptanceNotInstalled;
+
+  /// No description provided for @acceptanceChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking environment'**
+  String get acceptanceChecking;
+
+  /// No description provided for @acceptancePreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing environment'**
+  String get acceptancePreparing;
+
+  /// No description provided for @acceptanceVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying desktop'**
+  String get acceptanceVerifying;
+
+  /// No description provided for @acceptanceReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get acceptanceReady;
+
+  /// No description provided for @acceptanceFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get acceptanceFailed;
+
+  /// No description provided for @acceptanceStarting.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting'**
+  String get acceptanceStarting;
+
+  /// No description provided for @acceptanceRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Running'**
+  String get acceptanceRunning;
+
+  /// No description provided for @acceptanceStopping.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopping'**
+  String get acceptanceStopping;
+
+  /// No description provided for @acceptanceCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get acceptanceCompleted;
+
+  /// No description provided for @acceptanceOpenFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the desktop browser'**
+  String get acceptanceOpenFailed;
 }
 
 class _AppLocalizationsDelegate

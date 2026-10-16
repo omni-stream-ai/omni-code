@@ -996,5 +996,34 @@
     "placeholders": {
       "count": { "type": "int" }
     }
-  }
+  },
+  "acceptanceTitle": "Application acceptance",
+  "acceptancePlugin": "x11box acceptance plugin",
+  "acceptancePluginDescription": "Install an isolated desktop on your Bridge server to test applications and control them remotely.",
+  "acceptanceInstall": "Install environment",
+  "acceptanceStart": "Start acceptance",
+  "acceptanceEmpty": "No acceptance runs yet",
+  "acceptanceProject": "Project",
+  "acceptanceCommand": "Application launch command",
+  "acceptanceCommitHint": "The environment uses the project’s latest committed version. Commit your changes before starting.",
+  "acceptanceSize": "Window size",
+  "acceptanceTakeControl": "Open remote desktop",
+  "acceptanceReleaseControl": "Return control to automation",
+  "acceptanceCapture": "Capture screenshot",
+  "acceptanceStop": "Stop acceptance",
+  "acceptancePass": "Accept",
+  "acceptanceFail": "Report issues",
+  "acceptanceNotes": "Acceptance notes",
+  "acceptanceEvidence": "Evidence",
+  "acceptanceNotInstalled": "Not installed",
+  "acceptanceChecking": "Checking environment",
+  "acceptancePreparing": "Preparing environment",
+  "acceptanceVerifying": "Verifying desktop",
+  "acceptanceReady": "Ready",
+  "acceptanceFailed": "Failed",
+  "acceptanceStarting": "Starting",
+  "acceptanceRunning": "Running",
+  "acceptanceStopping": "Stopping",
+  "acceptanceCompleted": "Completed",
+  "acceptanceOpenFailed": "Could not open the desktop browser"
 }

@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
 import 'bridge_speech_models.dart';
+import 'acceptance_models.dart';
 import 'models.dart';
 import 'settings/app_settings.dart';
 import 'services/sentry_service.dart';
@@ -147,6 +148,103 @@ class BridgeClient {
       headers['Authorization'] = 'Bearer ${settings.bridgeToken.trim()}';
     }
     return headers;
+  }
+
+  Future<dynamic> _acceptanceRequest(String path,
+      {Map<String, dynamic>? body}) async {
+    final uri = Uri.parse('$baseUrl$path');
+    final response = await (body == null
+            ? _httpClient.get(uri, headers: _defaultHeaders)
+            : _httpClient.post(uri,
+                headers: {
+                  ..._defaultHeaders,
+                  'Content-Type': 'application/json'
+                },
+                body: jsonEncode(body)))
+        .timeout(const Duration(seconds: 180));
+    _assertJsonResponse(response);
+    return (jsonDecode(response.body) as Map<String, dynamic>)['data'];
+  }
+
+  Future<AcceptanceInstallation> getAcceptanceInstallation() async {
+    final data =
+        await _acceptanceRequest('/v2/runtime-plugins/x11box-acceptance');
+    return AcceptanceInstallation.fromJson(
+        data['installation'] as Map<String, dynamic>);
+  }
+
+  Future<AcceptanceInstallation> installAcceptancePlugin() async =>
+      AcceptanceInstallation.fromJson(await _acceptanceRequest(
+          '/v2/runtime-plugins/x11box-acceptance',
+          body: {}) as Map<String, dynamic>);
+
+  Future<List<AcceptanceRun>> listAcceptanceRuns() async =>
+      (await _acceptanceRequest('/v2/acceptance') as List<dynamic>)
+          .map((item) => AcceptanceRun.fromJson(item as Map<String, dynamic>))
+          .toList();
+
+  Future<AcceptanceRun> createAcceptanceRun(
+          {required String id,
+          required String projectId,
+          required String command,
+          String size = 'pc',
+          String? sessionId}) async =>
+      AcceptanceRun.fromJson(await _acceptanceRequest('/v2/acceptance', body: {
+        'id': id,
+        'project_id': projectId,
+        'command': command,
+        'size': size,
+        if (sessionId != null) 'session_id': sessionId,
+      }) as Map<String, dynamic>);
+
+  Future<AcceptanceRun> getAcceptanceRun(
+          String id) async =>
+      AcceptanceRun.fromJson(
+          await _acceptanceRequest('/v2/acceptance/${Uri.encodeComponent(id)}')
+              as Map<String, dynamic>);
+
+  Future<AcceptanceRun> setAcceptanceControl(String id,
+          {required bool acquire}) async =>
+      AcceptanceRun.fromJson(await _acceptanceRequest(
+          '/v2/acceptance/${Uri.encodeComponent(id)}/control',
+          body: {'acquire': acquire}) as Map<String, dynamic>);
+
+  Future<Uri> acceptanceDesktopUrl(String id) async {
+    final data = await _acceptanceRequest(
+        '/v2/acceptance/${Uri.encodeComponent(id)}/desktop-ticket',
+        body: {});
+    final path = data['url'] as String;
+    if (!path.startsWith('/v2/acceptance/') || path.startsWith('//')) {
+      throw const FormatException('Invalid desktop URL');
+    }
+    return Uri.parse('$baseUrl$path');
+  }
+
+  Future<AcceptanceArtifact> captureAcceptanceScreenshot(String id) async =>
+      AcceptanceArtifact.fromJson(await _acceptanceRequest(
+          '/v2/acceptance/${Uri.encodeComponent(id)}/screenshots',
+          body: {}) as Map<String, dynamic>);
+
+  Future<AcceptanceRun> stopAcceptanceRun(String id,
+          {bool? passed, String notes = ''}) async =>
+      AcceptanceRun.fromJson(await _acceptanceRequest(
+          '/v2/acceptance/${Uri.encodeComponent(id)}/stop',
+          body: {
+            if (passed != null) 'passed': passed,
+            'notes': notes,
+          }) as Map<String, dynamic>);
+
+  Future<Uint8List> acceptanceArtifact(String id, String name) async {
+    final response = await _httpClient
+        .get(
+            Uri.parse(
+                '$baseUrl/v2/acceptance/${Uri.encodeComponent(id)}/artifacts/${Uri.encodeComponent(name)}'),
+            headers: _defaultHeaders)
+        .timeout(const Duration(seconds: 120));
+    if (response.statusCode != 200) {
+      throw Exception(_extractErrorMessage(response));
+    }
+    return response.bodyBytes;
   }
 
   Future<List<PiPlugin>> getPiPlugins({String? projectId}) async {
