@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../acceptance_models.dart';
 import '../bridge_client.dart';
@@ -405,13 +406,14 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
     await widget.client.setAcceptanceControl(run.id, acquire: true);
     try {
       final uri = await widget.client.acceptanceDesktopUrl(run.id);
-      if (!await launchUrl(uri,
-          mode: LaunchMode.externalApplication,
-          webOnlyWindowName: kIsWeb ? '_self' : null)) {
-        throw StateError(mounted
-            ? context.l10n.acceptanceOpenFailed
-            : 'Cannot open desktop');
-      }
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => AcceptanceDesktopScreen(
+                url: uri,
+                title: context.l10n.acceptanceTakeControl,
+                onClose: () =>
+                    widget.client.setAcceptanceControl(run.id, acquire: false),
+              )));
     } catch (_) {
       await widget.client.setAcceptanceControl(run.id, acquire: false);
       rethrow;
@@ -571,4 +573,73 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
                   busy ? null : () => operation(() => openArtifact(artifact)))),
         ])));
   }
+}
+
+class AcceptanceDesktopScreen extends StatefulWidget {
+  const AcceptanceDesktopScreen({
+    super.key,
+    required this.url,
+    required this.title,
+    required this.onClose,
+  });
+  final Uri url;
+  final String title;
+  final Future<void> Function() onClose;
+
+  @override
+  State<AcceptanceDesktopScreen> createState() =>
+      _AcceptanceDesktopScreenState();
+}
+
+class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
+  late final WebViewController controller;
+  bool closing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..setNavigationDelegate(NavigationDelegate(
+        onWebResourceError: (error) {
+          if (mounted && error.isForMainFrame == true) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text(error.description)));
+          }
+        },
+      ))
+      ..loadRequest(widget.url);
+  }
+
+  Future<void> close() async {
+    if (closing) return;
+    closing = true;
+    try {
+      await widget.onClose();
+    } finally {
+      if (mounted) Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope<void>(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) close();
+        },
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            title: Text(widget.title),
+            actions: [
+              IconButton(
+                  onPressed: closing ? null : close,
+                  tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                  icon: const Icon(Icons.close)),
+            ],
+          ),
+          body: WebViewWidget(controller: controller),
+        ),
+      );
 }
