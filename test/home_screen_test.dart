@@ -10,6 +10,7 @@ import 'package:omni_code/src/app_routes.dart';
 import 'package:omni_code/src/bridge_client.dart';
 import 'package:omni_code/src/models.dart';
 import 'package:omni_code/src/screens/home_screen.dart';
+import 'package:omni_code/src/screens/settings_screen.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 import 'package:omni_code/src/settings/app_settings_store.dart';
 import 'package:omni_code/src/theme/app_theme.dart';
@@ -529,6 +530,105 @@ void main() {
       tester.element(find.byType(HomeScreen)),
     )!;
     expect(find.text(l10n.noSessionsYet), findsOneWidget);
+  });
+
+  testWidgets('home exposes bridge settings when the configured bridge fails',
+      (tester) async {
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        throw Exception('bridge unavailable');
+      }),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        home: HomeScreen(client: client),
+        onGenerateRoute: (settings) {
+          if (settings.name == AppRoutes.settings) {
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (_) => SettingsScreen(client: client),
+            );
+          }
+          return null;
+        },
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(HomeScreen)),
+    )!;
+    final changeBridge = find.text(l10n.changeBridge);
+    expect(changeBridge, findsOneWidget);
+
+    await tester.tap(changeBridge);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SettingsScreen), findsOneWidget);
+  });
+
+  testWidgets('saving a new bridge connects and returns home for authorization',
+      (tester) async {
+    const nextUrl = 'http://10.0.0.8:8787';
+    var newBridgeRequests = 0;
+    final client = BridgeClient(
+      httpClient: _FakeHttpClient((request) async {
+        if (request.url.path == '/projects') {
+          if (request.url == Uri.parse('$nextUrl/projects')) {
+            newBridgeRequests++;
+            return http.Response('unauthorized', 401);
+          }
+          throw http.ClientException('bridge unavailable');
+        }
+        return http.Response(
+          jsonEncode({
+            'data': {'model_providers': [], 'prompt': ''},
+          }),
+          200,
+        );
+      }),
+    );
+    await tester.pumpWidget(
+      _TestApp(
+        home: HomeScreen(client: client),
+        onGenerateRoute: (settings) {
+          if (settings.name == AppRoutes.settings) {
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (_) => SettingsScreen(client: client),
+            );
+          }
+          return null;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(HomeScreen)),
+    )!;
+    await tester.tap(find.text(l10n.changeBridge));
+    await tester.pumpAndSettle();
+
+    final bridgeUrl = find.byKey(const Key('settings-bridge-url'));
+    await tester.ensureVisible(bridgeUrl);
+    await tester.enterText(bridgeUrl, nextUrl);
+    await tester.ensureVisible(find.text(l10n.save));
+    await tester.tap(find.text(l10n.save));
+    await tester.pumpAndSettle();
+
+    expect(newBridgeRequests, 1);
+    expect(appSettingsController.settings.bridgeUrl, nextUrl);
+    expect(find.byType(SettingsScreen), findsNothing);
+    expect(find.text(l10n.authorizeThisDevice), findsOneWidget);
+    final connectBridgeField = find.byType(TextField).first;
+    expect(
+      tester.widget<TextField>(connectBridgeField).controller?.text,
+      nextUrl,
+    );
+    expect(find.textContaining('Failed to save settings'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('home shows desktop dashboard skeleton while loading wide layout',

@@ -506,6 +506,36 @@ abstract class AppLocalizations {
   /// **'Settings saved'**
   String get settingsSaved;
 
+  /// No description provided for @connectingBridge.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting...'**
+  String get connectingBridge;
+
+  /// No description provided for @settingsSavedBridgeConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings saved. Connected to Bridge.'**
+  String get settingsSavedBridgeConnected;
+
+  /// No description provided for @settingsSavedBridgeAuthorizationRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Bridge URL saved. Authorize this device on the home screen.'**
+  String get settingsSavedBridgeAuthorizationRequired;
+
+  /// No description provided for @settingsSavedBridgeConnectionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Bridge URL saved, but the connection failed: {error}'**
+  String settingsSavedBridgeConnectionFailed(Object error);
+
+  /// No description provided for @bridgeConnectionTimedOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection timed out. Check the Bridge URL and your network, then save to retry.'**
+  String get bridgeConnectionTimedOut;
+
   /// No description provided for @settingsSaveFailed.
   ///
   /// In en, this message translates to:
@@ -631,6 +661,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Retry'**
   String get retry;
+
+  /// No description provided for @changeBridge.
+  ///
+  /// In en, this message translates to:
+  /// **'Change Bridge'**
+  String get changeBridge;
 
   /// No description provided for @editMessage.
   ///

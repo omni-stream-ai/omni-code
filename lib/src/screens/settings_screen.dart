@@ -41,6 +41,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   static const double _desktopRailWidth = 296;
+  static const _bridgeConnectionTimeout = Duration(seconds: 10);
   final _bridgeUrlController = TextEditingController();
   final _clientIdController = TextEditingController();
   final _updateManifestUrlController = TextEditingController();
@@ -67,6 +68,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late String _appLanguage;
   String _currentVersion = '';
   bool _saving = false;
+  bool _connectingBridge = false;
+  bool _retryBridgeConnection = false;
   bool _checkingUpdate = false;
 
   BridgeClient get _client => widget.client ?? bridgeClient;
@@ -471,7 +474,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         SizedBox(
-          width: 72,
+          width: _connectingBridge ? 104 : 72,
           height: 32,
           child: FilledButton(
             style: FilledButton.styleFrom(
@@ -486,7 +489,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             onPressed: _saving ? null : _save,
-            child: Text(_saving ? l10n.saving : l10n.save),
+            child: Text(_saveButtonLabel(l10n)),
           ),
         ),
       ],
@@ -546,7 +549,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(width: AppSpacing.block),
           FilledButton(
             onPressed: _saving ? null : _save,
-            child: Text(_saving ? l10n.saving : l10n.save),
+            child: Text(_saveButtonLabel(l10n)),
           ),
         ],
       ),
@@ -796,6 +799,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           contentPadding: EdgeInsets.zero,
         ),
         TextField(
+          key: const Key('settings-bridge-url'),
           controller: _bridgeUrlController,
           style: formValueTextStyle,
           decoration: InputDecoration(
@@ -1301,7 +1305,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return result;
   }
 
+  String _saveButtonLabel(AppLocalizations l10n) {
+    if (_connectingBridge) return l10n.connectingBridge;
+    return _saving ? l10n.saving : l10n.save;
+  }
+
   Future<void> _save() async {
+    if (_saving) return;
     setState(() {
       _saving = true;
     });
@@ -1338,6 +1348,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           appSettingsController.settings.compressAssistantReplyMaxChars,
         ),
       );
+      final reconnectBridge = _retryBridgeConnection ||
+          next.bridgeUrl != appSettingsController.settings.bridgeUrl.trim();
       if (_aiApprovalDirty) {
         await _client.updateBridgeSettings(
           next,
@@ -1347,13 +1359,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
       await appSettingsController.save(next);
+      _aiApprovalDirty = false;
       if (!mounted) {
         return;
       }
+      var feedback = context.l10n.settingsSaved;
+      bool? bridgeConnectionResult;
+      if (reconnectBridge) {
+        bridgeConnectionResult = await _reconnectBridgeAfterSave();
+        if (!mounted) return;
+        if (bridgeConnectionResult != true) {
+          Navigator.of(context).pop(false);
+          return;
+        }
+        feedback = context.l10n.settingsSavedBridgeConnected;
+      }
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.settingsSaved)),
+        SnackBar(content: Text(feedback)),
       );
-      Navigator.of(context).pop(true);
+      Navigator.of(context).pop(bridgeConnectionResult);
     } catch (error) {
       if (!mounted) {
         return;
@@ -1364,6 +1389,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() {
           _saving = false;
         });
+      }
+    }
+  }
+
+  Future<bool> _reconnectBridgeAfterSave() async {
+    setState(() {
+      _connectingBridge = true;
+      _retryBridgeConnection = true;
+    });
+    try {
+      await _client
+          .listProjects(forceRefresh: true)
+          .timeout(_bridgeConnectionTimeout);
+      if (!mounted) return false;
+      _retryBridgeConnection = false;
+      return true;
+    } on ClientUnauthorizedException {
+      if (!mounted) return false;
+      _retryBridgeConnection = false;
+      return false;
+    } catch (error) {
+      if (!mounted) return false;
+      final message = error is TimeoutException
+          ? context.l10n.bridgeConnectionTimedOut
+          : '$error';
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      _showCopyableErrorSnackBar(
+        context.l10n.settingsSavedBridgeConnectionFailed(message),
+      );
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() => _connectingBridge = false);
       }
     }
   }

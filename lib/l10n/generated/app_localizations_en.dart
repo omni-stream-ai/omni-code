@@ -229,6 +229,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSaved => 'Settings saved';
 
   @override
+  String get connectingBridge => 'Connecting...';
+
+  @override
+  String get settingsSavedBridgeConnected =>
+      'Settings saved. Connected to Bridge.';
+
+  @override
+  String get settingsSavedBridgeAuthorizationRequired =>
+      'Bridge URL saved. Authorize this device on the home screen.';
+
+  @override
+  String settingsSavedBridgeConnectionFailed(Object error) {
+    return 'Bridge URL saved, but the connection failed: $error';
+  }
+
+  @override
+  String get bridgeConnectionTimedOut =>
+      'Connection timed out. Check the Bridge URL and your network, then save to retry.';
+
+  @override
   String settingsSaveFailed(Object error) {
     return 'Failed to save settings: $error';
   }
@@ -310,6 +330,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get retry => 'Retry';
+
+  @override
+  String get changeBridge => 'Change Bridge';
 
   @override
   String get editMessage => 'Edit';

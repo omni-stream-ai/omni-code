@@ -218,6 +218,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSaved => '设置已保存';
 
   @override
+  String get connectingBridge => '连接中...';
+
+  @override
+  String get settingsSavedBridgeConnected => '设置已保存，已连接 Bridge。';
+
+  @override
+  String get settingsSavedBridgeAuthorizationRequired =>
+      'Bridge 地址已保存，请在首页授权此设备。';
+
+  @override
+  String settingsSavedBridgeConnectionFailed(Object error) {
+    return 'Bridge 地址已保存，但连接失败：$error';
+  }
+
+  @override
+  String get bridgeConnectionTimedOut => '连接超时，请检查 Bridge 地址和网络，再点击保存重试。';
+
+  @override
   String settingsSaveFailed(Object error) {
     return '保存设置失败：$error';
   }
@@ -298,6 +316,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get retry => '重试';
+
+  @override
+  String get changeBridge => '更换 Bridge';
 
   @override
   String get editMessage => '编辑';

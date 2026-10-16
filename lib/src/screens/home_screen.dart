@@ -81,6 +81,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    appSettingsController.addListener(_onAppSettingsChanged);
     _bridgeUrlController.text = appSettingsController.settings.bridgeUrl;
     _visibleRecentCount = 0;
     _isLoading = true;
@@ -90,11 +91,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    appSettingsController.removeListener(_onAppSettingsChanged);
     _authPollTimer?.cancel();
     _searchDebounceTimer?.cancel();
     _bridgeUrlController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onAppSettingsChanged() {
+    if (!mounted) {
+      return;
+    }
+    final bridgeUrl = appSettingsController.settings.bridgeUrl.trim();
+    if (_bridgeUrlController.text != bridgeUrl) {
+      _bridgeUrlController.text = bridgeUrl;
+    }
   }
 
   void _scheduleSearchQueryUpdate(String value) {
@@ -205,6 +217,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _handleUnauthorized() async {
+    _syncBridgeUrlController();
     final pendingRequestId =
         appSettingsController.settings.pendingClientAuthRequestId.trim();
 
@@ -442,11 +455,50 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _openSettings() async {
-    await Navigator.of(context).pushNamed(SettingsScreen.routeName);
+    final bridgeUrlBefore = appSettingsController.settings.bridgeUrl.trim();
+    final bridgeConnectionChecked = await Navigator.of(context).pushNamed(
+      SettingsScreen.routeName,
+    );
     if (!mounted) {
       return;
     }
     setState(() {});
+    final bridgeUrlAfter = appSettingsController.settings.bridgeUrl.trim();
+    if (bridgeConnectionChecked is bool) {
+      if (bridgeConnectionChecked) {
+        unawaited(_loadHomeData(forceRefresh: true));
+      } else {
+        _showBridgeConnectionState();
+      }
+      return;
+    }
+    if (bridgeUrlBefore != bridgeUrlAfter) {
+      unawaited(_loadHomeData(forceRefresh: true));
+    }
+  }
+
+  void _showBridgeConnectionState() {
+    _authPollTimer?.cancel();
+    _authPollTimer = null;
+    setState(() {
+      _bridgeUrlController.text =
+          appSettingsController.settings.bridgeUrl.trim();
+      _projectsError = null;
+      _recentSessionsError = null;
+      _authError = null;
+      _needsAuthorization = true;
+      _isWaitingAuth = false;
+      _authRequestId = null;
+      _isLoading = false;
+      _isRefreshing = false;
+    });
+  }
+
+  void _syncBridgeUrlController() {
+    final bridgeUrl = appSettingsController.settings.bridgeUrl.trim();
+    if (_bridgeUrlController.text != bridgeUrl) {
+      _bridgeUrlController.text = bridgeUrl;
+    }
   }
 
   Future<void> _openBridgeDownloads() async {
@@ -674,6 +726,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         child: _ErrorPanel(
           message: l10n.loadSessionsFailed('$_recentSessionsError'),
           onRetry: _reloadHomeData,
+          onOpenSettings: _openSettings,
         ),
       );
     }
@@ -992,6 +1045,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 _ErrorPanel(
                   message: l10n.loadProjectsFailed('$_projectsError'),
                   onRetry: _reloadHomeData,
+                  onOpenSettings: _openSettings,
                 ),
               ],
               if (projects.isNotEmpty || sessions.isNotEmpty) ...[
@@ -1110,6 +1164,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         onOpenSession: _openSession,
                         onCreateSessionForProject: _newSessionForProject,
                         onRetry: _reloadHomeData,
+                        onOpenSettings: _openSettings,
                       ),
                     ),
                   ),
@@ -2459,6 +2514,7 @@ class _HomeDesktopInbox extends StatelessWidget {
     required this.onOpenSession,
     required this.onCreateSessionForProject,
     required this.onRetry,
+    required this.onOpenSettings,
   });
 
   final SessionSummary? pinnedSession;
@@ -2472,6 +2528,7 @@ class _HomeDesktopInbox extends StatelessWidget {
   final ValueChanged<SessionSummary> onOpenSession;
   final ValueChanged<ProjectSummary> onCreateSessionForProject;
   final Future<void> Function() onRetry;
+  final Future<void> Function() onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -2498,12 +2555,14 @@ class _HomeDesktopInbox extends StatelessWidget {
       return _ErrorPanel(
         message: l10n.loadProjectsFailed('$projectsError'),
         onRetry: onRetry,
+        onOpenSettings: onOpenSettings,
       );
     }
     if (recentSessionsError != null && sessions.isEmpty) {
       return _ErrorPanel(
         message: l10n.loadSessionsFailed('$recentSessionsError'),
         onRetry: onRetry,
+        onOpenSettings: onOpenSettings,
       );
     }
     if (sessions.isEmpty && projects.isEmpty) {
@@ -3866,10 +3925,12 @@ class _ErrorPanel extends StatelessWidget {
   const _ErrorPanel({
     required this.message,
     required this.onRetry,
+    this.onOpenSettings,
   });
 
   final String message;
   final Future<void> Function() onRetry;
+  final Future<void> Function()? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -3894,9 +3955,20 @@ class _ErrorPanel extends StatelessWidget {
             textColor: AppColors.errorTextFor(brightness),
           ),
           const SizedBox(height: AppSpacing.stack),
-          FilledButton(
-            onPressed: onRetry,
-            child: Text(context.l10n.retry),
+          Wrap(
+            spacing: AppSpacing.compact,
+            runSpacing: AppSpacing.compact,
+            children: [
+              FilledButton(
+                onPressed: onRetry,
+                child: Text(context.l10n.retry),
+              ),
+              if (onOpenSettings != null)
+                OutlinedButton(
+                  onPressed: onOpenSettings,
+                  child: Text(context.l10n.changeBridge),
+                ),
+            ],
           ),
         ],
       ),

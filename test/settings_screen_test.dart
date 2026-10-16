@@ -1,6 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:omni_code/l10n/generated/app_localizations.dart';
 import 'package:omni_code/src/bridge_client.dart';
 import 'package:omni_code/src/models.dart';
@@ -209,7 +214,130 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(client.updateCalls, 0);
+    expect(client.connectionChecks, 0);
   });
+
+  testWidgets('saving a new bridge URL connects before leaving settings',
+      (tester) async {
+    const nextUrl = 'http://10.0.0.8:8787';
+    final connection = Completer<http.Response>();
+    final requests = <Uri>[];
+    final client = BridgeClient(
+      httpClient: MockClient((request) async {
+        requests.add(request.url);
+        if (request.url.path == '/projects') {
+          if (request.url != Uri.parse('$nextUrl/projects')) {
+            return http.Response(jsonEncode({'data': []}), 200);
+          }
+          expect(appSettingsController.settings.bridgeUrl, nextUrl);
+          return connection.future;
+        }
+        return _settingsResponse();
+      }),
+    );
+    await client.listProjects();
+    requests.clear();
+    await _openSettings(tester, client);
+
+    await _saveBridgeUrl(tester, nextUrl);
+
+    expect(requests, contains(Uri.parse('$nextUrl/projects')));
+    expect(find.byType(SettingsScreen), findsOneWidget);
+    final connecting = find.widgetWithText(FilledButton, 'Connecting...');
+    expect(connecting, findsOneWidget);
+    expect(tester.widget<FilledButton>(connecting).onPressed, isNull);
+
+    connection.complete(http.Response(jsonEncode({'data': []}), 200));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SettingsScreen), findsNothing);
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Settings saved. Connected to Bridge.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('failed bridge connection returns to the home connect state',
+      (tester) async {
+    const nextUrl = 'http://10.0.0.8:8787';
+    var attempts = 0;
+    final client = BridgeClient(
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/projects') {
+          expect(request.url, Uri.parse('$nextUrl/projects'));
+          attempts++;
+          if (attempts == 1) throw http.ClientException('bridge unavailable');
+          return http.Response(jsonEncode({'data': []}), 200);
+        }
+        return _settingsResponse();
+      }),
+    );
+    await _openSettings(tester, client);
+
+    await _saveBridgeUrl(tester, nextUrl);
+    await tester.pumpAndSettle();
+
+    expect(attempts, 1);
+    expect(appSettingsController.settings.bridgeUrl, nextUrl);
+    expect(find.byType(SettingsScreen), findsNothing);
+    expect(find.text('Home'), findsOneWidget);
+    expect(attempts, 1);
+    expect(find.text('Home'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('bridge connection timeout returns to the home connect state',
+      (tester) async {
+    const nextUrl = 'http://10.0.0.8:8787';
+    final connection = Completer<http.Response>();
+    final client = BridgeClient(
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/projects') return connection.future;
+        return _settingsResponse();
+      }),
+    );
+    await _openSettings(tester, client);
+
+    await _saveBridgeUrl(tester, nextUrl);
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pumpAndSettle();
+
+    expect(appSettingsController.settings.bridgeUrl, nextUrl);
+    expect(find.byType(SettingsScreen), findsNothing);
+    expect(find.text('Home'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+Future<void> _openSettings(WidgetTester tester, BridgeClient client) async {
+  await tester.pumpWidget(
+    const _TestApp(home: Scaffold(body: Text('Home'))),
+  );
+  unawaited(
+    Navigator.of(tester.element(find.text('Home'))).push<void>(
+      MaterialPageRoute(
+        builder: (_) => SettingsScreen(client: client),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _saveBridgeUrl(WidgetTester tester, String url) async {
+  final field = find.byKey(const Key('settings-bridge-url'));
+  await tester.ensureVisible(field);
+  await tester.enterText(field, url);
+  await tester.ensureVisible(find.text('Save'));
+  await tester.tap(find.text('Save'));
+  await tester.pump();
+}
+
+http.Response _settingsResponse() {
+  return http.Response(
+    jsonEncode({
+      'data': {'model_providers': [], 'prompt': ''},
+    }),
+    200,
+  );
 }
 
 class _TestApp extends StatelessWidget {
@@ -264,8 +392,15 @@ class _FailingSettingsBridgeClient extends BridgeClient {
 
 class _RecordingSettingsBridgeClient extends BridgeClient {
   int updateCalls = 0;
+  int connectionChecks = 0;
   bool? includeAiApproval;
   ModelProviderConfig? aiApprovalProvider;
+
+  @override
+  Future<List<ProjectSummary>> listProjects({bool forceRefresh = false}) async {
+    connectionChecks++;
+    return [];
+  }
 
   @override
   Future<List<ModelProviderConfig>> getModelProviders() async => [

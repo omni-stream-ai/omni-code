@@ -68,6 +68,16 @@
   "compressRepliesSubtitle": "When enabled, new sessions ask the AI to summarize what it did briefly",
   "compressReplyMaxChars": "Compressed reply max chars",
   "settingsSaved": "Settings saved",
+  "connectingBridge": "Connecting...",
+  "settingsSavedBridgeConnected": "Settings saved. Connected to Bridge.",
+  "settingsSavedBridgeAuthorizationRequired": "Bridge URL saved. Authorize this device on the home screen.",
+  "settingsSavedBridgeConnectionFailed": "Bridge URL saved, but the connection failed: {error}",
+  "@settingsSavedBridgeConnectionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "bridgeConnectionTimedOut": "Connection timed out. Check the Bridge URL and your network, then save to retry.",
   "settingsSaveFailed": "Failed to save settings: {error}",
   "@settingsSaveFailed": {
     "placeholders": {
@@ -135,6 +145,7 @@
   "createNewProject": "Create new project",
   "newProject": "New project",
   "retry": "Retry",
+  "changeBridge": "Change Bridge",
   "editMessage": "Edit",
   "withdrawMessage": "Withdraw",
   "projectCount": "{count} sessions",
