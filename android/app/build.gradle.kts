@@ -20,7 +20,7 @@ if (file("google-services.json").exists()) {
 android {
     namespace = "com.omnistreamai.code"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = System.getenv("OMNI_ANDROID_NDK_VERSION") ?: flutter.ndkVersion
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
