@@ -1,3 +1,4 @@
+import 'acceptance_screen.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -386,6 +387,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
               _buildHeader(context),
               const SizedBox(height: AppSpacing.card),
               _buildProjectSummaryCard(context),
+              TextButton.icon(onPressed: _openAcceptance, icon: const Icon(Icons.fact_check_outlined), label: Text(context.l10n.acceptanceTitle)),
               const SizedBox(height: AppSpacing.card),
               _buildAiApprovalSettingsCard(context),
               const SizedBox(height: AppSpacing.card),
@@ -425,6 +427,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _buildDesktopHero(context, sessions),
+                    TextButton.icon(onPressed: _openAcceptance, icon: const Icon(Icons.fact_check_outlined), label: Text(context.l10n.acceptanceTitle)),
                     const SizedBox(height: AppSpacing.card),
                     _buildSearchSection(context),
                     const SizedBox(height: AppSpacing.card),
@@ -447,6 +450,11 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
         ),
       ),
     );
+  }
+
+  void _openAcceptance() {
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AcceptanceScreen(
+      client: _client, projectId: widget.project.id)));
   }
 
   Widget _buildHeader(BuildContext context) {

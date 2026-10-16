@@ -43,6 +43,47 @@ void main() {
         client.acceptanceDesktopUrl('run'), throwsFormatException);
   });
 
+  test('evidence download preserves ticket and stays on Bridge origin',
+      () async {
+    final client = BridgeClient(httpClient: MockClient((request) async {
+      expect(request.method, 'POST');
+      expect(
+          request.url.path, '/v2/acceptance/run/evidence-ticket/recording.mp4');
+      return response(
+          {'url': '/v2/acceptance/run/evidence/recording.mp4?ticket=one-use'});
+    }));
+    final uri = await client.acceptanceEvidenceUrl('run', 'recording.mp4',
+        download: true);
+    expect(uri.queryParameters['ticket'], 'one-use');
+    expect(uri.queryParameters['download'], 'true');
+    expect(uri.path, '/v2/acceptance/run/evidence/recording.mp4');
+  });
+
+  test('evidence URL rejects an external origin', () async {
+    final client = BridgeClient(
+        httpClient:
+            MockClient((_) async => response({'url': '//other.example/file'})));
+    await expectLater(client.acceptanceEvidenceUrl('run', 'recording.mp4'),
+        throwsFormatException);
+  });
+
+  test('uninstall issues DELETE and surfaces cleanup failures', () async {
+    var fail = false;
+    final client = BridgeClient(httpClient: MockClient((request) async {
+      expect(request.method, 'DELETE');
+      expect(request.url.path, '/v2/runtime-plugins/x11box-acceptance');
+      return fail
+          ? http.Response(jsonEncode({'error': 'cleanup needs retry'}), 409)
+          : http.Response('', 204);
+    }));
+    await client.uninstallAcceptancePlugin();
+    fail = true;
+    await expectLater(
+        client.uninstallAcceptancePlugin(),
+        throwsA(
+            predicate((e) => e.toString().contains('cleanup needs retry'))));
+  });
+
   test('control conflicts surface the server error', () async {
     final client = BridgeClient(
         httpClient: MockClient((_) async => http.Response(

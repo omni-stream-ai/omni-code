@@ -2364,4 +2364,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get acceptanceOpenFailed => 'Could not open the desktop browser';
+
+  @override
+  String get acceptanceUninstallHint =>
+      'Stop active acceptance runs and uninstall the plugin. Saved evidence and reports are retained.';
+
+  @override
+  String get acceptanceDownload => 'Download evidence';
 }

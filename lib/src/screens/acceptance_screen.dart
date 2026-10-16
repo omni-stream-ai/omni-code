@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
@@ -31,9 +32,11 @@ String acceptancePhaseLabel(BuildContext context, String phase) {
 }
 
 class AcceptanceScreen extends StatefulWidget {
-  const AcceptanceScreen({super.key, this.client});
+  const AcceptanceScreen(
+      {super.key, this.client, this.projectId, this.sessionId});
   static const routeName = '/acceptance';
   final BridgeClient? client;
+  final String? projectId, sessionId;
   @override
   State<AcceptanceScreen> createState() => _AcceptanceScreenState();
 }
@@ -76,8 +79,13 @@ class _AcceptanceScreenState extends State<AcceptanceScreen> {
       if (!mounted) return;
       setState(() {
         installation = values[0] as AcceptanceInstallation;
-        runs = values[1] as List<AcceptanceRun>;
-        projects = values[2] as List<ProjectSummary>;
+        runs = (values[1] as List<AcceptanceRun>)
+            .where((r) =>
+                widget.projectId == null || r.projectId == widget.projectId)
+            .toList();
+        projects = (values[2] as List<ProjectSummary>)
+            .where((p) => widget.projectId == null || p.id == widget.projectId)
+            .toList();
         error = null;
       });
     } catch (e) {
@@ -102,6 +110,27 @@ class _AcceptanceScreenState extends State<AcceptanceScreen> {
     }
   }
 
+  Future<void> uninstall() async {
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+                title: Text(context.l10n.uninstall),
+                content: Text(context.l10n.acceptanceUninstallHint),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: Text(context.l10n.cancel)),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: Text(context.l10n.uninstall))
+                ]));
+    if (confirmed != true || !mounted) return;
+    await operation(() async {
+      await client.uninstallAcceptancePlugin();
+      await refresh();
+    });
+  }
+
   Future<void> start() async {
     final input = await showDialog<_RunInput>(
         context: context, builder: (_) => _StartDialog(projects: projects));
@@ -111,7 +140,8 @@ class _AcceptanceScreenState extends State<AcceptanceScreen> {
           id: input.id,
           projectId: input.projectId,
           command: input.command,
-          size: input.size);
+          size: input.size,
+          sessionId: widget.sessionId);
       if (!mounted) return;
       await Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) => AcceptanceDetailScreen(run: run, client: client)));
@@ -159,6 +189,11 @@ class _AcceptanceScreenState extends State<AcceptanceScreen> {
                               if (installation!.error != null)
                                 SelectableText(installation!.error!),
                             ],
+                            if (installation?.ready == true)
+                              TextButton.icon(
+                                  onPressed: busy ? null : uninstall,
+                                  icon: const Icon(Icons.delete_outline),
+                                  label: Text(l.uninstall)),
                             if (installation?.ready != true)
                               FilledButton.icon(
                                   onPressed: busy || installation?.busy == true
@@ -297,7 +332,8 @@ class AcceptanceDetailScreen extends StatefulWidget {
   State<AcceptanceDetailScreen> createState() => _AcceptanceDetailScreenState();
 }
 
-class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen> {
+class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
+    with WidgetsBindingObserver {
   late AcceptanceRun run = widget.run;
   Uint8List? preview;
   Timer? timer;
@@ -306,15 +342,27 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(refresh());
     timer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (!run.terminal && !busy && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) { unawaited(refresh()); }
+      if (!run.terminal &&
+          !busy &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        unawaited(refresh());
+      }
     });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     timer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(refresh());
   }
 
   Future<void> refresh() async {
@@ -322,13 +370,14 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen> {
     refreshing = true;
     try {
       final value = await widget.client.getAcceptanceRun(run.id);
-      final image = value.running ? await widget.client.acceptancePreview(run.id) : null;
-      if (mounted) {
-        setState(() {
-          run = value;
-          if (image != null) preview = image;
-          error = null;
-        });
+      if (!mounted) return;
+      setState(() {
+        run = value;
+        error = null;
+      });
+      if (value.running) {
+        final image = await widget.client.acceptancePreview(run.id);
+        if (mounted) setState(() => preview = image);
       }
     } catch (e) {
       if (mounted) setState(() => error = e);
@@ -356,7 +405,9 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen> {
     await widget.client.setAcceptanceControl(run.id, acquire: true);
     try {
       final uri = await widget.client.acceptanceDesktopUrl(run.id);
-      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!await launchUrl(uri,
+          mode: LaunchMode.externalApplication,
+          webOnlyWindowName: kIsWeb ? '_self' : null)) {
         throw StateError(mounted
             ? context.l10n.acceptanceOpenFailed
             : 'Cannot open desktop');
@@ -403,6 +454,16 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen> {
   }
 
   Future<void> openArtifact(AcceptanceArtifact artifact) async {
+    if (artifact.contentType == 'video/mp4') {
+      final uri =
+          await widget.client.acceptanceEvidenceUrl(run.id, artifact.name);
+      if (!await launchUrl(uri,
+          mode: LaunchMode.externalApplication,
+          webOnlyWindowName: kIsWeb ? '_self' : null)) {
+        throw StateError('Could not open recording');
+      }
+      return;
+    }
     final bytes = await widget.client.acceptanceArtifact(run.id, artifact.name);
     if (!mounted) return;
     await showDialog<void>(
@@ -433,8 +494,12 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen> {
               style: Theme.of(context).textTheme.titleLarge),
           SelectableText(run.revision),
           Text(run.command),
-          if (preview != null) SizedBox(height: 360, child: InteractiveViewer(
-            child: Image.memory(preview!, gaplessPlayback: true, fit: BoxFit.contain))),
+          if (preview != null)
+            SizedBox(
+                height: 360,
+                child: InteractiveViewer(
+                    child: Image.memory(preview!,
+                        gaplessPlayback: true, fit: BoxFit.contain))),
           if (busy) const LinearProgressIndicator(),
           if (error != null || run.error != null)
             SelectableText(error?.toString() ?? run.error!,
@@ -487,9 +552,23 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen> {
           ...run.artifacts.map((artifact) => ListTile(
               title: Text(artifact.name),
               subtitle: Text(artifact.bytes.toString()),
-              onTap: busy || artifact.contentType == 'video/mp4'
-                  ? null
-                  : () => operation(() => openArtifact(artifact)))),
+              trailing: IconButton(
+                  icon: const Icon(Icons.download),
+                  tooltip: l.acceptanceDownload,
+                  onPressed: busy
+                      ? null
+                      : () => operation(() async {
+                            final uri = await widget.client
+                                .acceptanceEvidenceUrl(run.id, artifact.name,
+                                    download: true);
+                            if (!await launchUrl(uri,
+                                mode: LaunchMode.externalApplication,
+                                webOnlyWindowName: kIsWeb ? '_self' : null)) {
+                              throw StateError('Could not open evidence');
+                            }
+                          })),
+              onTap:
+                  busy ? null : () => operation(() => openArtifact(artifact)))),
         ])));
   }
 }

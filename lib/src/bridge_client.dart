@@ -178,6 +178,20 @@ class BridgeClient {
           '/v2/runtime-plugins/x11box-acceptance',
           body: {}) as Map<String, dynamic>);
 
+  Future<void> uninstallAcceptancePlugin() async {
+    final response = await _httpClient.delete(Uri.parse('$baseUrl/v2/runtime-plugins/x11box-acceptance'),
+      headers: _defaultHeaders).timeout(const Duration(minutes: 5));
+    if (response.statusCode != 204) { throw Exception(_extractErrorMessage(response)); }
+  }
+
+  Future<Uri> acceptanceEvidenceUrl(String id, String name, {bool download = false}) async {
+    final data = await _acceptanceRequest('/v2/acceptance/${Uri.encodeComponent(id)}/evidence-ticket/${Uri.encodeComponent(name)}', body: {});
+    final path = data['url'] as String;
+    if (!path.startsWith('/v2/acceptance/') || path.startsWith('//')) { throw const FormatException('Invalid evidence URL'); }
+    final uri = Uri.parse('$baseUrl$path');
+    return uri.replace(queryParameters: {...uri.queryParameters, if (download) 'download': 'true'});
+  }
+
   Future<List<AcceptanceRun>> listAcceptanceRuns() async =>
       (await _acceptanceRequest('/v2/acceptance') as List<dynamic>)
           .map((item) => AcceptanceRun.fromJson(item as Map<String, dynamic>))

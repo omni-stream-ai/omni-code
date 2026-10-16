@@ -4207,6 +4207,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not open the desktop browser'**
   String get acceptanceOpenFailed;
+
+  /// No description provided for @acceptanceUninstallHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop active acceptance runs and uninstall the plugin. Saved evidence and reports are retained.'**
+  String get acceptanceUninstallHint;
+
+  /// No description provided for @acceptanceDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download evidence'**
+  String get acceptanceDownload;
 }
 
 class _AppLocalizationsDelegate

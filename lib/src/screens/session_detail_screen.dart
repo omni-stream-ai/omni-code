@@ -1,3 +1,4 @@
+import 'acceptance_screen.dart';
 import 'dart:async';
 import 'dart:ui';
 import 'dart:convert';
@@ -2172,6 +2173,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           label: context.l10n.newSession,
           icon: Icons.add_comment_outlined,
           onTap: _startNewSessionFromCurrentProject,
+        ),
+        _buildSessionHeaderActionTile(
+          key: const Key('session-header-acceptance-button'),
+          label: context.l10n.acceptanceTitle, icon: Icons.fact_check_outlined,
+          onTap: () {
+            _sessionHeaderMenuController.close();
+            Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AcceptanceScreen(
+              client: _client, projectId: _session.projectId, sessionId: _session.id)));
+          },
         ),
         if (showDesktopRailToggle) ...[
           const SizedBox(height: AppSpacing.micro),

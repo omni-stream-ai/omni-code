@@ -2270,4 +2270,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get acceptanceOpenFailed => '无法打开远程桌面浏览器';
+
+  @override
+  String get acceptanceUninstallHint => '停止正在运行的验收并卸载插件，保留已保存的证据和报告。';
+
+  @override
+  String get acceptanceDownload => '下载证据';
 }
