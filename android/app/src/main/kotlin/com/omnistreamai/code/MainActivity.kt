@@ -5,6 +5,9 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
+import androidx.webkit.ProxyConfig
+import androidx.webkit.ProxyController
+import androidx.webkit.WebViewFeature
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -12,6 +15,19 @@ import java.io.File
 
 class MainActivity : FlutterActivity() {
     private val updateChannel = "omni_code/app_update"
+
+    private fun configureWebViewProxy(host: String?, result: MethodChannel.Result) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
+            result.success(false)
+            return
+        }
+        val proxy = ProxyConfig.Builder()
+            .addDirect()
+            .build()
+        ProxyController.getInstance().setProxyOverride(proxy, { command -> command.run() }) {
+            result.success(true)
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -25,6 +41,25 @@ class MainActivity : FlutterActivity() {
                             return@setMethodCallHandler
                         }
                         installApk(path, result)
+                    }
+                    "configureWebViewProxy" -> {
+                        val host = call.argument<String>("host")
+                        if (host !in setOf("10.0.2.2", "localhost", "127.0.0.1")) {
+                            result.success(false)
+                        } else if (!WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
+                            result.success(false)
+                        } else {
+                            configureWebViewProxy(host, result)
+                        }
+                    }
+                    "clearWebViewProxy" -> {
+                        if (!WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
+                            result.success(false)
+                        } else {
+                            ProxyController.getInstance().clearProxyOverride(
+                                { command -> command.run() },
+                            ) { result.success(true) }
+                        }
                     }
                     else -> result.notImplemented()
                 }

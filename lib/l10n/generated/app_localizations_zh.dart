@@ -2269,7 +2269,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get acceptanceCompleted => '已结束';
 
   @override
-  String get acceptanceOpenFailed => '无法打开远程桌面浏览器';
+  String get acceptanceOpenFailed => '无法连接远程桌面，请检查 Bridge 地址和设备代理设置。';
 
   @override
   String get acceptanceUninstallHint => '停止正在运行的验收并卸载插件，保留已保存的证据和报告。';

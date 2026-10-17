@@ -1025,7 +1025,7 @@
   "acceptanceRunning": "Running",
   "acceptanceStopping": "Stopping",
   "acceptanceCompleted": "Completed",
-  "acceptanceOpenFailed": "Could not open the desktop browser",
+  "acceptanceOpenFailed": "Could not connect to the remote desktop. Check the Bridge address and device proxy settings.",
   "acceptanceUninstallHint": "Stop active acceptance runs and uninstall the plugin. Saved evidence and reports are retained.",
   "acceptanceDownload": "Download evidence"
 }

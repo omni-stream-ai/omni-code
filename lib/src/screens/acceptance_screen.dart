@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -403,19 +404,25 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
   }
 
   Future<void> desktop() async {
-    await widget.client.setAcceptanceControl(run.id, acquire: true);
+    final id = run.id;
+    Future<Uri> openDesktop() async {
+      await widget.client.setAcceptanceControl(id, acquire: true);
+      return widget.client.acceptanceDesktopUrl(id);
+    }
+
     try {
-      final uri = await widget.client.acceptanceDesktopUrl(run.id);
+      final uri = await openDesktop();
       if (!mounted) return;
       await Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) => AcceptanceDesktopScreen(
                 url: uri,
                 title: context.l10n.acceptanceTakeControl,
+                onReload: openDesktop,
                 onClose: () =>
-                    widget.client.setAcceptanceControl(run.id, acquire: false),
+                    widget.client.setAcceptanceControl(id, acquire: false),
               )));
     } catch (_) {
-      await widget.client.setAcceptanceControl(run.id, acquire: false);
+      await widget.client.setAcceptanceControl(id, acquire: false);
       rethrow;
     }
   }
@@ -580,10 +587,12 @@ class AcceptanceDesktopScreen extends StatefulWidget {
     super.key,
     required this.url,
     required this.title,
+    required this.onReload,
     required this.onClose,
   });
   final Uri url;
   final String title;
+  final Future<Uri> Function() onReload;
   final Future<void> Function() onClose;
 
   @override
@@ -592,7 +601,11 @@ class AcceptanceDesktopScreen extends StatefulWidget {
 }
 
 class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
+  static const _platform = MethodChannel('omni_code/app_update');
   late final WebViewController controller;
+  bool loading = true;
+  String? loadError;
+  Uri? mainFrameUrl;
   bool closing = false;
 
   @override
@@ -602,19 +615,69 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.black)
       ..setNavigationDelegate(NavigationDelegate(
+        onPageStarted: (url) {
+          mainFrameUrl = Uri.tryParse(url);
+          if (mounted && loadError == null) setState(() => loading = true);
+        },
+        onPageFinished: (_) {
+          if (mounted) setState(() => loading = false);
+        },
+        onHttpError: (error) {
+          final uri = error.request?.uri ?? error.response?.uri;
+          if (uri == null ||
+              (uri.scheme == mainFrameUrl?.scheme &&
+                  uri.authority == mainFrameUrl?.authority &&
+                  uri.path == mainFrameUrl?.path)) {
+            showLoadError('HTTP ${error.response?.statusCode ?? "error"}');
+          }
+        },
         onWebResourceError: (error) {
-          if (mounted && error.isForMainFrame == true) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(SnackBar(content: Text(error.description)));
+          if (error.isForMainFrame == true && loadError == null) {
+            showLoadError(error.description);
           }
         },
       ));
-    // Desktop tickets are single use. Clear a stale desktop cookie left by a
-    // previous WebView session before following the fresh ticket redirect.
-    Future<void>(() async {
-      await WebViewCookieManager().clearCookies();
-      await controller.loadRequest(widget.url);
+    loadDesktop(widget.url);
+  }
+
+  void showLoadError(String message) {
+    if (!mounted) return;
+    setState(() {
+      loading = false;
+      loadError =
+          message.replaceAll(RegExp(r'ticket=[^\s&]+'), 'ticket=REDACTED');
     });
+  }
+
+  Future<void> loadDesktop([Uri? url]) async {
+    setState(() {
+      loading = true;
+      loadError = null;
+    });
+    try {
+      // Each retry exchanges a fresh single-use ticket for a scoped cookie.
+      final target = url ?? await widget.onReload();
+      if (!mounted) return;
+      mainFrameUrl = target;
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+        await _configureLocalBridgeProxy(target);
+      }
+      // The gateway issues a fresh single-use ticket and session cookie for
+      // every open/retry. Remove a previous desktop cookie before following
+      // the ticket so WebView cannot send an old control generation first.
+      await WebViewCookieManager().clearCookies();
+      await controller.loadRequest(target);
+    } catch (error) {
+      showLoadError(error.toString());
+    }
+  }
+
+  Future<void> _configureLocalBridgeProxy(Uri target) async {
+    if (!const {'10.0.2.2', 'localhost', '127.0.0.1'}.contains(target.host)) {
+      return;
+    }
+    await _platform.invokeMethod<bool>(
+        'configureWebViewProxy', <String, Object>{'host': target.host});
   }
 
   Future<void> close() async {
@@ -623,28 +686,59 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
     try {
       await widget.onClose();
     } finally {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+        await _platform.invokeMethod<bool>('clearWebViewProxy');
+      }
       if (mounted) Navigator.of(context).pop();
     }
   }
 
   @override
-  Widget build(BuildContext context) => PopScope<void>(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, result) {
-          if (!didPop) close();
-        },
-        child: Scaffold(
-          backgroundColor: Colors.black,
-          appBar: AppBar(
-            title: Text(widget.title),
-            actions: [
-              IconButton(
-                  onPressed: closing ? null : close,
-                  tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
-                  icon: const Icon(Icons.close)),
-            ],
-          ),
-          body: WebViewWidget(controller: controller),
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    return PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) close();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.title),
+          actions: [
+            IconButton(
+                onPressed: close,
+                tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                icon: const Icon(Icons.close)),
+          ],
         ),
-      );
+        body: SafeArea(
+          top: false,
+          child: Stack(children: [
+            Offstage(
+                offstage: loadError != null,
+                child: WebViewWidget(controller: controller)),
+            if (loading) const LinearProgressIndicator(),
+            if (loadError != null)
+              Center(
+                  child: Padding(
+                padding: AppSpacing.screenPadding,
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.error_outline, size: 40),
+                  const SizedBox(height: 16),
+                  Text(l.acceptanceOpenFailed,
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  SelectableText(loadError!, textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                      onPressed: loading ? null : () => loadDesktop(),
+                      icon: const Icon(Icons.refresh),
+                      label: Text(l.retry)),
+                ]),
+              )),
+          ]),
+        ),
+      ),
+    );
+  }
 }

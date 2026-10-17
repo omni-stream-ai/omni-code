@@ -4205,7 +4205,7 @@ abstract class AppLocalizations {
   /// No description provided for @acceptanceOpenFailed.
   ///
   /// In en, this message translates to:
-  /// **'Could not open the desktop browser'**
+  /// **'Could not connect to the remote desktop. Check the Bridge address and device proxy settings.'**
   String get acceptanceOpenFailed;
 
   /// No description provided for @acceptanceUninstallHint.

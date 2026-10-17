@@ -2363,7 +2363,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get acceptanceCompleted => 'Completed';
 
   @override
-  String get acceptanceOpenFailed => 'Could not open the desktop browser';
+  String get acceptanceOpenFailed =>
+      'Could not connect to the remote desktop. Check the Bridge address and device proxy settings.';
 
   @override
   String get acceptanceUninstallHint =>
