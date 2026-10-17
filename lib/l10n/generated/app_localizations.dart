@@ -4100,6 +4100,24 @@ abstract class AppLocalizations {
   /// **'Open remote desktop'**
   String get acceptanceTakeControl;
 
+  /// No description provided for @acceptanceSwitchLandscape.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to landscape'**
+  String get acceptanceSwitchLandscape;
+
+  /// No description provided for @acceptanceSwitchPortrait.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to portrait'**
+  String get acceptanceSwitchPortrait;
+
+  /// No description provided for @acceptanceOrientationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not change screen orientation'**
+  String get acceptanceOrientationFailed;
+
   /// No description provided for @acceptanceReleaseControl.
   ///
   /// In en, this message translates to:

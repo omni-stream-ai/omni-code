@@ -2312,6 +2312,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get acceptanceTakeControl => 'Open remote desktop';
 
   @override
+  String get acceptanceSwitchLandscape => 'Switch to landscape';
+
+  @override
+  String get acceptanceSwitchPortrait => 'Switch to portrait';
+
+  @override
+  String get acceptanceOrientationFailed =>
+      'Could not change screen orientation';
+
+  @override
   String get acceptanceReleaseControl => 'Return control to automation';
 
   @override

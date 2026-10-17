@@ -607,6 +607,8 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
   String? loadError;
   Uri? mainFrameUrl;
   bool closing = false;
+  bool changingOrientation = false;
+  bool orientationOverridden = false;
 
   @override
   void initState() {
@@ -638,6 +640,37 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
         },
       ));
     loadDesktop(widget.url);
+  }
+
+  Future<void> toggleOrientation() async {
+    if (changingOrientation || closing) return;
+    final landscape = MediaQuery.orientationOf(context) == Orientation.portrait;
+    setState(() => changingOrientation = true);
+    orientationOverridden = true;
+    try {
+      await SystemChrome.setPreferredOrientations(landscape
+          ? [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+          : [DeviceOrientation.portraitUp]);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.acceptanceOrientationFailed)));
+      }
+    } finally {
+      if (mounted) setState(() => changingOrientation = false);
+    }
+  }
+
+  Future<void> restoreOrientation() async {
+    if (!orientationOverridden) return;
+    orientationOverridden = false;
+    await SystemChrome.setPreferredOrientations([]);
+  }
+
+  @override
+  void dispose() {
+    unawaited(restoreOrientation());
+    super.dispose();
   }
 
   void showLoadError(String message) {
@@ -686,6 +719,7 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
     try {
       await widget.onClose();
     } finally {
+      await restoreOrientation();
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
         await _platform.invokeMethod<bool>('clearWebViewProxy');
       }
@@ -696,6 +730,11 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
   @override
   Widget build(BuildContext context) {
     final l = context.l10n;
+    final landscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final canRotate = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
     return PopScope<void>(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -705,6 +744,16 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
         appBar: AppBar(
           title: Text(widget.title),
           actions: [
+            if (canRotate)
+              IconButton(
+                  onPressed:
+                      changingOrientation || closing ? null : toggleOrientation,
+                  tooltip: landscape
+                      ? l.acceptanceSwitchPortrait
+                      : l.acceptanceSwitchLandscape,
+                  icon: Icon(landscape
+                      ? Icons.stay_current_portrait
+                      : Icons.stay_current_landscape)),
             IconButton(
                 onPressed: close,
                 tooltip: MaterialLocalizations.of(context).closeButtonTooltip,

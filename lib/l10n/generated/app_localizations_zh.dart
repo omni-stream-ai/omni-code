@@ -2218,6 +2218,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get acceptanceTakeControl => '打开远程桌面';
 
   @override
+  String get acceptanceSwitchLandscape => '切换横屏';
+
+  @override
+  String get acceptanceSwitchPortrait => '切换竖屏';
+
+  @override
+  String get acceptanceOrientationFailed => '无法切换屏幕方向';
+
+  @override
   String get acceptanceReleaseControl => '交还自动化控制权';
 
   @override
