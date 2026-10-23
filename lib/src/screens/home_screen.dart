@@ -51,6 +51,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _searchController = TextEditingController();
   List<ProjectSummary>? _projects;
   List<SessionSummary>? _recentSessions;
+  List<CodexProfileSummary> _profiles = const <CodexProfileSummary>[];
+  String? _selectedProfileId;
   Object? _projectsError;
   Object? _recentSessionsError;
   Object? _authError;
@@ -167,10 +169,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     try {
       final projects = await _client.listProjects(forceRefresh: true);
+      try {
+        _profiles = await _client.listCodexProfiles(forceRefresh: forceRefresh);
+      } catch (_) {
+        _profiles = const <CodexProfileSummary>[];
+      }
       List<SessionSummary>? sessions;
       Object? sessionsError;
       try {
-        sessions = await _client.listDomainSessions(forceRefresh: true);
+        sessions = await _client.listDomainSessions(
+          profileId: _selectedProfileId,
+          forceRefresh: true,
+        );
       } on ClientUnauthorizedException {
         rethrow;
       } catch (error) {
@@ -182,7 +192,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
       setState(() {
         _projects = projects;
-        _recentSessions = sessions ?? _recentSessions;
+        // Do not silently keep showing an old list after an explicit refresh
+        // failed. The previous behavior made a failed request look like a
+        // successful refresh with stale sessions.
+        _recentSessions = sessions ??
+            (forceRefresh ? const <SessionSummary>[] : _recentSessions);
         _visibleRecentCount =
             _resolvedVisibleRecentCount(_recentSessions?.length ?? 0);
         _recentSessionsError = sessionsError;
@@ -201,6 +215,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
       setState(() {
         _projectsError = error;
+        if (forceRefresh) {
+          _recentSessions = const <SessionSummary>[];
+          _recentSessionsError = error;
+          _visibleRecentCount = _recentPageSize;
+        }
       });
     } finally {
       if (mounted) {
@@ -214,6 +233,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _reloadHomeData() {
     return _loadHomeData(forceRefresh: true);
+  }
+
+  Future<void> _selectProfile(String? profileId) async {
+    if (_selectedProfileId == profileId) {
+      return;
+    }
+    setState(() {
+      _selectedProfileId = profileId;
+    });
+    await _loadHomeData(forceRefresh: true);
   }
 
   Future<void> _handleUnauthorized() async {
@@ -703,9 +732,55 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _buildRecentSessionsHeader() {
     return _SectionHeader(
       title: context.l10n.recentSessionsTitle,
-      trailing: _CircleActionButton(
-        icon: Icons.refresh_rounded,
-        onPressed: _reloadHomeData,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_profiles.length > 1) _buildProfileFilterButton(),
+          _CircleActionButton(
+            icon: Icons.refresh_rounded,
+            onPressed: _reloadHomeData,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileFilterButton() {
+    final selected = _profiles
+        .where((profile) => profile.id == _selectedProfileId)
+        .firstOrNull;
+    return PopupMenuButton<String>(
+      tooltip: '筛选 Profile',
+      initialValue: _selectedProfileId ?? '__all__',
+      onSelected: (value) => _selectProfile(value == '__all__' ? null : value),
+      itemBuilder: (context) => [
+        const PopupMenuItem<String>(
+          value: '__all__',
+          child: Text('全部 Profile'),
+        ),
+        for (final profile in _profiles)
+          PopupMenuItem<String>(
+            value: profile.id,
+            child: Text(profile.name),
+          ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.layers_outlined,
+              size: 16,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              selected?.name ?? '全部',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -984,7 +1059,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         (_projects ?? const <ProjectSummary>[]).where(_matchesProject).toList();
     final sessions = (_recentSessions ?? const <SessionSummary>[])
         .where(_matchesSession)
-        .toList();
+        .toList()
+      ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
     final visibleProjects = projects.take(4).toList();
     final visibleSessions = sessions.take(_visibleRecentCount).toList();
 
@@ -1230,6 +1306,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         .firstOrNull;
     if (projectName != null && projectName.isNotEmpty) {
       parts.add(projectName);
+    }
+    if (_profiles.length > 1 &&
+        session.profileName?.trim().isNotEmpty == true) {
+      parts.add('Profile: ${session.profileName}');
     }
     parts.add(_client.agentLabelFor(session.agentId));
     parts.add(_statusLabel(session.status));

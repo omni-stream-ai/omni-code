@@ -898,6 +898,19 @@ class ProjectSummary {
   }
 }
 
+class CodexProfileSummary {
+  const CodexProfileSummary({required this.id, required this.name});
+
+  final String id;
+  final String name;
+
+  factory CodexProfileSummary.fromJson(Map<String, dynamic> json) =>
+      CodexProfileSummary(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+      );
+}
+
 enum ProjectGitStatus { clean, dirty }
 
 ProjectGitStatus? parseProjectGitStatus(String? value) {
@@ -993,6 +1006,8 @@ class SessionSummary {
     this.model,
     this.forkedFromSessionId,
     this.runtimeSessionRef,
+    this.profileId,
+    this.profileName,
   });
 
   final String id;
@@ -1011,6 +1026,8 @@ class SessionSummary {
   final String? model;
   final String? forkedFromSessionId;
   final String? runtimeSessionRef;
+  final String? profileId;
+  final String? profileName;
 
   SessionSummary copyWith({
     String? id,
@@ -1036,6 +1053,8 @@ class SessionSummary {
     bool clearForkedFromSessionId = false,
     String? runtimeSessionRef,
     bool clearRuntimeSessionRef = false,
+    String? profileId,
+    String? profileName,
   }) {
     return SessionSummary(
       id: id ?? this.id,
@@ -1061,6 +1080,8 @@ class SessionSummary {
       runtimeSessionRef: clearRuntimeSessionRef
           ? null
           : runtimeSessionRef ?? this.runtimeSessionRef,
+      profileId: profileId ?? this.profileId,
+      profileName: profileName ?? this.profileName,
     );
   }
 
@@ -1082,6 +1103,8 @@ class SessionSummary {
       model: json['model'] as String?,
       forkedFromSessionId: json['forked_from_session_id'] as String?,
       runtimeSessionRef: json['runtime_session_ref'] as String?,
+      profileId: json['profile_id'] as String?,
+      profileName: json['profile_name'] as String?,
       pendingApproval: json['pending_approval'] == null
           ? null
           : ApprovalRequest.fromJson(

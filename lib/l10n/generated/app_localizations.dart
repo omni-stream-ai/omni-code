@@ -4064,6 +4064,168 @@ abstract class AppLocalizations {
   /// **'Start acceptance'**
   String get acceptanceStart;
 
+  /// No description provided for @acceptancePlanTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Test cases'**
+  String get acceptancePlanTitle;
+
+  /// No description provided for @acceptancePlanHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Review what to test. Edit the cases or discuss changes with the Agent. Environment setup and execution start only after confirmation.'**
+  String get acceptancePlanHint;
+
+  /// No description provided for @acceptancePlanApproved.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirmed. Acceptance will follow these test cases.'**
+  String get acceptancePlanApproved;
+
+  /// No description provided for @acceptancePlanWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Review test cases'**
+  String get acceptancePlanWaiting;
+
+  /// No description provided for @acceptancePlanGenerating.
+  ///
+  /// In en, this message translates to:
+  /// **'Generating test cases'**
+  String get acceptancePlanGenerating;
+
+  /// No description provided for @acceptancePlanRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Regenerate test cases'**
+  String get acceptancePlanRetry;
+
+  /// No description provided for @acceptancePlanRevising.
+  ///
+  /// In en, this message translates to:
+  /// **'The Agent is updating the test cases…'**
+  String get acceptancePlanRevising;
+
+  /// No description provided for @acceptancePlanConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm cases and run'**
+  String get acceptancePlanConfirm;
+
+  /// No description provided for @acceptancePlanEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit case'**
+  String get acceptancePlanEdit;
+
+  /// No description provided for @acceptancePlanDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete case'**
+  String get acceptancePlanDelete;
+
+  /// No description provided for @acceptancePlanAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add case'**
+  String get acceptancePlanAdd;
+
+  /// No description provided for @acceptancePlanCaseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Case title'**
+  String get acceptancePlanCaseTitle;
+
+  /// No description provided for @acceptancePlanSteps.
+  ///
+  /// In en, this message translates to:
+  /// **'Steps'**
+  String get acceptancePlanSteps;
+
+  /// No description provided for @acceptancePlanStepsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'One step per line'**
+  String get acceptancePlanStepsHint;
+
+  /// No description provided for @acceptancePlanStepsLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Use 1 to 12 steps, up to 1000 characters each'**
+  String get acceptancePlanStepsLimit;
+
+  /// No description provided for @acceptancePlanExpected.
+  ///
+  /// In en, this message translates to:
+  /// **'Expected result'**
+  String get acceptancePlanExpected;
+
+  /// No description provided for @acceptancePlanRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Required'**
+  String get acceptancePlanRequired;
+
+  /// No description provided for @acceptancePlanChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Discuss cases with the Agent'**
+  String get acceptancePlanChat;
+
+  /// No description provided for @acceptancePlanMessageHint.
+  ///
+  /// In en, this message translates to:
+  /// **'For example: add a failed login case and skip payments for now…'**
+  String get acceptancePlanMessageHint;
+
+  /// No description provided for @acceptanceCreating.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing acceptance'**
+  String get acceptanceCreating;
+
+  /// No description provided for @acceptanceCreatingHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading requirements and preparing the project. Please wait…'**
+  String get acceptanceCreatingHint;
+
+  /// No description provided for @acceptanceRequirementsInput.
+  ///
+  /// In en, this message translates to:
+  /// **'Acceptance focus (optional)'**
+  String get acceptanceRequirementsInput;
+
+  /// No description provided for @acceptanceRequirementsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add specific behaviors to check or narrow the scope. Leave empty to use the conversation\'s requirements.'**
+  String get acceptanceRequirementsHint;
+
+  /// No description provided for @acceptanceSessionScopeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent reviews the conversation\'s user requests and follows later corrections to build the checklist.'**
+  String get acceptanceSessionScopeHint;
+
+  /// No description provided for @acceptanceRequirementsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Acceptance requirements'**
+  String get acceptanceRequirementsTitle;
+
+  /// No description provided for @acceptanceRequirementSources.
+  ///
+  /// In en, this message translates to:
+  /// **'Based on {count} user messages'**
+  String acceptanceRequirementSources(int count);
+
+  /// No description provided for @acceptanceRemoteDesktop.
+  ///
+  /// In en, this message translates to:
+  /// **'Open remote desktop'**
+  String get acceptanceRemoteDesktop;
+
   /// No description provided for @acceptanceEmpty.
   ///
   /// In en, this message translates to:
@@ -4237,6 +4399,330 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Download evidence'**
   String get acceptanceDownload;
+
+  /// No description provided for @acceptanceHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent runs'**
+  String get acceptanceHistory;
+
+  /// No description provided for @acceptanceChecks.
+  ///
+  /// In en, this message translates to:
+  /// **'Checks'**
+  String get acceptanceChecks;
+
+  /// No description provided for @acceptanceDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Run details'**
+  String get acceptanceDetails;
+
+  /// No description provided for @acceptanceReview.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm result'**
+  String get acceptanceReview;
+
+  /// No description provided for @acceptanceReviewHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Review the checks and evidence before confirming.'**
+  String get acceptanceReviewHint;
+
+  /// No description provided for @acceptanceSuggestedPass.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent recommends passing'**
+  String get acceptanceSuggestedPass;
+
+  /// No description provided for @acceptanceSuggestedFail.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent recommends changes'**
+  String get acceptanceSuggestedFail;
+
+  /// No description provided for @acceptanceAutomationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent failed; remote desktop is still available'**
+  String get acceptanceAutomationFailed;
+
+  /// No description provided for @acceptanceAutomationFailedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic judgment stopped, but the acceptance container and remote desktop are still running. You can inspect, operate, or stop this run.'**
+  String get acceptanceAutomationFailedHint;
+
+  /// No description provided for @acceptanceAwaitingReview.
+  ///
+  /// In en, this message translates to:
+  /// **'Awaiting your confirmation'**
+  String get acceptanceAwaitingReview;
+
+  /// No description provided for @acceptanceNoEvidence.
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshots and reports will appear here.'**
+  String get acceptanceNoEvidence;
+
+  /// No description provided for @acceptanceScreenshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot'**
+  String get acceptanceScreenshot;
+
+  /// No description provided for @acceptanceRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording'**
+  String get acceptanceRecording;
+
+  /// No description provided for @acceptanceReport.
+  ///
+  /// In en, this message translates to:
+  /// **'Report'**
+  String get acceptanceReport;
+
+  /// No description provided for @acceptanceDesktopPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote desktop'**
+  String get acceptanceDesktopPreview;
+
+  /// No description provided for @acceptancePreviewHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the desktop to inspect and interact with the app.'**
+  String get acceptancePreviewHint;
+
+  /// No description provided for @acceptanceCheckPassed.
+  ///
+  /// In en, this message translates to:
+  /// **'Passed'**
+  String get acceptanceCheckPassed;
+
+  /// No description provided for @acceptanceCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get acceptanceCheckFailed;
+
+  /// No description provided for @acceptanceCheckPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get acceptanceCheckPending;
+
+  /// No description provided for @acceptanceCheckRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Running'**
+  String get acceptanceCheckRunning;
+
+  /// No description provided for @acceptanceCheckBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked'**
+  String get acceptanceCheckBlocked;
+
+  /// No description provided for @acceptanceCommandAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave blank for the Agent to choose how to launch the web or desktop app.'**
+  String get acceptanceCommandAuto;
+
+  /// No description provided for @acceptanceReplay.
+  ///
+  /// In en, this message translates to:
+  /// **'Replay acceptance video'**
+  String get acceptanceReplay;
+
+  /// No description provided for @acceptanceRecordingPending.
+  ///
+  /// In en, this message translates to:
+  /// **'The operation video will appear after the automatic checks finish. Screenshots supplement the video.'**
+  String get acceptanceRecordingPending;
+
+  /// No description provided for @acceptanceExportEvidence.
+  ///
+  /// In en, this message translates to:
+  /// **'Generate video and report'**
+  String get acceptanceExportEvidence;
+
+  /// No description provided for @acceptanceInitialFrame.
+  ///
+  /// In en, this message translates to:
+  /// **'Initial screen'**
+  String get acceptanceInitialFrame;
+
+  /// No description provided for @acceptanceCheckFrame.
+  ///
+  /// In en, this message translates to:
+  /// **'Check screenshot'**
+  String get acceptanceCheckFrame;
+
+  /// No description provided for @acceptanceVideoError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not play the recording.'**
+  String get acceptanceVideoError;
+
+  /// No description provided for @acceptanceVideoPlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get acceptanceVideoPlay;
+
+  /// No description provided for @acceptanceVideoPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get acceptanceVideoPause;
+
+  /// No description provided for @acceptanceVideoReplay.
+  ///
+  /// In en, this message translates to:
+  /// **'Replay'**
+  String get acceptanceVideoReplay;
+
+  /// No description provided for @acceptanceEnvironmentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Project environment'**
+  String get acceptanceEnvironmentTitle;
+
+  /// No description provided for @acceptanceEnvironmentHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The environment is prepared when you next open this project. Verified images and launch settings are reused.'**
+  String get acceptanceEnvironmentHint;
+
+  /// No description provided for @acceptanceEnvironmentAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Let the Agent prepare it'**
+  String get acceptanceEnvironmentAuto;
+
+  /// No description provided for @acceptanceEnvironmentAutoHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The Agent reads the project to choose SDK versions, system dependencies and how to launch the app.'**
+  String get acceptanceEnvironmentAutoHint;
+
+  /// No description provided for @acceptanceEnvironmentBase.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the base environment'**
+  String get acceptanceEnvironmentBase;
+
+  /// No description provided for @acceptanceEnvironmentBaseHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the installed x11box image without adding project SDKs.'**
+  String get acceptanceEnvironmentBaseHint;
+
+  /// No description provided for @acceptanceEnvironmentDockerfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom Dockerfile'**
+  String get acceptanceEnvironmentDockerfile;
+
+  /// No description provided for @acceptanceEnvironmentDockerfileHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Extend x11box using the template below. Build context contains the committed project. Keep the x11box user and desktop services.'**
+  String get acceptanceEnvironmentDockerfileHint;
+
+  /// No description provided for @acceptanceEnvironmentImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Existing compatible image'**
+  String get acceptanceEnvironmentImage;
+
+  /// No description provided for @acceptanceEnvironmentImageHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a prepared image or enter a local/registry image name. It must include working x11box desktop and control services.'**
+  String get acceptanceEnvironmentImageHint;
+
+  /// No description provided for @acceptanceEnvironmentImageLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Image name or digest'**
+  String get acceptanceEnvironmentImageLabel;
+
+  /// No description provided for @acceptanceEnvironmentAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Prepared images'**
+  String get acceptanceEnvironmentAvailable;
+
+  /// No description provided for @acceptanceEnvironmentSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save environment settings'**
+  String get acceptanceEnvironmentSave;
+
+  /// No description provided for @acceptanceEnvironmentSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved. These settings apply the next time you open the project.'**
+  String get acceptanceEnvironmentSaved;
+
+  /// No description provided for @acceptanceEnvironmentRebuild.
+  ///
+  /// In en, this message translates to:
+  /// **'Prepare a fresh environment next time'**
+  String get acceptanceEnvironmentRebuild;
+
+  /// No description provided for @acceptanceEnvironmentRebuildHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The next run will prepare and verify a new environment. Existing runs keep their current image.'**
+  String get acceptanceEnvironmentRebuildHint;
+
+  /// No description provided for @acceptanceEnvironmentIdentifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent is identifying dependencies'**
+  String get acceptanceEnvironmentIdentifying;
+
+  /// No description provided for @acceptanceEnvironmentBuilding.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing the project image'**
+  String get acceptanceEnvironmentBuilding;
+
+  /// No description provided for @acceptanceEnvironmentLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Environment build logs'**
+  String get acceptanceEnvironmentLogs;
+
+  /// No description provided for @acceptanceEnvironmentRecipe.
+  ///
+  /// In en, this message translates to:
+  /// **'Environment Dockerfile'**
+  String get acceptanceEnvironmentRecipe;
+
+  /// No description provided for @acceptanceEnvironmentReused.
+  ///
+  /// In en, this message translates to:
+  /// **'Reused a verified environment'**
+  String get acceptanceEnvironmentReused;
+
+  /// No description provided for @acceptanceEnvironmentPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting to prepare the project environment'**
+  String get acceptanceEnvironmentPending;
+
+  /// No description provided for @acceptanceEnvironmentRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an image name or Dockerfile.'**
+  String get acceptanceEnvironmentRequired;
 }
 
 class _AppLocalizationsDelegate

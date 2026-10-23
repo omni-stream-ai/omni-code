@@ -454,7 +454,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
 
   void _openAcceptance() {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AcceptanceScreen(
-      client: _client, projectId: widget.project.id)));
+      client: _client, projectId: widget.project.id, automatic: false)));
   }
 
   Widget _buildHeader(BuildContext context) {

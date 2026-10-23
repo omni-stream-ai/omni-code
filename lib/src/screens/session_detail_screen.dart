@@ -2176,11 +2176,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ),
         _buildSessionHeaderActionTile(
           key: const Key('session-header-acceptance-button'),
-          label: context.l10n.acceptanceTitle, icon: Icons.fact_check_outlined,
+          label: context.l10n.acceptanceTitle,
+          icon: Icons.fact_check_outlined,
           onTap: () {
             _sessionHeaderMenuController.close();
-            Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AcceptanceScreen(
-              client: _client, projectId: _session.projectId, sessionId: _session.id)));
+            Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => AcceptanceScreen(
+                    client: _client,
+                    projectId: _session.projectId,
+                    sessionId: _session.id)));
           },
         ),
         if (showDesktopRailToggle) ...[

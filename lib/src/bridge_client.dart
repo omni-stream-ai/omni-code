@@ -59,6 +59,41 @@ class BridgeClient {
   static String newClientSessionId() => const Uuid().v4();
   static const int _maxCachedMessageSessions = 8;
   static const int _maxCachedMessagesPerSession = 200;
+  static final RegExp _internalAcceptanceSessionId = RegExp(
+    r'^acceptance-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+  );
+  static bool _isInternalAcceptanceSession(SessionSummary session) =>
+      _internalAcceptanceSessionId.hasMatch(session.id);
+
+  static List<SessionSummary> _visibleSessions(
+    Iterable<SessionSummary> sessions,
+  ) =>
+      sessions
+          .where((session) => !_isInternalAcceptanceSession(session))
+          .toList();
+
+  void _purgeInternalAcceptanceSessions() {
+    var changed = false;
+    final sessions = _sessionsCache?.value;
+    if (sessions != null) {
+      final visible = _visibleSessions(sessions);
+      if (visible.length != sessions.length) {
+        _sessionsCache = _CacheEntry(visible);
+        changed = true;
+      }
+    }
+    for (final entry in _projectSessionsCache.entries.toList()) {
+      final current = entry.value.value;
+      final visible = _visibleSessions(current);
+      if (visible.length != current.length) {
+        _projectSessionsCache[entry.key] = _CacheEntry(visible);
+        changed = true;
+      }
+    }
+    if (changed) {
+      sessionCacheRevision.value++;
+    }
+  }
 
   BridgeClient({
     http.Client? httpClient,
@@ -179,17 +214,29 @@ class BridgeClient {
           body: {}) as Map<String, dynamic>);
 
   Future<void> uninstallAcceptancePlugin() async {
-    final response = await _httpClient.delete(Uri.parse('$baseUrl/v2/runtime-plugins/x11box-acceptance'),
-      headers: _defaultHeaders).timeout(const Duration(minutes: 5));
-    if (response.statusCode != 204) { throw Exception(_extractErrorMessage(response)); }
+    final response = await _httpClient
+        .delete(Uri.parse('$baseUrl/v2/runtime-plugins/x11box-acceptance'),
+            headers: _defaultHeaders)
+        .timeout(const Duration(minutes: 5));
+    if (response.statusCode != 204) {
+      throw Exception(_extractErrorMessage(response));
+    }
   }
 
-  Future<Uri> acceptanceEvidenceUrl(String id, String name, {bool download = false}) async {
-    final data = await _acceptanceRequest('/v2/acceptance/${Uri.encodeComponent(id)}/evidence-ticket/${Uri.encodeComponent(name)}', body: {});
+  Future<Uri> acceptanceEvidenceUrl(String id, String name,
+      {bool download = false}) async {
+    final data = await _acceptanceRequest(
+        '/v2/acceptance/${Uri.encodeComponent(id)}/evidence-ticket/${Uri.encodeComponent(name)}',
+        body: {});
     final path = data['url'] as String;
-    if (!path.startsWith('/v2/acceptance/') || path.startsWith('//')) { throw const FormatException('Invalid evidence URL'); }
+    if (!path.startsWith('/v2/acceptance/') || path.startsWith('//')) {
+      throw const FormatException('Invalid evidence URL');
+    }
     final uri = Uri.parse('$baseUrl$path');
-    return uri.replace(queryParameters: {...uri.queryParameters, if (download) 'download': 'true'});
+    return uri.replace(queryParameters: {
+      ...uri.queryParameters,
+      if (download) 'download': 'true'
+    });
   }
 
   Future<List<AcceptanceRun>> listAcceptanceRuns() async =>
@@ -197,17 +244,64 @@ class BridgeClient {
           .map((item) => AcceptanceRun.fromJson(item as Map<String, dynamic>))
           .toList();
 
+  Future<AcceptanceEnvironmentSettings> getAcceptanceEnvironment(
+          String projectId) async =>
+      AcceptanceEnvironmentSettings.fromJson(await _acceptanceRequest(
+              '/v2/projects/${Uri.encodeComponent(projectId)}/acceptance-environment')
+          as Map<String, dynamic>);
+
+  Future<AcceptanceEnvironmentSettings> saveAcceptanceEnvironment(
+          String projectId, AcceptanceEnvironmentConfig config,
+          {bool rebuild = false}) async =>
+      AcceptanceEnvironmentSettings.fromJson(await _acceptanceRequest(
+          '/v2/projects/${Uri.encodeComponent(projectId)}/acceptance-environment',
+          body: {
+            ...config.toJson(),
+            'rebuild': rebuild
+          }) as Map<String, dynamic>);
+
+  Future<AcceptanceRun> saveAcceptanceEvidence(String id) async =>
+      AcceptanceRun.fromJson(await _acceptanceRequest(
+          '/v2/acceptance/${Uri.encodeComponent(id)}/evidence',
+          body: {}) as Map<String, dynamic>);
+
+  ({Uri uri, Map<String, String> headers}) acceptanceVideoSource(
+          String id, String name) =>
+      (
+        uri: Uri.parse(
+            '$baseUrl/v2/acceptance/${Uri.encodeComponent(id)}/artifacts/${Uri.encodeComponent(name)}'),
+        headers: Map<String, String>.unmodifiable(_defaultHeaders)
+      );
+
+  Future<Stream<List<int>>> acceptanceVideoStream(
+      String id, String name) async {
+    final source = acceptanceVideoSource(id, name);
+    final request = http.Request('GET', source.uri)
+      ..headers.addAll(source.headers);
+    final response =
+        await _httpClient.send(request).timeout(const Duration(seconds: 45));
+    if (response.statusCode != 200) {
+      await response.stream.drain<void>();
+      throw Exception('Could not load recording (${response.statusCode})');
+    }
+    return response.stream.timeout(const Duration(seconds: 45));
+  }
+
   Future<AcceptanceRun> createAcceptanceRun(
           {required String id,
           required String projectId,
           required String command,
           String size = 'pc',
-          String? sessionId}) async =>
+          String? sessionId,
+          bool automatic = true,
+          String? requirements}) async =>
       AcceptanceRun.fromJson(await _acceptanceRequest('/v2/acceptance', body: {
         'id': id,
         'project_id': projectId,
         'command': command,
         'size': size,
+        'automatic': automatic,
+        if (requirements != null) 'requirements': requirements,
         if (sessionId != null) 'session_id': sessionId,
       }) as Map<String, dynamic>);
 
@@ -234,10 +328,44 @@ class BridgeClient {
     return Uri.parse('$baseUrl$path');
   }
 
+  Future<AcceptanceRun> editAcceptanceTestPlan(
+      String id, int version, List<AcceptanceTestCase> cases) async {
+    final key = Uri.encodeComponent(id);
+    return AcceptanceRun.fromJson(
+        await _acceptanceRequest('/v2/acceptance/$key/test-plan', body: {
+      'version': version,
+      'cases': cases.map((c) => c.toJson()).toList()
+    }) as Map<String, dynamic>);
+  }
+
+  Future<AcceptanceRun> reviseAcceptanceTestPlan(
+      String id, int version, String message) async {
+    final key = Uri.encodeComponent(id);
+    return AcceptanceRun.fromJson(await _acceptanceRequest(
+            '/v2/acceptance/$key/test-plan/messages',
+            body: {'version': version, 'message': message})
+        as Map<String, dynamic>);
+  }
+
+  Future<AcceptanceRun> confirmAcceptanceTestPlan(
+      String id, int version) async {
+    final key = Uri.encodeComponent(id);
+    return AcceptanceRun.fromJson(await _acceptanceRequest(
+        '/v2/acceptance/$key/test-plan/confirm',
+        body: {'version': version}) as Map<String, dynamic>);
+  }
+
   Future<AcceptanceArtifact> captureAcceptanceScreenshot(String id) async =>
       AcceptanceArtifact.fromJson(await _acceptanceRequest(
           '/v2/acceptance/${Uri.encodeComponent(id)}/screenshots',
           body: {}) as Map<String, dynamic>);
+
+  Future<AcceptanceRun> retryAcceptanceTestPlan(String id) async {
+    final key = Uri.encodeComponent(id);
+    return AcceptanceRun.fromJson(await _acceptanceRequest(
+        '/v2/acceptance/$key/test-plan/retry',
+        body: {}) as Map<String, dynamic>);
+  }
 
   Future<AcceptanceRun> stopAcceptanceRun(String id,
           {bool? passed, String notes = ''}) async =>
@@ -249,10 +377,15 @@ class BridgeClient {
           }) as Map<String, dynamic>);
 
   Future<Uint8List> acceptancePreview(String id) async {
-    final response = await _httpClient.get(Uri.parse(
-      '$baseUrl/v2/acceptance/${Uri.encodeComponent(id)}/preview'),
-      headers: _defaultHeaders).timeout(const Duration(seconds: 45));
-    if (response.statusCode != 200) { throw Exception(_extractErrorMessage(response)); }
+    final response = await _httpClient
+        .get(
+            Uri.parse(
+                '$baseUrl/v2/acceptance/${Uri.encodeComponent(id)}/preview'),
+            headers: _defaultHeaders)
+        .timeout(const Duration(seconds: 45));
+    if (response.statusCode != 200) {
+      throw Exception(_extractErrorMessage(response));
+    }
     return response.bodyBytes;
   }
 
@@ -437,6 +570,7 @@ class BridgeClient {
   }
 
   Future<List<SessionSummary>> listSessions({bool forceRefresh = false}) async {
+    _purgeInternalAcceptanceSessions();
     if (!forceRefresh) {
       final cache = _sessionsCache;
       if (cache != null && cache.isFresh) {
@@ -453,10 +587,10 @@ class BridgeClient {
     _assertJsonResponse(response);
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
     final items = payload['data'] as List<dynamic>;
-    final sessions = sortSessionsForDisplay(
+    final sessions = sortSessionsForDisplay(_visibleSessions(
       items
           .map((item) => SessionSummary.fromJson(item as Map<String, dynamic>)),
-    );
+    ));
     _sessionsCache = _CacheEntry(sessions);
     sessionCacheRevision.value++;
     for (final session in sessions) {
@@ -467,18 +601,31 @@ class BridgeClient {
 
   Future<List<SessionSummary>> listDomainSessions({
     String? projectId,
+    String? profileId,
     bool forceRefresh = false,
   }) async {
+    _purgeInternalAcceptanceSessions();
     if (!forceRefresh) {
-      final cache =
-          projectId == null ? _sessionsCache : _projectSessionsCache[projectId];
+      final cache = profileId != null
+          ? null
+          : (projectId == null
+              ? _sessionsCache
+              : _projectSessionsCache[projectId]);
       if (cache != null && cache.isFresh) {
         return cache.value;
       }
     }
     final response = await _httpClient.get(
       Uri.parse('$baseUrl/v2/sessions').replace(
-        queryParameters: projectId == null ? null : {'project_id': projectId},
+        queryParameters: {
+          if (projectId != null) 'project_id': projectId,
+          if (profileId != null) 'profile_id': profileId,
+        }.isEmpty
+            ? null
+            : {
+                if (projectId != null) 'project_id': projectId,
+                if (profileId != null) 'profile_id': profileId,
+              },
       ),
       headers: _defaultHeaders,
     );
@@ -487,11 +634,16 @@ class BridgeClient {
     }
     _assertJsonResponse(response);
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    final sessions = sortSessionsForDisplay(
+    final sessions = sortSessionsForDisplay(_visibleSessions(
       (payload['data'] as List<dynamic>)
           .map((item) => SessionSummary.fromJson(item as Map<String, dynamic>)),
-    );
-    if (projectId == null) {
+    ));
+    if (profileId != null) {
+      // Profile filtered results are intentionally kept out of the global
+      // cache so switching filters cannot mix sessions from different sources.
+      _projectSessionsCache[projectId ?? '__profile_$profileId'] =
+          _CacheEntry(sessions);
+    } else if (projectId == null) {
       _sessionsCache = _CacheEntry(sessions);
     } else {
       _projectSessionsCache[projectId] = _CacheEntry(sessions);
@@ -509,9 +661,30 @@ class BridgeClient {
     return sessions;
   }
 
+  Future<List<CodexProfileSummary>> listCodexProfiles({
+    bool forceRefresh = false,
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/v2/codex/profiles'),
+      headers: _defaultHeaders,
+    );
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    _assertJsonResponse(response);
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    return (payload['data'] as List<dynamic>)
+        .map((item) =>
+            CodexProfileSummary.fromJson(item as Map<String, dynamic>))
+        .toList(growable: false);
+  }
+
   List<ProjectSummary>? peekProjects() => _projectsCache?.value;
 
-  List<SessionSummary>? peekSessions() => _sessionsCache?.value;
+  List<SessionSummary>? peekSessions() {
+    _purgeInternalAcceptanceSessions();
+    return _sessionsCache?.value;
+  }
 
   List<AgentSummary>? peekAgents() => _agentsCache?.value;
 
@@ -522,10 +695,12 @@ class BridgeClient {
   }
 
   List<SessionSummary>? peekProjectSessions(String projectId) {
+    _purgeInternalAcceptanceSessions();
     return _projectSessionsCache[projectId]?.value;
   }
 
   SessionSummary? peekSession(String projectId, String sessionId) {
+    _purgeInternalAcceptanceSessions();
     return _projectSessionsCache[projectId]
         ?.value
         .where((session) => session.id == sessionId)
@@ -628,7 +803,22 @@ class BridgeClient {
     }
     _assertJsonResponse(response);
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    return SessionDetail.fromJson(payload);
+    final detail = SessionDetail.fromJson(payload);
+    final cached = _sessionsCache?.value
+        .where((session) => session.id == detail.session.id)
+        .firstOrNull;
+    if (cached == null ||
+        (cached.profileId == null && cached.profileName == null)) {
+      return detail;
+    }
+    return SessionDetail(
+      session: detail.session.copyWith(
+        profileId: cached.profileId,
+        profileName: cached.profileName,
+      ),
+      gitStatus: detail.gitStatus,
+      diffs: detail.diffs,
+    );
   }
 
   Future<ProjectSummary> getProject(
@@ -1776,7 +1966,13 @@ class BridgeClient {
     SessionSummary session, {
     bool authoritative = false,
   }) {
-    final current = _sessionsCache?.value ?? const <SessionSummary>[];
+    if (_isInternalAcceptanceSession(session)) {
+      _purgeInternalAcceptanceSessions();
+      return;
+    }
+    final current = _visibleSessions(
+      _sessionsCache?.value ?? const <SessionSummary>[],
+    );
     final next = authoritative
         ? sortSessionsForDisplay([
             ...current.where((item) => item.id != session.id),
@@ -1813,8 +2009,14 @@ class BridgeClient {
     SessionSummary session, {
     bool authoritative = false,
   }) {
-    final current = _projectSessionsCache[session.projectId]?.value ??
-        const <SessionSummary>[];
+    if (_isInternalAcceptanceSession(session)) {
+      _purgeInternalAcceptanceSessions();
+      return;
+    }
+    final current = _visibleSessions(
+      _projectSessionsCache[session.projectId]?.value ??
+          const <SessionSummary>[],
+    );
     final next = authoritative
         ? sortSessionsForDisplay([
             ...current.where((item) => item.id != session.id),
@@ -1838,7 +2040,7 @@ class BridgeClient {
 
   @visibleForTesting
   void debugSeedSessions(Iterable<SessionSummary> sessions) {
-    final sorted = sortSessionsForDisplay(sessions);
+    final sorted = sortSessionsForDisplay(_visibleSessions(sessions));
     _sessionsCache = _CacheEntry(sorted);
     sessionCacheRevision.value++;
     for (final session in sorted) {
@@ -1869,7 +2071,10 @@ class BridgeClient {
     for (final session in incoming) {
       final existing = merged[session.id];
       if (existing == null || session.updatedAt.isAfter(existing.updatedAt)) {
-        merged[session.id] = session;
+        merged[session.id] = session.copyWith(
+          profileId: session.profileId ?? existing?.profileId,
+          profileName: session.profileName ?? existing?.profileName,
+        );
         continue;
       }
 
@@ -1881,6 +2086,8 @@ class BridgeClient {
             existing.lastMessagePreview,
           ),
           pendingApproval: session.pendingApproval ?? existing.pendingApproval,
+          profileId: session.profileId ?? existing.profileId,
+          profileName: session.profileName ?? existing.profileName,
         );
       }
     }

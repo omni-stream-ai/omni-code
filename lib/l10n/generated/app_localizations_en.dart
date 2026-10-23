@@ -2293,6 +2293,96 @@ class AppLocalizationsEn extends AppLocalizations {
   String get acceptanceStart => 'Start acceptance';
 
   @override
+  String get acceptancePlanTitle => 'Test cases';
+
+  @override
+  String get acceptancePlanHint =>
+      'Review what to test. Edit the cases or discuss changes with the Agent. Environment setup and execution start only after confirmation.';
+
+  @override
+  String get acceptancePlanApproved =>
+      'Confirmed. Acceptance will follow these test cases.';
+
+  @override
+  String get acceptancePlanWaiting => 'Review test cases';
+
+  @override
+  String get acceptancePlanGenerating => 'Generating test cases';
+
+  @override
+  String get acceptancePlanRetry => 'Regenerate test cases';
+
+  @override
+  String get acceptancePlanRevising => 'The Agent is updating the test cases…';
+
+  @override
+  String get acceptancePlanConfirm => 'Confirm cases and run';
+
+  @override
+  String get acceptancePlanEdit => 'Edit case';
+
+  @override
+  String get acceptancePlanDelete => 'Delete case';
+
+  @override
+  String get acceptancePlanAdd => 'Add case';
+
+  @override
+  String get acceptancePlanCaseTitle => 'Case title';
+
+  @override
+  String get acceptancePlanSteps => 'Steps';
+
+  @override
+  String get acceptancePlanStepsHint => 'One step per line';
+
+  @override
+  String get acceptancePlanStepsLimit =>
+      'Use 1 to 12 steps, up to 1000 characters each';
+
+  @override
+  String get acceptancePlanExpected => 'Expected result';
+
+  @override
+  String get acceptancePlanRequired => 'Required';
+
+  @override
+  String get acceptancePlanChat => 'Discuss cases with the Agent';
+
+  @override
+  String get acceptancePlanMessageHint =>
+      'For example: add a failed login case and skip payments for now…';
+
+  @override
+  String get acceptanceCreating => 'Preparing acceptance';
+
+  @override
+  String get acceptanceCreatingHint =>
+      'Reading requirements and preparing the project. Please wait…';
+
+  @override
+  String get acceptanceRequirementsInput => 'Acceptance focus (optional)';
+
+  @override
+  String get acceptanceRequirementsHint =>
+      'Add specific behaviors to check or narrow the scope. Leave empty to use the conversation\'s requirements.';
+
+  @override
+  String get acceptanceSessionScopeHint =>
+      'The agent reviews the conversation\'s user requests and follows later corrections to build the checklist.';
+
+  @override
+  String get acceptanceRequirementsTitle => 'Acceptance requirements';
+
+  @override
+  String acceptanceRequirementSources(int count) {
+    return 'Based on $count user messages';
+  }
+
+  @override
+  String get acceptanceRemoteDesktop => 'Open remote desktop';
+
+  @override
   String get acceptanceEmpty => 'No acceptance runs yet';
 
   @override
@@ -2382,4 +2472,184 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get acceptanceDownload => 'Download evidence';
+
+  @override
+  String get acceptanceHistory => 'Recent runs';
+
+  @override
+  String get acceptanceChecks => 'Checks';
+
+  @override
+  String get acceptanceDetails => 'Run details';
+
+  @override
+  String get acceptanceReview => 'Confirm result';
+
+  @override
+  String get acceptanceReviewHint =>
+      'Review the checks and evidence before confirming.';
+
+  @override
+  String get acceptanceSuggestedPass => 'Agent recommends passing';
+
+  @override
+  String get acceptanceSuggestedFail => 'Agent recommends changes';
+
+  @override
+  String get acceptanceAutomationFailed =>
+      'Agent failed; remote desktop is still available';
+
+  @override
+  String get acceptanceAutomationFailedHint =>
+      'Automatic judgment stopped, but the acceptance container and remote desktop are still running. You can inspect, operate, or stop this run.';
+
+  @override
+  String get acceptanceAwaitingReview => 'Awaiting your confirmation';
+
+  @override
+  String get acceptanceNoEvidence =>
+      'Screenshots and reports will appear here.';
+
+  @override
+  String get acceptanceScreenshot => 'Screenshot';
+
+  @override
+  String get acceptanceRecording => 'Recording';
+
+  @override
+  String get acceptanceReport => 'Report';
+
+  @override
+  String get acceptanceDesktopPreview => 'Remote desktop';
+
+  @override
+  String get acceptancePreviewHint =>
+      'Open the desktop to inspect and interact with the app.';
+
+  @override
+  String get acceptanceCheckPassed => 'Passed';
+
+  @override
+  String get acceptanceCheckFailed => 'Failed';
+
+  @override
+  String get acceptanceCheckPending => 'Pending';
+
+  @override
+  String get acceptanceCheckRunning => 'Running';
+
+  @override
+  String get acceptanceCheckBlocked => 'Blocked';
+
+  @override
+  String get acceptanceCommandAuto =>
+      'Leave blank for the Agent to choose how to launch the web or desktop app.';
+
+  @override
+  String get acceptanceReplay => 'Replay acceptance video';
+
+  @override
+  String get acceptanceRecordingPending =>
+      'The operation video will appear after the automatic checks finish. Screenshots supplement the video.';
+
+  @override
+  String get acceptanceExportEvidence => 'Generate video and report';
+
+  @override
+  String get acceptanceInitialFrame => 'Initial screen';
+
+  @override
+  String get acceptanceCheckFrame => 'Check screenshot';
+
+  @override
+  String get acceptanceVideoError => 'Could not play the recording.';
+
+  @override
+  String get acceptanceVideoPlay => 'Play';
+
+  @override
+  String get acceptanceVideoPause => 'Pause';
+
+  @override
+  String get acceptanceVideoReplay => 'Replay';
+
+  @override
+  String get acceptanceEnvironmentTitle => 'Project environment';
+
+  @override
+  String get acceptanceEnvironmentHint =>
+      'The environment is prepared when you next open this project. Verified images and launch settings are reused.';
+
+  @override
+  String get acceptanceEnvironmentAuto => 'Let the Agent prepare it';
+
+  @override
+  String get acceptanceEnvironmentAutoHint =>
+      'The Agent reads the project to choose SDK versions, system dependencies and how to launch the app.';
+
+  @override
+  String get acceptanceEnvironmentBase => 'Use the base environment';
+
+  @override
+  String get acceptanceEnvironmentBaseHint =>
+      'Use the installed x11box image without adding project SDKs.';
+
+  @override
+  String get acceptanceEnvironmentDockerfile => 'Custom Dockerfile';
+
+  @override
+  String get acceptanceEnvironmentDockerfileHint =>
+      'Extend x11box using the template below. Build context contains the committed project. Keep the x11box user and desktop services.';
+
+  @override
+  String get acceptanceEnvironmentImage => 'Existing compatible image';
+
+  @override
+  String get acceptanceEnvironmentImageHint =>
+      'Select a prepared image or enter a local/registry image name. It must include working x11box desktop and control services.';
+
+  @override
+  String get acceptanceEnvironmentImageLabel => 'Image name or digest';
+
+  @override
+  String get acceptanceEnvironmentAvailable => 'Prepared images';
+
+  @override
+  String get acceptanceEnvironmentSave => 'Save environment settings';
+
+  @override
+  String get acceptanceEnvironmentSaved =>
+      'Saved. These settings apply the next time you open the project.';
+
+  @override
+  String get acceptanceEnvironmentRebuild =>
+      'Prepare a fresh environment next time';
+
+  @override
+  String get acceptanceEnvironmentRebuildHint =>
+      'The next run will prepare and verify a new environment. Existing runs keep their current image.';
+
+  @override
+  String get acceptanceEnvironmentIdentifying =>
+      'Agent is identifying dependencies';
+
+  @override
+  String get acceptanceEnvironmentBuilding => 'Preparing the project image';
+
+  @override
+  String get acceptanceEnvironmentLogs => 'Environment build logs';
+
+  @override
+  String get acceptanceEnvironmentRecipe => 'Environment Dockerfile';
+
+  @override
+  String get acceptanceEnvironmentReused => 'Reused a verified environment';
+
+  @override
+  String get acceptanceEnvironmentPending =>
+      'Waiting to prepare the project environment';
+
+  @override
+  String get acceptanceEnvironmentRequired =>
+      'Enter an image name or Dockerfile.';
 }

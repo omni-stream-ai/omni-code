@@ -217,6 +217,7 @@ class _SessionClient extends BridgeClient {
   @override
   Future<List<SessionSummary>> listDomainSessions({
     String? projectId,
+    String? profileId,
     bool forceRefresh = false,
   }) async =>
       sessions;
@@ -244,6 +245,7 @@ class _DelayedSessionClient extends BridgeClient {
   @override
   Future<List<SessionSummary>> listDomainSessions({
     String? projectId,
+    String? profileId,
     bool forceRefresh = false,
   }) {
     sessionLoadCount += 1;

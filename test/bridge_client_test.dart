@@ -702,6 +702,44 @@ void main() {
           client.peekProjectSessions('project-1')!.single.id, 'session-domain');
     });
 
+    test('lists profile sessions and preserves the source label', () async {
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          expect(request.url.path, '/v2/sessions');
+          expect(request.url.queryParameters['profile_id'], 'work');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'session-profile',
+                  'project_id': 'project-1',
+                  'title': 'Profile session',
+                  'agent': 'codex',
+                  'brief_reply_mode': false,
+                  'status': 'idle',
+                  'updated_at': '2026-08-13T03:21:53.326Z',
+                  'unread_count': 0,
+                  'last_message_preview': 'Complete',
+                  'profile_id': 'work',
+                  'profile_name': '工作 profile',
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final sessions = await client.listDomainSessions(
+        profileId: 'work',
+        forceRefresh: true,
+      );
+
+      expect(sessions.single.profileId, 'work');
+      expect(sessions.single.profileName, '工作 profile');
+    });
+
     test('parses global domain session SSE', () async {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {
@@ -737,6 +775,56 @@ void main() {
 
       expect(client.sessionCacheRevision.value, before + 1);
       expect(client.peekSessions()!.single.id, 'session-revision');
+    });
+
+    test('session updates retain the profile source label from the list', () {
+      final client = BridgeClient();
+      client.debugSeedSessions([
+        _session(
+          id: 'session-profile',
+          projectId: 'project-1',
+          updatedAt: DateTime(2026),
+        ).copyWith(profileId: 'work', profileName: '工作 profile'),
+      ]);
+
+      client.syncSessionSummary(
+        _session(
+          id: 'session-profile',
+          projectId: 'project-1',
+          updatedAt: DateTime(2026, 1, 1),
+        ),
+      );
+
+      expect(client.peekSessions()!.single.profileName, '工作 profile');
+    });
+
+    test('does not add internal acceptance sessions to the conversation cache',
+        () {
+      final client = BridgeClient();
+      client.debugSeedSessions([
+        _session(
+          id: 'visible-session',
+          projectId: 'project-1',
+          updatedAt: DateTime(2025),
+        ),
+      ]);
+
+      client.syncSessionSummary(
+        _session(
+          id: 'acceptance-11111111-1111-4111-8111-111111111111',
+          projectId: 'project-1',
+          updatedAt: DateTime(2026),
+        ),
+      );
+
+      expect(
+        client.peekSessions()!.map((session) => session.id),
+        ['visible-session'],
+      );
+      expect(
+        client.peekProjectSessions('project-1')!.map((session) => session.id),
+        ['visible-session'],
+      );
     });
 
     test('authoritative session snapshot replaces a newer cached title', () {

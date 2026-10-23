@@ -2200,6 +2200,89 @@ class AppLocalizationsZh extends AppLocalizations {
   String get acceptanceStart => '开始验收';
 
   @override
+  String get acceptancePlanTitle => '测试用例';
+
+  @override
+  String get acceptancePlanHint => '先确认要测什么。可以手动编辑，或与 Agent 沟通调整；确认后才会准备环境并执行。';
+
+  @override
+  String get acceptancePlanApproved => '已确认，将按这份用例执行验收。';
+
+  @override
+  String get acceptancePlanWaiting => '等待确认测试用例';
+
+  @override
+  String get acceptancePlanGenerating => '正在生成测试用例';
+
+  @override
+  String get acceptancePlanRetry => '重新生成测试用例';
+
+  @override
+  String get acceptancePlanRevising => 'Agent 正在调整测试用例…';
+
+  @override
+  String get acceptancePlanConfirm => '确认用例并开始执行';
+
+  @override
+  String get acceptancePlanEdit => '编辑用例';
+
+  @override
+  String get acceptancePlanDelete => '删除用例';
+
+  @override
+  String get acceptancePlanAdd => '添加用例';
+
+  @override
+  String get acceptancePlanCaseTitle => '用例标题';
+
+  @override
+  String get acceptancePlanSteps => '操作步骤';
+
+  @override
+  String get acceptancePlanStepsHint => '每行一个步骤';
+
+  @override
+  String get acceptancePlanStepsLimit => '请填写 1 到 12 个步骤，每个步骤不超过 1000 字';
+
+  @override
+  String get acceptancePlanExpected => '预期结果';
+
+  @override
+  String get acceptancePlanRequired => '请填写此项';
+
+  @override
+  String get acceptancePlanChat => '与 Agent 调整用例';
+
+  @override
+  String get acceptancePlanMessageHint => '例如：增加登录失败场景，暂时不测支付…';
+
+  @override
+  String get acceptanceCreating => '正在准备验收';
+
+  @override
+  String get acceptanceCreatingHint => '正在读取需求并准备项目，请稍候…';
+
+  @override
+  String get acceptanceRequirementsInput => '本次验收重点（可选）';
+
+  @override
+  String get acceptanceRequirementsHint => '补充要检查的行为，或限定本次范围。留空时按会话需求验收。';
+
+  @override
+  String get acceptanceSessionScopeHint => 'Agent 会整理本会话的用户需求，并按后续纠正生成验收清单。';
+
+  @override
+  String get acceptanceRequirementsTitle => '本次验收需求';
+
+  @override
+  String acceptanceRequirementSources(int count) {
+    return '依据 $count 条用户消息整理';
+  }
+
+  @override
+  String get acceptanceRemoteDesktop => '打开远程桌面';
+
+  @override
   String get acceptanceEmpty => '暂无验收记录';
 
   @override
@@ -2285,4 +2368,171 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get acceptanceDownload => '下载证据';
+
+  @override
+  String get acceptanceHistory => '最近验收';
+
+  @override
+  String get acceptanceChecks => '检查清单';
+
+  @override
+  String get acceptanceDetails => '运行详情';
+
+  @override
+  String get acceptanceReview => '确认验收结果';
+
+  @override
+  String get acceptanceReviewHint => '查看检查结果和验收材料后，确认最终结论。';
+
+  @override
+  String get acceptanceSuggestedPass => 'Agent 建议通过';
+
+  @override
+  String get acceptanceSuggestedFail => 'Agent 建议不通过';
+
+  @override
+  String get acceptanceAutomationFailed => 'Agent 自动验收失败，远程桌面仍可操作';
+
+  @override
+  String get acceptanceAutomationFailedHint =>
+      '自动判断已停止，但验收容器和远程桌面仍在运行；你可以继续查看、操作或停止本次验收。';
+
+  @override
+  String get acceptanceAwaitingReview => '等待人工确认';
+
+  @override
+  String get acceptanceNoEvidence => '截图和报告会展示在这里';
+
+  @override
+  String get acceptanceScreenshot => '截图';
+
+  @override
+  String get acceptanceRecording => '录像';
+
+  @override
+  String get acceptanceReport => '报告';
+
+  @override
+  String get acceptanceDesktopPreview => '远程桌面';
+
+  @override
+  String get acceptancePreviewHint => '进入桌面，查看并操作应用';
+
+  @override
+  String get acceptanceCheckPassed => '已通过';
+
+  @override
+  String get acceptanceCheckFailed => '未通过';
+
+  @override
+  String get acceptanceCheckPending => '待执行';
+
+  @override
+  String get acceptanceCheckRunning => '执行中';
+
+  @override
+  String get acceptanceCheckBlocked => '受阻';
+
+  @override
+  String get acceptanceCommandAuto => '留空时由 Agent 判断网页或原生应用的启动方式。';
+
+  @override
+  String get acceptanceReplay => '回放操作录像';
+
+  @override
+  String get acceptanceRecordingPending => '自动检查结束后会生成操作录像，截图仅作为补充证据。';
+
+  @override
+  String get acceptanceExportEvidence => '生成录像与报告';
+
+  @override
+  String get acceptanceInitialFrame => '初始画面';
+
+  @override
+  String get acceptanceCheckFrame => '检查截图';
+
+  @override
+  String get acceptanceVideoError => '录像播放失败';
+
+  @override
+  String get acceptanceVideoPlay => '播放';
+
+  @override
+  String get acceptanceVideoPause => '暂停';
+
+  @override
+  String get acceptanceVideoReplay => '重新播放';
+
+  @override
+  String get acceptanceEnvironmentTitle => '项目运行环境';
+
+  @override
+  String get acceptanceEnvironmentHint => '下次进入项目时准备环境，已验证的镜像和启动方式会自动复用。';
+
+  @override
+  String get acceptanceEnvironmentAuto => '由 Agent 自动准备';
+
+  @override
+  String get acceptanceEnvironmentAutoHint =>
+      'Agent 根据项目实际内容选择 SDK 版本、系统依赖和启动方式。';
+
+  @override
+  String get acceptanceEnvironmentBase => '使用基础环境';
+
+  @override
+  String get acceptanceEnvironmentBaseHint => '直接使用已安装的 x11box 镜像，不额外准备项目 SDK。';
+
+  @override
+  String get acceptanceEnvironmentDockerfile => '自定义 Dockerfile';
+
+  @override
+  String get acceptanceEnvironmentDockerfileHint =>
+      '使用下方模板继承 x11box，构建上下文为项目已提交源码。保留 x11box 用户和桌面服务。';
+
+  @override
+  String get acceptanceEnvironmentImage => '使用已有兼容镜像';
+
+  @override
+  String get acceptanceEnvironmentImageHint =>
+      '选择已准备的镜像，或填写本地、镜像仓库中的名称。镜像必须包含可用的 x11box 桌面和控制服务。';
+
+  @override
+  String get acceptanceEnvironmentImageLabel => '镜像名称或摘要';
+
+  @override
+  String get acceptanceEnvironmentAvailable => '已准备的镜像';
+
+  @override
+  String get acceptanceEnvironmentSave => '保存环境配置';
+
+  @override
+  String get acceptanceEnvironmentSaved => '已保存，下次进入项目时使用此配置。';
+
+  @override
+  String get acceptanceEnvironmentRebuild => '下次重新识别并准备环境';
+
+  @override
+  String get acceptanceEnvironmentRebuildHint =>
+      '下次运行会重新准备并验证环境，已运行的桌面继续使用原有镜像。';
+
+  @override
+  String get acceptanceEnvironmentIdentifying => 'Agent 正在识别依赖';
+
+  @override
+  String get acceptanceEnvironmentBuilding => '正在准备项目镜像';
+
+  @override
+  String get acceptanceEnvironmentLogs => '环境构建日志';
+
+  @override
+  String get acceptanceEnvironmentRecipe => '环境 Dockerfile';
+
+  @override
+  String get acceptanceEnvironmentReused => '已复用验证通过的环境';
+
+  @override
+  String get acceptanceEnvironmentPending => '等待准备项目环境';
+
+  @override
+  String get acceptanceEnvironmentRequired => '请填写镜像名称或 Dockerfile。';
 }
