@@ -2535,4 +2535,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get acceptanceEnvironmentRequired => '请填写镜像名称或 Dockerfile。';
+
+  @override
+  String get acceptanceFullscreen => '全屏桌面';
+
+  @override
+  String get acceptanceExitFullscreen => '退出全屏';
 }

@@ -1114,5 +1114,7 @@
   "acceptanceEnvironmentRecipe": "Environment Dockerfile",
   "acceptanceEnvironmentReused": "Reused a verified environment",
   "acceptanceEnvironmentPending": "Waiting to prepare the project environment",
-  "acceptanceEnvironmentRequired": "Enter an image name or Dockerfile."
+  "acceptanceEnvironmentRequired": "Enter an image name or Dockerfile.",
+  "acceptanceFullscreen": "Fullscreen desktop",
+  "acceptanceExitFullscreen": "Exit fullscreen"
 }

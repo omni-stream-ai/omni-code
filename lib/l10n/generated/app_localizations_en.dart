@@ -2652,4 +2652,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get acceptanceEnvironmentRequired =>
       'Enter an image name or Dockerfile.';
+
+  @override
+  String get acceptanceFullscreen => 'Fullscreen desktop';
+
+  @override
+  String get acceptanceExitFullscreen => 'Exit fullscreen';
 }

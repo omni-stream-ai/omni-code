@@ -2,8 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+    show defaultTargetPlatform, kIsWeb, TargetPlatform, Factory;
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
@@ -1279,6 +1280,7 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
   bool closing = false;
   bool changingOrientation = false;
   bool orientationOverridden = false;
+  bool fullscreen = false;
 
   @override
   void initState() {
@@ -1331,6 +1333,13 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
     }
   }
 
+  Future<void> toggleFullscreen() async {
+    final enabled = !fullscreen;
+    await SystemChrome.setEnabledSystemUIMode(
+        enabled ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge);
+    if (mounted) setState(() => fullscreen = enabled);
+  }
+
   Future<void> restoreOrientation() async {
     if (!orientationOverridden) return;
     orientationOverridden = false;
@@ -1340,6 +1349,7 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
   @override
   void dispose() {
     unawaited(restoreOrientation());
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     super.dispose();
   }
 
@@ -1390,6 +1400,7 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
       await widget.onClose();
     } finally {
       await restoreOrientation();
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
         await _platform.invokeMethod<bool>('clearWebViewProxy');
       }
@@ -1408,34 +1419,69 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
     return PopScope<void>(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) close();
+        if (!didPop) {
+          if (fullscreen) {
+            unawaited(toggleFullscreen());
+          } else {
+            close();
+          }
+        }
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(widget.title),
-          actions: [
-            if (canRotate)
-              IconButton(
-                  onPressed:
-                      changingOrientation || closing ? null : toggleOrientation,
-                  tooltip: landscape
-                      ? l.acceptanceSwitchPortrait
-                      : l.acceptanceSwitchLandscape,
-                  icon: Icon(landscape
-                      ? Icons.stay_current_portrait
-                      : Icons.stay_current_landscape)),
-            IconButton(
-                onPressed: close,
-                tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
-                icon: const Icon(Icons.close)),
-          ],
-        ),
+        appBar: fullscreen
+            ? null
+            : AppBar(
+                title: Text(widget.title),
+                actions: [
+                  IconButton(
+                      key: const Key('acceptance-desktop-fullscreen'),
+                      onPressed: toggleFullscreen,
+                      tooltip: l.acceptanceFullscreen,
+                      icon: const Icon(Icons.fullscreen)),
+                  if (canRotate)
+                    IconButton(
+                        onPressed: changingOrientation || closing
+                            ? null
+                            : toggleOrientation,
+                        tooltip: landscape
+                            ? l.acceptanceSwitchPortrait
+                            : l.acceptanceSwitchLandscape,
+                        icon: Icon(landscape
+                            ? Icons.stay_current_portrait
+                            : Icons.stay_current_landscape)),
+                  IconButton(
+                      onPressed: close,
+                      tooltip:
+                          MaterialLocalizations.of(context).closeButtonTooltip,
+                      icon: const Icon(Icons.close)),
+                ],
+              ),
         body: SafeArea(
-          top: false,
+          top: fullscreen,
           child: Stack(children: [
             Offstage(
                 offstage: loadError != null,
-                child: WebViewWidget(controller: controller)),
+                child:
+                    WebViewWidget(controller: controller, gestureRecognizers: {
+                  Factory<OneSequenceGestureRecognizer>(
+                      () => EagerGestureRecognizer()),
+                })),
+            if (fullscreen)
+              Positioned(
+                top: 4,
+                right: 4,
+                child: Material(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(24),
+                  child: IconButton(
+                    key: const Key('acceptance-desktop-exit-fullscreen'),
+                    tooltip: l.acceptanceExitFullscreen,
+                    color: Colors.white,
+                    onPressed: toggleFullscreen,
+                    icon: const Icon(Icons.fullscreen_exit),
+                  ),
+                ),
+              ),
             if (loading) const LinearProgressIndicator(),
             if (loadError != null)
               Center(

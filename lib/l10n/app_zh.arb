@@ -1114,5 +1114,7 @@
   "acceptanceEnvironmentRecipe": "环境 Dockerfile",
   "acceptanceEnvironmentReused": "已复用验证通过的环境",
   "acceptanceEnvironmentPending": "等待准备项目环境",
-  "acceptanceEnvironmentRequired": "请填写镜像名称或 Dockerfile。"
+  "acceptanceEnvironmentRequired": "请填写镜像名称或 Dockerfile。",
+  "acceptanceFullscreen": "全屏桌面",
+  "acceptanceExitFullscreen": "退出全屏"
 }

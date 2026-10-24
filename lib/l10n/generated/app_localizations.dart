@@ -4723,6 +4723,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enter an image name or Dockerfile.'**
   String get acceptanceEnvironmentRequired;
+
+  /// No description provided for @acceptanceFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Fullscreen desktop'**
+  String get acceptanceFullscreen;
+
+  /// No description provided for @acceptanceExitFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit fullscreen'**
+  String get acceptanceExitFullscreen;
 }
 
 class _AppLocalizationsDelegate
