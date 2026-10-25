@@ -890,6 +890,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     if (state.session.id != _session.id) return;
+    _domainActivityStates.clear();
     final messages = <ChatMessage>[];
     final diffsByKey = <String, _SessionDiffEntry>{};
     ApprovalRequest? pendingApproval;
@@ -932,6 +933,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         // The conversation view still groups these into one compact tool entry,
         // while the activity dialog can show every call/result after a reload.
         for (final activity in segment.activities) {
+          _domainActivityStates[activity.id] = activity.state;
           messages.add(ChatMessage(
             id: activity.id,
             sessionId: _session.id,
@@ -6586,7 +6588,26 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     await launchUrl(uri);
   }
 
+  final _domainActivityStates = <String, DomainEntityState>{};
+
   String _toolMessagePreview(ChatMessage message) {
+    final state = _domainActivityStates[message.id];
+    // Runtime status titles are snapshots, not the current lifecycle state.
+    // Keep the original event in details, but close its summary when the
+    // domain marks it terminal, including after history recovery.
+    if ((message.content.startsWith('[status]') ||
+            message.content.startsWith('[thread]')) &&
+        (state == DomainEntityState.completed ||
+            state == DomainEntityState.cancelled ||
+            state == DomainEntityState.failed)) {
+      final kind = _parseToolMessage(message.content)?.kindLabel;
+      final label = switch (state!) {
+        DomainEntityState.completed => context.l10n.phaseCompleted,
+        DomainEntityState.cancelled => context.l10n.sessionStatusInterrupted,
+        _ => context.l10n.sessionStatusFailed,
+      };
+      return [if (kind != null) kind, label].join(' · ');
+    }
     final payload = message.activityPayload;
     final payloadTool = payload?['tool_name'] as String?;
     if (payload != null && payloadTool != null && payloadTool.isNotEmpty) {

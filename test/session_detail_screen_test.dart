@@ -7628,6 +7628,63 @@ void main() {
     expect(find.text('Reasoning · complete'), findsNothing);
   });
 
+  for (final status in ['idle', 'running']) {
+    testWidgets('runtime status summaries follow domain state when $status',
+        (tester) async {
+      final state = _domainStateJson([
+        _messageJson(
+          id: 'user-1',
+          sessionId: 'session-1',
+          role: 'user',
+          content: 'Fix remote desktop',
+          createdAt: '2026-05-09T10:00:00.000',
+        ),
+        _messageJson(
+          id: 'thread-status',
+          sessionId: 'session-1',
+          role: 'system',
+          content: '[thread] active',
+          createdAt: '2026-05-09T10:00:01.000',
+        ),
+        _messageJson(
+          id: 'assistant-1',
+          sessionId: 'session-1',
+          role: 'assistant',
+          content: 'Tests passed',
+          createdAt: '2026-05-09T10:00:02.000',
+        ),
+        _messageJson(
+          id: 'command-status',
+          sessionId: 'session-1',
+          role: 'system',
+          content: '[status] command still running',
+          createdAt: '2026-05-09T10:00:03.000',
+        ),
+      ], status: status);
+      for (final turn in state['turns'] as List) {
+        for (final segment in turn['segments'] as List) {
+          for (final activity in segment['activities'] as List) {
+            activity['state'] = status == 'running' ? 'running' : 'completed';
+          }
+        }
+      }
+      await tester.pumpWidget(_TestApp(
+          home: SessionDetailScreen(
+        session: _session(),
+        client: _clientForDomainState(state),
+        enableSpeechServices: false,
+      )));
+      await tester.pump();
+      expect(find.textContaining('command still running'),
+          status == 'running' ? findsOneWidget : findsNothing);
+      expect(find.textContaining('active'),
+          status == 'running' ? findsOneWidget : findsNothing);
+      if (status == 'idle') {
+        expect(find.textContaining('Completed'), findsNWidgets(2));
+      }
+    });
+  }
+
   testWidgets('active tool activity shows a loading indicator', (tester) async {
     final messages = [
       _messageJson(
