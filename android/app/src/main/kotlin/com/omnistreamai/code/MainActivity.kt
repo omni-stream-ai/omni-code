@@ -1,5 +1,10 @@
 package com.omnistreamai.code
 
+import android.content.Context
+import android.view.inputmethod.InputMethodManager
+import android.webkit.WebView
+import android.view.View
+import android.view.ViewGroup
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -34,6 +39,26 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, updateChannel)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "showDesktopKeyboard" -> {
+                        fun findWebView(view: View): WebView? {
+                            if (view is WebView) return view
+                            if (view is ViewGroup) {
+                                for (i in 0 until view.childCount) {
+                                    findWebView(view.getChildAt(i))?.let { return it }
+                                }
+                            }
+                            return null
+                        }
+                        val webView = findWebView(window.decorView)
+                        if (webView == null) result.success(false)
+                        else {
+                            webView.requestFocus()
+                            webView.post {
+                                val ime = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                                result.success(ime.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT))
+                            }
+                        }
+                    }
                     "installApk" -> {
                         val path = call.argument<String>("path")
                         if (path.isNullOrBlank()) {

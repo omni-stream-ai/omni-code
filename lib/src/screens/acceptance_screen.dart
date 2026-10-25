@@ -1287,6 +1287,15 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
     super.initState();
     controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..addJavaScriptChannel('DesktopKeyboard', onMessageReceived: (message) {
+        if (message.message == 'show' &&
+            !kIsWeb &&
+            defaultTargetPlatform == TargetPlatform.android) {
+          unawaited(_platform
+              .invokeMethod<bool>('showDesktopKeyboard')
+              .catchError((Object _) => false));
+        }
+      })
       ..setBackgroundColor(Colors.black)
       ..setNavigationDelegate(NavigationDelegate(
         onPageStarted: (url) {
