@@ -5,6 +5,7 @@ import '../acceptance_models.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../widgets/app_card.dart';
+import '../widgets/acceptance_ui.dart';
 
 class AcceptancePlanCard extends StatefulWidget {
   const AcceptancePlanCard(
@@ -75,12 +76,11 @@ class _AcceptancePlanCardState extends State<AcceptancePlanCard> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final revising = widget.run.automation == 'revising_plan';
-    return AppCard(
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    final content =
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Row(children: [
         Icon(plan.approved ? Icons.fact_check_rounded : Icons.edit_note_rounded,
-            color: colors.primary),
+            color: acceptanceAccent(context)),
         const SizedBox(width: 10),
         Expanded(
             child: Text(l.acceptancePlanTitle,
@@ -101,9 +101,20 @@ class _AcceptancePlanCardState extends State<AcceptancePlanCard> {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
+              Container(
+                  width: 28,
+                  height: 28,
+                  alignment: Alignment.center,
+                  margin: const EdgeInsets.only(right: 10),
+                  decoration: BoxDecoration(
+                      color: acceptanceAccent(context).withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(8)),
+                  child: Text((index + 1).toString(),
+                      style: TextStyle(
+                          color: acceptanceAccent(context),
+                          fontWeight: FontWeight.w700))),
               Expanded(
-                  child: Text('${index + 1}. ${item.title}',
-                      style: theme.textTheme.titleSmall)),
+                  child: Text(item.title, style: theme.textTheme.titleSmall)),
               if (editable) ...[
                 IconButton(
                     key: Key('acceptance-case-edit-${item.id}'),
@@ -131,7 +142,7 @@ class _AcceptancePlanCardState extends State<AcceptancePlanCard> {
                   child: Text('${step + 1}) $text')),
             const SizedBox(height: 8),
             Text('${l.acceptancePlanExpected}：${item.expected}',
-                style: TextStyle(color: colors.primary)),
+                style: TextStyle(color: acceptanceAccent(context))),
           ]),
         ),
       if (plan.notes.isNotEmpty)
@@ -215,7 +226,24 @@ class _AcceptancePlanCardState extends State<AcceptancePlanCard> {
             icon: const Icon(Icons.play_arrow_rounded),
             label: Text(l.acceptancePlanConfirm)),
       ],
-    ]));
+    ]);
+    if (plan.approved) {
+      return AppCard(
+          padding: EdgeInsets.zero,
+          child: ExpansionTile(
+            tilePadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            leading:
+                Icon(Icons.task_alt_rounded, color: acceptanceAccent(context)),
+            title: Text(l.acceptancePlanTitle),
+            subtitle: Text(l.acceptancePlanApproved),
+            shape: const Border(),
+            collapsedShape: const Border(),
+            childrenPadding: const EdgeInsets.all(16),
+            children: [content],
+          ));
+    }
+    return AppCard(child: content);
   }
 }
 

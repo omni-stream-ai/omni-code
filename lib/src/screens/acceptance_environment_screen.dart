@@ -6,6 +6,7 @@ import '../acceptance_models.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../widgets/app_card.dart';
+import '../widgets/acceptance_ui.dart';
 
 const _dockerfileTemplate =
     'FROM {{BASE_IMAGE}}\nUSER root\nRUN apt-get update && apt-get install -y --no-install-recommends git unzip xz-utils && rm -rf /var/lib/apt/lists/*\nUSER x11box\nWORKDIR /workspace\n';
@@ -113,7 +114,10 @@ class _AcceptanceEnvironmentScreenState
                       child: ListView(
                         padding: const EdgeInsets.all(16),
                         children: [
-                          Text(l.acceptanceEnvironmentHint),
+                          AcceptanceIntro(
+                              title: l.acceptanceEnvironmentOverview,
+                              subtitle: l.acceptanceEnvironmentHint,
+                              icon: Icons.layers_outlined),
                           const SizedBox(height: 16),
                           if (error != null) ...[
                             SelectableText(error.toString(),
@@ -280,9 +284,16 @@ class AcceptanceEnvironmentCard extends StatelessWidget {
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Row(children: [
-        Icon(environment.phase == 'failed'
-            ? Icons.error_outline
-            : Icons.layers_outlined),
+        if (environment.busy)
+          SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: acceptanceAccent(context)))
+        else
+          Icon(environment.phase == 'failed'
+              ? Icons.error_outline
+              : Icons.layers_outlined),
         const SizedBox(width: 12),
         Expanded(
             child: Text(environment.name,
@@ -290,6 +301,11 @@ class AcceptanceEnvironmentCard extends StatelessWidget {
       ]),
       const SizedBox(height: 8),
       Text(label),
+      if (environment.busy && environment.progress.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Text(environment.progress,
+            style: Theme.of(context).textTheme.bodySmall),
+      ],
       if (environment.busy) ...[
         const SizedBox(height: 12),
         const LinearProgressIndicator()

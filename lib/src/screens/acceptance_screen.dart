@@ -19,6 +19,7 @@ import '../l10n/app_locale.dart';
 import '../models.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_card.dart';
+import '../widgets/acceptance_ui.dart';
 
 String acceptancePhaseLabel(BuildContext context, String phase) {
   final l = context.l10n;
@@ -220,60 +221,97 @@ class _AcceptanceScreenState extends State<AcceptanceScreen> {
                     onRefresh: refresh,
                     child: _AcceptanceBody(
                       children: [
-                        AppCard(
-                            padding: AppSpacing.cardPadding,
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                        AcceptanceIntro(
+                          title: widget.automatic
+                              ? l.acceptanceIntro
+                              : l.acceptanceRemoteDesktop,
+                          subtitle: widget.automatic
+                              ? l.acceptanceIntroHint
+                              : l.acceptancePreviewHint,
+                          child: widget.automatic
+                              ? const AcceptanceJourney()
+                              : null,
+                        ),
+                        if (installation?.ready == true)
+                          AppCard(
+                              padding: EdgeInsets.zero,
+                              child: ExpansionTile(
+                                tilePadding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 4),
+                                leading: Icon(
+                                    Icons.check_circle_outline_rounded,
+                                    color: acceptanceAccent(context)),
+                                title: Text(l.acceptanceReady),
+                                subtitle: Text(l.acceptanceEnvironmentTitle),
+                                shape: const Border(),
+                                collapsedShape: const Border(),
+                                childrenPadding:
+                                    const EdgeInsets.fromLTRB(16, 0, 16, 16),
                                 children: [
-                                  Row(children: [
-                                    Icon(Icons.desktop_windows_outlined,
-                                        color: _acceptanceAccent(context)),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                        child: Text(l.acceptancePlugin,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .titleMedium)),
-                                    if (installation?.ready == true)
-                                      PopupMenuButton<String>(
-                                        enabled: !busy,
-                                        onSelected: (_) => uninstall(),
-                                        itemBuilder: (_) => [
-                                          PopupMenuItem(
-                                              value: 'uninstall',
-                                              child: Text(l.uninstall))
-                                        ],
-                                      ),
-                                  ]),
-                                  const SizedBox(height: 8),
                                   Text(l.acceptancePluginDescription),
-                                  if (installation != null) ...[
-                                    const SizedBox(height: 12),
-                                    _StatusPill(
-                                        label: acceptancePhaseLabel(
-                                            context, installation!.phase),
-                                        error: installation!.phase == 'failed'),
-                                    if (installation!.busy)
-                                      const LinearProgressIndicator(),
-                                    if (installation!.error != null)
-                                      SelectableText(installation!.error!),
-                                  ],
-                                  if (installation?.ready != true)
-                                    FilledButton.icon(
-                                        onPressed: busy ||
-                                                installation?.busy == true
-                                            ? null
-                                            : () => operation(() async {
-                                                  final value = await client
-                                                      .installAcceptancePlugin();
-                                                  if (mounted) {
-                                                    setState(() =>
-                                                        installation = value);
-                                                  }
-                                                }),
-                                        icon: const Icon(Icons.download),
-                                        label: Text(l.acceptanceInstall)),
-                                ])),
+                                  Align(
+                                      alignment: Alignment.centerRight,
+                                      child: TextButton(
+                                          onPressed: busy ? null : uninstall,
+                                          child: Text(l.uninstall))),
+                                ],
+                              ))
+                        else
+                          AppCard(
+                              padding: AppSpacing.cardPadding,
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(children: [
+                                      Icon(Icons.desktop_windows_outlined,
+                                          color: _acceptanceAccent(context)),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                          child: Text(l.acceptancePlugin,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleMedium)),
+                                      if (installation?.ready == true)
+                                        PopupMenuButton<String>(
+                                          enabled: !busy,
+                                          onSelected: (_) => uninstall(),
+                                          itemBuilder: (_) => [
+                                            PopupMenuItem(
+                                                value: 'uninstall',
+                                                child: Text(l.uninstall))
+                                          ],
+                                        ),
+                                    ]),
+                                    const SizedBox(height: 8),
+                                    Text(l.acceptancePluginDescription),
+                                    if (installation != null) ...[
+                                      const SizedBox(height: 12),
+                                      _StatusPill(
+                                          label: acceptancePhaseLabel(
+                                              context, installation!.phase),
+                                          error:
+                                              installation!.phase == 'failed'),
+                                      if (installation!.busy)
+                                        const LinearProgressIndicator(),
+                                      if (installation!.error != null)
+                                        SelectableText(installation!.error!),
+                                    ],
+                                    if (installation?.ready != true)
+                                      FilledButton.icon(
+                                          onPressed: busy ||
+                                                  installation?.busy == true
+                                              ? null
+                                              : () => operation(() async {
+                                                    final value = await client
+                                                        .installAcceptancePlugin();
+                                                    if (mounted) {
+                                                      setState(() =>
+                                                          installation = value);
+                                                    }
+                                                  }),
+                                          icon: const Icon(Icons.download),
+                                          label: Text(l.acceptanceInstall)),
+                                  ])),
                         if (loading)
                           const Center(child: CircularProgressIndicator()),
                         if (error != null)
@@ -281,9 +319,25 @@ class _AcceptanceScreenState extends State<AcceptanceScreen> {
                               style: TextStyle(
                                   color: Theme.of(context).colorScheme.error)),
                         if (!loading && runs.isEmpty)
-                          Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Text(l.acceptanceEmpty)),
+                          AppCard(
+                              child: Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 20),
+                                  child: Column(children: [
+                                    Icon(Icons.assignment_outlined,
+                                        size: 40,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant),
+                                    const SizedBox(height: 16),
+                                    Text(l.acceptanceEmpty,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium),
+                                    const SizedBox(height: 8),
+                                    Text(l.acceptanceEmptyHint,
+                                        textAlign: TextAlign.center),
+                                  ]))),
                         if (runs.isNotEmpty)
                           Text(l.acceptanceHistory,
                               style: Theme.of(context).textTheme.titleMedium),
@@ -444,11 +498,13 @@ class _StartDialogState extends State<_StartDialog> {
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
               DropdownButtonFormField<String>(
                   initialValue: projectId,
+                  isExpanded: true,
                   decoration: InputDecoration(
                       labelText: context.l10n.acceptanceProject),
                   items: widget.projects
-                      .map((p) =>
-                          DropdownMenuItem(value: p.id, child: Text(p.name)))
+                      .map((p) => DropdownMenuItem(
+                          value: p.id,
+                          child: Text(p.name, overflow: TextOverflow.ellipsis)))
                       .toList(),
                   onChanged: (v) {
                     if (v != null) setState(() => projectId = v);
@@ -468,7 +524,10 @@ class _StartDialogState extends State<_StartDialog> {
               if (widget.automatic) ...[
                 const SizedBox(height: 12),
                 if (widget.sessionScoped)
-                  Text(context.l10n.acceptanceSessionScopeHint),
+                  Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(context.l10n.acceptanceSessionScopeHint,
+                          style: Theme.of(context).textTheme.bodySmall)),
                 TextField(
                   key: const Key('acceptance-requirements-input'),
                   controller: requirements,
@@ -481,24 +540,42 @@ class _StartDialogState extends State<_StartDialog> {
                   ),
                 ),
               ],
-              TextField(
-                  controller: command,
-                  minLines: 2,
-                  maxLines: 5,
-                  decoration: InputDecoration(
-                      labelText: context.l10n.acceptanceCommand,
-                      hintText: context.l10n.acceptanceCommandAuto),
-                  onChanged: (_) => setState(() {})),
-              DropdownButtonFormField<String>(
-                  initialValue: size,
-                  decoration:
-                      InputDecoration(labelText: context.l10n.acceptanceSize),
-                  items: const ['mobile', 'tablet', 'laptop', 'pc']
-                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) setState(() => size = v);
-                  }),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                shape: const Border(),
+                collapsedShape: const Border(),
+                title: Text(context.l10n.acceptanceAdvanced),
+                subtitle: Text(context.l10n.acceptanceAdvancedHint),
+                childrenPadding: const EdgeInsets.only(top: 12, bottom: 12),
+                children: [
+                  TextField(
+                      controller: command,
+                      minLines: 2,
+                      maxLines: 5,
+                      decoration: InputDecoration(
+                          labelText: context.l10n.acceptanceCommand,
+                          hintText: context.l10n.acceptanceCommandAuto),
+                      onChanged: (_) => setState(() {})),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                      initialValue: size,
+                      decoration: InputDecoration(
+                          labelText: context.l10n.acceptanceSize),
+                      items: const ['mobile', 'tablet', 'laptop', 'pc']
+                          .map((v) => DropdownMenuItem(
+                              value: v,
+                              child: Text(switch (v) {
+                                'mobile' => context.l10n.acceptanceDeviceMobile,
+                                'tablet' => context.l10n.acceptanceDeviceTablet,
+                                'laptop' => context.l10n.acceptanceDeviceLaptop,
+                                _ => context.l10n.acceptanceDeviceDesktop
+                              })))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setState(() => size = v);
+                      }),
+                ],
+              ),
               const SizedBox(height: 12),
               Text(context.l10n.acceptanceCommitHint),
             ]))),
@@ -741,7 +818,11 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
         onRefresh: refresh,
         child: _AcceptanceBody(children: [
           AppCard(
-            color: colors.surfaceContainerHighest,
+            color: Color.alphaBlend(
+                acceptanceAccent(context).withValues(alpha: .08),
+                colors.surface),
+            borderSide: BorderSide(
+                color: acceptanceAccent(context).withValues(alpha: .2)),
             padding: const EdgeInsets.all(20),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -763,6 +844,8 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
                             color: colors.onSurface,
                             fontWeight: FontWeight.w700))),
               ]),
+              const SizedBox(height: 20),
+              AcceptanceJourney(run: run),
               if (run.automationProgress.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(run.automationProgress,
@@ -826,6 +909,8 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
               padding: EdgeInsets.zero,
               child: ExpansionTile(
                 key: const Key('acceptance-requirement-brief'),
+                tilePadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 initiallyExpanded: run.testPlan == null,
                 shape: const Border(),
                 collapsedShape: const Border(),
@@ -849,10 +934,12 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
                 ],
               ),
             ),
-          if ((run.running ||
+          if ((run.phase == 'starting' ||
+                  (run.running && run.automatic) ||
                   (run.phase == 'planning' && run.testPlan == null)) &&
               run.automation != 'awaiting_confirmation' &&
-              run.automation != 'failed')
+              run.automation != 'failed' &&
+              run.automation != 'completed')
             AppCard(
                 color: colors.primaryContainer,
                 child: Column(
@@ -974,27 +1061,6 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
                   const SizedBox(height: 8),
                   ...run.checklist.map((check) => _CheckRow(check: check)),
                 ])),
-          if (run.running)
-            AppCard(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                  Text(l.acceptanceReview, style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 6),
-                  Text(l.acceptanceReviewHint,
-                      style: TextStyle(color: colors.onSurfaceVariant)),
-                  const SizedBox(height: 16),
-                  Wrap(spacing: 10, runSpacing: 8, children: [
-                    FilledButton.tonalIcon(
-                        onPressed: busy ? null : () => finish(true),
-                        icon: const Icon(Icons.check_rounded),
-                        label: Text(l.acceptancePass)),
-                    OutlinedButton.icon(
-                        onPressed: busy ? null : () => finish(false),
-                        icon: const Icon(Icons.close_rounded),
-                        label: Text(l.acceptanceFail)),
-                  ]),
-                ])),
           if (run.phase != 'planning' || run.artifacts.isNotEmpty)
             AppCard(
                 child: Column(
@@ -1112,9 +1178,32 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
                     );
                   }),
                 ])),
+          if (run.running)
+            AppCard(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                  Text(l.acceptanceReview, style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 6),
+                  Text(l.acceptanceReviewHint,
+                      style: TextStyle(color: colors.onSurfaceVariant)),
+                  const SizedBox(height: 16),
+                  Wrap(spacing: 10, runSpacing: 8, children: [
+                    FilledButton.tonalIcon(
+                        onPressed: busy ? null : () => finish(true),
+                        icon: const Icon(Icons.check_rounded),
+                        label: Text(l.acceptancePass)),
+                    OutlinedButton.icon(
+                        onPressed: busy ? null : () => finish(false),
+                        icon: const Icon(Icons.close_rounded),
+                        label: Text(l.acceptanceFail)),
+                  ]),
+                ])),
           AppCard(
               padding: EdgeInsets.zero,
               child: ExpansionTile(
+                tilePadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 shape: const Border(),
                 collapsedShape: const Border(),
                 leading: const Icon(Icons.code_rounded),
@@ -1271,7 +1360,8 @@ class AcceptanceDesktopScreen extends StatefulWidget {
       _AcceptanceDesktopScreenState();
 }
 
-class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
+class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen>
+    with WidgetsBindingObserver {
   static const _platform = MethodChannel('omni_code/app_update');
   late final WebViewController controller;
   bool loading = true;
@@ -1281,12 +1371,17 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
   bool changingOrientation = false;
   bool orientationOverridden = false;
   bool fullscreen = false;
+  bool wasBackgrounded = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..addJavaScriptChannel('DesktopClipboard', onMessageReceived: (message) {
+        unawaited(Clipboard.setData(ClipboardData(text: message.message)));
+      })
       ..addJavaScriptChannel('DesktopKeyboard', onMessageReceived: (message) {
         if (message.message == 'show' &&
             !kIsWeb &&
@@ -1323,6 +1418,15 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
     loadDesktop(widget.url);
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) wasBackgrounded = true;
+    if (state == AppLifecycleState.resumed && wasBackgrounded) {
+      wasBackgrounded = false;
+      if (!closing) unawaited(loadDesktop());
+    }
+  }
+
   Future<void> toggleOrientation() async {
     if (changingOrientation || closing) return;
     final landscape = MediaQuery.orientationOf(context) == Orientation.portrait;
@@ -1357,6 +1461,7 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(restoreOrientation());
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     super.dispose();
@@ -1442,6 +1547,11 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen> {
             : AppBar(
                 title: Text(widget.title),
                 actions: [
+                  IconButton(
+                      onPressed:
+                          loading || closing ? null : () => loadDesktop(),
+                      tooltip: l.retry,
+                      icon: const Icon(Icons.refresh)),
                   IconButton(
                       key: const Key('acceptance-desktop-fullscreen'),
                       onPressed: toggleFullscreen,

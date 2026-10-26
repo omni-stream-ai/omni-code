@@ -1116,5 +1116,20 @@
   "acceptanceEnvironmentPending": "Waiting to prepare the project environment",
   "acceptanceEnvironmentRequired": "Enter an image name or Dockerfile.",
   "acceptanceFullscreen": "Fullscreen desktop",
-  "acceptanceExitFullscreen": "Exit fullscreen"
+  "acceptanceExitFullscreen": "Exit fullscreen",
+  "acceptanceIntro": "Verify every delivery, from requirements to results",
+  "acceptanceIntroHint": "Review the test plan, watch the app run, and confirm the result.",
+  "acceptanceEntryHint": "Test plans · Live desktop · Evidence replay",
+  "acceptanceStagePlan": "Plan",
+  "acceptanceStageEnvironment": "Prepare",
+  "acceptanceStageRun": "Test",
+  "acceptanceStageReview": "Review",
+  "acceptanceAdvanced": "Launch options",
+  "acceptanceAdvancedHint": "Launch settings are detected automatically",
+  "acceptanceEmptyHint": "Start your first acceptance run. Plans and results will appear here.",
+  "acceptanceEnvironmentOverview": "A workspace ready for your app",
+  "acceptanceDeviceMobile": "Phone",
+  "acceptanceDeviceTablet": "Tablet",
+  "acceptanceDeviceLaptop": "Laptop",
+  "acceptanceDeviceDesktop": "Desktop"
 }

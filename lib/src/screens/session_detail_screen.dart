@@ -1,4 +1,5 @@
 import 'acceptance_screen.dart';
+import '../widgets/acceptance_ui.dart';
 import 'dart:async';
 import 'dart:ui';
 import 'dart:convert';
@@ -2176,10 +2177,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           icon: Icons.add_comment_outlined,
           onTap: _startNewSessionFromCurrentProject,
         ),
-        _buildSessionHeaderActionTile(
+        AcceptanceIntro(
           key: const Key('session-header-acceptance-button'),
-          label: context.l10n.acceptanceTitle,
-          icon: Icons.fact_check_outlined,
+          title: context.l10n.acceptanceTitle,
+          subtitle: context.l10n.acceptanceEntryHint,
           onTap: () {
             _sessionHeaderMenuController.close();
             Navigator.of(context).push(MaterialPageRoute<void>(

@@ -2541,4 +2541,49 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get acceptanceExitFullscreen => '退出全屏';
+
+  @override
+  String get acceptanceIntro => '从需求到结果，验证每一次交付';
+
+  @override
+  String get acceptanceIntroHint => '确认测试用例，查看应用运行过程，再决定是否通过。';
+
+  @override
+  String get acceptanceEntryHint => '测试用例 · 远程操作 · 结果回放';
+
+  @override
+  String get acceptanceStagePlan => '确认方案';
+
+  @override
+  String get acceptanceStageEnvironment => '准备环境';
+
+  @override
+  String get acceptanceStageRun => '执行检查';
+
+  @override
+  String get acceptanceStageReview => '查看结果';
+
+  @override
+  String get acceptanceAdvanced => '启动选项';
+
+  @override
+  String get acceptanceAdvancedHint => '自动识别启动方式，可按需调整';
+
+  @override
+  String get acceptanceEmptyHint => '开始第一次验收，测试方案和结果都会保存在这里。';
+
+  @override
+  String get acceptanceEnvironmentOverview => '为应用准备合适的运行空间';
+
+  @override
+  String get acceptanceDeviceMobile => '手机';
+
+  @override
+  String get acceptanceDeviceTablet => '平板';
+
+  @override
+  String get acceptanceDeviceLaptop => '笔记本';
+
+  @override
+  String get acceptanceDeviceDesktop => '桌面';
 }

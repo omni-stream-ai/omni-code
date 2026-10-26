@@ -9,6 +9,7 @@ import 'package:omni_code/l10n/generated/app_localizations.dart';
 import 'package:omni_code/src/bridge_client.dart';
 import 'package:omni_code/src/acceptance_models.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
+import 'package:omni_code/src/theme/app_theme.dart';
 import 'package:omni_code/src/screens/acceptance_screen.dart';
 import 'package:omni_code/src/screens/acceptance_environment_screen.dart';
 
@@ -83,7 +84,9 @@ void main() {
     await tester.enterText(
         find.byKey(const Key('acceptance-environment-dockerfile')),
         'FROM {{BASE_IMAGE}}\nUSER x11box');
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(SwitchListTile));
     await tester.pumpAndSettle();
     await tester
@@ -128,6 +131,57 @@ void main() {
     await tester.tap(logs);
     await tester.pumpAndSettle();
     expect(find.text('Missing GTK development libraries'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('environment preparation stays visibly busy until it finishes',
+      (tester) async {
+    Map<String, dynamic> data = {...runJson()};
+    final client =
+        BridgeClient(httpClient: MockClient((_) async => response(data)));
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: AcceptanceDetailScreen(
+          run: AcceptanceRun.fromJson(data), client: client),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const Key('acceptance-journey-loading')), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+    data = {
+      ...data,
+      'environment': {
+        'id': 'environment-a',
+        'name': 'Flutter Linux',
+        'phase': 'building',
+        'progress': 'Installing Flutter dependencies',
+      }
+    };
+    await tester.tap(find.byTooltip('Retry'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const Key('acceptance-journey-loading')), findsOneWidget);
+    expect(find.text('Installing Flutter dependencies'), findsOneWidget);
+
+    data = {
+      ...data,
+      'phase': 'failed',
+      'environment': {
+        'id': 'environment-a',
+        'name': 'Flutter Linux',
+        'phase': 'failed',
+        'error': 'Dependency installation failed',
+      }
+    };
+    await tester.tap(find.byTooltip('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.text('Dependency installation failed'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
@@ -357,6 +411,7 @@ void main() {
       throw StateError('Unexpected request');
     }));
     await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.lightTheme,
       locale: const Locale('en'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -373,6 +428,17 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
     expect(find.text('Ready'), findsOneWidget);
+    final readyTile = find.ancestor(
+        of: find.text('Ready'), matching: find.byType(ExpansionTile));
+    final leading = find.descendant(
+        of: readyTile,
+        matching: find.byIcon(Icons.check_circle_outline_rounded));
+    final trailing = find.descendant(
+        of: readyTile, matching: find.byIcon(Icons.expand_more));
+    expect(tester.getTopLeft(leading).dx - tester.getTopLeft(readyTile).dx,
+        greaterThanOrEqualTo(16));
+    expect(tester.getTopRight(readyTile).dx - tester.getTopRight(trailing).dx,
+        greaterThanOrEqualTo(16));
     expect(find.text('Start acceptance'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

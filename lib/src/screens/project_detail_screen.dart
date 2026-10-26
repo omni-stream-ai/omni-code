@@ -1,3 +1,4 @@
+import '../widgets/acceptance_ui.dart';
 import 'acceptance_screen.dart';
 import 'dart:async';
 
@@ -387,7 +388,12 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
               _buildHeader(context),
               const SizedBox(height: AppSpacing.card),
               _buildProjectSummaryCard(context),
-              TextButton.icon(onPressed: _openAcceptance, icon: const Icon(Icons.fact_check_outlined), label: Text(context.l10n.acceptanceTitle)),
+              Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: AcceptanceIntro(
+                      title: context.l10n.acceptanceTitle,
+                      subtitle: context.l10n.acceptanceEntryHint,
+                      onTap: _openAcceptance)),
               const SizedBox(height: AppSpacing.card),
               _buildAiApprovalSettingsCard(context),
               const SizedBox(height: AppSpacing.card),
@@ -427,7 +433,12 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _buildDesktopHero(context, sessions),
-                    TextButton.icon(onPressed: _openAcceptance, icon: const Icon(Icons.fact_check_outlined), label: Text(context.l10n.acceptanceTitle)),
+                    Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: AcceptanceIntro(
+                            title: context.l10n.acceptanceTitle,
+                            subtitle: context.l10n.acceptanceEntryHint,
+                            onTap: _openAcceptance)),
                     const SizedBox(height: AppSpacing.card),
                     _buildSearchSection(context),
                     const SizedBox(height: AppSpacing.card),
@@ -453,8 +464,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
   }
 
   void _openAcceptance() {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AcceptanceScreen(
-      client: _client, projectId: widget.project.id, automatic: false)));
+    Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => AcceptanceScreen(
+            client: _client, projectId: widget.project.id, automatic: false)));
   }
 
   Widget _buildHeader(BuildContext context) {

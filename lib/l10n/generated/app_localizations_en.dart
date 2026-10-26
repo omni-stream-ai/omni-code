@@ -2658,4 +2658,54 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get acceptanceExitFullscreen => 'Exit fullscreen';
+
+  @override
+  String get acceptanceIntro =>
+      'Verify every delivery, from requirements to results';
+
+  @override
+  String get acceptanceIntroHint =>
+      'Review the test plan, watch the app run, and confirm the result.';
+
+  @override
+  String get acceptanceEntryHint =>
+      'Test plans · Live desktop · Evidence replay';
+
+  @override
+  String get acceptanceStagePlan => 'Plan';
+
+  @override
+  String get acceptanceStageEnvironment => 'Prepare';
+
+  @override
+  String get acceptanceStageRun => 'Test';
+
+  @override
+  String get acceptanceStageReview => 'Review';
+
+  @override
+  String get acceptanceAdvanced => 'Launch options';
+
+  @override
+  String get acceptanceAdvancedHint =>
+      'Launch settings are detected automatically';
+
+  @override
+  String get acceptanceEmptyHint =>
+      'Start your first acceptance run. Plans and results will appear here.';
+
+  @override
+  String get acceptanceEnvironmentOverview => 'A workspace ready for your app';
+
+  @override
+  String get acceptanceDeviceMobile => 'Phone';
+
+  @override
+  String get acceptanceDeviceTablet => 'Tablet';
+
+  @override
+  String get acceptanceDeviceLaptop => 'Laptop';
+
+  @override
+  String get acceptanceDeviceDesktop => 'Desktop';
 }

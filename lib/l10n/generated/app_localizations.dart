@@ -4735,6 +4735,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Exit fullscreen'**
   String get acceptanceExitFullscreen;
+
+  /// No description provided for @acceptanceIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify every delivery, from requirements to results'**
+  String get acceptanceIntro;
+
+  /// No description provided for @acceptanceIntroHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Review the test plan, watch the app run, and confirm the result.'**
+  String get acceptanceIntroHint;
+
+  /// No description provided for @acceptanceEntryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Test plans · Live desktop · Evidence replay'**
+  String get acceptanceEntryHint;
+
+  /// No description provided for @acceptanceStagePlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Plan'**
+  String get acceptanceStagePlan;
+
+  /// No description provided for @acceptanceStageEnvironment.
+  ///
+  /// In en, this message translates to:
+  /// **'Prepare'**
+  String get acceptanceStageEnvironment;
+
+  /// No description provided for @acceptanceStageRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Test'**
+  String get acceptanceStageRun;
+
+  /// No description provided for @acceptanceStageReview.
+  ///
+  /// In en, this message translates to:
+  /// **'Review'**
+  String get acceptanceStageReview;
+
+  /// No description provided for @acceptanceAdvanced.
+  ///
+  /// In en, this message translates to:
+  /// **'Launch options'**
+  String get acceptanceAdvanced;
+
+  /// No description provided for @acceptanceAdvancedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Launch settings are detected automatically'**
+  String get acceptanceAdvancedHint;
+
+  /// No description provided for @acceptanceEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Start your first acceptance run. Plans and results will appear here.'**
+  String get acceptanceEmptyHint;
+
+  /// No description provided for @acceptanceEnvironmentOverview.
+  ///
+  /// In en, this message translates to:
+  /// **'A workspace ready for your app'**
+  String get acceptanceEnvironmentOverview;
+
+  /// No description provided for @acceptanceDeviceMobile.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone'**
+  String get acceptanceDeviceMobile;
+
+  /// No description provided for @acceptanceDeviceTablet.
+  ///
+  /// In en, this message translates to:
+  /// **'Tablet'**
+  String get acceptanceDeviceTablet;
+
+  /// No description provided for @acceptanceDeviceLaptop.
+  ///
+  /// In en, this message translates to:
+  /// **'Laptop'**
+  String get acceptanceDeviceLaptop;
+
+  /// No description provided for @acceptanceDeviceDesktop.
+  ///
+  /// In en, this message translates to:
+  /// **'Desktop'**
+  String get acceptanceDeviceDesktop;
 }
 
 class _AppLocalizationsDelegate

@@ -105,16 +105,20 @@ void main() {
     }));
     await showPlan(tester, client);
     expect(confirmations, 0);
-    expect(find.text('Invalid login'), findsNothing);
-    expect(find.text('1. Invalid login'), findsOneWidget);
+    expect(find.text('Invalid login'), findsOneWidget);
     await tester
         .ensureVisible(find.byKey(const Key('acceptance-plan-confirm')));
     await tester.tap(find.byKey(const Key('acceptance-plan-confirm')));
     await tester.pumpAndSettle();
     expect(confirmations, 1);
+    expect(find.text('Invalid login'), findsNothing);
+    await tester.ensureVisible(find.byType(ExpansionTile));
+    await tester.tap(find.byType(ExpansionTile));
+    await tester.pumpAndSettle();
+    expect(find.text('Invalid login'), findsOneWidget);
     expect(find.byKey(const Key('acceptance-plan-confirm')), findsNothing);
     expect(find.text('Confirmed. Acceptance will follow these test cases.'),
-        findsOneWidget);
+        findsNWidgets(2));
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -147,7 +151,7 @@ void main() {
     expect(body!['version'], 1);
     expect(body!['cases'][0]['steps'],
         ['Open login', 'Enter an invalid password']);
-    expect(find.text('1. Show login errors'), findsOneWidget);
+    expect(find.text('Show login errors'), findsOneWidget);
     expect(find.text('v2'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
@@ -197,7 +201,7 @@ void main() {
     await tester.tap(find.byKey(const Key('acceptance-plan-confirm')));
     await tester.pumpAndSettle();
     expect(find.textContaining('Test cases changed.'), findsOneWidget);
-    expect(find.text('1. Invalid login'), findsOneWidget);
+    expect(find.text('Invalid login'), findsOneWidget);
     expect(
         tester
             .widget<FilledButton>(
