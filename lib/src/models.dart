@@ -344,7 +344,8 @@ class DomainActivity {
       this.primary,
       required this.secondary,
       required this.payload,
-      required this.createdAt});
+      required this.createdAt,
+      this.updatedAt});
   final String id, segmentId, title;
   final int revision;
   final DomainActivityKind kind;
@@ -353,6 +354,7 @@ class DomainActivity {
   final List<String> secondary;
   final Map<String, dynamic> payload;
   final DateTime createdAt;
+  final DateTime? updatedAt;
   factory DomainActivity.fromJson(Map<String, dynamic> json) => DomainActivity(
         id: json['id'] as String,
         segmentId: json['segment_id'] as String,
@@ -366,6 +368,7 @@ class DomainActivity {
             .toList(growable: false),
         payload: json['payload'] as Map<String, dynamic>? ?? const {},
         createdAt: DateTime.parse(json['created_at'] as String),
+        updatedAt: DateTime.tryParse(json['updated_at'] as String? ?? ''),
       );
 }
 
@@ -425,6 +428,129 @@ class DomainArtifact {
       );
 }
 
+enum ExecutionPhase {
+  starting,
+  thinking,
+  runningCommand,
+  awaitingApproval,
+  retrying,
+  waitingForTool,
+  background,
+  unconfirmed,
+}
+
+class ExecutionHealth {
+  const ExecutionHealth(
+      {required this.phase,
+      required this.phaseStartedAt,
+      required this.lastProgressAt,
+      this.lastCheckedAt,
+      this.checkStartedAt,
+      this.checkError});
+  final ExecutionPhase phase;
+  final DateTime phaseStartedAt, lastProgressAt;
+  final DateTime? lastCheckedAt, checkStartedAt;
+  final String? checkError;
+
+  factory ExecutionHealth.fromJson(Map<String, dynamic> json) =>
+      ExecutionHealth(
+        phase: switch (json['phase']) {
+          'starting' => ExecutionPhase.starting,
+          'thinking' => ExecutionPhase.thinking,
+          'running_command' => ExecutionPhase.runningCommand,
+          'awaiting_approval' => ExecutionPhase.awaitingApproval,
+          'retrying' => ExecutionPhase.retrying,
+          'waiting_for_tool' => ExecutionPhase.waitingForTool,
+          'background' => ExecutionPhase.background,
+          _ => ExecutionPhase.unconfirmed,
+        },
+        phaseStartedAt: DateTime.parse(json['phase_started_at'] as String),
+        lastProgressAt: DateTime.parse(json['last_progress_at'] as String),
+        lastCheckedAt:
+            DateTime.tryParse(json['last_checked_at'] as String? ?? ''),
+        checkStartedAt:
+            DateTime.tryParse(json['check_started_at'] as String? ?? ''),
+        checkError: json['check_error'] as String?,
+      );
+
+  bool needsAttention(DateTime now) {
+    final seconds = switch (phase) {
+      ExecutionPhase.awaitingApproval => null,
+      ExecutionPhase.starting => 60,
+      ExecutionPhase.unconfirmed => 30,
+      ExecutionPhase.waitingForTool || ExecutionPhase.retrying => 120,
+      ExecutionPhase.thinking => 180,
+      ExecutionPhase.runningCommand || ExecutionPhase.background => 300,
+    };
+    return seconds != null &&
+        now.difference(lastProgressAt).inSeconds >= seconds &&
+        now.difference(phaseStartedAt).inSeconds >= seconds;
+  }
+
+  // Older Bridges have no execution metadata. Derive a conservative display
+  // from actual replies and tool events, excluding watchdog observations.
+  static ExecutionHealth forTurn(DomainTurn turn) {
+    if (turn.execution != null) return turn.execution!;
+    var phase = ExecutionPhase.starting;
+    var phaseAt = turn.userMessage.createdAt;
+    var progressAt = phaseAt;
+    void observe(ExecutionPhase next, DateTime at, {bool progress = true}) {
+      if (phase != next && !at.isBefore(phaseAt)) {
+        phase = next;
+        phaseAt = at;
+      }
+      if (progress && at.isAfter(progressAt)) progressAt = at;
+    }
+
+    for (final segment in turn.segments) {
+      final message = segment.message;
+      if (message != null && message.content.trim().isNotEmpty) {
+        observe(ExecutionPhase.thinking, message.updatedAt);
+      }
+      for (final activity in segment.activities) {
+        final title = activity.title;
+        if (title.startsWith('[codex:retry]')) {
+          observe(ExecutionPhase.retrying, activity.createdAt, progress: false);
+          continue;
+        }
+        if (title.startsWith('[command:stalled]')) {
+          observe(ExecutionPhase.unconfirmed, activity.createdAt,
+              progress: false);
+          continue;
+        }
+        if ([
+          '[status]',
+          '[thread]',
+          '[debug:',
+          '[moderation]',
+          '[codex:watchdog]'
+        ].any(title.startsWith)) {
+          continue;
+        }
+        final at = activity.updatedAt ?? activity.createdAt;
+        if (activity.kind == DomainActivityKind.approval &&
+            activity.state == DomainEntityState.awaitingApproval) {
+          observe(ExecutionPhase.awaitingApproval, at);
+        } else if (activity.kind == DomainActivityKind.toolCall &&
+            activity.state == DomainEntityState.running) {
+          observe(
+              activity.payload['process_id'] == null
+                  ? ExecutionPhase.waitingForTool
+                  : ExecutionPhase.runningCommand,
+              at);
+        } else if (activity.kind != DomainActivityKind.progress) {
+          observe(ExecutionPhase.thinking, at);
+        }
+      }
+    }
+    if (turn.status == DomainTurnStatus.awaitingApproval) {
+      phase = ExecutionPhase.awaitingApproval;
+    }
+    return ExecutionHealth(
+        phase: phase, phaseStartedAt: phaseAt, lastProgressAt: progressAt);
+  }
+}
+
 class DomainTurn {
   const DomainTurn(
       {required this.id,
@@ -435,7 +561,8 @@ class DomainTurn {
       required this.userMessage,
       required this.segments,
       required this.artifacts,
-      this.finalAssistantMessageId});
+      this.finalAssistantMessageId,
+      this.execution});
   final String id;
   final int sequence, version;
   final DomainTurnStatus status;
@@ -444,6 +571,7 @@ class DomainTurn {
   final List<DomainSegment> segments;
   final List<DomainArtifact> artifacts;
   final String? finalAssistantMessageId;
+  final ExecutionHealth? execution;
   factory DomainTurn.fromJson(Map<String, dynamic> json) => DomainTurn(
         id: json['id'] as String,
         sequence: (json['sequence'] as num?)?.toInt() ?? 0,
@@ -461,6 +589,10 @@ class DomainTurn {
             .map(DomainArtifact.fromJson)
             .toList(growable: false),
         finalAssistantMessageId: json['final_assistant_message_id'] as String?,
+        execution: json['execution'] is Map<String, dynamic>
+            ? ExecutionHealth.fromJson(
+                json['execution'] as Map<String, dynamic>)
+            : null,
       );
 }
 

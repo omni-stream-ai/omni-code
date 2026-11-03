@@ -2708,4 +2708,95 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get acceptanceDeviceDesktop => 'Desktop';
+
+  @override
+  String get executionStarting => 'Waiting for task to start';
+
+  @override
+  String get executionThinking => 'Processing';
+
+  @override
+  String get executionRunningCommand => 'Command running';
+
+  @override
+  String get executionAwaitingApproval => 'Waiting for approval';
+
+  @override
+  String get executionRetrying => 'Retrying connection';
+
+  @override
+  String get executionWaitingForTool => 'Waiting for tool results';
+
+  @override
+  String get executionBackground => 'Waiting for background work';
+
+  @override
+  String get executionUnconfirmed => 'Execution status unconfirmed';
+
+  @override
+  String executionNoProgressMinutes(int minutes) {
+    return 'No new progress for $minutes min';
+  }
+
+  @override
+  String executionNoProgressSeconds(int seconds) {
+    return 'No new progress for ${seconds}s';
+  }
+
+  @override
+  String get executionRecentProgress => 'Recent progress received';
+
+  @override
+  String get executionLongWait => 'No recent progress';
+
+  @override
+  String get executionCheck => 'Check again';
+
+  @override
+  String get executionChecking => 'Checking status';
+
+  @override
+  String get executionCheckUnavailable =>
+      'Live status checks are unavailable. The saved session state has been refreshed.';
+
+  @override
+  String get executionCheckFailed =>
+      'Unable to confirm execution status. You can check again or keep waiting.';
+
+  @override
+  String get executionProviderApproval =>
+      'The agent is waiting for approval. Check pending requests.';
+
+  @override
+  String get executionProviderInput =>
+      'The agent is waiting for your input. Check pending questions.';
+
+  @override
+  String get executionProviderIdle =>
+      'The agent is idle, but this turn has no completion result. You can stop and continue.';
+
+  @override
+  String get executionProviderError =>
+      'The agent encountered an error. You can stop and continue.';
+
+  @override
+  String get executionCheckTimeout =>
+      'The status check did not respond in time. You can check again.';
+
+  @override
+  String get executionKeepWaiting => 'Keep waiting';
+
+  @override
+  String get executionStopContinue => 'Stop this turn and continue';
+
+  @override
+  String get executionRecovering => 'Continuing task';
+
+  @override
+  String get executionRecoveryFailed =>
+      'Could not continue the task. Check its current status before trying again.';
+
+  @override
+  String get executionContinueMessage =>
+      'Continue the unfinished task. First check existing execution results and active processes, then resume the remaining steps without repeating completed operations.';
 }

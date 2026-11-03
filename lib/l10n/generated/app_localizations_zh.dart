@@ -2586,4 +2586,87 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get acceptanceDeviceDesktop => '桌面';
+
+  @override
+  String get executionStarting => '等待任务启动';
+
+  @override
+  String get executionThinking => '正在处理';
+
+  @override
+  String get executionRunningCommand => '命令执行中';
+
+  @override
+  String get executionAwaitingApproval => '等待审批';
+
+  @override
+  String get executionRetrying => '网络重试中';
+
+  @override
+  String get executionWaitingForTool => '等待工具结果';
+
+  @override
+  String get executionBackground => '等待后台任务';
+
+  @override
+  String get executionUnconfirmed => '执行状态待确认';
+
+  @override
+  String executionNoProgressMinutes(int minutes) {
+    return '已 $minutes 分钟没有新进展';
+  }
+
+  @override
+  String executionNoProgressSeconds(int seconds) {
+    return '已 $seconds 秒没有新进展';
+  }
+
+  @override
+  String get executionRecentProgress => '最近收到新进展';
+
+  @override
+  String get executionLongWait => '长时间没有新进展';
+
+  @override
+  String get executionCheck => '重新检查';
+
+  @override
+  String get executionChecking => '正在检查状态';
+
+  @override
+  String get executionCheckUnavailable => '暂时无法主动核实执行状态，已刷新现有会话状态。';
+
+  @override
+  String get executionCheckFailed => '暂时无法确认执行状态，可以重新检查或继续等待。';
+
+  @override
+  String get executionProviderApproval => '执行端正在等待审批，请检查审批请求。';
+
+  @override
+  String get executionProviderInput => '执行端正在等待你补充信息，请检查待回答的问题。';
+
+  @override
+  String get executionProviderIdle => '执行端已空闲，但本轮完成结果未返回，可以停止并继续。';
+
+  @override
+  String get executionProviderError => '执行端发生异常，可以停止并继续。';
+
+  @override
+  String get executionCheckTimeout => '状态检查未及时返回，可以重新检查。';
+
+  @override
+  String get executionKeepWaiting => '继续等待';
+
+  @override
+  String get executionStopContinue => '停止本轮后继续';
+
+  @override
+  String get executionRecovering => '正在继续任务';
+
+  @override
+  String get executionRecoveryFailed => '未能继续任务，请检查当前状态后重试。';
+
+  @override
+  String get executionContinueMessage =>
+      '继续未完成的任务。先核对已有执行结果和当前进程，从尚未完成的步骤继续，避免重复执行已完成的操作。';
 }

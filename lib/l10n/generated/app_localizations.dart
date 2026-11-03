@@ -4825,6 +4825,162 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Desktop'**
   String get acceptanceDeviceDesktop;
+
+  /// No description provided for @executionStarting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for task to start'**
+  String get executionStarting;
+
+  /// No description provided for @executionThinking.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing'**
+  String get executionThinking;
+
+  /// No description provided for @executionRunningCommand.
+  ///
+  /// In en, this message translates to:
+  /// **'Command running'**
+  String get executionRunningCommand;
+
+  /// No description provided for @executionAwaitingApproval.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for approval'**
+  String get executionAwaitingApproval;
+
+  /// No description provided for @executionRetrying.
+  ///
+  /// In en, this message translates to:
+  /// **'Retrying connection'**
+  String get executionRetrying;
+
+  /// No description provided for @executionWaitingForTool.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for tool results'**
+  String get executionWaitingForTool;
+
+  /// No description provided for @executionBackground.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for background work'**
+  String get executionBackground;
+
+  /// No description provided for @executionUnconfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'Execution status unconfirmed'**
+  String get executionUnconfirmed;
+
+  /// No description provided for @executionNoProgressMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'No new progress for {minutes} min'**
+  String executionNoProgressMinutes(int minutes);
+
+  /// No description provided for @executionNoProgressSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'No new progress for {seconds}s'**
+  String executionNoProgressSeconds(int seconds);
+
+  /// No description provided for @executionRecentProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent progress received'**
+  String get executionRecentProgress;
+
+  /// No description provided for @executionLongWait.
+  ///
+  /// In en, this message translates to:
+  /// **'No recent progress'**
+  String get executionLongWait;
+
+  /// No description provided for @executionCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'Check again'**
+  String get executionCheck;
+
+  /// No description provided for @executionChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking status'**
+  String get executionChecking;
+
+  /// No description provided for @executionCheckUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Live status checks are unavailable. The saved session state has been refreshed.'**
+  String get executionCheckUnavailable;
+
+  /// No description provided for @executionCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to confirm execution status. You can check again or keep waiting.'**
+  String get executionCheckFailed;
+
+  /// No description provided for @executionProviderApproval.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent is waiting for approval. Check pending requests.'**
+  String get executionProviderApproval;
+
+  /// No description provided for @executionProviderInput.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent is waiting for your input. Check pending questions.'**
+  String get executionProviderInput;
+
+  /// No description provided for @executionProviderIdle.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent is idle, but this turn has no completion result. You can stop and continue.'**
+  String get executionProviderIdle;
+
+  /// No description provided for @executionProviderError.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent encountered an error. You can stop and continue.'**
+  String get executionProviderError;
+
+  /// No description provided for @executionCheckTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'The status check did not respond in time. You can check again.'**
+  String get executionCheckTimeout;
+
+  /// No description provided for @executionKeepWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep waiting'**
+  String get executionKeepWaiting;
+
+  /// No description provided for @executionStopContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop this turn and continue'**
+  String get executionStopContinue;
+
+  /// No description provided for @executionRecovering.
+  ///
+  /// In en, this message translates to:
+  /// **'Continuing task'**
+  String get executionRecovering;
+
+  /// No description provided for @executionRecoveryFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not continue the task. Check its current status before trying again.'**
+  String get executionRecoveryFailed;
+
+  /// No description provided for @executionContinueMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue the unfinished task. First check existing execution results and active processes, then resume the remaining steps without repeating completed operations.'**
+  String get executionContinueMessage;
 }
 
 class _AppLocalizationsDelegate

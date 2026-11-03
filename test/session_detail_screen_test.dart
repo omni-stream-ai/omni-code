@@ -7806,54 +7806,312 @@ void main() {
     });
   }
 
-  testWidgets('active tool activity shows a loading indicator', (tester) async {
-    final messages = [
-      _messageJson(
-        id: 'user-1',
-        sessionId: 'session-1',
-        role: 'user',
-        content: 'Inspect this project',
-        createdAt: '2026-05-09T10:00:00.000',
-      ),
-      _messageJson(
-        id: 'assistant-1',
-        sessionId: 'session-1',
-        role: 'assistant',
-        content: '',
-        createdAt: '2026-05-09T10:00:00.500',
-      ),
-      _messageJson(
-        id: 'system-1',
-        sessionId: 'session-1',
-        role: 'system',
-        content: '[command:started] rg -n "tool" lib/src',
-        createdAt: '2026-05-09T10:00:01.000',
-      ),
-    ];
-    final client = _clientForDomainState(
-      _domainStateJson(messages, status: 'running'),
-    );
+  for (final terminalStatus in ['completed', 'cancelled']) {
+    for (final update in ['snapshot', 'event', 'recovery']) {
+      testWidgets(
+          'terminal domain $update clears stale running state when $terminalStatus',
+          (tester) async {
+        final messages = [
+          _messageJson(
+            id: 'user-1',
+            sessionId: 'session-1',
+            role: 'user',
+            content: 'Build Android APK',
+            createdAt: '2026-05-09T10:00:00.000',
+          ),
+          _messageJson(
+            id: 'assistant-1',
+            sessionId: 'session-1',
+            role: 'assistant',
+            content: 'Waiting for Android build',
+            createdAt: '2026-05-09T10:00:01.000',
+          ),
+          _messageJson(
+            id: 'command-1',
+            sessionId: 'session-1',
+            role: 'system',
+            content: '[command:completed] ps -eo pid,ppid,comm',
+            createdAt: '2026-05-09T10:00:02.000',
+          ),
+        ];
+        final running = _domainStateJson(messages, status: 'running');
+        final terminal = _domainStateJson(messages, cursor: 1);
+        final terminalTurn = (terminal['turns'] as List).single as Map;
+        terminalTurn['status'] = terminalStatus;
+        terminalTurn['version'] = 2;
+        // Older Bridge snapshots can leave the nested partial reply running
+        // after its owning turn has already ended.
+        final assistantSegment =
+            (terminalTurn['segments'] as List).first as Map;
+        (assistantSegment['message'] as Map)['state'] = 'running';
+        var currentState = update == 'snapshot' ? terminal : running;
+        var snapshotLoads = 0;
+        final events = StreamController<List<int>>.broadcast();
+        final client = BridgeClient(
+          httpClient: _StreamingEventHttpClient(
+            events: events.stream,
+            handler: (request) async {
+              if (request.method == 'GET' &&
+                  request.url.path == '/v2/sessions/session-1/state') {
+                snapshotLoads += 1;
+                return http.Response(
+                  jsonEncode({'data': currentState}),
+                  200,
+                  headers: {'content-type': 'application/json'},
+                );
+              }
+              return http.Response('not found', 404);
+            },
+          ),
+        );
+        await tester.pumpWidget(_TestApp(
+          home: SessionDetailScreen(
+            session: _session().copyWith(status: SessionStatus.running),
+            client: client,
+            enableSpeechServices: false,
+          ),
+        ));
+        await tester.pump();
+        await tester.pump();
 
-    await tester.pumpWidget(
-      _TestApp(
-        home: SessionDetailScreen(
-          session: _session().copyWith(status: SessionStatus.running),
-          client: client,
-          enableSpeechServices: false,
+        if (update != 'snapshot') {
+          expect(find.byKey(const Key('session-stop-reply-button')),
+              findsOneWidget);
+          currentState = terminal;
+          events.add(utf8.encode('id: 1\ndata: ${jsonEncode({
+                'event_id': 1,
+                'event_type': 'turn.status_changed',
+                'payload': update == 'recovery'
+                    ? <String, dynamic>{}
+                    : {
+                        'session': terminal['session'],
+                        'turn': terminalTurn,
+                      },
+              })}\n\n'));
+          await tester.pump();
+          await tester.pump();
+          for (var attempt = 0;
+              attempt < 10 &&
+                  find
+                      .byKey(const Key('session-stop-reply-button'))
+                      .evaluate()
+                      .isNotEmpty;
+              attempt += 1) {
+            await tester.pump(const Duration(milliseconds: 20));
+          }
+        }
+
+        expect(snapshotLoads, update == 'recovery' ? 2 : 1);
+        expect(find.text('Waiting for Android build'), findsOneWidget);
+        expect(
+            find.byKey(const Key('session-stop-reply-button')), findsNothing);
+        expect(find.byKey(const ValueKey('tool-entry-loading-indicator')),
+            findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await events.close();
+      });
+    }
+  }
+
+  for (final action in ['check', 'recover']) {
+    testWidgets('execution health $action preserves history and composer draft',
+        (tester) async {
+      final started = DateTime.now().subtract(const Duration(minutes: 10));
+      final messages = [
+        _messageJson(
+            id: 'original-user',
+            sessionId: 'session-1',
+            role: 'user',
+            content: 'Build the APK',
+            createdAt: started.toIso8601String()),
+        _messageJson(
+            id: 'original-reply',
+            sessionId: 'session-1',
+            role: 'assistant',
+            content: 'Library build already completed',
+            createdAt:
+                started.add(const Duration(seconds: 1)).toIso8601String()),
+        _messageJson(
+            id: 'original-command',
+            sessionId: 'session-1',
+            role: 'system',
+            content: '[command:completed] build library',
+            createdAt:
+                started.add(const Duration(seconds: 2)).toIso8601String()),
+      ];
+      var state = _domainStateJson(messages, status: 'running');
+      (state['turns'] as List).single['execution'] = {
+        'phase': 'waiting_for_tool',
+        'phase_started_at': started.toIso8601String(),
+        'last_progress_at': started.toIso8601String(),
+      };
+      var checks = 0;
+      var cancellations = 0;
+      final continuations = <Map<String, dynamic>>[];
+      final events = StreamController<List<int>>.broadcast();
+      final client = BridgeClient(
+          httpClient: _StreamingEventHttpClient(
+              events: events.stream,
+              handler: (request) async {
+                if (request.method == 'GET' &&
+                    request.url.path == '/v2/sessions/session-1/state') {
+                  return http.Response(jsonEncode({'data': state}), 200,
+                      headers: {'content-type': 'application/json'});
+                }
+                if (request.method == 'POST' &&
+                    request.url.path ==
+                        '/v2/sessions/session-1/turns/turn-1/check') {
+                  checks += 1;
+                  ((state['turns'] as List).single['execution']
+                          as Map)['last_checked_at'] =
+                      DateTime.now().toIso8601String();
+                  state['cursor'] = 1;
+                  return http.Response(
+                      jsonEncode({
+                        'data': {'requested': true}
+                      }),
+                      202);
+                }
+                if (request.method == 'POST' &&
+                    request.url.path ==
+                        '/v2/sessions/session-1/turns/turn-1/cancel') {
+                  cancellations += 1;
+                  state = _domainStateJson(messages, cursor: 1);
+                  (state['turns'] as List).single['status'] = 'cancelled';
+                  return http.Response(
+                      jsonEncode({
+                        'data': {'cancelled': true}
+                      }),
+                      200);
+                }
+                if (request.method == 'POST' &&
+                    request.url.path == '/v2/sessions/session-1/turns') {
+                  final body = jsonDecode(request.body) as Map<String, dynamic>;
+                  continuations.add(body);
+                  state = _domainStateJson([
+                    ...messages,
+                    _messageJson(
+                        id: body['user_message_id'] as String,
+                        sessionId: 'session-1',
+                        role: 'user',
+                        content: body['content'] as String,
+                        createdAt: DateTime.now().toIso8601String())
+                  ], status: 'running', cursor: 2);
+                  final turns = state['turns'] as List;
+                  turns.first['status'] = 'cancelled';
+                  turns.last['id'] = body['turn_id'];
+                  (state['session'] as Map)['active_turn_id'] = body['turn_id'];
+                  return http.Response(
+                      jsonEncode({
+                        'data': {'accepted': true, 'turn_id': body['turn_id']}
+                      }),
+                      202);
+                }
+                return http.Response('not found', 404);
+              }));
+      await tester.pumpWidget(_TestApp(
+          home: SessionDetailScreen(
+              session: _session().copyWith(status: SessionStatus.running),
+              client: client,
+              enableSpeechServices: false)));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('No recent progress'), findsOneWidget);
+      expect(find.textContaining('Waiting for tool results'), findsOneWidget);
+      final input = find.byKey(const Key('session-message-input'));
+      await tester.enterText(input, 'Unsent scratch draft');
+      await tester.pump();
+      await tester.tap(find.byKey(Key(action == 'check'
+          ? 'session-execution-check'
+          : 'session-execution-stop-continue')));
+      for (var i = 0; i < 8; i += 1) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      expect(find.text('Library build already completed'), findsOneWidget);
+      final editable = tester.widget<EditableText>(
+          find.descendant(of: input, matching: find.byType(EditableText)));
+      expect(editable.controller.text, 'Unsent scratch draft');
+      expect(checks, action == 'check' ? 1 : 0);
+      expect(cancellations, action == 'recover' ? 1 : 0);
+      expect(continuations, hasLength(action == 'recover' ? 1 : 0));
+      if (action == 'recover') {
+        expect(continuations.single['turn_id'], isNot('turn-1'));
+        expect(continuations.single['content'],
+            contains('without repeating completed operations'));
+        expect(find.text('No recent progress'), findsNothing);
+      } else {
+        expect(find.text('No recent progress'), findsOneWidget);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      await events.close();
+    });
+  }
+
+  for (final stalled in [false, true]) {
+    testWidgets(
+        stalled
+            ? 'execution health stalled tool shows a waiting marker'
+            : 'active tool activity shows a loading indicator', (tester) async {
+      final messages = [
+        _messageJson(
+          id: 'user-1',
+          sessionId: 'session-1',
+          role: 'user',
+          content: 'Inspect this project',
+          createdAt: '2026-05-09T10:00:00.000',
         ),
-      ),
-    );
-    await tester.pump();
+        _messageJson(
+          id: 'assistant-1',
+          sessionId: 'session-1',
+          role: 'assistant',
+          content: '',
+          createdAt: '2026-05-09T10:00:00.500',
+        ),
+        _messageJson(
+          id: 'system-1',
+          sessionId: 'session-1',
+          role: 'system',
+          content: '[command:started] rg -n "tool" lib/src',
+          createdAt: '2026-05-09T10:00:01.000',
+        ),
+      ];
+      final state = _domainStateJson(messages, status: 'running');
+      if (stalled) {
+        final lastProgress = DateTime.now()
+            .subtract(const Duration(minutes: 10))
+            .toIso8601String();
+        (state['turns'] as List).single['execution'] = {
+          'phase': 'waiting_for_tool',
+          'phase_started_at': lastProgress,
+          'last_progress_at': lastProgress
+        };
+      }
+      final client = _clientForDomainState(state);
 
-    expect(find.textContaining('rg -n "tool" lib/src'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('tool-entry-loading-indicator')),
-      findsOneWidget,
-    );
-    expect(find.text('Working...'), findsNothing);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    expect(find.byIcon(Icons.build_outlined), findsNothing);
-  });
+      await tester.pumpWidget(
+        _TestApp(
+          home: SessionDetailScreen(
+            session: _session().copyWith(status: SessionStatus.running),
+            client: client,
+            enableSpeechServices: false,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.textContaining('rg -n "tool" lib/src'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('tool-entry-loading-indicator')),
+        stalled ? findsNothing : findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('tool-entry-waiting-indicator')),
+          stalled ? findsOneWidget : findsNothing);
+      expect(find.text('Working...'), findsNothing);
+      expect(find.byType(CircularProgressIndicator),
+          stalled ? findsNothing : findsOneWidget);
+      expect(find.byIcon(Icons.build_outlined), findsNothing);
+    });
+  }
 
   testWidgets('session initially shows only the most recent turns',
       (tester) async {

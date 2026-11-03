@@ -1065,9 +1065,11 @@ class BridgeClient {
     }
   }
 
-  Future<bool> cancelReply(String sessionId) async {
+  Future<bool> cancelReply(String sessionId, {String? expectedTurnId}) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/v2/sessions/$sessionId/cancel'),
+      Uri.parse(expectedTurnId == null
+          ? '$baseUrl/v2/sessions/$sessionId/cancel'
+          : '$baseUrl/v2/sessions/$sessionId/turns/$expectedTurnId/cancel'),
       headers: _defaultHeaders,
     );
 
@@ -1487,6 +1489,37 @@ class BridgeClient {
     }
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
     return DomainSessionState.fromJson(payload['data'] as Map<String, dynamic>);
+  }
+
+  Future<void> recoverSessionExecution(
+      String sessionId, String turnId, String content) async {
+    final uuid = const Uuid();
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/v2/sessions/$sessionId/turns/$turnId/recover'),
+      headers: {..._defaultHeaders, 'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'command_id': uuid.v4(),
+        'turn_id': uuid.v4(),
+        'user_message_id': uuid.v4(),
+        'content': content,
+        'input_mode': 'text',
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+  }
+
+  Future<bool> checkSessionExecution(String sessionId, String turnId) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/v2/sessions/$sessionId/turns/$turnId/check'),
+      headers: _defaultHeaders,
+    );
+    if (response.statusCode == 404 || response.statusCode == 405) return false;
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+    return _decodeApiData(response.body)['requested'] == true;
   }
 
   Future<void> markDomainSessionRead(String sessionId) async {

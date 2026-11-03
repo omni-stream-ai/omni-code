@@ -48,6 +48,7 @@ import '../widgets/app_skeleton.dart';
 import '../widgets/new_session_flow.dart';
 import '../widgets/session_call_mode_view.dart';
 import '../widgets/session_cache_scope.dart';
+import '../widgets/session_execution_status_card.dart';
 import 'project_ai_approval_prompt_screen.dart';
 import '../../l10n/generated/app_localizations.dart';
 
@@ -976,10 +977,19 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       DomainSessionStatus.failed => SessionStatus.failed,
       DomainSessionStatus.idle => SessionStatus.idle,
     };
-    final hasPendingLocalMessage = _localMessageStates.values.any(
-      (draft) =>
-          draft.state == _LocalMessageState.pending ||
-          draft.state == _LocalMessageState.submitted,
+    final latestTurnStatus = state.turns.lastOrNull?.status;
+    final hasTerminalTurn = latestTurnStatus == DomainTurnStatus.completed ||
+        latestTurnStatus == DomainTurnStatus.cancelled ||
+        latestTurnStatus == DomainTurnStatus.failed;
+    final terminalSnapshot =
+        state.session.activeTurnId == null && hasTerminalTurn;
+    final acceptedUserMessageIds =
+        state.turns.map((turn) => turn.userMessage.id).toSet();
+    final hasPendingLocalMessage = _localMessageStates.entries.any(
+      (entry) =>
+          !acceptedUserMessageIds.contains(entry.key) &&
+          (entry.value.state == _LocalMessageState.pending ||
+              entry.value.state == _LocalMessageState.submitted),
     );
     // A cleared domain approval is authoritative on every connected client.
     final effectivePendingApproval = pendingApproval ??
@@ -988,6 +998,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             ? _pendingApproval
             : null);
     final preserveActiveSessionStatus = domainStatus == SessionStatus.idle &&
+        !terminalSnapshot &&
         (_session.status == SessionStatus.running ||
             _session.status == SessionStatus.waiting);
     final status = effectivePendingApproval != null
@@ -2570,6 +2581,30 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required bool showPendingApprovalInline,
   }) {
     final widgets = <Widget>[];
+    final domain = _domainController?.state;
+    final activeTurnId = domain?.session.activeTurnId;
+    final activeTurn =
+        domain?.turns.where((turn) => turn.id == activeTurnId).firstOrNull;
+    // The actionable approval card already explains why execution is paused.
+    if (activeTurn != null && _pendingApproval == null) {
+      widgets.add(SessionExecutionStatusCard(
+        key: ValueKey('execution-${activeTurn.id}'),
+        health: ExecutionHealth.forTurn(activeTurn),
+        onCheck: () async =>
+            await _domainController?.checkExecution(activeTurn.id) ?? false,
+        onStopAndContinue: () async {
+          final controller = _domainController;
+          if (controller == null || _cancellingReply) return;
+          final content = context.l10n.executionContinueMessage;
+          setState(() => _cancellingReply = true);
+          try {
+            await controller.stopAndContinue(activeTurn.id, content);
+          } finally {
+            if (mounted) setState(() => _cancellingReply = false);
+          }
+        },
+      ));
+    }
     if (_session.status == SessionStatus.failed) {
       widgets.add(
         _buildErrorBanner(
@@ -5264,6 +5299,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required VoidCallback onTap,
   }) {
     final brightness = Theme.of(context).brightness;
+    final waitingForResult = loading &&
+        (_domainController?.state?.turns.lastOrNull?.execution
+                ?.needsAttention(DateTime.now()) ??
+            false);
     final textColor = highlighted
         ? AppColors.textFor(brightness)
         : AppColors.mutedFor(brightness);
@@ -5285,15 +5324,25 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (loading) ...[
-                    SizedBox(
-                      key: const ValueKey('tool-entry-loading-indicator'),
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.8,
-                        color: AppColors.signalFor(brightness),
+                    if (waitingForResult)
+                      Tooltip(
+                          message: context.l10n.executionLongWait,
+                          child: Icon(
+                            Icons.hourglass_empty_rounded,
+                            key: const ValueKey('tool-entry-waiting-indicator'),
+                            size: 14,
+                            color: AppColors.warningTextFor(brightness),
+                          ))
+                    else
+                      SizedBox(
+                        key: const ValueKey('tool-entry-loading-indicator'),
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.8,
+                          color: AppColors.signalFor(brightness),
+                        ),
                       ),
-                    ),
                     const SizedBox(width: AppSpacing.compact),
                   ],
                   Flexible(

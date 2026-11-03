@@ -35,6 +35,7 @@ class SessionController extends ChangeNotifier {
   bool _disposed = false;
   bool _recoveryInFlight = false;
   bool _loadingOlderTurns = false;
+  bool _turnRecoveryInFlight = false;
   bool get loadingOlderTurns => _loadingOlderTurns;
 
   Future<void> start() async {
@@ -70,7 +71,11 @@ class SessionController extends ChangeNotifier {
     connectionState = SessionConnectionState.recovering;
     notifyListeners();
     try {
-      await _subscription?.cancel();
+      final subscription = _subscription;
+      _subscription = null;
+      // An idle SSE stream can wait for more data before cancellation finishes.
+      // Refresh the snapshot immediately; start() invalidates old callbacks.
+      unawaited(subscription?.cancel());
       await start();
     } finally {
       _recoveryInFlight = false;
@@ -227,8 +232,11 @@ class SessionController extends ChangeNotifier {
   Future<void> loadOlderTurns() async {
     final current = _state;
     final before = current?.nextBeforeSequence;
-    if (_disposed || current == null || !current.hasMoreTurns ||
-        before == null || _loadingOlderTurns) {
+    if (_disposed ||
+        current == null ||
+        !current.hasMoreTurns ||
+        before == null ||
+        _loadingOlderTurns) {
       return;
     }
     _loadingOlderTurns = true;
@@ -255,6 +263,44 @@ class SessionController extends ChangeNotifier {
     } finally {
       _loadingOlderTurns = false;
       if (!_disposed) notifyListeners();
+    }
+  }
+
+  Future<bool> checkExecution(String turnId) async {
+    try {
+      return await _client
+          .checkSessionExecution(sessionId, turnId)
+          .timeout(const Duration(seconds: 15));
+    } finally {
+      if (!_disposed) await recover().timeout(const Duration(seconds: 15));
+    }
+  }
+
+  Future<void> stopAndContinue(String turnId, String content) async {
+    if (_disposed || _turnRecoveryInFlight) {
+      throw StateError(
+          'A recovery is already in progress or the session was closed.');
+    }
+    _turnRecoveryInFlight = true;
+    try {
+      if (_state?.session.activeTurnId != turnId) {
+        await recover();
+        throw StateError(
+            'The active turn changed. Refresh the session before recovering it.');
+      }
+      if (queuedCommands.isNotEmpty) {
+        throw StateError(
+            'The session is still busy. Check its status before continuing.');
+      }
+      await _client
+          .recoverSessionExecution(sessionId, turnId, content)
+          .timeout(const Duration(seconds: 30));
+      if (!_disposed) await recover().timeout(const Duration(seconds: 15));
+    } catch (_) {
+      if (!_disposed) await recover().timeout(const Duration(seconds: 15));
+      rethrow;
+    } finally {
+      _turnRecoveryInFlight = false;
     }
   }
 
