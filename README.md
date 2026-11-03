@@ -83,6 +83,12 @@ flutter pub get
 flutter run
 ```
 
+On Nix / NixOS, use the development shell to include the native Linux dependencies:
+
+```bash
+nix develop --command flutter run -d linux
+```
+
 Sentry error and performance monitoring is enabled only when a DSN is supplied:
 
 ```bash

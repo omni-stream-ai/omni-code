@@ -34,7 +34,26 @@
       });
 
       devShells = forAllSystems (pkgs: {
-        default = pkgs.mkShell { packages = with pkgs; [ flutter gtk3 pkg-config ]; };
+        default = pkgs.mkShell {
+          packages = with pkgs; [
+            flutter
+            gtk3
+            pkg-config
+            jdk
+            alsa-lib
+            gst_all_1.gstreamer
+            gst_all_1.gst-plugins-base
+            zlib.out
+            zlib.dev
+          ];
+
+          # JNI needs the JDK home, rather than the root of its Nix output.
+          JAVA_HOME = pkgs.jdk.home;
+
+          # Native plugins use CMake library discovery in addition to pkg-config.
+          CMAKE_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.alsa-lib pkgs.zlib ];
+          CMAKE_INCLUDE_PATH = "${pkgs.zlib.dev}/include";
+        };
       });
     };
 }

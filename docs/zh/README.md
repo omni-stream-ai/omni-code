@@ -84,6 +84,12 @@ flutter pub get
 flutter run
 ```
 
+在 Nix / NixOS 上，使用开发环境加载 Linux 原生依赖：
+
+```bash
+nix develop --command flutter run -d linux
+```
+
 ## 贡献
 
 参见 [CONTRIBUTING.md](../../CONTRIBUTING.md)。项目 TODO 看板在 [GitHub Projects](https://github.com/orgs/omni-stream-ai/projects/2)。
