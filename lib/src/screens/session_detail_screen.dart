@@ -19,6 +19,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
 import '../app_routes.dart';
+import '../widgets/mcp_elicitation_dialog.dart';
+import '../widgets/mcp_content_view.dart';
+import 'mcp_servers_screen.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../message_image_paths.dart';
@@ -2233,6 +2236,20 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           icon: Icons.add_comment_outlined,
           onTap: _startNewSessionFromCurrentProject,
         ),
+        if (_session.agentId == 'codex')
+          _buildSessionHeaderActionTile(
+            key: const Key('session-header-mcp-button'),
+            label: 'MCP',
+            icon: Icons.hub_outlined,
+            onTap: () {
+              _sessionHeaderMenuController.close();
+              Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => McpServersScreen(
+                      client: _client,
+                      sessionId: _session.id,
+                      profileId: _session.profileId ?? 'default')));
+            },
+          ),
         AcceptanceIntro(
           key: const Key('session-header-acceptance-button'),
           title: context.l10n.acceptanceTitle,
@@ -7877,6 +7894,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           value = await _showPiTextInput(request);
           cancelled = value == null;
           break;
+        case 'mcp_elicitation':
+          value = await showMcpElicitation(context, request.payload);
+          cancelled = value == null;
+          break;
         case 'custom':
           value = await _showPiConfirm(request);
           cancelled = value == null;
@@ -10956,10 +10977,65 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
+  Future<void> _readMcpResource(String server, String uri) async {
+    try {
+      final result = await _client
+          .mcpRequest('rpc', method: 'POST', sessionId: _session.id, body: {
+        'method': 'mcpServer/resource/read',
+        'params': {'server': server, 'uri': uri},
+      });
+      if (!mounted) return;
+      await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+                title: Text(uri),
+                content: SizedBox(
+                    width: 640,
+                    child: SingleChildScrollView(
+                        child: McpContentView(
+                            value: result,
+                            onReadResource: (uri) =>
+                                _readMcpResource(server, uri)))),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      child: Text(context.l10n.close)),
+                ],
+              ));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$error')));
+    }
+  }
+
   Widget _buildActivityPayloadDetail(
     Map<String, dynamic> payload,
     String rawContent,
   ) {
+    if (payload['source'] == 'codex_mcp') {
+      return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${payload['server']} / ${payload['tool_name']}',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            if (payload['duration_ms'] != null)
+              Text('${payload['duration_ms']} ms'),
+            if (payload['args'] != null)
+              _detailBlock(context.l10n.detailContent,
+                  const JsonEncoder.withIndent('  ').convert(payload['args'])),
+            if (payload['result'] != null)
+              McpContentView(
+                value: payload['result'],
+                onReadResource: (uri) =>
+                    _readMcpResource('${payload['server']}', uri),
+              ),
+            if (payload['error'] != null)
+              SelectableText(
+                  const JsonEncoder.withIndent('  ').convert(payload['error'])),
+          ]);
+    }
     final brightness = Theme.of(context).brightness;
     final toolName = payload['tool_name'] as String?;
     final args = payload['args'];

@@ -23,6 +23,7 @@ import '../widgets/app_navigation_scaffold.dart';
 import '../widgets/copyable_message.dart';
 import '../widgets/new_session_flow.dart';
 import 'model_provider_screen.dart';
+import 'mcp_servers_screen.dart';
 import 'pi_plugins_screen.dart';
 import 'acceptance_screen.dart';
 import 'ai_approval_prompt_screen.dart';
@@ -383,6 +384,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: AppSpacing.fieldGap),
           _buildAcceptanceSection(context, l10n),
           const SizedBox(height: AppSpacing.fieldGap),
+          _buildMcpSection(context),
+          const SizedBox(height: AppSpacing.stack),
           _buildPiPluginsSection(context, l10n),
           const SizedBox(height: AppSpacing.fieldGap),
           _buildAiApprovalSection(context, l10n, formValueTextStyle),
@@ -572,6 +575,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: AppSpacing.fieldGap),
         _buildAcceptanceSection(context, l10n),
         const SizedBox(height: AppSpacing.fieldGap),
+        _buildMcpSection(context),
+        const SizedBox(height: AppSpacing.stack),
         _buildPiPluginsSection(context, l10n),
         const SizedBox(height: AppSpacing.fieldGap),
         _buildModelProvidersSection(context, l10n),
@@ -662,6 +667,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ]),
     );
   }
+
+  Widget _buildMcpSection(BuildContext context) => AppCard(
+        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => McpServersScreen(client: _client))),
+        padding: AppSpacing.cardPadding,
+        child: const Row(children: [
+          Icon(Icons.hub_outlined),
+          SizedBox(width: AppSpacing.stack),
+          Expanded(child: Text('MCP · Codex')),
+          Icon(Icons.chevron_right_rounded)
+        ]),
+      );
 
   Widget _buildPiPluginsSection(BuildContext context, AppLocalizations l10n) {
     final theme = Theme.of(context);

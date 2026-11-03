@@ -1239,6 +1239,34 @@ class BridgeClient {
     return ProjectAiApprovalSettings.fromJson(_decodeApiData(response.body));
   }
 
+  Future<Map<String, dynamic>> mcpRequest(String path,
+      {String method = 'GET',
+      Map<String, dynamic>? body,
+      String profileId = 'default',
+      String? sessionId}) async {
+    final uri = Uri.parse('$baseUrl/v2/mcp/$path').replace(queryParameters: {
+      'profile_id': profileId,
+      if (sessionId != null) 'session_id': sessionId,
+    });
+    final request = http.Request(method, uri)
+      ..headers
+          .addAll({..._defaultHeaders, 'Content-Type': 'application/json'});
+    if (body != null) request.body = jsonEncode(body);
+    final response =
+        await http.Response.fromStream(await _httpClient.send(request));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final detail = _extractErrorMessage(response).trim();
+      final hint = response.statusCode == 404
+          ? 'MCP API unavailable. Update and restart the connected Bridge, and verify its server address.'
+          : 'MCP request failed.';
+      throw Exception(
+          '$hint HTTP ${response.statusCode} ${request.method} ${uri.path}'
+          '${detail.isEmpty ? "" : ": $detail"}');
+    }
+    return (jsonDecode(response.body) as Map<String, dynamic>)['data']
+        as Map<String, dynamic>;
+  }
+
   Future<List<ModelProviderConfig>> getModelProviders() async {
     final response = await _httpClient.get(
       Uri.parse('$baseUrl/settings'),
