@@ -5291,6 +5291,127 @@ void main() {
     await events.close();
   });
 
+  for (final update in [
+    'event',
+    'recovery',
+    'late-submit',
+    'new-request',
+    'two-clients',
+  ]) {
+    testWidgets('approval resolution sync clears cards with $update', (
+      tester,
+    ) async {
+      Map<String, dynamic> snapshot(String? requestId, int cursor) =>
+          _approvalDomainState(
+            requestId == null
+                ? null
+                : _approvalRequest(
+                    requestId: requestId,
+                    command: requestId == 'approval-2'
+                        ? 'second command'
+                        : 'first command',
+                  ),
+            cursor: cursor,
+          );
+      var currentState = snapshot('approval-1', 0);
+      final events = StreamController<List<int>>.broadcast();
+      final submitGate = Completer<http.Response>();
+      final submitting =
+          update == 'late-submit' ||
+          update == 'new-request' ||
+          update == 'two-clients';
+      BridgeClient createClient() => BridgeClient(
+        httpClient: _StreamingEventHttpClient(
+          events: events.stream,
+          handler: (request) async {
+            if (request.method == 'GET' &&
+                request.url.path.endsWith('/state')) {
+              return http.Response(
+                jsonEncode({'data': currentState}),
+                200,
+                headers: {'content-type': 'application/json'},
+              );
+            }
+            if (request.method == 'POST' &&
+                request.url.path.contains('/approvals/')) {
+              return submitGate.future;
+            }
+            return http.Response('not found', 404);
+          },
+        ),
+      );
+      Widget screen() => SessionDetailScreen(
+        session: _session(),
+        client: createClient(),
+        enableSpeechServices: false,
+      );
+      if (update == 'two-clients') {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(1600, 900);
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+      }
+      await tester.pumpWidget(
+        _TestApp(
+          home: update == 'two-clients'
+              ? Row(
+                  children: [
+                    Expanded(child: screen()),
+                    Expanded(child: screen()),
+                  ],
+                )
+              : screen(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.byKey(const Key('session-approval-accept-button')),
+        findsNWidgets(update == 'two-clients' ? 2 : 1),
+      );
+      if (submitting) {
+        await tester.tap(
+          find.byKey(const Key('session-approval-accept-button')).first,
+        );
+        await tester.pump();
+      }
+      currentState = snapshot(update == 'new-request' ? 'approval-2' : null, 1);
+      events.add(
+        utf8.encode(
+          'id: 1\ndata: ${jsonEncode({
+                'event_id': 1,
+                'event_type': 'activity.updated',
+                'payload': update == 'recovery'
+                    ? <String, dynamic>{}
+                    : {
+                        'session': currentState['session'],
+                        'turn': (currentState['turns'] as List).single,
+                      },
+              })}\n\n',
+        ),
+      );
+      for (var i = 0; i < 5; i++) {
+        await tester.pump();
+      }
+      if (submitting) {
+        submitGate.complete(http.Response('', 204));
+        await tester.pump();
+        await tester.pump();
+      }
+      expect(
+        find.byKey(const Key('session-approval-accept-button')),
+        update == 'new-request' ? findsOneWidget : findsNothing,
+      );
+      expect(find.text('first command'), findsNothing);
+      if (update == 'new-request') {
+        expect(find.text('second command'), findsWidgets);
+        expect(tester.widget<FilledButton>(find.byKey(const Key('session-approval-accept-button'))).onPressed, isNotNull);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      await events.close();
+    });
+  }
+
   testWidgets('approval focus moves to primary action then back to input',
       (tester) async {
     var approvalSubmitCalls = 0;
@@ -12802,7 +12923,7 @@ void main() {
             status: SessionStatus.awaitingApproval,
             pendingApproval: approval,
           ),
-          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          client: _clientForDomainState(_approvalDomainState(approval)),
           enableSpeechServices: false,
         ),
       ),
@@ -12923,7 +13044,7 @@ void main() {
             status: SessionStatus.awaitingApproval,
             pendingApproval: approval,
           ),
-          client: _clientForMessages(const <Map<String, dynamic>>[]),
+          client: _clientForDomainState(_approvalDomainState(approval)),
           enableSpeechServices: false,
         ),
       ),
@@ -12946,6 +13067,11 @@ void main() {
     );
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/v2/sessions/session-1/state') {
+          return http.Response(jsonEncode({'data': _approvalDomainState(approval)}), 200,
+              headers: {'content-type': 'application/json'});
+        }
+
         if (request.method == 'GET' &&
             request.url.path == '/sessions/session-1/messages') {
           return http.Response(
@@ -13573,6 +13699,59 @@ class _RecordingNavigatorObserver extends NavigatorObserver {
   }
 }
 
+Map<String, dynamic> _approvalDomainState(
+  ApprovalRequest? approval, {
+  int cursor = 0,
+}) {
+  final state = _domainStateJson(
+    [
+      _messageJson(
+        id: 'user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'Run tests',
+        createdAt: '2026-05-09T10:00:00.000Z',
+      ),
+      _messageJson(
+        id: 'approval-activity',
+        sessionId: 'session-1',
+        role: 'system',
+        content: 'Approval activity',
+        createdAt: '2026-05-09T10:00:01.000Z',
+      ),
+    ],
+    status: approval == null ? 'running' : 'awaiting_approval',
+    cursor: cursor,
+  );
+  final session = state['session'] as Map;
+  session['pending_approval_id'] = approval?.requestId;
+  session['active_turn_id'] = 'turn-1';
+  session['version'] = cursor + 1;
+  final turn = (state['turns'] as List).single as Map;
+  turn['status'] = approval == null ? 'running' : 'awaiting_approval';
+  turn['version'] = cursor + 1;
+  final activity =
+      (((turn['segments'] as List).single as Map)['activities'] as List).single
+          as Map;
+  activity['id'] = approval?.requestId ?? 'approval-1';
+  activity['kind'] = 'approval';
+  activity['state'] = approval == null ? 'completed' : 'awaiting_approval';
+  activity['payload'] = approval == null
+      ? <String, dynamic>{}
+      : {
+          'request_id': approval.requestId,
+          'kind': approval.kind,
+          'command': approval.command,
+          'reason': approval.reason,
+          'auto_approval_reason': approval.autoApprovalReason,
+          'auto_approval_reason_kind': approval.autoApprovalReasonKind,
+          'allow_accept_for_session': approval.allowAcceptForSession,
+          'allow_cancel': approval.allowCancel,
+          'resolvable': approval.resolvable,
+        };
+  return state;
+}
+
 BridgeClient _clientForMessages(List<Map<String, dynamic>> messages) {
   return BridgeClient(
     httpClient: _FakeHttpClient((request) async {
@@ -13871,9 +14050,22 @@ ApprovalRequest _approvalRequest({
 }
 
 String _eventStreamBody(List<Map<String, dynamic>> events) {
-  return events
-      .map((event) => 'event: session\ndata: ${jsonEncode(event)}\n\n')
-      .join();
+  return events.map((event) {
+    if (event['type'] == 'approval_requested' || event['type'] == 'approval_resolved') {
+      final requested = event['type'] == 'approval_requested';
+      final payload = event['payload'] as Map<String, dynamic>;
+      final approval = requested ? ApprovalRequest.fromJson(
+          (payload['request'] as Map<String, dynamic>?) ?? payload) : null;
+      final id = requested ? 1 : 2;
+      final state = _approvalDomainState(approval, cursor: id);
+      final data = jsonEncode({
+        'event_id': id, 'event_type': 'activity.updated',
+        'payload': {'coalesced': true, 'session': state['session'], 'turn': (state['turns'] as List).single},
+      });
+      return 'id: $id\ndata: $data\n\n';
+    }
+    return 'event: session\ndata: ${jsonEncode(event)}\n\n';
+  }).join();
 }
 
 class _FakeHttpClient extends http.BaseClient {

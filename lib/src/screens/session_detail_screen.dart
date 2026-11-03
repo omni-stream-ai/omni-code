@@ -927,7 +927,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           if (projected.content.trim().isNotEmpty) messages.add(projected);
         }
         for (final activity in segment.activities) {
-          if (activity.id == state.session.pendingApprovalId &&
+          if (turn.id == state.session.activeTurnId &&
+              activity.state == DomainEntityState.awaitingApproval &&
+              activity.id == state.session.pendingApprovalId &&
               activity.payload.isNotEmpty) {
             pendingApproval = ApprovalRequest.fromJson(activity.payload);
           }
@@ -976,7 +978,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           draft.state == _LocalMessageState.pending ||
           draft.state == _LocalMessageState.submitted,
     );
-    final effectivePendingApproval = pendingApproval ?? _pendingApproval;
+    // A cleared domain approval is authoritative on every connected client.
+    final effectivePendingApproval = pendingApproval ??
+        (state.session.pendingApprovalId != null &&
+                state.session.pendingApprovalId == _pendingApproval?.requestId
+            ? _pendingApproval
+            : null);
     final preserveActiveSessionStatus = domainStatus == SessionStatus.idle &&
         (_session.status == SessionStatus.running ||
             _session.status == SessionStatus.waiting);
@@ -1010,6 +1017,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     });
     messages.addAll(localMessages);
     final previousStatus = _session.status;
+    final previousApprovalId = _pendingApproval?.requestId;
     setState(() {
       for (final messageId in serverMessageIds) {
         _localMessageStates.remove(messageId);
@@ -1031,6 +1039,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         clearPendingApproval: effectivePendingApproval == null,
       );
       _pendingApproval = effectivePendingApproval;
+      if (previousApprovalId != effectivePendingApproval?.requestId) {
+        _submittingApproval = false;
+        _submittingApprovalChoice = null;
+        _submittedApprovalRequestId = null;
+      }
       _loadingMessages = false;
       _sessionRestoreError = controller?.error?.toString();
       _reconcileSubmittedApprovalState();
@@ -1038,6 +1051,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _cacheCurrentSessionMessages();
     _syncSessionSummaryCache();
     unawaited(_markVisibleBridgeReplyRead());
+    if (previousApprovalId != effectivePendingApproval?.requestId) {
+      if (effectivePendingApproval != null) {
+        _announcePendingApproval(effectivePendingApproval);
+      } else {
+        _requestComposerFocusWhileActiveTurnAfterFrame();
+      }
+    }
     if (previousStatus != status && status == SessionStatus.idle) {
       final finalMessage = _lastMatchingMessage(
         (message) => message.role == MessageRole.assistant,
@@ -7737,27 +7757,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           _reconcileSubmittedApprovalState();
         });
         _syncSessionSummaryCache();
-        _requestApprovalFocusAfterFrame();
-        if (!_appInForeground && !pushService.remoteNotificationsRegistered) {
-          for (final timer in _pendingAssistantNotificationTimers.values) {
-            timer.cancel();
-          }
-          _pendingAssistantNotificationTimers.clear();
-          final notificationTitle = context.l10n.waitingApprovalTitle;
-          final notificationBody = approval.reason?.trim().isNotEmpty == true
-              ? approval.reason!.trim()
-              : approval.command?.trim().isNotEmpty == true
-                  ? approval.command!.trim()
-                  : context.l10n.waitingApprovalBody;
-          unawaited(
-            _replaceReplyNotificationWithApproval(
-              title: notificationTitle,
-              body: notificationBody,
-            ),
-          );
-        }
+        _announcePendingApproval(approval);
         break;
       case 'approval_resolved':
+        final resolvedRequestId = payload['request_id'] as String?;
+        if (resolvedRequestId != null &&
+            _pendingApproval != null &&
+            _pendingApproval!.requestId != resolvedRequestId) {
+          break;
+        }
         setState(() {
           _pendingApproval = null;
           _session = _session.copyWith(
@@ -8058,6 +8066,28 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     };
   }
 
+  void _announcePendingApproval(ApprovalRequest approval) {
+    _requestApprovalFocusAfterFrame();
+    if (!_appInForeground && !pushService.remoteNotificationsRegistered) {
+      for (final timer in _pendingAssistantNotificationTimers.values) {
+        timer.cancel();
+      }
+      _pendingAssistantNotificationTimers.clear();
+      final notificationTitle = context.l10n.waitingApprovalTitle;
+      final notificationBody = approval.reason?.trim().isNotEmpty == true
+          ? approval.reason!.trim()
+          : approval.command?.trim().isNotEmpty == true
+              ? approval.command!.trim()
+              : context.l10n.waitingApprovalBody;
+      unawaited(
+        _replaceReplyNotificationWithApproval(
+          title: notificationTitle,
+          body: notificationBody,
+        ),
+      );
+    }
+  }
+
   Future<void> _submitApproval(String choice) async {
     final approval = _pendingApproval;
     if (approval == null || _submittingApproval) {
@@ -8071,19 +8101,20 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     try {
       await _client.submitApproval(_session.id, approval.requestId, choice);
-      if (!mounted) {
+      if (!mounted || _pendingApproval?.requestId != approval.requestId) {
         return;
       }
       setState(() {
-        _pendingApproval = approval;
-        _session = _session.copyWith(updatedAt: DateTime.now());
+        // Resolution or a new request may arrive before this HTTP response.
         _submittingApproval = false;
         _submittingApprovalChoice = null;
-        _submittedApprovalRequestId = approval.requestId;
+        if (_pendingApproval?.requestId == approval.requestId) {
+          _submittedApprovalRequestId = approval.requestId;
+        }
       });
       _syncSessionSummaryCache();
     } catch (error) {
-      if (!mounted) {
+      if (!mounted || _pendingApproval?.requestId != approval.requestId) {
         return;
       }
       setState(() {
