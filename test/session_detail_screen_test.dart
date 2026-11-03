@@ -9939,6 +9939,72 @@ void main() {
     expect(find.byKey(const ValueKey('image-preview-surface')), findsOneWidget);
   });
 
+  testWidgets('Markdown file preview defaults to rendered and can show source',
+      (tester) async {
+    const recorderChannel = MethodChannel('com.llfbandit.record/messages');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(recorderChannel, (_) async => null);
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(recorderChannel, null));
+    final directory = Directory.systemTemp.createTempSync('markdown-preview-');
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final file = File('${directory.path}/notes.md')
+      ..writeAsStringSync(
+          '# Heading\n\n**Bold content**\n\n[Open child](./docs/child%20notes.md#details)');
+    Directory('${directory.path}/docs').createSync();
+    File('${directory.path}/docs/child notes.md').writeAsStringSync(
+      '# Child document\n\n[Open sibling](../sibling.md)',
+    );
+    File('${directory.path}/sibling.md')
+        .writeAsStringSync('# Sibling document');
+    final client = _clientForMessages([
+      _messageJson(
+          id: 'assistant-file',
+          sessionId: 'session-1',
+          role: 'assistant',
+          content: '[Open notes](${file.path})',
+          createdAt: '2026-05-09T10:00:01.000'),
+    ]);
+    await tester.pumpWidget(_TestApp(
+        home: SessionDetailScreen(
+      session: _session(),
+      client: client,
+      enableSpeechServices: false,
+    )));
+    await tester.pump();
+    await tester.pump();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Open notes'));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('markdown-file-preview-rendered')),
+        findsOneWidget);
+    expect(find.text('Heading'), findsOneWidget);
+    await tester.tap(find.text('Source'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('markdown-file-preview-content')),
+        findsOneWidget);
+    expect(find.textContaining('# Heading'), findsOneWidget);
+    await tester.tap(find.text('Preview'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Open child'));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('child notes.md'), findsOneWidget);
+    expect(find.text('Child document'), findsOneWidget);
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Open sibling'));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('sibling.md'), findsOneWidget);
+    expect(find.text('Sibling document'), findsOneWidget);
+  });
+
   testWidgets('assistant replies render styled code blocks', (tester) async {
     final semantics = tester.ensureSemantics();
     try {
@@ -13094,6 +13160,54 @@ void main() {
     final screenBottom =
         tester.view.physicalSize.height / tester.view.devicePixelRatio;
     expect(composerRect.bottom, screenBottom - AppSpacing.compact);
+  });
+
+  testWidgets(
+      'session profile selector inherits CLI profile and persists changes',
+      (tester) async {
+    final patches = <Map<String, dynamic>>[];
+    final client = BridgeClient(httpClient: _FakeHttpClient((request) async {
+      if (request.url.path == '/v2/codex/profiles') {
+        return http.Response(
+            jsonEncode({
+              'data': [
+                {'id': 'default', 'name': 'default'},
+                {'id': 'work', 'name': 'Work'},
+              ]
+            }),
+            200);
+      }
+      if (request.method == 'PATCH' &&
+          request.url.path == '/v2/sessions/session-1') {
+        patches.add(jsonDecode(request.body) as Map<String, dynamic>);
+        return http.Response('', 204);
+      }
+      return http.Response('not found', 404);
+    }));
+    await tester.pumpWidget(_TestApp(
+        home: SessionDetailScreen(
+      session: _session().copyWith(profileId: 'work', profileName: 'Work'),
+      client: client,
+      enableSpeechServices: false,
+    )));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-message-input')));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.byKey(const Key('session-composer-settings-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.byKey(const Key('session-profile-settings-button')));
+    await tester.pump();
+    final work = find.byKey(const Key('session-profile-option-work'));
+    expect(
+        find.descendant(of: work, matching: find.byIcon(Icons.check_rounded)),
+        findsOneWidget);
+    await tester.tap(find.byKey(const Key('session-profile-option-default')));
+    await tester.pump();
+    expect(patches, [
+      {'profile_id': 'default'}
+    ]);
+    expect(client.peekSessions()?.single.profileId, 'default');
   });
 
   testWidgets('session reasoning effort selector patches session default',

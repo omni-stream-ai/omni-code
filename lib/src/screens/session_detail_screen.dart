@@ -193,7 +193,7 @@ class SessionDetailScreen extends StatefulWidget {
   State<SessionDetailScreen> createState() => _SessionDetailScreenState();
 }
 
-enum _ComposerSettingsPanelSection { provider, reasoning, model }
+enum _ComposerSettingsPanelSection { profile, provider, reasoning, model }
 
 class _SessionDetailScreenState extends State<SessionDetailScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
@@ -378,6 +378,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Future<void>? _pendingModelUpdate;
   int _modelUpdateGeneration = 0;
   List<ModelProviderConfig> _providers = const [];
+  List<CodexProfileSummary> _profiles = const [];
   List<String> _fetchedModels = const [];
   GitStatusDetail? _gitStatus;
   final MenuController _sessionHeaderMenuController = MenuController();
@@ -772,6 +773,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _subscribeToPiExtensionEvents();
       unawaited(_loadSessionDetail());
     }
+    _loadProfiles();
     _loadProviders();
     _loadAgentCommands();
     // Keep the compatibility entry point referenced without using it in the v2 flow.
@@ -1144,7 +1146,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         previousSession.runtimeSessionRef == nextSession.runtimeSessionRef &&
         previousSession.providerId == nextSession.providerId &&
         previousSession.reasoningEffort == nextSession.reasoningEffort &&
-        previousSession.model == nextSession.model) {
+        previousSession.model == nextSession.model &&
+        previousSession.profileId == nextSession.profileId &&
+        previousSession.profileName == nextSession.profileName) {
       return;
     }
 
@@ -1228,6 +1232,38 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   void _syncSessionSummaryCache() {
     _client.syncSessionSummary(_session);
+  }
+
+  Future<void> _loadProfiles() async {
+    if (_session.agentId != 'codex') return;
+    try {
+      final profiles = await _client.listCodexProfiles();
+      if (mounted) setState(() => _profiles = profiles);
+    } catch (error) {
+      debugPrint('Failed to load Codex profiles: $error');
+    }
+  }
+
+  Future<void> _applyProfile(CodexProfileSummary profile) async {
+    try {
+      await _client.updateSessionDefaults(_session.id, profileId: profile.id);
+      if (!mounted) return;
+      setState(() {
+        _overrideProviderId = null;
+        _session = _session.copyWith(
+            profileId: profile.id,
+            profileName: profile.name,
+            clearProviderId: true);
+        _composerSettingsPanelSection = null;
+        _composerSettingsOverlayController.hide();
+      });
+      _syncSessionSummaryCache();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
   }
 
   Future<void> _loadProviders() async {
@@ -3356,6 +3392,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (_session.agentId == 'codex') ...[
+                        _buildComposerSettingsSectionTile(
+                          key: const Key('session-profile-settings-button'),
+                          label: 'Profile',
+                          section: _ComposerSettingsPanelSection.profile,
+                        ),
+                        const SizedBox(height: AppSpacing.compact),
+                      ],
                       if (_providers.isNotEmpty ||
                           isAutoProviderId(_overrideProviderId))
                         _buildProviderSettingsRow(),
@@ -3394,6 +3438,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }) {
     final l10n = context.l10n;
     final children = switch (_composerSettingsPanelSection) {
+      _ComposerSettingsPanelSection.profile => <Widget>[
+          ..._profiles.map((profile) => _buildComposerOptionTile(
+                key: Key('session-profile-option-${profile.id}'),
+                label: profile.name,
+                selected: (_session.profileId ?? 'default') == profile.id,
+                onTap: () => _applyProfile(profile),
+              )),
+        ],
       _ComposerSettingsPanelSection.provider => <Widget>[
           if (_providers.isNotEmpty)
             _buildComposerOptionTile(
@@ -4161,7 +4213,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   String _composerSettingsSummaryLabel() {
-    final labels = <String>[];
+    final labels = <String>[
+      if (_session.agentId == 'codex')
+        _session.profileName ?? _session.profileId ?? 'default',
+    ];
     if (_overrideProviderId != null && !isAutoProviderId(_overrideProviderId)) {
       final providerName = _providers
           .where((p) => p.id == _overrideProviderId)
@@ -5582,7 +5637,20 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return Clipboard.setData(ClipboardData(text: markdown));
   }
 
-  void _handleAssistantMarkdownLinkTap(String? href) {
+  void _handleAssistantMarkdownLinkTap(String? href, {File? sourceFile}) {
+    if (sourceFile != null && href != null) {
+      final target = Uri.tryParse(href);
+      if (target == null) return;
+      // Resolve against the document, including nested directories and ../.
+      // Conversation links without a source document still use the project root.
+      href = sourceFile.absolute.uri.resolveUri(target).toString();
+    }
+    final linkUri = href == null ? null : Uri.tryParse(href);
+    if (linkUri?.scheme == 'file') {
+      // File previews open the document; query/fragment are not file names.
+      href = Uri(scheme: 'file', host: linkUri!.host, path: linkUri.path)
+          .toString();
+    }
     final reference =
         href == null ? null : MessageImageReference.tryParse(href);
     if (reference != null) {
@@ -5607,7 +5675,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final uri = Uri.tryParse(href);
     if (uri == null || (uri.hasScheme && uri.scheme != 'file')) return null;
     final decodedPath = uri.scheme == 'file'
-        ? uri.toFilePath()
+        ? Uri(scheme: 'file', host: uri.host, path: uri.path).toFilePath()
         : Uri.decodeComponent(uri.path).trim();
     if (decodedPath.isEmpty) return null;
     final projectRoot = _client.peekProject(_session.projectId)?.rootPath;
@@ -5636,60 +5704,89 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     final content = utf8.decode(bytes, allowMalformed: true);
+    final isMarkdown = RegExp(r'\.(md|markdown|mdown)$', caseSensitive: false)
+        .hasMatch(file.path);
+    final isChinese = Localizations.localeOf(context).languageCode == 'zh';
     final brightness = Theme.of(context).brightness;
     await showDialog<void>(
       context: context,
-      builder: (context) => Dialog.fullscreen(
-        backgroundColor: AppColors.panelFor(brightness),
-        child: SafeArea(
-          child: Padding(
-            padding: AppSpacing.tilePadding,
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.description_outlined, size: 18),
-                    const SizedBox(width: AppSpacing.compact),
-                    Expanded(
-                      child: Text(
-                        file.path.split(Platform.pathSeparator).last,
-                        key: const ValueKey('markdown-file-preview-title'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: context.l10n.close,
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.compact),
-                Expanded(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: AppColors.panelDeepFor(brightness),
-                      border:
-                          Border.all(color: AppColors.outlineFor(brightness)),
-                      borderRadius:
-                          BorderRadius.circular(AppSpacing.radiusControl),
-                    ),
-                    child: SingleChildScrollView(
-                      padding: AppSpacing.tilePadding,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: SelectableText.rich(
-                          _AssistantCodeSyntaxHighlighter(Theme.of(context))
-                              .format(content),
-                          key: const ValueKey('markdown-file-preview-content'),
+      builder: (context) => DefaultTabController(
+        length: isMarkdown ? 2 : 1,
+        child: Dialog.fullscreen(
+          backgroundColor: AppColors.panelFor(brightness),
+          child: SafeArea(
+            child: Padding(
+              padding: AppSpacing.tilePadding,
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.description_outlined, size: 18),
+                      const SizedBox(width: AppSpacing.compact),
+                      Expanded(
+                        child: Text(
+                          file.path.split(Platform.pathSeparator).last,
+                          key: const ValueKey('markdown-file-preview-title'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ),
+                      IconButton(
+                        tooltip: context.l10n.close,
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                  if (isMarkdown)
+                    TabBar(tabs: [
+                      Tab(text: isChinese ? '预览' : 'Preview'),
+                      Tab(text: isChinese ? '原文' : 'Source'),
+                    ]),
+                  const SizedBox(height: AppSpacing.compact),
+                  Expanded(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.panelDeepFor(brightness),
+                        border:
+                            Border.all(color: AppColors.outlineFor(brightness)),
+                        borderRadius:
+                            BorderRadius.circular(AppSpacing.radiusControl),
+                      ),
+                      child: TabBarView(children: [
+                        if (isMarkdown)
+                          SingleChildScrollView(
+                            padding: AppSpacing.tilePadding,
+                            child: MarkdownBody(
+                              key: const ValueKey(
+                                  'markdown-file-preview-rendered'),
+                              data: content,
+                              selectable: true,
+                              onTapLink: (_, href, __) =>
+                                  _handleAssistantMarkdownLinkTap(
+                                href,
+                                sourceFile: file,
+                              ),
+                            ),
+                          ),
+                        SingleChildScrollView(
+                          padding: AppSpacing.tilePadding,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: SelectableText.rich(
+                              _AssistantCodeSyntaxHighlighter(Theme.of(context))
+                                  .format(content),
+                              key: const ValueKey(
+                                  'markdown-file-preview-content'),
+                            ),
+                          ),
+                        ),
+                      ]),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

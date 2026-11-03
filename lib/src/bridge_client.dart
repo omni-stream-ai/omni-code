@@ -1032,8 +1032,11 @@ class BridgeClient {
     bool clearReasoningEffort = false,
     String? model,
     bool clearModel = false,
+    String? profileId,
   }) async {
-    final body = <String, dynamic>{};
+    final body = <String, dynamic>{
+      if (profileId != null) 'profile_id': profileId,
+    };
     if (clearProviderId) {
       body['provider_id'] = null;
     } else if (providerId != null) {
