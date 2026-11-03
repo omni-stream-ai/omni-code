@@ -1,0 +1,5243 @@
+{
+  "states": [
+    {
+      "group": "会话主状态",
+      "id": "session-creating",
+      "title": "正在创建会话",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_creatingSession",
+      "when": "creatingSession=true",
+      "actions": [],
+      "blocked": [
+        "附件",
+        "语音",
+        "输入"
+      ],
+      "hidden": [
+        "发送"
+      ],
+      "line": 361,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n3292"
+      ],
+      "preview": "previews/session-creating-dark.png"
+    },
+    {
+      "group": "会话主状态",
+      "id": "session-loading",
+      "title": "加载历史消息",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_loadingMessages",
+      "when": "loadingMessages=true，显示消息骨架",
+      "actions": [],
+      "blocked": [],
+      "hidden": [
+        "发送"
+      ],
+      "line": 305,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n3348"
+      ],
+      "preview": "previews/session-loading-dark.png"
+    },
+    {
+      "group": "会话主状态",
+      "id": "session-empty",
+      "title": "空会话 / 尚未开始",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "SessionStatus.idle",
+      "when": "idle，历史轮次为空",
+      "actions": [
+        "输入文字",
+        "录音",
+        "选择附件"
+      ],
+      "blocked": [],
+      "hidden": [
+        "停止",
+        "空草稿发送"
+      ],
+      "line": 620,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n3404"
+      ],
+      "preview": "previews/session-empty-dark.png"
+    },
+    {
+      "group": "会话主状态",
+      "id": "session-idle",
+      "title": "本轮完成 / 空闲",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "SessionStatus.idle",
+      "when": "idle，已存在完成的回复",
+      "actions": [
+        "复制",
+        "播报",
+        "继续输入"
+      ],
+      "blocked": [],
+      "hidden": [
+        "停止"
+      ],
+      "line": 620,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n3453"
+      ],
+      "preview": "previews/session-idle-dark.png"
+    },
+    {
+      "group": "会话主状态",
+      "id": "session-running",
+      "title": "回复进行中",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "SessionStatus.running",
+      "when": "status=running，有活跃轮次",
+      "actions": [
+        "停止",
+        "发送后续消息"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 637,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n3506"
+      ],
+      "preview": "previews/session-running-dark.png"
+    },
+    {
+      "group": "会话主状态",
+      "id": "session-waiting",
+      "title": "等待 Bridge 回复",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "SessionStatus.waiting",
+      "when": "status=waiting，已提交且等待回复",
+      "actions": [
+        "停止",
+        "继续输入"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 638,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n3570"
+      ],
+      "preview": "previews/session-waiting-dark.png"
+    },
+    {
+      "group": "会话主状态",
+      "id": "session-awaiting-approval",
+      "title": "等待审批",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "SessionStatus.awaitingApproval",
+      "when": "存在可处理的 pendingApproval",
+      "actions": [
+        "按请求能力处理审批",
+        "停止"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 537,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n3631"
+      ],
+      "preview": "previews/session-awaiting-approval-dark.png"
+    },
+    {
+      "group": "会话主状态",
+      "id": "session-interrupted",
+      "title": "已中断",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "SessionStatus.interrupted",
+      "when": "status=interrupted",
+      "actions": [
+        "发送新消息"
+      ],
+      "blocked": [],
+      "hidden": [
+        "停止"
+      ],
+      "line": 660,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n3706"
+      ],
+      "preview": "previews/session-interrupted-dark.png"
+    },
+    {
+      "group": "会话主状态",
+      "id": "session-failed",
+      "title": "本轮失败",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "SessionStatus.failed",
+      "when": "status=failed，错误横幅不可直接关闭",
+      "actions": [
+        "查看实际错误",
+        "继续输入"
+      ],
+      "blocked": [],
+      "hidden": [
+        "关闭失败横幅"
+      ],
+      "line": 970,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n3762"
+      ],
+      "preview": "previews/session-failed-dark.png"
+    },
+    {
+      "group": "会话主状态",
+      "id": "session-restore-failed",
+      "title": "会话恢复异常",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_sessionRestoreError",
+      "when": "恢复失败：标题显示错误提示，保留已加载内容",
+      "actions": [],
+      "blocked": [],
+      "hidden": [
+        "虚构的恢复按钮"
+      ],
+      "line": 354,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n3820"
+      ],
+      "preview": "previews/session-restore-failed-dark.png"
+    },
+    {
+      "group": "会话主状态",
+      "id": "session-create-failed",
+      "title": "创建会话失败",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "createSessionFailed",
+      "when": "初始化 Future 失败，保留错误原因",
+      "actions": [],
+      "blocked": [],
+      "hidden": [
+        "重复的创建提交"
+      ],
+      "line": 6779,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n3872"
+      ],
+      "preview": "previews/session-create-failed-dark.png"
+    },
+    {
+      "group": "会话主状态",
+      "id": "session-keyboard",
+      "title": "软键盘打开",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_composerHasInteractiveFocus",
+      "when": "输入框聚焦且软键盘显示；键盘为 Android 示例",
+      "actions": [
+        "发送",
+        "输入区设置",
+        "附件"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 726,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n3927"
+      ],
+      "preview": "previews/session-keyboard-dark.png"
+    },
+    {
+      "group": "会话主状态",
+      "id": "session-keyboard-approval",
+      "title": "软键盘与审批共存",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_buildPendingApprovalCard",
+      "when": "软键盘显示；示例请求无命令且不支持会话允许 / 取消",
+      "actions": [
+        "批准",
+        "拒绝",
+        "发送",
+        "停止"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 2546,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4050"
+      ],
+      "preview": "previews/session-keyboard-approval-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-starting",
+      "title": "等待任务启动",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "ExecutionPhase.starting",
+      "when": "phase=starting；阶段与最近进展均超过 60 秒 才提示长等待",
+      "actions": [
+        "重新检查"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 111,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4174"
+      ],
+      "preview": "previews/execution-starting-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-thinking",
+      "title": "正在处理",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "ExecutionPhase.thinking",
+      "when": "phase=thinking；阶段与最近进展均超过 180 秒 才提示长等待",
+      "actions": [
+        "重新检查"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 112,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4191"
+      ],
+      "preview": "previews/execution-thinking-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-runningCommand",
+      "title": "命令执行中",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "ExecutionPhase.runningCommand",
+      "when": "phase=runningCommand；阶段与最近进展均超过 300 秒 才提示长等待",
+      "actions": [
+        "重新检查"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 113,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4208"
+      ],
+      "preview": "previews/execution-runningCommand-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-awaitingApproval",
+      "title": "等待审批",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "ExecutionPhase.awaitingApproval",
+      "when": "phase=awaitingApproval；此阶段不触发长等待提醒",
+      "actions": [
+        "重新检查"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 114,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4225"
+      ],
+      "preview": "previews/execution-awaitingApproval-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-retrying",
+      "title": "网络重试中",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "ExecutionPhase.retrying",
+      "when": "phase=retrying；阶段与最近进展均超过 120 秒 才提示长等待",
+      "actions": [
+        "重新检查"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 115,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4243"
+      ],
+      "preview": "previews/execution-retrying-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-waitingForTool",
+      "title": "等待工具结果",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "ExecutionPhase.waitingForTool",
+      "when": "phase=waitingForTool；阶段与最近进展均超过 120 秒 才提示长等待",
+      "actions": [
+        "重新检查"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 116,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4260"
+      ],
+      "preview": "previews/execution-waitingForTool-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-background",
+      "title": "等待后台任务",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "ExecutionPhase.background",
+      "when": "phase=background；阶段与最近进展均超过 300 秒 才提示长等待",
+      "actions": [
+        "重新检查"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 117,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4277"
+      ],
+      "preview": "previews/execution-background-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-unconfirmed",
+      "title": "执行状态待确认",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "ExecutionPhase.unconfirmed",
+      "when": "phase=unconfirmed；阶段与最近进展均超过 30 秒 才提示长等待",
+      "actions": [
+        "重新检查"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 118,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4294"
+      ],
+      "preview": "previews/execution-unconfirmed-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-attention",
+      "title": "长时间没有新进展",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "health.needsAttention",
+      "when": "阶段与最近进展均超过对应阈值，且提醒未暂缓",
+      "actions": [
+        "重新检查",
+        "继续等待",
+        "停止本轮后继续"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 102,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4312"
+      ],
+      "preview": "previews/execution-attention-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-checking",
+      "title": "主动检查请求处理中",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "_checking",
+      "when": "_checking=true，且长等待提醒可见",
+      "actions": [],
+      "blocked": [
+        "重新检查",
+        "继续等待",
+        "停止本轮后继续"
+      ],
+      "hidden": [],
+      "line": 30,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4334"
+      ],
+      "preview": "previews/execution-checking-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-check-pending",
+      "title": "检查已发出 / 等待结果",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "checkPending",
+      "when": "checkPending=true，_checking=false，长等待提醒可见",
+      "actions": [
+        "继续等待",
+        "停止本轮后继续"
+      ],
+      "blocked": [
+        "重新检查"
+      ],
+      "hidden": [],
+      "line": 120,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4356"
+      ],
+      "preview": "previews/execution-check-pending-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-quiet",
+      "title": "继续等待 / 提醒暂缓",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "_quietUntil",
+      "when": "选择继续等待后，5 分钟内暂缓长等待提醒",
+      "actions": [
+        "重新检查"
+      ],
+      "blocked": [],
+      "hidden": [
+        "长等待强调样式"
+      ],
+      "line": 32,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4378"
+      ],
+      "preview": "previews/execution-quiet-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-recovering",
+      "title": "停止并继续中",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "_recovering",
+      "when": "恢复任务请求处理中",
+      "actions": [],
+      "blocked": [
+        "全部执行恢复操作"
+      ],
+      "hidden": [],
+      "line": 31,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4396"
+      ],
+      "preview": "previews/execution-recovering-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-check-provider_waiting_on_approval",
+      "title": "执行端等待审批",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "provider_waiting_on_approval",
+      "when": "checkError=provider_waiting_on_approval，且长等待提醒可见",
+      "actions": [
+        "重新检查",
+        "继续等待",
+        "停止本轮后继续"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 124,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4418"
+      ],
+      "preview": "previews/execution-check-provider_waiting_on_approval-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-check-provider_waiting_on_user_input",
+      "title": "执行端等待补充信息",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "provider_waiting_on_user_input",
+      "when": "checkError=provider_waiting_on_user_input，且长等待提醒可见",
+      "actions": [
+        "重新检查",
+        "继续等待",
+        "停止本轮后继续"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 125,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4440"
+      ],
+      "preview": "previews/execution-check-provider_waiting_on_user_input-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-check-provider_idle_without_turn_completion",
+      "title": "执行端已空闲",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "provider_idle_without_turn_completion",
+      "when": "checkError=provider_idle_without_turn_completion，且长等待提醒可见",
+      "actions": [
+        "重新检查",
+        "继续等待",
+        "停止本轮后继续"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 126,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4462"
+      ],
+      "preview": "previews/execution-check-provider_idle_without_turn_completion-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-check-provider_system_error",
+      "title": "执行端发生异常",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "provider_system_error",
+      "when": "checkError=provider_system_error，且长等待提醒可见",
+      "actions": [
+        "重新检查",
+        "继续等待",
+        "停止本轮后继续"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 127,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4485"
+      ],
+      "preview": "previews/execution-check-provider_system_error-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-check-timeout",
+      "title": "状态检查超时",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "timeout",
+      "when": "checkError=timeout，且长等待提醒可见",
+      "actions": [
+        "重新检查",
+        "继续等待",
+        "停止本轮后继续"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 131,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4507"
+      ],
+      "preview": "previews/execution-check-timeout-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-check-unavailable",
+      "title": "暂时无法主动核实",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "executionCheckUnavailable",
+      "when": "主动检查不可用，已刷新现有会话状态",
+      "actions": [
+        "重新检查",
+        "继续等待"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 69,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4529"
+      ],
+      "preview": "previews/execution-check-unavailable-dark.png"
+    },
+    {
+      "group": "执行阶段",
+      "id": "execution-recovery-failed",
+      "title": "继续任务失败",
+      "source": "lib/src/widgets/session_execution_status_card.dart",
+      "evidence": "executionRecoveryFailed",
+      "when": "stopAndContinue 请求失败，保留当前执行状态",
+      "actions": [
+        "重新检查",
+        "停止本轮后继续"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 90,
+      "sourceSha256": "1fa7715c01b5780f4756fae29419e35f3c7a489e3f0415ea4415e79da92c8243",
+      "nodeIds": [
+        "n4548"
+      ],
+      "preview": "previews/execution-recovery-failed-dark.png"
+    },
+    {
+      "group": "审批请求",
+      "id": "approval-command",
+      "title": "命令审批 / 完整能力",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "allowAcceptForSession",
+      "when": "resolvable=true，命令非空，支持会话允许与取消",
+      "actions": [
+        "批准",
+        "在本会话允许",
+        "始终允许",
+        "拒绝",
+        "取消"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 4596,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4576"
+      ],
+      "preview": "previews/approval-command-dark.png"
+    },
+    {
+      "group": "审批请求",
+      "id": "approval-limited",
+      "title": "命令审批 / 有限能力",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "approval.allowCancel",
+      "when": "不支持本会话允许与取消，仍包含命令",
+      "actions": [
+        "批准",
+        "始终允许",
+        "拒绝"
+      ],
+      "blocked": [],
+      "hidden": [
+        "在本会话允许",
+        "取消"
+      ],
+      "line": 4634,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4603"
+      ],
+      "preview": "previews/approval-limited-dark.png"
+    },
+    {
+      "group": "审批请求",
+      "id": "approval-no-command",
+      "title": "非命令审批",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "approval.command",
+      "when": "command 为空，不展示始终允许",
+      "actions": [
+        "批准",
+        "在本会话允许",
+        "拒绝"
+      ],
+      "blocked": [],
+      "hidden": [
+        "始终允许"
+      ],
+      "line": 4560,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4625"
+      ],
+      "preview": "previews/approval-no-command-dark.png"
+    },
+    {
+      "group": "审批请求",
+      "id": "approval-submitting",
+      "title": "审批正在提交",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_submittingApprovalChoice",
+      "when": "已点击审批选项，提交尚未返回",
+      "actions": [],
+      "blocked": [
+        "批准",
+        "在本会话允许",
+        "始终允许",
+        "拒绝",
+        "取消"
+      ],
+      "hidden": [],
+      "line": 363,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4647"
+      ],
+      "preview": "previews/approval-submitting-dark.png"
+    },
+    {
+      "group": "审批请求",
+      "id": "approval-resolution-pending",
+      "title": "已提交 / 等待执行端确认",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_isAwaitingSubmittedApprovalResolution",
+      "when": "已记录 submittedApprovalRequestId，但请求尚未从服务状态消失",
+      "actions": [],
+      "blocked": [],
+      "hidden": [
+        "批准",
+        "在本会话允许",
+        "始终允许",
+        "拒绝",
+        "取消"
+      ],
+      "line": 534,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4675"
+      ],
+      "preview": "previews/approval-resolution-pending-dark.png"
+    },
+    {
+      "group": "审批请求",
+      "id": "approval-submit-error",
+      "title": "审批提交失败",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "approvalSubmitFailed",
+      "when": "提交失败，原审批请求仍存在",
+      "actions": [
+        "重新选择可用审批操作"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 8045,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4688"
+      ],
+      "preview": "previews/approval-submit-error-dark.png"
+    },
+    {
+      "group": "审批请求",
+      "id": "approval-desktop-only",
+      "title": "仅桌面可处理",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "desktopOnlyApproval",
+      "when": "resolvable=false",
+      "actions": [],
+      "blocked": [
+        "所有审批操作"
+      ],
+      "hidden": [],
+      "line": 4722,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4713"
+      ],
+      "preview": "previews/approval-desktop-only-dark.png"
+    },
+    {
+      "group": "审批请求",
+      "id": "approval-ai-block",
+      "title": "AI 审查 / 高风险需人工确认",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "'hard_block'",
+      "when": "autoApprovalReason=hard_block，仍按 resolvable 决定人工操作",
+      "actions": [
+        "请求允许的人工审批操作"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 7999,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4732"
+      ],
+      "preview": "previews/approval-ai-block-dark.png"
+    },
+    {
+      "group": "审批请求",
+      "id": "approval-ai-error",
+      "title": "AI 审查失败",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "'review_failed'",
+      "when": "autoApprovalReason=review_failed",
+      "actions": [
+        "请求允许的人工审批操作"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 8000,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4752"
+      ],
+      "preview": "previews/approval-ai-error-dark.png"
+    },
+    {
+      "group": "审批请求",
+      "id": "approval-cleared",
+      "title": "请求已解决",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_pendingApproval = null",
+      "when": "服务确认审批已解决，pendingApproval 清空",
+      "actions": [],
+      "blocked": [],
+      "hidden": [
+        "已解决的审批卡片"
+      ],
+      "line": 7487,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4771"
+      ],
+      "preview": "previews/approval-cleared-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-empty",
+      "title": "空草稿 / 收起输入区",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "hasSendableDraft",
+      "when": "无文本、无附件、未聚焦",
+      "actions": [
+        "语音模式",
+        "附件",
+        "录音"
+      ],
+      "blocked": [],
+      "hidden": [
+        "发送",
+        "会话设置"
+      ],
+      "line": 2810,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4810"
+      ],
+      "preview": "previews/composer-empty-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-focused",
+      "title": "聚焦 / 展开输入区",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_composerHasInteractiveFocus",
+      "when": "移动端输入获得焦点，无文本草稿",
+      "actions": [
+        "附件",
+        "会话设置",
+        "录音"
+      ],
+      "blocked": [],
+      "hidden": [
+        "发送"
+      ],
+      "line": 726,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4828"
+      ],
+      "preview": "previews/composer-focused-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-draft",
+      "title": "有文本草稿",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "hasSendableDraft",
+      "when": "文本 trim 后非空",
+      "actions": [
+        "发送",
+        "附件",
+        "会话设置"
+      ],
+      "blocked": [],
+      "hidden": [
+        "非语音来源草稿的录音按钮"
+      ],
+      "line": 2810,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4849"
+      ],
+      "preview": "previews/composer-draft-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-running",
+      "title": "执行中仍可输入",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "hasActiveTurn",
+      "when": "有活跃轮次，且存在可发送草稿",
+      "actions": [
+        "停止",
+        "发送后续消息",
+        "附件",
+        "会话设置"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 1881,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4870"
+      ],
+      "preview": "previews/composer-running-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-attachments",
+      "title": "有待发送图片",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_pendingAttachments.isNotEmpty",
+      "when": "已选择图片，文本可以为空",
+      "actions": [
+        "预览附件",
+        "移除附件",
+        "发送"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 2811,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4895"
+      ],
+      "preview": "previews/composer-attachments-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-uploading",
+      "title": "附件正在上传",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_uploadingAttachments",
+      "when": "isSessionBusy=true",
+      "actions": [],
+      "blocked": [
+        "输入",
+        "发送",
+        "附件选择",
+        "语音"
+      ],
+      "hidden": [],
+      "line": 290,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4924"
+      ],
+      "preview": "previews/composer-uploading-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-voice-mode",
+      "title": "按住说话模式",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_voiceComposerMode",
+      "when": "voiceComposerMode=true",
+      "actions": [
+        "切换键盘",
+        "按住录音"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 329,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4961"
+      ],
+      "preview": "previews/composer-voice-mode-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-voice-starting",
+      "title": "正在初始化录音",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_voiceInputStarting",
+      "when": "语音初始化尚未完成",
+      "actions": [],
+      "blocked": [
+        "重复启动语音"
+      ],
+      "hidden": [],
+      "line": 309,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4975"
+      ],
+      "preview": "previews/composer-voice-starting-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-voice-recording",
+      "title": "正在录音",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_voiceHoldActive",
+      "when": "按住按钮，语音录制中",
+      "actions": [
+        "松开发送",
+        "上滑选择动作"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 330,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n4990"
+      ],
+      "preview": "previews/composer-voice-recording-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-voice-lifted",
+      "title": "上滑选择：发送 / 转文字 / 取消",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_voiceHoldLifted",
+      "when": "按住录音后已上滑离开按钮区域",
+      "actions": [
+        "松开发送",
+        "转为文字",
+        "取消录音"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 331,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5005"
+      ],
+      "preview": "previews/composer-voice-lifted-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-transcribing",
+      "title": "录音已结束 / 正在转写",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "uploadingAudio",
+      "when": "批量 ASR 已提交录音，尚未返回文本",
+      "actions": [],
+      "blocked": [
+        "重复发送录音"
+      ],
+      "hidden": [],
+      "line": 8651,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5028"
+      ],
+      "preview": "previews/composer-transcribing-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-voice-unavailable",
+      "title": "语音权限缺失",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "microphonePermissionMissing",
+      "when": "语音启动时检测到麦克风权限缺失",
+      "actions": [
+        "键盘输入"
+      ],
+      "blocked": [
+        "本次录音"
+      ],
+      "hidden": [],
+      "line": 8145,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5052"
+      ],
+      "preview": "previews/composer-voice-unavailable-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-at-files",
+      "title": "文件引用候选",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_composerSuggestionsOverlayController",
+      "when": "输入 @ 后显示当前项目文件候选",
+      "actions": [
+        "选择文件或目录候选"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 229,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5077"
+      ],
+      "preview": "previews/composer-at-files-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-stopping",
+      "title": "正在停止回复",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_cancellingReply",
+      "when": "已请求取消当前活跃轮次",
+      "actions": [],
+      "blocked": [
+        "重复停止"
+      ],
+      "hidden": [],
+      "line": 367,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5107"
+      ],
+      "preview": "previews/composer-stopping-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-hold-send",
+      "title": "录音手势 / 松开发送",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_VoiceHoldAction.send",
+      "when": "按住录音后，当前松手动作=send",
+      "actions": [
+        "松开发送"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 8450,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5133"
+      ],
+      "preview": "previews/composer-hold-send-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-hold-insert",
+      "title": "录音手势 / 松开转为文字",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_VoiceHoldAction.insert",
+      "when": "按住录音后，当前松手动作=insert",
+      "actions": [
+        "松开转为文字"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 3183,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5154"
+      ],
+      "preview": "previews/composer-hold-insert-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-hold-cancel",
+      "title": "录音手势 / 松开取消录音",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_VoiceHoldAction.cancel",
+      "when": "按住录音后，当前松手动作=cancel",
+      "actions": [
+        "松开取消录音"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 3196,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5176"
+      ],
+      "preview": "previews/composer-hold-cancel-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-select-provider",
+      "title": "选择模型供应商",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_ComposerSettingsPanelSection.provider",
+      "when": "已打开输入区的模型供应商子面板",
+      "actions": [
+        "选择模型供应商"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 3432,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5198"
+      ],
+      "preview": "previews/composer-select-provider-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-select-reasoning",
+      "title": "选择推理强度",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_ComposerSettingsPanelSection.reasoning",
+      "when": "已打开输入区的推理强度子面板",
+      "actions": [
+        "选择推理强度"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 3455,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5223"
+      ],
+      "preview": "previews/composer-select-reasoning-dark.png"
+    },
+    {
+      "group": "消息与输入",
+      "id": "composer-select-model",
+      "title": "选择模型",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_ComposerSettingsPanelSection.model",
+      "when": "已打开输入区的模型子面板",
+      "actions": [
+        "选择模型"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 3472,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5248"
+      ],
+      "preview": "previews/composer-select-model-dark.png"
+    },
+    {
+      "group": "消息与内容",
+      "id": "message-queued",
+      "title": "排队中的用户消息",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_LocalMessageState.queued",
+      "when": "本地消息状态=queued",
+      "actions": [
+        "撤回",
+        "编辑"
+      ],
+      "blocked": [],
+      "hidden": [
+        "重试"
+      ],
+      "line": 4959,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5282"
+      ],
+      "preview": "previews/message-queued-dark.png"
+    },
+    {
+      "group": "消息与内容",
+      "id": "message-pending",
+      "title": "正在提交的用户消息",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_LocalMessageState.pending",
+      "when": "本地消息状态=pending",
+      "actions": [],
+      "blocked": [],
+      "hidden": [
+        "撤回",
+        "编辑",
+        "重试"
+      ],
+      "line": 984,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5299"
+      ],
+      "preview": "previews/message-pending-dark.png"
+    },
+    {
+      "group": "消息与内容",
+      "id": "message-submitted",
+      "title": "已提交 / 等待消息确认",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_LocalMessageState.submitted",
+      "when": "本地消息状态=submitted",
+      "actions": [],
+      "blocked": [],
+      "hidden": [
+        "撤回",
+        "编辑",
+        "重试"
+      ],
+      "line": 985,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5310"
+      ],
+      "preview": "previews/message-submitted-dark.png"
+    },
+    {
+      "group": "消息与内容",
+      "id": "message-failed",
+      "title": "发送失败的用户消息",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_LocalMessageState.failed",
+      "when": "本地消息状态=failed",
+      "actions": [
+        "重试"
+      ],
+      "blocked": [],
+      "hidden": [
+        "撤回",
+        "编辑"
+      ],
+      "line": 4958,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5321"
+      ],
+      "preview": "previews/message-failed-dark.png"
+    },
+    {
+      "group": "消息与内容",
+      "id": "message-streaming",
+      "title": "Agent 流式回复",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_mergeAssistantStreamContent",
+      "when": "同一 assistant 消息持续返回增量内容",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "line": 7640,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5337"
+      ],
+      "preview": "previews/message-streaming-dark.png"
+    },
+    {
+      "group": "消息与内容",
+      "id": "message-tools",
+      "title": "工具活动进行中 / 展开",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_showToolMessageDetail",
+      "when": "工具调用已开始或返回结果，可查看详情",
+      "actions": [
+        "展开工具活动",
+        "查看原始内容"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 10784,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5353"
+      ],
+      "preview": "previews/message-tools-dark.png"
+    },
+    {
+      "group": "消息与内容",
+      "id": "message-diff",
+      "title": "文件变更折叠 / 展开",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_expandedDiffTurnIds",
+      "when": "本轮存在一项或多项文件 diff",
+      "actions": [
+        "展开或折叠文件",
+        "查看完整 Diff"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 337,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5371"
+      ],
+      "preview": "previews/message-diff-dark.png"
+    },
+    {
+      "group": "消息与内容",
+      "id": "message-history-loading",
+      "title": "加载更早消息",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_expandingHistory",
+      "when": "滚动至历史顶部，扩展更早消息中",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "line": 355,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5388"
+      ],
+      "preview": "previews/message-history-loading-dark.png"
+    },
+    {
+      "group": "消息与内容",
+      "id": "message-scroll-latest",
+      "title": "离开最新位置",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_showScrollToBottomAction",
+      "when": "当前滚动位置已离开底部",
+      "actions": [
+        "回到最新消息"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 368,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5411"
+      ],
+      "preview": "previews/message-scroll-latest-dark.png"
+    },
+    {
+      "group": "消息与内容",
+      "id": "message-image-preview",
+      "title": "媒体预览 / 背景选择",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_ImagePreviewBackdropMode",
+      "when": "打开消息中的图片预览",
+      "actions": [
+        "缩放预览",
+        "切换深色 / 浅色 / 棋盘背景",
+        "关闭"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 6097,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5432"
+      ],
+      "preview": "previews/message-image-preview-dark.png"
+    },
+    {
+      "group": "消息与内容",
+      "id": "message-media-error",
+      "title": "媒体预览失败",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "imagePreviewLoadFailed",
+      "when": "图片或视频加载失败",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "line": 6136,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5455"
+      ],
+      "preview": "previews/message-media-error-dark.png"
+    },
+    {
+      "group": "消息与内容",
+      "id": "message-speaking",
+      "title": "正在播报回复",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_isSpeaking",
+      "when": "TTS 正在播放当前回复",
+      "actions": [
+        "停止播报"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 311,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5468"
+      ],
+      "preview": "previews/message-speaking-dark.png"
+    },
+    {
+      "group": "消息与内容",
+      "id": "image-backdrop-dark",
+      "title": "图片背景 / 深色",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_ImagePreviewBackdropMode.dark",
+      "when": "图片预览背景选为深色",
+      "actions": [
+        "缩放",
+        "切换背景",
+        "关闭"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 6097,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5491"
+      ],
+      "preview": "previews/image-backdrop-dark-dark.png"
+    },
+    {
+      "group": "消息与内容",
+      "id": "image-backdrop-light",
+      "title": "图片背景 / 浅色",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_ImagePreviewBackdropMode.light",
+      "when": "图片预览背景选为浅色",
+      "actions": [
+        "缩放",
+        "切换背景",
+        "关闭"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 6323,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5508"
+      ],
+      "preview": "previews/image-backdrop-light-dark.png"
+    },
+    {
+      "group": "消息与内容",
+      "id": "image-backdrop-checker",
+      "title": "图片背景 / 棋盘格",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_ImagePreviewBackdropMode.checker",
+      "when": "图片预览背景选为棋盘格",
+      "actions": [
+        "缩放",
+        "切换背景",
+        "关闭"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 6325,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5525"
+      ],
+      "preview": "previews/image-backdrop-checker-dark.png"
+    },
+    {
+      "group": "语音通话",
+      "id": "call-preparing",
+      "title": "准备聆听",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_showVoiceInputStartingAsPrimary",
+      "when": "正在初始化实时 ASR",
+      "actions": [
+        "切换字幕",
+        "当前主操作",
+        "结束通话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 3882,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5609"
+      ],
+      "preview": "previews/call-preparing-dark.png"
+    },
+    {
+      "group": "语音通话",
+      "id": "call-idle",
+      "title": "尚未开始聆听",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "startCallMode",
+      "when": "通话模式已打开但未聆听",
+      "actions": [
+        "切换字幕",
+        "当前主操作",
+        "结束通话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 4005,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5657"
+      ],
+      "preview": "previews/call-idle-dark.png"
+    },
+    {
+      "group": "语音通话",
+      "id": "call-listening",
+      "title": "正在聆听",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_streamingAsrActive",
+      "when": "isListening 或 streamingAsrActive",
+      "actions": [
+        "切换字幕",
+        "当前主操作",
+        "结束通话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 321,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5705"
+      ],
+      "preview": "previews/call-listening-dark.png"
+    },
+    {
+      "group": "语音通话",
+      "id": "call-detected",
+      "title": "检测到说话",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_CallModeSpeechHintState.speaking",
+      "when": "speechHintState=speaking",
+      "actions": [
+        "切换字幕",
+        "当前主操作",
+        "结束通话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 4030,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5753"
+      ],
+      "preview": "previews/call-detected-dark.png"
+    },
+    {
+      "group": "语音通话",
+      "id": "call-pause",
+      "title": "等待停顿确认",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_CallModeSpeechHintState.waitingForPause",
+      "when": "speechHintState=waitingForPause",
+      "actions": [
+        "切换字幕",
+        "当前主操作",
+        "结束通话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 4036,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5802"
+      ],
+      "preview": "previews/call-pause-dark.png"
+    },
+    {
+      "group": "语音通话",
+      "id": "call-working",
+      "title": "Agent 正在处理",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_session.status == SessionStatus.running",
+      "when": "status=running",
+      "actions": [
+        "切换字幕",
+        "当前主操作",
+        "结束通话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 991,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5850"
+      ],
+      "preview": "previews/call-working-dark.png"
+    },
+    {
+      "group": "语音通话",
+      "id": "call-waiting",
+      "title": "等待执行结果",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_session.status == SessionStatus.waiting",
+      "when": "status=waiting",
+      "actions": [
+        "切换字幕",
+        "当前主操作",
+        "结束通话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 992,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5898"
+      ],
+      "preview": "previews/call-waiting-dark.png"
+    },
+    {
+      "group": "语音通话",
+      "id": "call-approval",
+      "title": "等待审批",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_session.status == SessionStatus.awaitingApproval",
+      "when": "status=awaitingApproval",
+      "actions": [
+        "切换字幕",
+        "当前主操作",
+        "结束通话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 1883,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5946"
+      ],
+      "preview": "previews/call-approval-dark.png"
+    },
+    {
+      "group": "语音通话",
+      "id": "call-speaking",
+      "title": "正在播报",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_callModeAwaitingPlaybackCompletion",
+      "when": "isSpeaking 或等待音频播放完成",
+      "actions": [
+        "切换字幕",
+        "当前主操作",
+        "结束通话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 315,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n5995"
+      ],
+      "preview": "previews/call-speaking-dark.png"
+    },
+    {
+      "group": "语音通话",
+      "id": "call-speaker-check",
+      "title": "声纹待核实",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_recognizedSpeechPendingSpeakerVerification",
+      "when": "转写内容尚在等待说话人核实",
+      "actions": [
+        "切换字幕",
+        "当前主操作",
+        "结束通话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 299,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n6043"
+      ],
+      "preview": "previews/call-speaker-check-dark.png"
+    },
+    {
+      "group": "语音通话",
+      "id": "call-rejected-speaker",
+      "title": "说话人不匹配",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_recognizedSpeechRejectedSpeaker",
+      "when": "语音不属于所选说话人",
+      "actions": [
+        "切换字幕",
+        "当前主操作",
+        "结束通话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 300,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n6091"
+      ],
+      "preview": "previews/call-rejected-speaker-dark.png"
+    },
+    {
+      "group": "语音通话",
+      "id": "call-rejected-other",
+      "title": "输入被过滤",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_recognizedSpeechRejectedOther",
+      "when": "转写未通过当前输入校验",
+      "actions": [
+        "切换字幕",
+        "当前主操作",
+        "结束通话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 302,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n6139"
+      ],
+      "preview": "previews/call-rejected-other-dark.png"
+    },
+    {
+      "group": "语音通话",
+      "id": "call-error",
+      "title": "语音或会话错误",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "statusIsError",
+      "when": "speechError 非空或会话失败",
+      "actions": [
+        "切换字幕",
+        "当前主操作",
+        "结束通话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 3923,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n6188"
+      ],
+      "preview": "previews/call-error-dark.png"
+    },
+    {
+      "group": "语音通话",
+      "id": "call-subtitles-off",
+      "title": "字幕已隐藏",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_callModeSubtitlesVisible",
+      "when": "subtitlesVisible=false",
+      "actions": [
+        "切换字幕",
+        "当前主操作",
+        "结束通话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 314,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n6234"
+      ],
+      "preview": "previews/call-subtitles-off-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "home-loading",
+      "title": "首页正在加载",
+      "source": "lib/src/screens/home_screen.dart",
+      "evidence": "_HomeSurfaceState.loading",
+      "when": "首页尚未取得首次会话 / 项目结果",
+      "actions": [],
+      "blocked": [],
+      "hidden": [
+        "旧的空态提示"
+      ],
+      "line": 626,
+      "sourceSha256": "be7adfe21d8301ddffcc2ee2ad7066e325fa4fe0ec98fe20c9f99a27f01a99fc",
+      "nodeIds": [
+        "n6264"
+      ],
+      "preview": "previews/home-loading-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "home-connect",
+      "title": "尚未连接 Bridge",
+      "source": "lib/src/screens/home_screen.dart",
+      "evidence": "_HomeSurfaceState.connect",
+      "when": "尚未配置可用的 Bridge 或未授权",
+      "actions": [
+        "下载 Bridge",
+        "填写地址",
+        "授权当前设备"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 632,
+      "sourceSha256": "be7adfe21d8301ddffcc2ee2ad7066e325fa4fe0ec98fe20c9f99a27f01a99fc",
+      "nodeIds": [
+        "n6277"
+      ],
+      "preview": "previews/home-connect-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "home-authorization",
+      "title": "等待设备授权",
+      "source": "lib/src/screens/home_screen.dart",
+      "evidence": "_HomeSurfaceState.waitingApproval",
+      "when": "已取得授权请求 ID，等待主机批准",
+      "actions": [
+        "复制批准命令",
+        "重新请求",
+        "返回欢迎页"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 629,
+      "sourceSha256": "be7adfe21d8301ddffcc2ee2ad7066e325fa4fe0ec98fe20c9f99a27f01a99fc",
+      "nodeIds": [
+        "n6299"
+      ],
+      "preview": "previews/home-authorization-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "home-auth-error",
+      "title": "设备授权请求失败",
+      "source": "lib/src/screens/home_screen.dart",
+      "evidence": "_authError",
+      "when": "授权请求或轮询返回错误",
+      "actions": [
+        "重新请求",
+        "更换 Bridge"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 58,
+      "sourceSha256": "be7adfe21d8301ddffcc2ee2ad7066e325fa4fe0ec98fe20c9f99a27f01a99fc",
+      "nodeIds": [
+        "n6321"
+      ],
+      "preview": "previews/home-auth-error-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "home-saving-bridge",
+      "title": "正在保存 Bridge 地址",
+      "source": "lib/src/screens/home_screen.dart",
+      "evidence": "_isSavingBridgeConfig",
+      "when": "Bridge 配置保存请求尚未结束",
+      "actions": [
+        "保存地址"
+      ],
+      "blocked": [
+        "保存地址"
+      ],
+      "hidden": [],
+      "line": 64,
+      "sourceSha256": "be7adfe21d8301ddffcc2ee2ad7066e325fa4fe0ec98fe20c9f99a27f01a99fc",
+      "nodeIds": [
+        "n6341"
+      ],
+      "preview": "previews/home-saving-bridge-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "home-refreshing",
+      "title": "首页正在刷新",
+      "source": "lib/src/screens/home_screen.dart",
+      "evidence": "_isRefreshing",
+      "when": "已存在数据，再次刷新中",
+      "actions": [],
+      "blocked": [],
+      "hidden": [
+        "首次加载骨架"
+      ],
+      "line": 60,
+      "sourceSha256": "be7adfe21d8301ddffcc2ee2ad7066e325fa4fe0ec98fe20c9f99a27f01a99fc",
+      "nodeIds": [
+        "n6358"
+      ],
+      "preview": "previews/home-refreshing-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "home-session-error",
+      "title": "首页会话加载失败",
+      "source": "lib/src/screens/home_screen.dart",
+      "evidence": "_recentSessionsError",
+      "when": "会话接口失败，项目可以独立展示",
+      "actions": [
+        "重试"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 57,
+      "sourceSha256": "be7adfe21d8301ddffcc2ee2ad7066e325fa4fe0ec98fe20c9f99a27f01a99fc",
+      "nodeIds": [
+        "n6371"
+      ],
+      "preview": "previews/home-session-error-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "home-project-error",
+      "title": "首页项目加载失败",
+      "source": "lib/src/screens/home_screen.dart",
+      "evidence": "_projectsError",
+      "when": "项目接口失败，已有会话内容可保留",
+      "actions": [
+        "重试",
+        "打开设置"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 56,
+      "sourceSha256": "be7adfe21d8301ddffcc2ee2ad7066e325fa4fe0ec98fe20c9f99a27f01a99fc",
+      "nodeIds": [
+        "n6388"
+      ],
+      "preview": "previews/home-project-error-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "home-no-sessions",
+      "title": "已有项目 / 尚无会话",
+      "source": "lib/src/screens/home_screen.dart",
+      "evidence": "noSessionsYet",
+      "when": "项目存在，但会话列表为空",
+      "actions": [
+        "新建会话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 812,
+      "sourceSha256": "be7adfe21d8301ddffcc2ee2ad7066e325fa4fe0ec98fe20c9f99a27f01a99fc",
+      "nodeIds": [
+        "n6408"
+      ],
+      "preview": "previews/home-no-sessions-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "home-search-empty",
+      "title": "首页搜索无结果",
+      "source": "lib/src/screens/home_screen.dart",
+      "evidence": "noSearchResultsTitle",
+      "when": "查询非空，匹配会话与项目均为空",
+      "actions": [
+        "清空搜索"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 1363,
+      "sourceSha256": "be7adfe21d8301ddffcc2ee2ad7066e325fa4fe0ec98fe20c9f99a27f01a99fc",
+      "nodeIds": [
+        "n6425"
+      ],
+      "preview": "previews/home-search-empty-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "projects-loading",
+      "title": "项目列表加载中",
+      "source": "lib/src/screens/home_screen.dart",
+      "evidence": "_SearchBarSkeleton",
+      "when": "首次项目请求尚未返回",
+      "actions": [],
+      "blocked": [],
+      "hidden": [
+        "空项目提示"
+      ],
+      "line": 723,
+      "sourceSha256": "be7adfe21d8301ddffcc2ee2ad7066e325fa4fe0ec98fe20c9f99a27f01a99fc",
+      "nodeIds": [
+        "n6442"
+      ],
+      "preview": "previews/projects-loading-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "projects-empty",
+      "title": "项目列表为空",
+      "source": "lib/src/screens/home_screen.dart",
+      "evidence": "noProjectsYet",
+      "when": "项目请求成功且列表为空",
+      "actions": [
+        "创建项目"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 1830,
+      "sourceSha256": "be7adfe21d8301ddffcc2ee2ad7066e325fa4fe0ec98fe20c9f99a27f01a99fc",
+      "nodeIds": [
+        "n6455"
+      ],
+      "preview": "previews/projects-empty-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "projects-error",
+      "title": "项目列表请求失败",
+      "source": "lib/src/screens/home_screen.dart",
+      "evidence": "loadProjectsFailed",
+      "when": "列表接口返回错误",
+      "actions": [
+        "重试",
+        "更换 Bridge"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 1122,
+      "sourceSha256": "be7adfe21d8301ddffcc2ee2ad7066e325fa4fe0ec98fe20c9f99a27f01a99fc",
+      "nodeIds": [
+        "n6473"
+      ],
+      "preview": "previews/projects-error-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "project-empty",
+      "title": "项目内尚无会话",
+      "source": "lib/src/screens/project_detail_screen.dart",
+      "evidence": "_ProjectEmptyCard",
+      "when": "当前项目会话请求成功且列表为空",
+      "actions": [
+        "新建会话"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 763,
+      "sourceSha256": "e00fdb6f1f3e80d758435122f75a011587f12a1b1e1d440d1617fa9a03ba9269",
+      "nodeIds": [
+        "n6492"
+      ],
+      "preview": "previews/project-empty-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "project-search-empty",
+      "title": "项目内搜索无结果",
+      "source": "lib/src/screens/project_detail_screen.dart",
+      "evidence": "_ProjectSearchEmptyCard",
+      "when": "该项目有会话，但没有匹配当前查询",
+      "actions": [
+        "清空搜索"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 768,
+      "sourceSha256": "e00fdb6f1f3e80d758435122f75a011587f12a1b1e1d440d1617fa9a03ba9269",
+      "nodeIds": [
+        "n6509"
+      ],
+      "preview": "previews/project-search-empty-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "project-error",
+      "title": "项目会话请求失败",
+      "source": "lib/src/screens/project_detail_screen.dart",
+      "evidence": "_ProjectErrorCard",
+      "when": "当前项目会话接口返回错误",
+      "actions": [
+        "重试"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 757,
+      "sourceSha256": "e00fdb6f1f3e80d758435122f75a011587f12a1b1e1d440d1617fa9a03ba9269",
+      "nodeIds": [
+        "n6526"
+      ],
+      "preview": "previews/project-error-dark.png"
+    },
+    {
+      "group": "连接、首页与项目",
+      "id": "project-refreshing",
+      "title": "项目会话刷新中",
+      "source": "lib/src/screens/project_detail_screen.dart",
+      "evidence": "_isRefreshing",
+      "when": "已有会话，周期刷新或下拉刷新中",
+      "actions": [],
+      "blocked": [],
+      "hidden": [
+        "首次加载空态"
+      ],
+      "line": 51,
+      "sourceSha256": "e00fdb6f1f3e80d758435122f75a011587f12a1b1e1d440d1617fa9a03ba9269",
+      "nodeIds": [
+        "n6544"
+      ],
+      "preview": "previews/project-refreshing-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "create-agents-loading",
+      "title": "正在读取 Agent",
+      "source": "lib/src/widgets/create_session_dialog.dart",
+      "evidence": "_loadingAgents",
+      "when": "Agent 列表首次加载中",
+      "actions": [
+        "选择 Agent",
+        "创建会话"
+      ],
+      "blocked": [
+        "选择 Agent",
+        "创建会话"
+      ],
+      "hidden": [],
+      "line": 41,
+      "sourceSha256": "9c7fd64589fe7ba57e3d95483d0250767679ead19fc5ad5295f7a68bff6ac8a4",
+      "nodeIds": [
+        "n6566"
+      ],
+      "preview": "previews/create-agents-loading-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "create-agent-missing",
+      "title": "Agent 尚未安装",
+      "source": "lib/src/widgets/create_session_dialog.dart",
+      "evidence": "_selectedAgentInstalled",
+      "when": "选中的 Agent installed=false",
+      "actions": [
+        "安装 Agent"
+      ],
+      "blocked": [],
+      "hidden": [
+        "可直接创建的状态"
+      ],
+      "line": 99,
+      "sourceSha256": "9c7fd64589fe7ba57e3d95483d0250767679ead19fc5ad5295f7a68bff6ac8a4",
+      "nodeIds": [
+        "n6585"
+      ],
+      "preview": "previews/create-agent-missing-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "create-agent-installing",
+      "title": "Agent 正在安装",
+      "source": "lib/src/widgets/create_session_dialog.dart",
+      "evidence": "_installingAgent",
+      "when": "安装请求尚未完成",
+      "actions": [
+        "安装 Agent",
+        "创建会话"
+      ],
+      "blocked": [
+        "安装 Agent",
+        "创建会话"
+      ],
+      "hidden": [],
+      "line": 42,
+      "sourceSha256": "9c7fd64589fe7ba57e3d95483d0250767679ead19fc5ad5295f7a68bff6ac8a4",
+      "nodeIds": [
+        "n6602"
+      ],
+      "preview": "previews/create-agent-installing-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "create-agent-install-error",
+      "title": "Agent 安装失败",
+      "source": "lib/src/widgets/create_session_dialog.dart",
+      "evidence": "_agentError",
+      "when": "安装返回失败或网络异常",
+      "actions": [
+        "重新安装",
+        "切换 Agent"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 43,
+      "sourceSha256": "9c7fd64589fe7ba57e3d95483d0250767679ead19fc5ad5295f7a68bff6ac8a4",
+      "nodeIds": [
+        "n6621"
+      ],
+      "preview": "previews/create-agent-install-error-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "create-models-loading",
+      "title": "模型列表读取中",
+      "source": "lib/src/widgets/create_session_dialog.dart",
+      "evidence": "_loadingModels",
+      "when": "选择供应商后正在读取其模型",
+      "actions": [
+        "选择模型"
+      ],
+      "blocked": [
+        "选择模型"
+      ],
+      "hidden": [],
+      "line": 40,
+      "sourceSha256": "9c7fd64589fe7ba57e3d95483d0250767679ead19fc5ad5295f7a68bff6ac8a4",
+      "nodeIds": [
+        "n6641"
+      ],
+      "preview": "previews/create-models-loading-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "create-provider-default",
+      "title": "没有兼容供应商",
+      "source": "lib/src/widgets/create_session_dialog.dart",
+      "evidence": "_normalizeProviderSelection",
+      "when": "没有符合所选 Agent 格式的供应商",
+      "actions": [
+        "使用默认配置"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 74,
+      "sourceSha256": "9c7fd64589fe7ba57e3d95483d0250767679ead19fc5ad5295f7a68bff6ac8a4",
+      "nodeIds": [
+        "n6658"
+      ],
+      "preview": "previews/create-provider-default-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "settings-saving",
+      "title": "设置正在保存",
+      "source": "lib/src/screens/settings_screen.dart",
+      "evidence": "_saving",
+      "when": "设置保存请求未结束",
+      "actions": [
+        "保存"
+      ],
+      "blocked": [
+        "保存"
+      ],
+      "hidden": [],
+      "line": 71,
+      "sourceSha256": "de5f8ed03f3547837b77aac09fd7d59aa7f27723dd46399472d0540abebf7214",
+      "nodeIds": [
+        "n6675"
+      ],
+      "preview": "previews/settings-saving-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "settings-ai-providers-loading",
+      "title": "审批供应商加载中",
+      "source": "lib/src/screens/settings_screen.dart",
+      "evidence": "_loadingModelProviders",
+      "when": "正在读取已配置且可用的模型服务",
+      "actions": [
+        "选择审批模型服务"
+      ],
+      "blocked": [
+        "选择审批模型服务"
+      ],
+      "hidden": [],
+      "line": 59,
+      "sourceSha256": "de5f8ed03f3547837b77aac09fd7d59aa7f27723dd46399472d0540abebf7214",
+      "nodeIds": [
+        "n6692"
+      ],
+      "preview": "previews/settings-ai-providers-loading-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "settings-ai-providers-error",
+      "title": "审批供应商加载失败",
+      "source": "lib/src/screens/settings_screen.dart",
+      "evidence": "_modelProvidersError",
+      "when": "已配置服务列表请求失败",
+      "actions": [
+        "重试加载"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 62,
+      "sourceSha256": "de5f8ed03f3547837b77aac09fd7d59aa7f27723dd46399472d0540abebf7214",
+      "nodeIds": [
+        "n6710"
+      ],
+      "preview": "previews/settings-ai-providers-error-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "settings-no-model-service",
+      "title": "未配置审批模型服务",
+      "source": "lib/src/screens/settings_screen.dart",
+      "evidence": "noConfiguredModels",
+      "when": "没有已启用的模型服务",
+      "actions": [
+        "打开模型供应商"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 902,
+      "sourceSha256": "de5f8ed03f3547837b77aac09fd7d59aa7f27723dd46399472d0540abebf7214",
+      "nodeIds": [
+        "n6727"
+      ],
+      "preview": "previews/settings-no-model-service-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "settings-ai-models-loading",
+      "title": "审批模型加载中",
+      "source": "lib/src/screens/settings_screen.dart",
+      "evidence": "_loadingAiApprovalModels",
+      "when": "已选模型服务，其模型列表尚未返回",
+      "actions": [
+        "选择审批模型"
+      ],
+      "blocked": [
+        "选择审批模型"
+      ],
+      "hidden": [],
+      "line": 60,
+      "sourceSha256": "de5f8ed03f3547837b77aac09fd7d59aa7f27723dd46399472d0540abebf7214",
+      "nodeIds": [
+        "n6744"
+      ],
+      "preview": "previews/settings-ai-models-loading-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "settings-no-ai-models",
+      "title": "供应商无可用审批模型",
+      "source": "lib/src/screens/settings_screen.dart",
+      "evidence": "noApprovalModels",
+      "when": "已选服务未返回模型",
+      "actions": [
+        "切换服务",
+        "重试模型加载"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 957,
+      "sourceSha256": "de5f8ed03f3547837b77aac09fd7d59aa7f27723dd46399472d0540abebf7214",
+      "nodeIds": [
+        "n6761"
+      ],
+      "preview": "previews/settings-no-ai-models-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "provider-loading",
+      "title": "供应商列表加载中",
+      "source": "lib/src/screens/model_provider_screen.dart",
+      "evidence": "_loading",
+      "when": "首次读取模型供应商中",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "line": 31,
+      "sourceSha256": "dc280cac412f17c7d37806292f2406af9bd959c03a28383d015ba20c01e27731",
+      "nodeIds": [
+        "n6781"
+      ],
+      "preview": "previews/provider-loading-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "provider-empty",
+      "title": "尚无模型供应商",
+      "source": "lib/src/screens/model_provider_screen.dart",
+      "evidence": "noProvidersYet",
+      "when": "读取成功且供应商列表为空",
+      "actions": [
+        "添加供应商"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 429,
+      "sourceSha256": "dc280cac412f17c7d37806292f2406af9bd959c03a28383d015ba20c01e27731",
+      "nodeIds": [
+        "n6794"
+      ],
+      "preview": "previews/provider-empty-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "provider-load-error",
+      "title": "供应商读取失败",
+      "source": "lib/src/screens/model_provider_screen.dart",
+      "evidence": "_buildErrorState",
+      "when": "模型供应商接口失败",
+      "actions": [
+        "重试"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 304,
+      "sourceSha256": "dc280cac412f17c7d37806292f2406af9bd959c03a28383d015ba20c01e27731",
+      "nodeIds": [
+        "n6811"
+      ],
+      "preview": "previews/provider-load-error-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "provider-required",
+      "title": "供应商必填字段缺失",
+      "source": "lib/src/screens/model_provider_screen.dart",
+      "evidence": "fieldRequired",
+      "when": "名称或基础 URL 为空",
+      "actions": [
+        "补充字段",
+        "保存"
+      ],
+      "blocked": [
+        "保存"
+      ],
+      "hidden": [],
+      "line": 854,
+      "sourceSha256": "dc280cac412f17c7d37806292f2406af9bd959c03a28383d015ba20c01e27731",
+      "nodeIds": [
+        "n6828"
+      ],
+      "preview": "previews/provider-required-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "provider-delete-confirm",
+      "title": "删除供应商确认",
+      "source": "lib/src/screens/model_provider_screen.dart",
+      "evidence": "_deleteProvider",
+      "when": "已选择删除某个供应商，尚未确认",
+      "actions": [
+        "确认删除",
+        "取消"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 104,
+      "sourceSha256": "dc280cac412f17c7d37806292f2406af9bd959c03a28383d015ba20c01e27731",
+      "nodeIds": [
+        "n6848"
+      ],
+      "preview": "previews/provider-delete-confirm-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "update-checking",
+      "title": "正在检查更新",
+      "source": "lib/src/screens/settings_screen.dart",
+      "evidence": "_checkingUpdate",
+      "when": "更新检查请求未结束",
+      "actions": [
+        "检查更新"
+      ],
+      "blocked": [
+        "检查更新"
+      ],
+      "hidden": [],
+      "line": 74,
+      "sourceSha256": "de5f8ed03f3547837b77aac09fd7d59aa7f27723dd46399472d0540abebf7214",
+      "nodeIds": [
+        "n6867"
+      ],
+      "preview": "previews/update-checking-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "update-not-found",
+      "title": "指定版本未找到",
+      "source": "lib/src/screens/settings_screen.dart",
+      "evidence": "targetVersionNotFound",
+      "when": "目标版本不存在或不可下载",
+      "actions": [
+        "修改版本号",
+        "重新检查"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 1539,
+      "sourceSha256": "de5f8ed03f3547837b77aac09fd7d59aa7f27723dd46399472d0540abebf7214",
+      "nodeIds": [
+        "n6884"
+      ],
+      "preview": "previews/update-not-found-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "update-force",
+      "title": "强制更新提示",
+      "source": "lib/src/screens/settings_screen.dart",
+      "evidence": "update.force",
+      "when": "服务返回 force=true",
+      "actions": [
+        "立即更新"
+      ],
+      "blocked": [],
+      "hidden": [
+        "稍后",
+        "直接关闭更新对话框"
+      ],
+      "line": 1587,
+      "sourceSha256": "de5f8ed03f3547837b77aac09fd7d59aa7f27723dd46399472d0540abebf7214",
+      "nodeIds": [
+        "n6903"
+      ],
+      "preview": "previews/update-force-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "update-web",
+      "title": "Web 不提供应用包更新",
+      "source": "lib/src/screens/settings_screen.dart",
+      "evidence": "onPressed: kIsWeb",
+      "when": "当前运行在 Web 平台",
+      "actions": [
+        "检查 App 更新"
+      ],
+      "blocked": [
+        "检查 App 更新"
+      ],
+      "hidden": [],
+      "line": 1182,
+      "sourceSha256": "de5f8ed03f3547837b77aac09fd7d59aa7f27723dd46399472d0540abebf7214",
+      "nodeIds": [
+        "n6921"
+      ],
+      "preview": "previews/update-web-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "update-available",
+      "title": "可选更新提示",
+      "source": "lib/src/screens/settings_screen.dart",
+      "evidence": "_showUpdateDialog",
+      "when": "发现新版本且 force=false",
+      "actions": [
+        "立即更新",
+        "稍后"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 1547,
+      "sourceSha256": "de5f8ed03f3547837b77aac09fd7d59aa7f27723dd46399472d0540abebf7214",
+      "nodeIds": [
+        "n6938"
+      ],
+      "preview": "previews/update-available-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "update-downloading",
+      "title": "Android 更新下载中",
+      "source": "lib/src/screens/settings_screen.dart",
+      "evidence": "_downloadAndInstallUpdate",
+      "when": "已确认更新，Android 正在下载应用包",
+      "actions": [],
+      "blocked": [
+        "重复下载"
+      ],
+      "hidden": [],
+      "line": 1621,
+      "sourceSha256": "de5f8ed03f3547837b77aac09fd7d59aa7f27723dd46399472d0540abebf7214",
+      "nodeIds": [
+        "n6957"
+      ],
+      "preview": "previews/update-downloading-dark.png"
+    },
+    {
+      "group": "创建、设置与模型供应商",
+      "id": "update-downgrade",
+      "title": "目标版本为降级包",
+      "source": "lib/src/screens/settings_screen.dart",
+      "evidence": "targetVersionDowngradeWarning",
+      "when": "指定版本比当前已安装版本更旧",
+      "actions": [
+        "立即更新",
+        "稍后"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 1603,
+      "sourceSha256": "de5f8ed03f3547837b77aac09fd7d59aa7f27723dd46399472d0540abebf7214",
+      "nodeIds": [
+        "n6970"
+      ],
+      "preview": "previews/update-downgrade-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-system-unavailable",
+      "title": "系统语音能力不可用",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "_systemAsrSupportedOnPlatform",
+      "when": "当前平台不支持所选系统语音能力",
+      "actions": [
+        "选择语音服务"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 171,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n6998"
+      ],
+      "preview": "previews/speech-system-unavailable-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-plugin-missing",
+      "title": "所选语音插件未安装",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "selectedPluginNotInstalled",
+      "when": "选择的插件尚未安装",
+      "actions": [
+        "安装插件",
+        "测试"
+      ],
+      "blocked": [
+        "测试"
+      ],
+      "hidden": [],
+      "line": 1147,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7015"
+      ],
+      "preview": "previews/speech-plugin-missing-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-credentials-required",
+      "title": "语音插件缺少必填参数",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "fillRequiredPluginSettings",
+      "when": "插件清单要求的配置项缺失",
+      "actions": [
+        "填写配置",
+        "保存并使用",
+        "测试"
+      ],
+      "blocked": [
+        "测试"
+      ],
+      "hidden": [],
+      "line": 1449,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7034"
+      ],
+      "preview": "previews/speech-credentials-required-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-credentials-saving",
+      "title": "语音插件配置保存中",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "_savingPluginConfigurationIds",
+      "when": "插件配置正在保存",
+      "actions": [
+        "保存插件设置"
+      ],
+      "blocked": [
+        "保存插件设置"
+      ],
+      "hidden": [],
+      "line": 105,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7056"
+      ],
+      "preview": "previews/speech-credentials-saving-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-service-error",
+      "title": "语音服务测试被拒绝",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "realtimeAsrAuthenticationRejected",
+      "when": "实时 ASR 认证被服务拒绝",
+      "actions": [
+        "修改配置",
+        "重新测试"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 1920,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7074"
+      ],
+      "preview": "previews/speech-service-error-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-test-recording",
+      "title": "批量 ASR 测试录音中",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "recordingSpeakThenStop",
+      "when": "已开始录音，尚未停止",
+      "actions": [
+        "录音",
+        "停止并转写"
+      ],
+      "blocked": [
+        "录音"
+      ],
+      "hidden": [],
+      "line": 1845,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7093"
+      ],
+      "preview": "previews/speech-test-recording-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-test-transcribing",
+      "title": "批量 ASR 测试转写中",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "transcribingRecordedAudio",
+      "when": "录音已停止，正在等待转写结果",
+      "actions": [
+        "录音",
+        "停止并转写"
+      ],
+      "blocked": [
+        "录音",
+        "停止并转写"
+      ],
+      "hidden": [],
+      "line": 1756,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7112"
+      ],
+      "preview": "previews/speech-test-transcribing-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-test-playing",
+      "title": "TTS 测试播放中",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "playbackStartedSuccessfully",
+      "when": "测试语音已成功开始播放",
+      "actions": [
+        "播放",
+        "停止"
+      ],
+      "blocked": [
+        "播放"
+      ],
+      "hidden": [],
+      "line": 1593,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7131"
+      ],
+      "preview": "previews/speech-test-playing-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-local-unreachable",
+      "title": "本地 Bridge 语音状态读取失败",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "_speechStatusError",
+      "when": "本地语音状态接口失败",
+      "actions": [
+        "刷新状态"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 145,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7151"
+      ],
+      "preview": "previews/speech-local-unreachable-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-no-speaker",
+      "title": "尚未录入说话人",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "enrollSpeakerBeforeFiltering",
+      "when": "说话人列表为空",
+      "actions": [
+        "下载声纹模型",
+        "录入说话人",
+        "启用过滤"
+      ],
+      "blocked": [
+        "启用过滤"
+      ],
+      "hidden": [],
+      "line": 3822,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7168"
+      ],
+      "preview": "previews/speech-no-speaker-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-speaker-recording",
+      "title": "说话人样本录制中",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "_speakerEnrollmentRecording",
+      "when": "正在录制声纹样本",
+      "actions": [
+        "完成录入"
+      ],
+      "blocked": [],
+      "hidden": [
+        "重复开始录制"
+      ],
+      "line": 136,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7190"
+      ],
+      "preview": "previews/speech-speaker-recording-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-speaker-saving",
+      "title": "说话人样本保存中",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "_speakerEnrollmentSaving",
+      "when": "声纹录入请求未完成",
+      "actions": [
+        "正在保存说话人"
+      ],
+      "blocked": [
+        "正在保存说话人"
+      ],
+      "hidden": [],
+      "line": 137,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7207"
+      ],
+      "preview": "previews/speech-speaker-saving-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-model-queued",
+      "title": "模型下载排队中",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "speechDownloadStatusQueued",
+      "when": "模型任务状态为 queued",
+      "actions": [],
+      "blocked": [
+        "重复下载"
+      ],
+      "hidden": [],
+      "line": 5012,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7225"
+      ],
+      "preview": "previews/speech-model-queued-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-model-downloading",
+      "title": "模型正在下载",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "speechDownloadStatusDownloading",
+      "when": "模型任务状态为 downloading",
+      "actions": [],
+      "blocked": [
+        "重复下载"
+      ],
+      "hidden": [],
+      "line": 5013,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7238"
+      ],
+      "preview": "previews/speech-model-downloading-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-model-extracting",
+      "title": "模型正在解压",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "speechDownloadStatusExtracting",
+      "when": "模型任务状态为 extracting",
+      "actions": [],
+      "blocked": [
+        "重复下载"
+      ],
+      "hidden": [],
+      "line": 5014,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7251"
+      ],
+      "preview": "previews/speech-model-extracting-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-model-verifying",
+      "title": "模型正在校验",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "speechDownloadStatusVerifying",
+      "when": "模型任务状态为 verifying",
+      "actions": [],
+      "blocked": [
+        "重复下载"
+      ],
+      "hidden": [],
+      "line": 5015,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7264"
+      ],
+      "preview": "previews/speech-model-verifying-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-model-ready",
+      "title": "模型下载完成",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "speechDownloadStatusCompleted",
+      "when": "模型任务状态为 completed",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "line": 5016,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7278"
+      ],
+      "preview": "previews/speech-model-ready-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-realtime-starting",
+      "title": "实时 ASR 测试启动中",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "startingRealtimeSpeechTest",
+      "when": "测试正在连接实时语音服务",
+      "actions": [
+        "开始测试"
+      ],
+      "blocked": [
+        "开始测试"
+      ],
+      "hidden": [],
+      "line": 1959,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7291"
+      ],
+      "preview": "previews/speech-realtime-starting-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "speech-realtime-listening",
+      "title": "实时 ASR 测试聆听中",
+      "source": "lib/src/screens/speech_settings_screen.dart",
+      "evidence": "listeningSpeakShortSentence",
+      "when": "实时语音测试已开始并等待转写",
+      "actions": [
+        "停止测试"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 2085,
+      "sourceSha256": "9205a5263beddb965c86fb44fe0fedba452adde317a8139b577e462ec2d04eb6",
+      "nodeIds": [
+        "n7308"
+      ],
+      "preview": "previews/speech-realtime-listening-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "pi-loading",
+      "title": "Pi 插件列表加载中",
+      "source": "lib/src/screens/pi_plugins_screen.dart",
+      "evidence": "if (_loading)",
+      "when": "首次读取插件列表中",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "line": 178,
+      "sourceSha256": "0289c514a81ccc4da38ae9c3dc1e53e8fc4e8e022448c34f3232ba732db812cb",
+      "nodeIds": [
+        "n7325"
+      ],
+      "preview": "previews/pi-loading-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "pi-empty",
+      "title": "尚未安装 Pi 插件",
+      "source": "lib/src/screens/pi_plugins_screen.dart",
+      "evidence": "piPluginEmpty",
+      "when": "插件接口成功返回空列表",
+      "actions": [
+        "安装插件"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 192,
+      "sourceSha256": "0289c514a81ccc4da38ae9c3dc1e53e8fc4e8e022448c34f3232ba732db812cb",
+      "nodeIds": [
+        "n7339"
+      ],
+      "preview": "previews/pi-empty-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "pi-load-error",
+      "title": "Pi 插件列表读取失败",
+      "source": "lib/src/screens/pi_plugins_screen.dart",
+      "evidence": "piPluginLoadFailed",
+      "when": "插件列表接口失败",
+      "actions": [
+        "重试"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 183,
+      "sourceSha256": "0289c514a81ccc4da38ae9c3dc1e53e8fc4e8e022448c34f3232ba732db812cb",
+      "nodeIds": [
+        "n7356"
+      ],
+      "preview": "previews/pi-load-error-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "pi-installing",
+      "title": "Pi 插件正在安装",
+      "source": "lib/src/screens/pi_plugins_screen.dart",
+      "evidence": "_busy.contains('__install__')",
+      "when": "安装请求未完成",
+      "actions": [
+        "安装插件"
+      ],
+      "blocked": [
+        "安装插件"
+      ],
+      "hidden": [],
+      "line": 157,
+      "sourceSha256": "0289c514a81ccc4da38ae9c3dc1e53e8fc4e8e022448c34f3232ba732db812cb",
+      "nodeIds": [
+        "n7373"
+      ],
+      "preview": "previews/pi-installing-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "pi-plugin-busy",
+      "title": "当前插件操作处理中",
+      "source": "lib/src/screens/pi_plugins_screen.dart",
+      "evidence": "final busy = _busy.contains(plugin.id)",
+      "when": "启用、校验、配置或卸载当前插件的请求未完成",
+      "actions": [
+        "启用",
+        "校验",
+        "配置",
+        "卸载"
+      ],
+      "blocked": [
+        "启用",
+        "校验",
+        "配置",
+        "卸载"
+      ],
+      "hidden": [],
+      "line": 205,
+      "sourceSha256": "0289c514a81ccc4da38ae9c3dc1e53e8fc4e8e022448c34f3232ba732db812cb",
+      "nodeIds": [
+        "n7390"
+      ],
+      "preview": "previews/pi-plugin-busy-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "pi-validation-error",
+      "title": "Pi 插件校验失败",
+      "source": "lib/src/screens/pi_plugins_screen.dart",
+      "evidence": "plugin.validationError",
+      "when": "插件返回非空的校验错误",
+      "actions": [
+        "配置",
+        "校验",
+        "卸载"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 254,
+      "sourceSha256": "0289c514a81ccc4da38ae9c3dc1e53e8fc4e8e022448c34f3232ba732db812cb",
+      "nodeIds": [
+        "n7415"
+      ],
+      "preview": "previews/pi-validation-error-dark.png"
+    },
+    {
+      "group": "语音服务与 Pi 插件",
+      "id": "pi-json-error",
+      "title": "插件配置不是 JSON 对象",
+      "source": "lib/src/screens/pi_plugins_screen.dart",
+      "evidence": "Configuration must be a JSON object",
+      "when": "安装或编辑时的配置解析失败",
+      "actions": [
+        "编辑配置",
+        "安装"
+      ],
+      "blocked": [
+        "安装"
+      ],
+      "hidden": [],
+      "line": 355,
+      "sourceSha256": "0289c514a81ccc4da38ae9c3dc1e53e8fc4e8e022448c34f3232ba732db812cb",
+      "nodeIds": [
+        "n7437"
+      ],
+      "preview": "previews/pi-json-error-dark.png"
+    },
+    {
+      "group": "Pi 扩展交互",
+      "id": "pi-ui-confirm",
+      "title": "插件请求确认",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_showPiConfirm",
+      "when": "插件发出 confirm / custom 请求",
+      "actions": [
+        "批准",
+        "拒绝"
+      ],
+      "blocked": [],
+      "hidden": [
+        "非能力请求的始终允许"
+      ],
+      "line": 7812,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n7465"
+      ],
+      "preview": "previews/pi-ui-confirm-dark.png"
+    },
+    {
+      "group": "Pi 扩展交互",
+      "id": "pi-ui-capability",
+      "title": "插件请求能力权限",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "isCapability",
+      "when": "请求包含 capability、permission 或 persist",
+      "actions": [
+        "批准",
+        "始终允许",
+        "拒绝"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 7850,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n7484"
+      ],
+      "preview": "previews/pi-ui-capability-dark.png"
+    },
+    {
+      "group": "Pi 扩展交互",
+      "id": "pi-ui-select",
+      "title": "插件请求选择选项",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_showPiSelect",
+      "when": "插件发出 select 请求",
+      "actions": [
+        "选择服务提供的选项"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 7816,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n7506"
+      ],
+      "preview": "previews/pi-ui-select-dark.png"
+    },
+    {
+      "group": "Pi 扩展交互",
+      "id": "pi-ui-input",
+      "title": "插件请求单行输入",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "request.method == 'editor'",
+      "when": "插件发出 input 请求",
+      "actions": [
+        "输入",
+        "确认",
+        "取消"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 7926,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n7521"
+      ],
+      "preview": "previews/pi-ui-input-dark.png"
+    },
+    {
+      "group": "Pi 扩展交互",
+      "id": "pi-ui-editor",
+      "title": "插件请求多行编辑",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_showPiTextInput",
+      "when": "插件发出 editor 请求，保留多行输入",
+      "actions": [
+        "编辑",
+        "确认",
+        "取消"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 7821,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n7540"
+      ],
+      "preview": "previews/pi-ui-editor-dark.png"
+    },
+    {
+      "group": "验收运行",
+      "id": "acceptance-phase-not_installed",
+      "title": "验收环境未安装",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "'not_installed'",
+      "when": "phase=not_installed",
+      "actions": [
+        "安装验收环境"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 27,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7567"
+      ],
+      "preview": "previews/acceptance-phase-not_installed-dark.png"
+    },
+    {
+      "group": "验收运行",
+      "id": "acceptance-phase-checking",
+      "title": "正在检查环境",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "'checking'",
+      "when": "phase=checking",
+      "actions": [],
+      "blocked": [
+        "重复启动对应操作"
+      ],
+      "hidden": [],
+      "line": 28,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7584"
+      ],
+      "preview": "previews/acceptance-phase-checking-dark.png"
+    },
+    {
+      "group": "验收运行",
+      "id": "acceptance-phase-preparing",
+      "title": "正在准备环境",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "'preparing'",
+      "when": "phase=preparing",
+      "actions": [],
+      "blocked": [
+        "重复启动对应操作"
+      ],
+      "hidden": [],
+      "line": 29,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7597"
+      ],
+      "preview": "previews/acceptance-phase-preparing-dark.png"
+    },
+    {
+      "group": "验收运行",
+      "id": "acceptance-phase-verifying",
+      "title": "正在验证桌面",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "'verifying'",
+      "when": "phase=verifying",
+      "actions": [],
+      "blocked": [
+        "重复启动对应操作"
+      ],
+      "hidden": [],
+      "line": 30,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7610"
+      ],
+      "preview": "previews/acceptance-phase-verifying-dark.png"
+    },
+    {
+      "group": "验收运行",
+      "id": "acceptance-phase-ready",
+      "title": "验收环境已就绪",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "'ready'",
+      "when": "phase=ready",
+      "actions": [
+        "开始验收"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 31,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7624"
+      ],
+      "preview": "previews/acceptance-phase-ready-dark.png"
+    },
+    {
+      "group": "验收运行",
+      "id": "acceptance-phase-starting",
+      "title": "正在启动验收",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "'starting'",
+      "when": "phase=starting",
+      "actions": [],
+      "blocked": [
+        "重复启动对应操作"
+      ],
+      "hidden": [],
+      "line": 32,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7641"
+      ],
+      "preview": "previews/acceptance-phase-starting-dark.png"
+    },
+    {
+      "group": "验收运行",
+      "id": "acceptance-phase-planning",
+      "title": "正在生成测试用例",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "'planning'",
+      "when": "phase=planning",
+      "actions": [],
+      "blocked": [
+        "重复启动对应操作"
+      ],
+      "hidden": [],
+      "line": 33,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7654"
+      ],
+      "preview": "previews/acceptance-phase-planning-dark.png"
+    },
+    {
+      "group": "验收运行",
+      "id": "acceptance-phase-running",
+      "title": "自动验收执行中",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "'running'",
+      "when": "phase=running",
+      "actions": [
+        "停止验收"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 34,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7667"
+      ],
+      "preview": "previews/acceptance-phase-running-dark.png"
+    },
+    {
+      "group": "验收运行",
+      "id": "acceptance-phase-stopping",
+      "title": "正在停止验收",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "'stopping'",
+      "when": "phase=stopping",
+      "actions": [],
+      "blocked": [
+        "重复启动对应操作"
+      ],
+      "hidden": [],
+      "line": 35,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7685"
+      ],
+      "preview": "previews/acceptance-phase-stopping-dark.png"
+    },
+    {
+      "group": "验收运行",
+      "id": "acceptance-phase-completed",
+      "title": "验收运行已结束",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "'completed'",
+      "when": "phase=completed",
+      "actions": [
+        "查看证据"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 36,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7698"
+      ],
+      "preview": "previews/acceptance-phase-completed-dark.png"
+    },
+    {
+      "group": "验收运行",
+      "id": "acceptance-phase-failed",
+      "title": "验收运行失败",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "'failed'",
+      "when": "phase=failed",
+      "actions": [
+        "查看错误"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 37,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7715"
+      ],
+      "preview": "previews/acceptance-phase-failed-dark.png"
+    },
+    {
+      "group": "验收计划、桌面与证据",
+      "id": "acceptance-creating-blocked",
+      "title": "验收正在创建 / 禁止退出",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "acceptance-creation-loading",
+      "when": "creating=true，显示阻止点击与返回的进度遮罩",
+      "actions": [],
+      "blocked": [
+        "返回",
+        "重复创建"
+      ],
+      "hidden": [],
+      "line": 433,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7741"
+      ],
+      "preview": "previews/acceptance-creating-blocked-dark.png"
+    },
+    {
+      "group": "验收计划、桌面与证据",
+      "id": "acceptance-empty",
+      "title": "尚无验收记录",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "acceptanceEmpty",
+      "when": "读取成功且 runs 为空",
+      "actions": [
+        "开始验收"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 333,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7754"
+      ],
+      "preview": "previews/acceptance-empty-dark.png"
+    },
+    {
+      "group": "验收计划、桌面与证据",
+      "id": "plan-awaiting-confirmation",
+      "title": "测试用例等待确认",
+      "source": "lib/src/screens/acceptance_plan_card.dart",
+      "evidence": "acceptance-plan-confirm",
+      "when": "测试计划已生成且尚未 approved",
+      "actions": [
+        "新增用例",
+        "编辑用例",
+        "删除用例",
+        "补充要求",
+        "确认用例"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 221,
+      "sourceSha256": "2e312612e4557fb1fe531d5871d402c5faed194c6c43cd1ba5febeb13bb2c6d5",
+      "nodeIds": [
+        "n7771"
+      ],
+      "preview": "previews/plan-awaiting-confirmation-dark.png"
+    },
+    {
+      "group": "验收计划、桌面与证据",
+      "id": "plan-revising",
+      "title": "Agent 正在修改测试计划",
+      "source": "lib/src/screens/acceptance_plan_card.dart",
+      "evidence": "revising_plan",
+      "when": "automation=revising_plan",
+      "actions": [
+        "编辑用例",
+        "确认用例",
+        "发送要求"
+      ],
+      "blocked": [
+        "编辑用例",
+        "确认用例",
+        "发送要求"
+      ],
+      "hidden": [],
+      "line": 78,
+      "sourceSha256": "2e312612e4557fb1fe531d5871d402c5faed194c6c43cd1ba5febeb13bb2c6d5",
+      "nodeIds": [
+        "n7798"
+      ],
+      "preview": "previews/plan-revising-dark.png"
+    },
+    {
+      "group": "验收计划、桌面与证据",
+      "id": "plan-generation-error",
+      "title": "测试计划生成失败",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "retryAcceptanceTestPlan",
+      "when": "planning 阶段生成失败且无 testPlan",
+      "actions": [
+        "重新生成测试用例"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 1001,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7821"
+      ],
+      "preview": "previews/plan-generation-error-dark.png"
+    },
+    {
+      "group": "验收计划、桌面与证据",
+      "id": "plan-case-invalid",
+      "title": "测试用例校验未通过",
+      "source": "lib/src/screens/acceptance_plan_card.dart",
+      "evidence": "acceptancePlanStepsLimit",
+      "when": "标题 / 预期缺失，或步骤数量、长度超出限制",
+      "actions": [
+        "编辑用例",
+        "保存"
+      ],
+      "blocked": [
+        "保存"
+      ],
+      "hidden": [],
+      "line": 312,
+      "sourceSha256": "2e312612e4557fb1fe531d5871d402c5faed194c6c43cd1ba5febeb13bb2c6d5",
+      "nodeIds": [
+        "n7838"
+      ],
+      "preview": "previews/plan-case-invalid-dark.png"
+    },
+    {
+      "group": "验收计划、桌面与证据",
+      "id": "desktop-manual-control",
+      "title": "手动接管远程桌面",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "acceptanceReleaseControl",
+      "when": "已从自动化切换至手动桌面控制",
+      "actions": [
+        "保存截图",
+        "切换方向",
+        "全屏",
+        "交还自动化控制权"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 1052,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7857"
+      ],
+      "preview": "previews/desktop-manual-control-dark.png"
+    },
+    {
+      "group": "验收计划、桌面与证据",
+      "id": "desktop-automation-error",
+      "title": "自动化失败但桌面仍可用",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "acceptanceAutomationFailedHint",
+      "when": "自动检查失败，但运行仍在进行",
+      "actions": [
+        "接管桌面",
+        "停止验收"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 980,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7881"
+      ],
+      "preview": "previews/desktop-automation-error-dark.png"
+    },
+    {
+      "group": "验收计划、桌面与证据",
+      "id": "acceptance-human-review",
+      "title": "等待人工验收结果",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "acceptanceAwaitingReview",
+      "when": "已产生运行结果，尚未人工确认",
+      "actions": [
+        "填写说明",
+        "验收通过",
+        "报告问题"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 796,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7901"
+      ],
+      "preview": "previews/acceptance-human-review-dark.png"
+    },
+    {
+      "group": "验收计划、桌面与证据",
+      "id": "acceptance-evidence-empty",
+      "title": "验收证据尚未生成",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "acceptanceNoEvidence",
+      "when": "没有可展示的证据附件",
+      "actions": [
+        "生成录像与报告"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 1125,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7923"
+      ],
+      "preview": "previews/acceptance-evidence-empty-dark.png"
+    },
+    {
+      "group": "验收计划、桌面与证据",
+      "id": "acceptance-evidence-exporting",
+      "title": "证据正在导出",
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "evidence": "acceptanceExportEvidence",
+      "when": "生成录像与报告请求未返回",
+      "actions": [
+        "生成录像与报告"
+      ],
+      "blocked": [
+        "生成录像与报告"
+      ],
+      "hidden": [],
+      "line": 1120,
+      "sourceSha256": "1b8974c707c56b74dff620d8855df2e9c5704c200f007815224c9f76e015aa7d",
+      "nodeIds": [
+        "n7940"
+      ],
+      "preview": "previews/acceptance-evidence-exporting-dark.png"
+    },
+    {
+      "group": "验收计划、桌面与证据",
+      "id": "environment-invalid",
+      "title": "运行环境配置无效",
+      "source": "lib/src/screens/acceptance_environment_screen.dart",
+      "evidence": "acceptanceEnvironmentRequired",
+      "when": "Dockerfile 或已有镜像模式缺少必填内容",
+      "actions": [
+        "补充配置",
+        "保存环境"
+      ],
+      "blocked": [
+        "保存环境"
+      ],
+      "hidden": [],
+      "line": 70,
+      "sourceSha256": "f95ccdd7871c3ec13894737d89333e55ea4d86c399369f41d4ce91e8987334fc",
+      "nodeIds": [
+        "n7957"
+      ],
+      "preview": "previews/environment-invalid-dark.png"
+    },
+    {
+      "group": "验收计划、桌面与证据",
+      "id": "recording-loading",
+      "title": "录像正在加载",
+      "source": "lib/src/screens/acceptance_video_screen.dart",
+      "evidence": "!player.value.isInitialized",
+      "when": "播放器未创建或尚未完成初始化",
+      "actions": [],
+      "blocked": [
+        "播放",
+        "进度拖动"
+      ],
+      "hidden": [],
+      "line": 115,
+      "sourceSha256": "c0e701230d0124c8a1785af1095e3301157360d753606a5022fadd33270176d1",
+      "nodeIds": [
+        "n7977"
+      ],
+      "preview": "previews/recording-loading-dark.png"
+    },
+    {
+      "group": "验收计划、桌面与证据",
+      "id": "recording-error",
+      "title": "录像加载失败",
+      "source": "lib/src/screens/acceptance_video_screen.dart",
+      "evidence": "acceptanceVideoError",
+      "when": "下载、初始化或读取录像失败",
+      "actions": [
+        "重试"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "line": 108,
+      "sourceSha256": "c0e701230d0124c8a1785af1095e3301157360d753606a5022fadd33270176d1",
+      "nodeIds": [
+        "n7990"
+      ],
+      "preview": "previews/recording-error-dark.png"
+    },
+    {
+      "group": "Markdown 正文",
+      "id": "render-headings",
+      "title": "标题与段落层次",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "MarkdownBody(",
+      "when": "返回 Markdown 标题与普通段落",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "# 让信息，各就其位。\n\n本次调整聚焦阅读体验。\n\n## 检查结果\n\n导航入口已完成检查。",
+      "notes": "",
+      "line": 5553,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8016"
+      ],
+      "preview": "previews/render-headings-dark.png"
+    },
+    {
+      "group": "Markdown 正文",
+      "id": "render-emphasis",
+      "title": "加粗与斜体",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "strong:",
+      "when": "内容包含强调语法",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "**关键结论：**功能保持完整，*阅读更轻松。*",
+      "notes": "",
+      "line": 5486,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8033"
+      ],
+      "preview": "previews/render-emphasis-dark.png"
+    },
+    {
+      "group": "Markdown 正文",
+      "id": "render-inline-code",
+      "title": "行内代码与路径",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "code: codeStyle",
+      "when": "段落包含反引号代码",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "检查 `SessionStatus.running`。",
+      "notes": "图中高亮块用于放大展示行内代码字色；实际在正文行内排列。",
+      "line": 5477,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8048"
+      ],
+      "preview": "previews/render-inline-code-dark.png"
+    },
+    {
+      "group": "Markdown 正文",
+      "id": "render-code",
+      "title": "代码块与语法高亮",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_AssistantCodeSyntaxHighlighter(theme)",
+      "when": "返回 fenced code block",
+      "actions": [
+        "选择文本"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "```dart\nfinal style = TextStyle(\n  fontSize: 16,\n  height: 1.6,\n);\n```",
+      "notes": "关键词、字符串、数字、注释按现有正则高亮；没有新增执行代码或复制代码块按钮。",
+      "line": 5560,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8065"
+      ],
+      "preview": "previews/render-code-dark.png"
+    },
+    {
+      "group": "Markdown 正文",
+      "id": "render-code-wide",
+      "title": "长代码横向阅读",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_AssistantCodeSyntaxHighlighter(theme)",
+      "when": "长行代码超出正文宽度",
+      "actions": [
+        "选择文本"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "```dart\nfinal screen = SessionDetailScreen(session: selectedSession, client: bridgeClient);\n```",
+      "notes": "长代码内容需保持可读；不把横向代码伪装成换行后改变源文本。",
+      "line": 5560,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8085"
+      ],
+      "preview": "previews/render-code-wide-dark.png"
+    },
+    {
+      "group": "Markdown 正文",
+      "id": "render-unordered-list",
+      "title": "无序列表",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "listBullet:",
+      "when": "内容包含无序列表",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "## 本次检查\n\n- 确认导航与已有路由一致\n- 检查审批按钮的可用条件\n- 复核长回复与媒体内容",
+      "notes": "",
+      "line": 5494,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8104"
+      ],
+      "preview": "previews/render-unordered-list-dark.png"
+    },
+    {
+      "group": "Markdown 正文",
+      "id": "render-ordered-list",
+      "title": "有序步骤",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "listBullet:",
+      "when": "内容包含有序列表",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "1. 进入项目并打开已有会话\n2. 查看本轮返回内容\n3. 完成检查后继续对话",
+      "notes": "",
+      "line": 5494,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8127"
+      ],
+      "preview": "previews/render-ordered-list-dark.png"
+    },
+    {
+      "group": "Markdown 正文",
+      "id": "render-table",
+      "title": "Markdown 表格",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "MarkdownBody(",
+      "when": "MarkdownBody 以默认 Markdown 规则渲染表格",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "| 内容类型 | 展示方式 |\n| --- | --- |\n| Markdown | 正文与引用 |\n| 图片 / MP4 | 独立媒体缩略图 |",
+      "notes": "表格属于文本解析，不提供排序、筛选或单元格编辑。",
+      "line": 5553,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8150"
+      ],
+      "preview": "previews/render-table-dark.png"
+    },
+    {
+      "group": "Markdown 正文",
+      "id": "render-quote",
+      "title": "引用块",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "blockquoteDecoration:",
+      "when": "内容以 > 引用标记开头",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "这次修改遵循原始要求：\n\n> 不能遗漏当前功能，也不能把不可用的动作展示为可用。\n\n因此，视觉调整只改变展示层次。",
+      "notes": "",
+      "line": 5498,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8177"
+      ],
+      "preview": "previews/render-quote-dark.png"
+    },
+    {
+      "group": "Markdown 正文",
+      "id": "render-quote-nested",
+      "title": "嵌套引用",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "blockquotePadding:",
+      "when": "引用内容包含嵌套引用",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "> 会话状态与消息内容，需要分别设计。\n>\n> > 先核对解析分支，再调整视觉呈现。",
+      "notes": "左侧引用线表达引用层级，不新增折叠引用交互。",
+      "line": 5506,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8196"
+      ],
+      "preview": "previews/render-quote-nested-dark.png"
+    },
+    {
+      "group": "Markdown 正文",
+      "id": "render-divider",
+      "title": "消息内分隔线",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "markdown-horizontal-rule",
+      "when": "正文包含独立的 --- 分隔行",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "## 已完成\n\n导航与审批入口核对完成。\n\n---\n\n## 接下来\n\n继续检查返回的图文与代码。",
+      "notes": "",
+      "line": 5586,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8218"
+      ],
+      "preview": "previews/render-divider-dark.png"
+    },
+    {
+      "group": "Markdown 正文",
+      "id": "render-consecutive",
+      "title": "连续助手消息分隔",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "assistant-message-divider",
+      "when": "同一轮中相邻的助手消息分别展示",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "assistant[0]: 第一部分：已完成导航检查。\nassistant[1]: 第二部分：接下来核对图片与视频。",
+      "notes": "",
+      "line": 4937,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8236"
+      ],
+      "preview": "previews/render-consecutive-dark.png"
+    },
+    {
+      "group": "Markdown 正文",
+      "id": "render-streaming-markdown",
+      "title": "流式内容尚未返回完整",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "isLoadingReply",
+      "when": "正文持续增长，Markdown 按当前已收到的文本渲染",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "```dart\nfinal style = TextStyle(\n  fontSize: 16,",
+      "notes": "不新增语法错误警告；流式片段继续随内容更新。",
+      "line": 5284,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8253"
+      ],
+      "preview": "previews/render-streaming-markdown-dark.png"
+    },
+    {
+      "group": "链接与文件",
+      "id": "render-external-link",
+      "title": "外部网页链接",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "unawaited(launchUrl(uri))",
+      "when": "链接既不是媒体引用，也不是客户端可访问的本地文件",
+      "actions": [
+        "打开系统链接"
+      ],
+      "blocked": [],
+      "hidden": [
+        "网页抓取摘要",
+        "网页预览卡片"
+      ],
+      "example": "详细说明见：[查看移动端审查记录](https://example.com/review)",
+      "notes": "",
+      "line": 5652,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8283"
+      ],
+      "preview": "previews/render-external-link-dark.png"
+    },
+    {
+      "group": "链接与文件",
+      "id": "render-autolink",
+      "title": "尖括号自动链接",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "onTapLink:",
+      "when": "返回尖括号包裹的 URL",
+      "actions": [
+        "打开系统链接"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "也可以直接访问：<https://example.com/review>",
+      "notes": "",
+      "line": 5562,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8301"
+      ],
+      "preview": "previews/render-autolink-dark.png"
+    },
+    {
+      "group": "链接与文件",
+      "id": "render-file-relative",
+      "title": "项目内相对文件链接",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_resolveMarkdownFile(href)",
+      "when": "客户端能访问项目根路径，且目标文件在本机存在",
+      "actions": [
+        "打开本地文件预览"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "[home_screen.dart](lib/src/screens/home_screen.dart)",
+      "notes": "路径以客户端本地可访问的项目根目录解析；不是通用远程 Bridge 文件浏览器。",
+      "line": 5642,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8318"
+      ],
+      "preview": "previews/render-file-relative-dark.png"
+    },
+    {
+      "group": "链接与文件",
+      "id": "render-file-uri",
+      "title": "file URI 与绝对路径",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "uri.toFilePath()",
+      "when": "file URI 解析为存在的客户端本地文件",
+      "actions": [
+        "打开本地文件预览"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "[查看设计说明](file:///workspace/omni-code/DESIGN.md)",
+      "notes": "",
+      "line": 5659,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8335"
+      ],
+      "preview": "previews/render-file-uri-dark.png"
+    },
+    {
+      "group": "链接与文件",
+      "id": "render-file-preview",
+      "title": "文本文件全文预览",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "markdown-file-preview-content",
+      "when": "文件存在、大小不超过 2 MiB，且不包含 0 字节",
+      "actions": [
+        "关闭",
+        "选择文本",
+        "横向与纵向滚动"
+      ],
+      "blocked": [],
+      "hidden": [
+        "编辑",
+        "保存文件"
+      ],
+      "example": "点击 [home_screen.dart](lib/src/screens/home_screen.dart)",
+      "notes": "",
+      "line": 5735,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8352"
+      ],
+      "preview": "previews/render-file-preview-dark.png"
+    },
+    {
+      "group": "链接与文件",
+      "id": "render-file-too-large",
+      "title": "文件过大提示",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "File is too large to preview",
+      "when": "客户端本地文件大于 2 MiB",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "本地文件大小：2 MiB + 1 byte",
+      "notes": "对应当前 SnackBar；不虚构“下载”“重试预览”按钮。",
+      "line": 5678,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8372"
+      ],
+      "preview": "previews/render-file-too-large-dark.png"
+    },
+    {
+      "group": "链接与文件",
+      "id": "render-file-binary",
+      "title": "二进制文件提示",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "Binary files cannot be previewed",
+      "when": "文件字节包含 0，判定为二进制",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "[archive](assets/archive.bin) → 本地字节包含 0",
+      "notes": "对应当前 SnackBar；不会渲染为可编辑文本。",
+      "line": 5684,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8388"
+      ],
+      "preview": "previews/render-file-binary-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-image-markdown",
+      "title": "Markdown 图片",
+      "source": "lib/src/message_image_paths.dart",
+      "evidence": "_markdownLinkPattern",
+      "when": "消息包含标准 Markdown 图片标记",
+      "actions": [
+        "打开全屏预览"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "这是本次检查的输出截图。\n\n![检查结果](assets/review.png)",
+      "notes": "Markdown 中的图片节点隐藏，提取出的缩略图统一排在正文后。",
+      "line": 89,
+      "sourceSha256": "b1928d334014517558e5c9326b95aed7bc6b2b7cb3979b5a1e667788e736f40e",
+      "nodeIds": [
+        "n8413"
+      ],
+      "preview": "previews/render-image-markdown-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-image-link",
+      "title": "指向图片的普通链接",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "MessageImageReference.tryParse(href)",
+      "when": "普通 Markdown 链接指向支持的媒体路径",
+      "actions": [
+        "点击链接或缩略图打开媒体"
+      ],
+      "blocked": [],
+      "hidden": [
+        "按普通网页链接打开"
+      ],
+      "example": "[打开检查截图](assets/review.png)",
+      "notes": "",
+      "line": 5636,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8430"
+      ],
+      "preview": "previews/render-image-link-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-image-bare",
+      "title": "裸路径提取",
+      "source": "lib/src/message_image_paths.dart",
+      "evidence": "_bareImagePathPattern",
+      "when": "正文出现支持的图片文件路径",
+      "actions": [
+        "打开媒体预览"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "输出文件：assets/review.png",
+      "notes": "",
+      "line": 111,
+      "sourceSha256": "b1928d334014517558e5c9326b95aed7bc6b2b7cb3979b5a1e667788e736f40e",
+      "nodeIds": [
+        "n8449"
+      ],
+      "preview": "previews/render-image-bare-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-image-inline-path",
+      "title": "行内代码中的图片路径",
+      "source": "lib/src/message_image_paths.dart",
+      "evidence": "_inlineCodePattern",
+      "when": "行内代码的值可以解析为媒体路径",
+      "actions": [
+        "打开缩略图预览"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "`assets/review.png`",
+      "notes": "提取缩略图不意味着原行内代码自动变为可点击文件链接。",
+      "line": 97,
+      "sourceSha256": "b1928d334014517558e5c9326b95aed7bc6b2b7cb3979b5a1e667788e736f40e",
+      "nodeIds": [
+        "n8466"
+      ],
+      "preview": "previews/render-image-inline-path-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-image-remote",
+      "title": "远程图片 URL",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "reference.isRemoteUrl",
+      "when": "引用为 http / https 图片地址",
+      "actions": [
+        "打开媒体预览"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "![远程截图](https://example.com/review.png)",
+      "notes": "",
+      "line": 5895,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8484"
+      ],
+      "preview": "previews/render-image-remote-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-image-data",
+      "title": "Base64 内嵌图片",
+      "source": "lib/src/message_image_paths.dart",
+      "evidence": "_tryParseDataUri",
+      "when": "data:image/*;base64, 后的内容可成功解码",
+      "actions": [
+        "打开媒体预览"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "![内嵌截图](data:image/png;base64,<有效 Base64 内容>)",
+      "notes": "示例占位表示有效字节；支持 PNG、JPEG、GIF、WebP、BMP、SVG MIME。",
+      "line": 60,
+      "sourceSha256": "b1928d334014517558e5c9326b95aed7bc6b2b7cb3979b5a1e667788e736f40e",
+      "nodeIds": [
+        "n8503"
+      ],
+      "preview": "previews/render-image-data-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-image-svg",
+      "title": "SVG 与透明背景",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "reference.isSvg",
+      "when": "媒体引用识别为 SVG",
+      "actions": [
+        "打开预览",
+        "缩放",
+        "切换背景"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "![矢量图](assets/diagram.svg)",
+      "notes": "使用 SVG 渲染分支；透明区域在不同背景下可见。",
+      "line": 5928,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8520"
+      ],
+      "preview": "previews/render-image-svg-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-image-animated",
+      "title": "GIF / WebP 动图",
+      "source": "lib/src/message_image_paths.dart",
+      "evidence": "isAnimatedImage",
+      "when": "GIF 或 WebP 引用进入预览",
+      "actions": [
+        "打开媒体预览"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "![过程](assets/flow.gif)",
+      "notes": "预览打开时更换会话 token，动图重新开始；没有新增手动逐帧控制。",
+      "line": 44,
+      "sourceSha256": "b1928d334014517558e5c9326b95aed7bc6b2b7cb3979b5a1e667788e736f40e",
+      "nodeIds": [
+        "n8537"
+      ],
+      "preview": "previews/render-image-animated-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-image-deduplicate",
+      "title": "重复路径只出现一次",
+      "source": "lib/src/message_image_paths.dart",
+      "evidence": "matches.putIfAbsent",
+      "when": "同一路径被多种语法重复引用",
+      "actions": [
+        "打开唯一缩略图"
+      ],
+      "blocked": [],
+      "hidden": [
+        "重复媒体卡片"
+      ],
+      "example": "assets/review.png\n\n`assets/review.png`",
+      "notes": "",
+      "line": 86,
+      "sourceSha256": "b1928d334014517558e5c9326b95aed7bc6b2b7cb3979b5a1e667788e736f40e",
+      "nodeIds": [
+        "n8555"
+      ],
+      "preview": "previews/render-image-deduplicate-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-media-mixed",
+      "title": "图片与视频混排",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "buildImageReferences()",
+      "when": "同一消息提取到图片、MP4 与 SVG",
+      "actions": [
+        "打开相应媒体",
+        "在预览中切换项目"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "![截图](assets/review.png)\n[录像](assets/demo.mp4)\n![矢量图](assets/diagram.svg)",
+      "notes": "媒体按提取顺序独立排列；图文中间不重复嵌入大图。",
+      "line": 5536,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8573"
+      ],
+      "preview": "previews/render-media-mixed-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-media-user",
+      "title": "用户消息中的媒体",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "imageWrapAlignment: WrapAlignment.end",
+      "when": "用户消息同时包含正文与图片",
+      "actions": [
+        "打开媒体预览"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "user: 检查这张截图。\n\n![截图](assets/review.png)",
+      "notes": "用户消息右对齐；不会改用助手消息的开放式背景。",
+      "line": 4984,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8597"
+      ],
+      "preview": "previews/render-media-user-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-image-loading",
+      "title": "本地缩略图读取中",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "widget.loadingBuilder()",
+      "when": "Bridge 文件 Future 尚未完成",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "assets/review.png → 文件读取中",
+      "notes": "占位位于媒体缩略图位置，不覆盖整条消息。",
+      "line": 11957,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8609"
+      ],
+      "preview": "previews/render-image-loading-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-image-hidden-error",
+      "title": "本地缩略图读取失败",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "snapshot.hasError || !snapshot.hasData",
+      "when": "Bridge 读取失败或没有数据，缩略图分支返回 SizedBox.shrink",
+      "actions": [],
+      "blocked": [],
+      "hidden": [
+        "失败的缩略图"
+      ],
+      "example": "assets/review.png → Bridge 读取失败",
+      "notes": "当前代码隐藏该缩略图；没有内联“重试图片”按钮。",
+      "line": 6224,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8627"
+      ],
+      "preview": "previews/render-image-hidden-error-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-image-decode-error",
+      "title": "缩略图解码失败",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "errorBuilder: (context, _, __) => const SizedBox.shrink()",
+      "when": "图片字节不可解码，缩略图内容收起",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "assets/review.png → 无效图像字节",
+      "notes": "外层媒体点击区域仍可能存在；全屏失败态单独展示。",
+      "line": 5937,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8641"
+      ],
+      "preview": "previews/render-image-decode-error-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-image-preview-loading",
+      "title": "全屏媒体读取中",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "snapshot.connectionState != ConnectionState.done",
+      "when": "打开本地图片预览，文件 Future 尚未完成",
+      "actions": [
+        "关闭预览",
+        "切换背景"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "点击本地图片缩略图 → 读取中",
+      "notes": "",
+      "line": 6215,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8656"
+      ],
+      "preview": "previews/render-image-preview-loading-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-image-preview-failed",
+      "title": "全屏图片加载失败",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_buildImagePreviewError(",
+      "when": "全屏读取或图片解码失败",
+      "actions": [
+        "关闭预览",
+        "切换背景"
+      ],
+      "blocked": [],
+      "hidden": [
+        "虚构的重试按钮"
+      ],
+      "example": "点击缩略图 → 图像读取 / 解码失败",
+      "notes": "",
+      "line": 6135,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8687"
+      ],
+      "preview": "previews/render-image-preview-failed-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-gallery-0",
+      "title": "画廊第一项",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "image-preview-previous",
+      "when": "同一消息有 3 个媒体引用，当前索引为 0",
+      "actions": [
+        "关闭",
+        "切换背景",
+        "下一项"
+      ],
+      "blocked": [
+        "上一项"
+      ],
+      "hidden": [],
+      "example": "[review.png, demo.mp4, diagram.svg] → index=0",
+      "notes": "",
+      "line": 6496,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8718"
+      ],
+      "preview": "previews/render-gallery-0-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-gallery-1",
+      "title": "画廊中间项",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "image-preview-previous",
+      "when": "同一消息有 3 个媒体引用，当前索引为 1",
+      "actions": [
+        "关闭",
+        "切换背景",
+        "上一项",
+        "下一项"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "[review.png, demo.mp4, diagram.svg] → index=1",
+      "notes": "",
+      "line": 6496,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8747"
+      ],
+      "preview": "previews/render-gallery-1-dark.png"
+    },
+    {
+      "group": "图片与媒体解析",
+      "id": "render-gallery-2",
+      "title": "画廊最后一项",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "image-preview-previous",
+      "when": "同一消息有 3 个媒体引用，当前索引为 2",
+      "actions": [
+        "关闭",
+        "切换背景",
+        "上一项"
+      ],
+      "blocked": [
+        "下一项"
+      ],
+      "hidden": [],
+      "example": "[review.png, demo.mp4, diagram.svg] → index=2",
+      "notes": "",
+      "line": 6496,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8776"
+      ],
+      "preview": "previews/render-gallery-2-dark.png"
+    },
+    {
+      "group": "视频播放",
+      "id": "render-video-fallback",
+      "title": "MP4 缩略图回退",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_buildVideoThumbnailFallback",
+      "when": "缩略图未初始化、初始化失败，或平台不支持内联视频帧",
+      "actions": [
+        "打开视频"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "[演示录像](assets/demo.mp4)",
+      "notes": "回退显示 MP4 播放图形。Android / iOS / macOS 可在初始化后显示视频首帧；Web、Linux、Windows 使用回退缩略图。",
+      "line": 5982,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8814"
+      ],
+      "preview": "previews/render-video-fallback-dark.png"
+    },
+    {
+      "group": "视频播放",
+      "id": "render-video-thumbnail",
+      "title": "MP4 视频首帧",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "video-thumbnail-icon-",
+      "when": "支持内联视频帧且缩略图已完成初始化",
+      "actions": [
+        "打开视频预览"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "导航与审批交互的演示录像：\n\n[录像](assets/demo.mp4)",
+      "notes": "",
+      "line": 6052,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8833"
+      ],
+      "preview": "previews/render-video-thumbnail-dark.png"
+    },
+    {
+      "group": "视频播放",
+      "id": "render-video-loading",
+      "title": "视频播放器初始化",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "initializeFuture == null || controller == null",
+      "when": "视频文件读取或播放器初始化尚未完成",
+      "actions": [
+        "关闭",
+        "切换背景"
+      ],
+      "blocked": [
+        "播放 / 暂停",
+        "静音切换",
+        "进度拖动"
+      ],
+      "hidden": [],
+      "example": "assets/demo.mp4 → 初始化中",
+      "notes": "",
+      "line": 13392,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8852"
+      ],
+      "preview": "previews/render-video-loading-dark.png"
+    },
+    {
+      "group": "视频播放",
+      "id": "render-video-playing-muted",
+      "title": "播放中 / 静音",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "video-preview-toggle-play",
+      "when": "播放器已初始化，isPlaying=true，muted=true",
+      "actions": [
+        "播放 / 暂停",
+        "切换静音",
+        "拖动进度",
+        "关闭",
+        "切换背景"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "assets/demo.mp4 → 播放，静音",
+      "notes": "初始化成功后自动循环播放；静音选择会保存到应用设置。",
+      "line": 13441,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8875"
+      ],
+      "preview": "previews/render-video-playing-muted-dark.png"
+    },
+    {
+      "group": "视频播放",
+      "id": "render-video-playing-sound",
+      "title": "播放中 / 有声",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "video-preview-toggle-play",
+      "when": "播放器已初始化，isPlaying=true，muted=false",
+      "actions": [
+        "播放 / 暂停",
+        "切换静音",
+        "拖动进度",
+        "关闭",
+        "切换背景"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "assets/demo.mp4 → 播放，有声",
+      "notes": "初始化成功后自动循环播放；静音选择会保存到应用设置。",
+      "line": 13441,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8908"
+      ],
+      "preview": "previews/render-video-playing-sound-dark.png"
+    },
+    {
+      "group": "视频播放",
+      "id": "render-video-paused-muted",
+      "title": "已暂停 / 静音",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "video-preview-toggle-play",
+      "when": "播放器已初始化，isPlaying=false，muted=true",
+      "actions": [
+        "播放 / 暂停",
+        "切换静音",
+        "拖动进度",
+        "关闭",
+        "切换背景"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "assets/demo.mp4 → 暂停，静音",
+      "notes": "初始化成功后自动循环播放；静音选择会保存到应用设置。",
+      "line": 13441,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8940"
+      ],
+      "preview": "previews/render-video-paused-muted-dark.png"
+    },
+    {
+      "group": "视频播放",
+      "id": "render-video-paused-sound",
+      "title": "已暂停 / 有声",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "video-preview-toggle-play",
+      "when": "播放器已初始化，isPlaying=false，muted=false",
+      "actions": [
+        "播放 / 暂停",
+        "切换静音",
+        "拖动进度",
+        "关闭",
+        "切换背景"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "assets/demo.mp4 → 暂停，有声",
+      "notes": "初始化成功后自动循环播放；静音选择会保存到应用设置。",
+      "line": 13441,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n8972"
+      ],
+      "preview": "previews/render-video-paused-sound-dark.png"
+    },
+    {
+      "group": "视频播放",
+      "id": "render-video-portrait",
+      "title": "竖屏视频比例",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "controller.value.aspectRatio",
+      "when": "视频已初始化，采用播放器返回的原始宽高比",
+      "actions": [
+        "播放 / 暂停",
+        "静音切换",
+        "拖动进度",
+        "缩放",
+        "关闭"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "assets/portrait.mp4 → aspectRatio=9/16",
+      "notes": "",
+      "line": 13420,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n9004"
+      ],
+      "preview": "previews/render-video-portrait-dark.png"
+    },
+    {
+      "group": "视频播放",
+      "id": "render-video-error",
+      "title": "视频播放失败",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_buildPreviewError(errorMessage)",
+      "when": "视频读取或初始化失败",
+      "actions": [
+        "关闭",
+        "切换背景"
+      ],
+      "blocked": [],
+      "hidden": [
+        "重试按钮",
+        "不可用播放控件"
+      ],
+      "example": "assets/demo.mp4 → 初始化失败",
+      "notes": "当前视频分支复用 imagePreviewLoadFailed 文案；未把它设计成不存在的专用错误和重试流程。",
+      "line": 13387,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n9037"
+      ],
+      "preview": "previews/render-video-error-dark.png"
+    },
+    {
+      "group": "视频播放",
+      "id": "render-video-external",
+      "title": "桌面端交给外部播放器",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_openVideoExternally(",
+      "when": "Linux / Windows 点击视频引用，进入外部打开流程",
+      "actions": [
+        "通过系统播放器打开"
+      ],
+      "blocked": [],
+      "hidden": [
+        "应用内视频播放器"
+      ],
+      "example": "[演示录像](assets/demo.mp4)",
+      "notes": "此项标明平台分支，不作为手机新增功能。",
+      "line": 6084,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n9059"
+      ],
+      "preview": "previews/render-video-external-dark.png"
+    },
+    {
+      "group": "Diff 与文件变更",
+      "id": "render-diff-single",
+      "title": "单文件变更摘要",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "diffs.length == 1",
+      "when": "当前轮次只有一个文件变更",
+      "actions": [
+        "打开全屏 Diff"
+      ],
+      "blocked": [],
+      "hidden": [
+        "多文件展开开关"
+      ],
+      "example": "turn.diff: files=[home_screen.dart], added=24, removed=8",
+      "notes": "",
+      "line": 5040,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n9090"
+      ],
+      "preview": "previews/render-diff-single-dark.png"
+    },
+    {
+      "group": "Diff 与文件变更",
+      "id": "render-diff-collapsed",
+      "title": "多文件变更 / 收起",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_expandedDiffTurnIds.contains(turn.id)",
+      "when": "当前轮次有多个变更，expanded=false",
+      "actions": [
+        "打开首个 Diff",
+        "展开其他文件"
+      ],
+      "blocked": [],
+      "hidden": [
+        "其余文件摘要"
+      ],
+      "example": "turn.diffs=[home_screen.dart, session_detail_screen.dart] → collapsed",
+      "notes": "",
+      "line": 5043,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n9112"
+      ],
+      "preview": "previews/render-diff-collapsed-dark.png"
+    },
+    {
+      "group": "Diff 与文件变更",
+      "id": "render-diff-expanded",
+      "title": "多文件变更 / 展开",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "for (final diff in diffs.skip(1))",
+      "when": "当前轮次有多个变更，expanded=true",
+      "actions": [
+        "查看各文件 Diff",
+        "收起其他文件"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "turn.diffs=[home_screen.dart, session_detail_screen.dart] → expanded",
+      "notes": "",
+      "line": 5082,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n9134"
+      ],
+      "preview": "previews/render-diff-expanded-dark.png"
+    },
+    {
+      "group": "Diff 与文件变更",
+      "id": "render-diff-detail",
+      "title": "全屏 Diff / 原行与新行",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_buildLineSpan(",
+      "when": "点击文件变更摘要，打开全屏 Diff",
+      "actions": [
+        "关闭",
+        "选择文本",
+        "横向与纵向滚动"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "@@ -168,3 +168,4 @@\n style: textTheme.bodyLarge,\n-fontSize: 11,\n+fontSize: 16,\n+height: 1.6,",
+      "notes": "旧行号、新行号、增删前缀与底色同时区分；不新增应用补丁或代码编辑按钮。",
+      "line": 12597,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n9164"
+      ],
+      "preview": "previews/render-diff-detail-dark.png"
+    },
+    {
+      "group": "Diff 与文件变更",
+      "id": "render-diff-summary-only",
+      "title": "Diff 无 patch / 使用 summary",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "diff.summary ?? 'No diff details'",
+      "when": "patch 为空，优先显示 summary，否则显示 No diff details",
+      "actions": [
+        "关闭"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "patch=\"\"; summary=\"调整了首页导航与消息排版。\"",
+      "notes": "",
+      "line": 5189,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n9196"
+      ],
+      "preview": "previews/render-diff-summary-only-dark.png"
+    },
+    {
+      "group": "Diff 与文件变更",
+      "id": "render-diff-long",
+      "title": "超长 Diff / 虚拟列表",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_virtualizedLineThreshold = 1000",
+      "when": "解析后行数大于 1000，使用固定行高的虚拟列表",
+      "actions": [
+        "关闭",
+        "横向与纵向滚动"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "patch → 1001 条 diff 行",
+      "notes": "虚拟列表使用 RichText，未承诺与短 Diff 的 SelectableText.rich 相同的跨行选择行为。",
+      "line": 12557,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n9212"
+      ],
+      "preview": "previews/render-diff-long-dark.png"
+    },
+    {
+      "group": "Diff 与文件变更",
+      "id": "render-diff-fenced-text",
+      "title": "消息内 fenced diff 文本",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "syntaxHighlighter:",
+      "when": "助手在普通 Markdown 回复中返回 diff 代码块",
+      "actions": [
+        "选择文本"
+      ],
+      "blocked": [],
+      "hidden": [],
+      "example": "```diff\n- fontSize: 11,\n+ fontSize: 16,\n```",
+      "notes": "普通 fenced diff 走通用语法高亮；只有结构化变更条目进入专门的 DiffViewer，不伪造 patch 应用交互。",
+      "line": 5560,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n9247"
+      ],
+      "preview": "previews/render-diff-fenced-text-dark.png"
+    },
+    {
+      "group": "Markdown 正文",
+      "id": "render-task-list",
+      "title": "任务列表 / 只读勾选状态",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "MarkdownBody(",
+      "when": "默认 GitHub Flavored Markdown 解析任务列表",
+      "actions": [],
+      "blocked": [],
+      "hidden": [
+        "交互式修改勾选状态"
+      ],
+      "example": "## 检查清单\n\n- [x] 导航与审批入口已核对\n- [ ] 继续检查媒体预览",
+      "notes": "当前未提供 checkboxBuilder / onTap 回调；展示原文中的完成状态，不新增待办编辑功能。",
+      "line": 5553,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n9713"
+      ],
+      "preview": "previews/render-task-list-dark.png"
+    },
+    {
+      "group": "Markdown 正文",
+      "id": "render-strikethrough",
+      "title": "删除线与修订说明",
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "MarkdownBody(",
+      "when": "默认 GitHub Flavored Markdown 解析删除线",
+      "actions": [],
+      "blocked": [],
+      "hidden": [],
+      "example": "~~沿用之前的紧凑排版~~\n\n改为更舒适的正文行距。",
+      "notes": "删除线属于返回文本的样式，不等同于结构化 Diff，也不提供应用补丁操作。",
+      "line": 5553,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9",
+      "nodeIds": [
+        "n9735"
+      ],
+      "preview": "previews/render-strikethrough-dark.png"
+    }
+  ],
+  "enumCoverage": {
+    "SessionStatus": {
+      "source": "lib/src/models.dart",
+      "values": [
+        "idle",
+        "running",
+        "awaitingApproval",
+        "interrupted",
+        "waiting",
+        "failed"
+      ],
+      "representedBy": [
+        "session-idle",
+        "session-running",
+        "session-awaiting-approval",
+        "session-interrupted",
+        "session-waiting",
+        "session-failed"
+      ]
+    },
+    "ExecutionPhase": {
+      "source": "lib/src/models.dart",
+      "values": [
+        "starting",
+        "thinking",
+        "runningCommand",
+        "awaitingApproval",
+        "retrying",
+        "waitingForTool",
+        "background",
+        "unconfirmed"
+      ],
+      "representedBy": [
+        "execution-starting",
+        "execution-thinking",
+        "execution-runningCommand",
+        "execution-awaitingApproval",
+        "execution-retrying",
+        "execution-waitingForTool",
+        "execution-background",
+        "execution-unconfirmed"
+      ]
+    },
+    "_LocalMessageState": {
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "values": [
+        "queued",
+        "pending",
+        "submitted",
+        "failed"
+      ],
+      "representedBy": [
+        "message-queued",
+        "message-pending",
+        "message-submitted",
+        "message-failed"
+      ]
+    },
+    "_VoiceHoldAction": {
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "values": [
+        "send",
+        "insert",
+        "cancel"
+      ],
+      "representedBy": [
+        "composer-hold-send",
+        "composer-hold-insert",
+        "composer-hold-cancel"
+      ]
+    },
+    "_CallModeSpeechHintState": {
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "values": [
+        "speaking",
+        "waitingForPause"
+      ],
+      "representedBy": [
+        "call-detected",
+        "call-pause"
+      ]
+    },
+    "_ImagePreviewBackdropMode": {
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "values": [
+        "dark",
+        "light",
+        "checker"
+      ],
+      "representedBy": [
+        "image-backdrop-dark",
+        "image-backdrop-light",
+        "image-backdrop-checker"
+      ]
+    },
+    "_ComposerSettingsPanelSection": {
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "values": [
+        "provider",
+        "reasoning",
+        "model"
+      ],
+      "representedBy": [
+        "composer-select-provider",
+        "composer-select-reasoning",
+        "composer-select-model"
+      ]
+    },
+    "AcceptancePhase": {
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "values": [
+        "not_installed",
+        "checking",
+        "preparing",
+        "verifying",
+        "ready",
+        "starting",
+        "planning",
+        "running",
+        "stopping",
+        "completed",
+        "failed"
+      ],
+      "representedBy": [
+        "acceptance-phase-not_installed",
+        "acceptance-phase-checking",
+        "acceptance-phase-preparing",
+        "acceptance-phase-verifying",
+        "acceptance-phase-ready",
+        "acceptance-phase-starting",
+        "acceptance-phase-planning",
+        "acceptance-phase-running",
+        "acceptance-phase-stopping",
+        "acceptance-phase-completed",
+        "acceptance-phase-failed"
+      ]
+    }
+  }
+}

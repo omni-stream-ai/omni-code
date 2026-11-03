@@ -1,0 +1,216 @@
+{
+  "boards": 29,
+  "screens": 296,
+  "states": 247,
+  "featureGroups": 413,
+  "nodes": 9816,
+  "allFeatureNodesPresent": true,
+  "allSourceReferencesPresent": true,
+  "uniqueNodeIds": true,
+  "unresolvedVariables": [],
+  "fonts": [
+    "Roboto",
+    "Noto Sans CJK SC",
+    "DejaVu Sans Mono"
+  ],
+  "authoredSvgIcons": 65,
+  "iconInstances": 817,
+  "uniformIconSize": 20,
+  "originalLogoVerified": true,
+  "enumCoverage": {
+    "SessionStatus": {
+      "source": "lib/src/models.dart",
+      "values": [
+        "idle",
+        "running",
+        "awaitingApproval",
+        "interrupted",
+        "waiting",
+        "failed"
+      ],
+      "representedBy": [
+        "session-idle",
+        "session-running",
+        "session-awaiting-approval",
+        "session-interrupted",
+        "session-waiting",
+        "session-failed"
+      ]
+    },
+    "ExecutionPhase": {
+      "source": "lib/src/models.dart",
+      "values": [
+        "starting",
+        "thinking",
+        "runningCommand",
+        "awaitingApproval",
+        "retrying",
+        "waitingForTool",
+        "background",
+        "unconfirmed"
+      ],
+      "representedBy": [
+        "execution-starting",
+        "execution-thinking",
+        "execution-runningCommand",
+        "execution-awaitingApproval",
+        "execution-retrying",
+        "execution-waitingForTool",
+        "execution-background",
+        "execution-unconfirmed"
+      ]
+    },
+    "_LocalMessageState": {
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "values": [
+        "queued",
+        "pending",
+        "submitted",
+        "failed"
+      ],
+      "representedBy": [
+        "message-queued",
+        "message-pending",
+        "message-submitted",
+        "message-failed"
+      ]
+    },
+    "_VoiceHoldAction": {
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "values": [
+        "send",
+        "insert",
+        "cancel"
+      ],
+      "representedBy": [
+        "composer-hold-send",
+        "composer-hold-insert",
+        "composer-hold-cancel"
+      ]
+    },
+    "_CallModeSpeechHintState": {
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "values": [
+        "speaking",
+        "waitingForPause"
+      ],
+      "representedBy": [
+        "call-detected",
+        "call-pause"
+      ]
+    },
+    "_ImagePreviewBackdropMode": {
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "values": [
+        "dark",
+        "light",
+        "checker"
+      ],
+      "representedBy": [
+        "image-backdrop-dark",
+        "image-backdrop-light",
+        "image-backdrop-checker"
+      ]
+    },
+    "_ComposerSettingsPanelSection": {
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "values": [
+        "provider",
+        "reasoning",
+        "model"
+      ],
+      "representedBy": [
+        "composer-select-provider",
+        "composer-select-reasoning",
+        "composer-select-model"
+      ]
+    },
+    "AcceptancePhase": {
+      "source": "lib/src/screens/acceptance_screen.dart",
+      "values": [
+        "not_installed",
+        "checking",
+        "preparing",
+        "verifying",
+        "ready",
+        "starting",
+        "planning",
+        "running",
+        "stopping",
+        "completed",
+        "failed"
+      ],
+      "representedBy": [
+        "acceptance-phase-not_installed",
+        "acceptance-phase-checking",
+        "acceptance-phase-preparing",
+        "acceptance-phase-verifying",
+        "acceptance-phase-ready",
+        "acceptance-phase-starting",
+        "acceptance-phase-planning",
+        "acceptance-phase-running",
+        "acceptance-phase-stopping",
+        "acceptance-phase-completed",
+        "acceptance-phase-failed"
+      ]
+    }
+  },
+  "contentStates": 58,
+  "parserCases": 10,
+  "lintErrors": 0,
+  "allPreviewsExported": true,
+  "previewCount": 325,
+  "textContrast": {
+    "lightMutedOnBackground": 4.9577,
+    "lightMutedOnPanel": 4.5817,
+    "lightLinkOnBackground": 5.4573,
+    "lightBodyOnBackground": 6.1646
+  },
+  "nativeDocumentReopened": true,
+  "reviewedAt": "2026-11-03",
+  "browserReview": {
+    "checkedAt": "2026-11-03",
+    "desktopViewport": [
+      1800,
+      1300
+    ],
+    "mobileViewport": [
+      390,
+      844
+    ],
+    "mainThemeFilters": true,
+    "conversationThemeFilters": true,
+    "conversationExamples": 6,
+    "contentStates": 58,
+    "contentCategoryFilter": true,
+    "rawInputExamples": true,
+    "contentSearch": true,
+    "contentDeepLinks": true,
+    "totalStates": 247,
+    "svgIcons": 65,
+    "sourceLinks": true,
+    "mobile": [
+      {
+        "file": "index.html?view=all",
+        "overflow": false
+      },
+      {
+        "file": "index.html?group=26&view=all",
+        "overflow": false
+      },
+      {
+        "file": "content.html",
+        "overflow": false
+      },
+      {
+        "file": "states.html",
+        "overflow": false
+      },
+      {
+        "file": "icons.html",
+        "overflow": false
+      }
+    ],
+    "javascriptErrors": []
+  }
+}

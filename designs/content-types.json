@@ -1,0 +1,210 @@
+{
+  "groups": [
+    "Markdown 正文",
+    "链接与文件",
+    "图片与媒体解析",
+    "视频播放",
+    "Diff 与文件变更"
+  ],
+  "states": [
+    "render-headings",
+    "render-emphasis",
+    "render-inline-code",
+    "render-code",
+    "render-code-wide",
+    "render-unordered-list",
+    "render-ordered-list",
+    "render-table",
+    "render-quote",
+    "render-quote-nested",
+    "render-divider",
+    "render-consecutive",
+    "render-streaming-markdown",
+    "render-external-link",
+    "render-autolink",
+    "render-file-relative",
+    "render-file-uri",
+    "render-file-preview",
+    "render-file-too-large",
+    "render-file-binary",
+    "render-image-markdown",
+    "render-image-link",
+    "render-image-bare",
+    "render-image-inline-path",
+    "render-image-remote",
+    "render-image-data",
+    "render-image-svg",
+    "render-image-animated",
+    "render-image-deduplicate",
+    "render-media-mixed",
+    "render-media-user",
+    "render-image-loading",
+    "render-image-hidden-error",
+    "render-image-decode-error",
+    "render-image-preview-loading",
+    "render-image-preview-failed",
+    "render-gallery-0",
+    "render-gallery-1",
+    "render-gallery-2",
+    "render-video-fallback",
+    "render-video-thumbnail",
+    "render-video-loading",
+    "render-video-playing-muted",
+    "render-video-playing-sound",
+    "render-video-paused-muted",
+    "render-video-paused-sound",
+    "render-video-portrait",
+    "render-video-error",
+    "render-video-external",
+    "render-diff-single",
+    "render-diff-collapsed",
+    "render-diff-expanded",
+    "render-diff-detail",
+    "render-diff-summary-only",
+    "render-diff-long",
+    "render-diff-fenced-text",
+    "render-task-list",
+    "render-strikethrough"
+  ],
+  "cases": [
+    {
+      "id": "markdown-image",
+      "input": "![检查结果](assets/review.png)",
+      "output": "正文后出现图片缩略图",
+      "states": [
+        "render-image-markdown"
+      ],
+      "source": "lib/src/message_image_paths.dart",
+      "evidence": "_markdownLinkPattern",
+      "line": 89,
+      "sourceSha256": "b1928d334014517558e5c9326b95aed7bc6b2b7cb3979b5a1e667788e736f40e"
+    },
+    {
+      "id": "ordinary-image-link",
+      "input": "[截图](assets/review.png)",
+      "output": "链接与提取后的媒体缩略图；点击均打开媒体",
+      "states": [
+        "render-image-link"
+      ],
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "MessageImageReference.tryParse(href)",
+      "line": 5636,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9"
+    },
+    {
+      "id": "bare-or-code-path",
+      "input": "assets/review.png 或 `assets/review.png`",
+      "output": "提取媒体；保留正文原文",
+      "states": [
+        "render-image-bare",
+        "render-image-inline-path"
+      ],
+      "source": "lib/src/message_image_paths.dart",
+      "evidence": "_inlineCodePattern",
+      "line": 97,
+      "sourceSha256": "b1928d334014517558e5c9326b95aed7bc6b2b7cb3979b5a1e667788e736f40e"
+    },
+    {
+      "id": "data-uri",
+      "input": "data:image/png;base64,...",
+      "output": "有效数据直接解码，无 Bridge 文件读取",
+      "states": [
+        "render-image-data"
+      ],
+      "source": "lib/src/message_image_paths.dart",
+      "evidence": "_tryParseDataUri",
+      "line": 60,
+      "sourceSha256": "b1928d334014517558e5c9326b95aed7bc6b2b7cb3979b5a1e667788e736f40e"
+    },
+    {
+      "id": "same-path-deduplication",
+      "input": "同一路径在链接、行内代码、正文中重复",
+      "output": "每个路径只生成一个媒体引用",
+      "states": [
+        "render-image-deduplicate"
+      ],
+      "source": "lib/src/message_image_paths.dart",
+      "evidence": "matches.putIfAbsent",
+      "line": 86,
+      "sourceSha256": "b1928d334014517558e5c9326b95aed7bc6b2b7cb3979b5a1e667788e736f40e"
+    },
+    {
+      "id": "media-types",
+      "input": "PNG / JPEG / GIF / WebP / BMP / SVG / MP4",
+      "output": "支持类型；MP4 走视频分支，SVG 走矢量分支",
+      "states": [
+        "render-image-svg",
+        "render-image-animated",
+        "render-video-thumbnail"
+      ],
+      "source": "lib/src/bridge_client.dart",
+      "evidence": "isSupportedImagePath",
+      "line": 2182,
+      "sourceSha256": "9aea69df453a0dcea0777ce9cb0359289819304c43bcf9562226aa3c3dfc93d5"
+    },
+    {
+      "id": "query-classification-boundary",
+      "input": "https://example.com/demo.mp4?token=abc",
+      "output": "路径检测可以通过，但 isVideo 对完整字符串做 endsWith(.mp4)，含 query 时不会进入视频分支；当前实现边界，设计不假装已支持",
+      "states": [
+        "render-video-fallback"
+      ],
+      "source": "lib/src/message_image_paths.dart",
+      "evidence": "path.toLowerCase().endsWith('.mp4')",
+      "line": 40,
+      "sourceSha256": "b1928d334014517558e5c9326b95aed7bc6b2b7cb3979b5a1e667788e736f40e"
+    },
+    {
+      "id": "local-file-client-access",
+      "input": "[文件](lib/src/screens/home_screen.dart)",
+      "output": "仅在客户端本地项目路径存在时预览；不保证任意远程 Bridge 项目文件可打开",
+      "states": [
+        "render-file-relative",
+        "render-file-preview"
+      ],
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "return file.existsSync() ? file : null",
+      "line": 5670,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9"
+    },
+    {
+      "id": "structured-diff-vs-code",
+      "input": "结构化 turn diff / Markdown fenced diff",
+      "output": "前者可打开带原新行号的 DiffViewer；后者是普通代码高亮",
+      "states": [
+        "render-diff-detail",
+        "render-diff-fenced-text"
+      ],
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "_buildTurnDiffs",
+      "line": 4883,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9"
+    },
+    {
+      "id": "gfm-readonly-details",
+      "input": "- [x] 已核对 / ~~旧方案~~",
+      "output": "默认 GFM 只读任务状态与删除线，无新增编辑动作",
+      "states": [
+        "render-task-list",
+        "render-strikethrough"
+      ],
+      "source": "lib/src/screens/session_detail_screen.dart",
+      "evidence": "MarkdownBody(",
+      "line": 5553,
+      "sourceSha256": "d51748fbabc4b0e7fe2fe40a69ada174aa2e4cc721ca6c614a0adc56b498c1c9"
+    }
+  ],
+  "notes": [
+    "媒体缩略图排在正文之后，图片和 MP4 不直接在段落中重复渲染。",
+    "视频识别限 MP4；带 query 的 MP4 / SVG / 动图分类仍存在 endsWith 的实现边界。",
+    "本地文件链接预览要求客户端可访问目标文件；大于 2 MiB 或二进制内容仅提示错误。",
+    "普通 fenced diff 与结构化 DiffViewer 分开展示，未新增补丁应用或编辑功能。"
+  ],
+  "checkedAt": "2026-11-03",
+  "markdownDefaults": {
+    "renderer": "flutter_markdown 0.7.7+1",
+    "parser": "markdown 7.3.1",
+    "extensionSet": "gitHubFlavored",
+    "taskCheckboxes": "read-only Icon; no checkboxBuilder callback configured"
+  }
+}

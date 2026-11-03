@@ -14,6 +14,7 @@ import 'package:omni_code/l10n/generated/app_localizations.dart';
 import 'package:omni_code/src/bridge_client.dart';
 import 'package:omni_code/src/models.dart';
 import 'package:omni_code/src/screens/home_screen.dart';
+import 'package:omni_code/src/screens/project_detail_screen.dart';
 import 'package:omni_code/src/screens/session_detail_screen.dart';
 import 'package:omni_code/src/screens/settings_screen.dart';
 import 'package:omni_code/src/services/audio_recording_service.dart';
@@ -150,9 +151,62 @@ void main() {
     },
     skip: !_enabled,
   );
+  for (final desktop in [false, true]) {
+    for (final dark in [false, true]) {
+      for (final page in ['home', 'session', 'project', 'settings']) {
+        final name = '${desktop ? 'desktop' : 'mobile'}-$page-${dark ? 'dark' : 'light'}';
+        testWidgets('capture current app $name', (tester) async {
+          tester.view.physicalSize = desktop ? const Size(1440, 900) : const Size(390, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          final Widget screen = switch (page) {
+            'home' => HomeScreen(client: _dashboardClient()),
+            'project' => ProjectDetailScreen(project: _projects.first, client: _dashboardClient()),
+            'session' => SessionDetailScreen(
+              session: _previewSession.copyWith(
+                id: _imagePreviewSession.id,
+                title: _imagePreviewSession.title,
+                status: SessionStatus.idle,
+              ),
+              client: _imagePreviewSessionClient(),
+              enableSpeechServices: false,
+              audioRecordingService: _FakeAudioRecordingService(),
+              speechInputService: _FakeSpeechInputService(),
+              ttsService: _FakeTtsService(),
+              bridgeRealtimeAsrService: _FakeBridgeRealtimeAsrService(),
+            ),
+            _ => const SettingsScreen(),
+          };
+          await tester.pumpWidget(_PreviewApp(
+            themeMode: dark ? ThemeMode.dark : ThemeMode.light,
+            home: screen,
+          ));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 200));
+          await tester.pump(const Duration(milliseconds: 500));
+          await expectLater(find.byType(MaterialApp),
+            matchesGoldenFile('designs/current/previews/$name.png'));
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump();
+        }, skip: !const bool.fromEnvironment('UPDATE_CURRENT_APP_PREVIEWS'));
+      }
+    }
+  }
+
 }
 
 Future<void> _loadPreviewFonts() async {
+  // Flutter widget tests use Ahem for styles with no explicit font family.
+  // Register the app's preview fonts for both paths without changing AppTheme.
+  for (final family in ['Roboto', 'Ahem']) {
+    await _loadFontFamily(family, const [
+      'designs/assets/fonts/Roboto-Regular.ttf',
+      'designs/assets/fonts/Roboto-Medium.ttf',
+      'designs/assets/fonts/Roboto-Bold.ttf',
+      'designs/assets/fonts/Roboto-Black.ttf',
+    ]);
+  }
   final bodyFontFamily = AppTheme.bodyFontFamily;
   if (bodyFontFamily != null) {
     await _loadFontFamily(bodyFontFamily, const [
@@ -165,7 +219,7 @@ Future<void> _loadPreviewFonts() async {
   ]);
 
   final iconFile = File(
-    '/home/junjie/Flutter/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+    '${Platform.environment['FLUTTER_ROOT'] ?? '/home/junjie/Flutter/flutter'}/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
   );
   if (iconFile.existsSync()) {
     final bytes = await iconFile.readAsBytes();
@@ -192,8 +246,23 @@ Future<void> _loadFontFamily(String family, List<String> paths) async {
   }
 }
 
+// Resolve null button font families for offscreen test rendering only.
+ThemeData _previewTheme(ThemeData theme) {
+  ButtonStyle? normalize(ButtonStyle? style) => style?.copyWith(
+    textStyle: WidgetStateProperty.resolveWith((states) =>
+      style.textStyle?.resolve(states)?.copyWith(fontFamily: 'Roboto')),
+  );
+  return theme.copyWith(
+    filledButtonTheme: FilledButtonThemeData(style: normalize(theme.filledButtonTheme.style)),
+    outlinedButtonTheme: OutlinedButtonThemeData(style: normalize(theme.outlinedButtonTheme.style)),
+    textButtonTheme: TextButtonThemeData(style: normalize(theme.textButtonTheme.style)),
+  );
+}
+
 class _PreviewApp extends StatelessWidget {
-  const _PreviewApp({required this.home});
+  const _PreviewApp({required this.home, this.themeMode = ThemeMode.light});
+
+  final ThemeMode themeMode;
 
   final Widget home;
 
@@ -210,9 +279,9 @@ class _PreviewApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.light,
+      theme: _previewTheme(AppTheme.lightTheme),
+      darkTheme: _previewTheme(AppTheme.darkTheme),
+      themeMode: themeMode,
       home: home,
     );
   }
@@ -719,9 +788,10 @@ BridgeClient _dashboardClient() {
       if (request.method == 'GET' && request.url.path == '/projects') {
         return _jsonResponse(_projects.map(_projectJson).toList());
       }
-      if (request.method == 'GET' && request.url.path == '/sessions') {
+      if (request.method == 'GET' && request.url.path == '/v2/sessions') {
         return _jsonResponse(_sessions.map(_sessionJson).toList());
       }
+      if (request.url.path == '/v2/codex/profiles') return _jsonResponse([]);
       return http.Response('not found', 404);
     }),
   );
@@ -730,12 +800,34 @@ BridgeClient _dashboardClient() {
 BridgeClient _imagePreviewSessionClient() {
   return BridgeClient(
     httpClient: _FakeHttpClient((request) async {
+      if (request.url.path == '/v2/codex/profiles') return _jsonResponse([]);
+      if (request.url.path == '/v2/sessions/${_imagePreviewSession.id}/state') {
+        final date = '2026-05-29T09:14:00.000Z';
+        Map<String, Object?> message(Map<String, Object?> source, String purpose) => {
+          ...source, 'turn_id': 'preview-turn', 'sequence': 1, 'revision': 1,
+          'purpose': purpose, 'state': 'completed', 'updated_at': source['created_at'],
+          'attachments': <Object>[],
+        };
+        return _jsonResponse({
+          'session': {..._sessionJson(_imagePreviewSession), 'created_at': date, 'version': 1},
+          'cursor': 0,
+          'turns': [{
+            'id': 'preview-turn', 'sequence': 1, 'version': 1, 'status': 'completed',
+            'input_mode': 'text', 'user_message': message(_imagePreviewMessages.first, 'user'),
+            'segments': [for (final item in _imagePreviewMessages.skip(1)) {
+              'id': 'segment-${item['id']}', 'sequence': 1, 'revision': 1,
+              'kind': 'assistant_message', 'state': 'completed',
+              'message': message(item, 'final'), 'activities': <Object>[],
+            }], 'artifacts': <Object>[],
+          }],
+        });
+      }
       if (request.method == 'GET' &&
-          request.url.path == '/sessions/${_imagePreviewSession.id}/messages') {
+          request.url.path == '/v2/sessions/${_imagePreviewSession.id}/messages') {
         return _jsonResponse(_imagePreviewMessages);
       }
       if (request.method == 'GET' &&
-          request.url.path == '/sessions/${_imagePreviewSession.id}/events') {
+          request.url.path == '/v2/sessions/${_imagePreviewSession.id}/events') {
         return http.Response(
           '',
           200,

@@ -1,0 +1,14 @@
+{
+  "generated_at": "2026-11-03T08:37:13.534417+00:00",
+  "files": {
+    "lib/src/theme/app_colors.dart": "19c4371ed833acd7d74413aed77f46b12364e6755be6a74a3499be0d74e87874",
+    "lib/src/theme/app_theme.dart": "de71d21308b11ca88c450f162893308cc83fd203043e17b50fe0e8592be4fa26",
+    "lib/src/theme/app_spacing.dart": "47f2cb02ad78d9d7a0332f2de542b9f4abdfc2cfae09cb0615f44aef364eab82",
+    "lib/src/responsive/app_responsive_layout.dart": "e12b527f50bdb1192feb2f2e787b16d418b474f5a5e8b3bc6fc7a43fd25588b3",
+    "lib/src/screens/home_screen.dart": "be7adfe21d8301ddffcc2ee2ad7066e325fa4fe0ec98fe20c9f99a27f01a99fc",
+    "lib/src/screens/session_detail_screen.dart": "680784a96b28166036abc7f4f6c5729e2e7801f579353cf9ec45d0341fb4f292",
+    "lib/src/screens/project_detail_screen.dart": "e00fdb6f1f3e80d758435122f75a011587f12a1b1e1d440d1617fa9a03ba9269",
+    "lib/src/screens/settings_screen.dart": "5d00f855006c307a2af1b0495656b93ea5e1fc2d0fff3353d496998b5023300a",
+    "test/generate_readme_previews_test.dart": "27768336c0cfd248a8c3a8c57cf41b8e6f15ea14fc4bcdc1735a5d11ef9f107a"
+  }
+}

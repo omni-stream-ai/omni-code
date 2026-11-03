@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-03",
+  "nodesBefore": 9816,
+  "nodesAfter": 9816,
+  "sameNodeIds": true,
+  "removedFunctionalLabels": [],
+  "changedText": [
+    "n4",
+    "n514",
+    "n1024",
+    "n1300",
+    "n1624",
+    "n1888",
+    "n2217",
+    "n2533",
+    "n2779"
+  ],
+  "shrunkActionTargets": [],
+  "contrastRatios": {
+    "dark text/bg": 16.39,
+    "dark secondary/bg": 11.02,
+    "dark muted/bg": 7.81,
+    "dark muted/panel": 6.27,
+    "dark accent-ink/accent": 10.8,
+    "dark green/green-bg": 8.61,
+    "light text/bg": 13.83,
+    "light secondary/bg": 6.87,
+    "light muted/bg": 4.54,
+    "light muted/panel": 4.84,
+    "light accent-ink/accent": 9.36,
+    "light green/green-bg": 5.38
+  },
+  "tokensMatchDocument": true,
+  "scope": "Design artifacts only; does not validate Flutter runtime interactions.",
+  "coreLayoutSnapshots": 10,
+  "coreLayoutUnexpectedOverflow": 0,
+  "exportNote": "Exported sequentially from a separate document copy to avoid concurrent exporter mutations.",
+  "exportedPreviews": 325,
+  "exportErrors": []
+}
