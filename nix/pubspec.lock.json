@@ -548,11 +548,11 @@
       "dependency": "transitive",
       "description": {
         "name": "hooks",
-        "sha256": "a41af4e8fc687cd6d33de9751eb936c8c0204ebe2bcb6c15ecf707504bf47f31",
+        "sha256": "eaac480a35ec0814146c2c48d96aaa829e0e44a7662c88ae84c9edf4bc35651f",
         "url": "https://pub.dev"
       },
       "source": "hosted",
-      "version": "2.0.0"
+      "version": "2.2.0"
     },
     "html": {
       "dependency": "transitive",
@@ -1038,11 +1038,11 @@
       "dependency": "transitive",
       "description": {
         "name": "record_use",
-        "sha256": "2551bd8eecfe95d14ae75f6021ad0248be5c27f138c2ec12fcb52b500b3ba1ed",
+        "sha256": "1cb8564af8d43b464294411db9217f5ec04891c6f22ee2c32d73ae05e88a6bd2",
         "url": "https://pub.dev"
       },
       "source": "hosted",
-      "version": "0.6.0"
+      "version": "1.1.1"
     },
     "record_web": {
       "dependency": "transitive",
@@ -1560,6 +1560,16 @@
       "source": "hosted",
       "version": "1.2.1"
     },
+    "webview_all_linux": {
+      "dependency": "direct main",
+      "description": {
+        "name": "webview_all_linux",
+        "sha256": "8ad14c6d930c03c51fb02a8362fec4672fe8e852e9de6c1e6f9f162399083064",
+        "url": "https://pub.dev"
+      },
+      "source": "hosted",
+      "version": "0.5.3"
+    },
     "webview_flutter": {
       "dependency": "direct main",
       "description": {
@@ -1581,7 +1591,7 @@
       "version": "4.14.1"
     },
     "webview_flutter_platform_interface": {
-      "dependency": "transitive",
+      "dependency": "direct dev",
       "description": {
         "name": "webview_flutter_platform_interface",
         "sha256": "1221c1b12f5278791042f2ec2841743784cf25c5a644e23d6680e5d718824f04",
@@ -1599,6 +1609,16 @@
       },
       "source": "hosted",
       "version": "3.27.0"
+    },
+    "webview_windows": {
+      "dependency": "direct main",
+      "description": {
+        "name": "webview_windows",
+        "sha256": "47fcad5875a45db29dbb5c9e6709bf5c88dcc429049872701343f91ed7255730",
+        "url": "https://pub.dev"
+      },
+      "source": "hosted",
+      "version": "0.4.0"
     },
     "win32": {
       "dependency": "transitive",

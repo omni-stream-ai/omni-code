@@ -4,6 +4,7 @@
   alsa-lib,
   cmake,
   gtk3,
+  webkitgtk_4_1,
   gst_all_1,
   makeWrapper,
   writeShellScriptBin,
@@ -61,6 +62,7 @@ flutter.buildFlutterApplication {
   buildInputs = [
     alsa-lib
     gtk3
+    webkitgtk_4_1
     gst_all_1.gstreamer
     gst_all_1.gst-plugins-base
     zlib.out

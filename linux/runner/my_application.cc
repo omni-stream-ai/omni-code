@@ -19,6 +19,23 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
+// Native WebViews take GTK focus independently of Flutter's FocusNode tree.
+// Return keyboard input to FlView when a native child is hidden, and when the
+// user clicks Flutter content again.
+static void window_set_focus_cb(GtkWindow* window, GtkWidget* focused,
+                                gpointer user_data) {
+  GtkWidget* view = GTK_WIDGET(user_data);
+  if (focused == nullptr && gtk_widget_get_mapped(view)) {
+    gtk_widget_grab_focus(view);
+  }
+}
+
+static gboolean flutter_button_press_cb(GtkWidget* view, GdkEventButton* event,
+                                        gpointer user_data) {
+  gtk_widget_grab_focus(view);
+  return FALSE;
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
@@ -64,8 +81,20 @@ static void my_application_activate(GApplication* application) {
   // for transparent.
   gdk_rgba_parse(&background_color, "#000000");
   fl_view_set_background_color(view, &background_color);
+  // Prepare the WebView plugin's overlay before realizing FlView. Reparenting
+  // an already-realized Flutter view destroys its GL surface and can leave the
+  // entire application black when the first WebView is created.
+  GtkWidget* overlay = gtk_overlay_new();
+  gtk_widget_set_hexpand(overlay, TRUE);
+  gtk_widget_set_vexpand(overlay, TRUE);
+  gtk_container_add(GTK_CONTAINER(window), overlay);
+  gtk_container_add(GTK_CONTAINER(overlay), GTK_WIDGET(view));
+  g_signal_connect_after(window, "set-focus", G_CALLBACK(window_set_focus_cb),
+                         view);
+  g_signal_connect(view, "button-press-event",
+                   G_CALLBACK(flutter_button_press_cb), nullptr);
+  gtk_widget_show(overlay);
   gtk_widget_show(GTK_WIDGET(view));
-  gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
 
   // Show the window when Flutter renders.
   // Requires the view to be realized so we can start rendering.

@@ -19,6 +19,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
 import '../app_routes.dart';
+import '../services/session_file_access.dart';
+import '../widgets/session_file_preview.dart';
 import '../widgets/mcp_elicitation_dialog.dart';
 import '../widgets/mcp_content_view.dart';
 import 'mcp_servers_screen.dart';
@@ -5772,118 +5774,32 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             : '$projectRoot/$decodedPath';
     if (path == null) return null;
     final file = File(path);
-    return file.existsSync() ? file : null;
+    return file;
   }
 
   Future<void> _showFilePreview(File file) async {
-    const maxPreviewBytes = 2 * 1024 * 1024;
-    final length = await file.length();
-    if (!mounted) return;
-    if (length > maxPreviewBytes) {
-      _showFilePreviewError('File is too large to preview');
-      return;
-    }
-    final bytes = await file.readAsBytes();
-    if (!mounted) return;
-    if (bytes.contains(0)) {
-      _showFilePreviewError('Binary files cannot be previewed');
-      return;
-    }
-    final content = utf8.decode(bytes, allowMalformed: true);
-    final isMarkdown = RegExp(r'\.(md|markdown|mdown)$', caseSensitive: false)
-        .hasMatch(file.path);
-    final isChinese = Localizations.localeOf(context).languageCode == 'zh';
-    final brightness = Theme.of(context).brightness;
     await showDialog<void>(
       context: context,
-      builder: (context) => DefaultTabController(
-        length: isMarkdown ? 2 : 1,
-        child: Dialog.fullscreen(
-          backgroundColor: AppColors.panelFor(brightness),
-          child: SafeArea(
-            child: Padding(
-              padding: AppSpacing.tilePadding,
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.description_outlined, size: 18),
-                      const SizedBox(width: AppSpacing.compact),
-                      Expanded(
-                        child: Text(
-                          file.path.split(Platform.pathSeparator).last,
-                          key: const ValueKey('markdown-file-preview-title'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: context.l10n.close,
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
-                  ),
-                  if (isMarkdown)
-                    TabBar(tabs: [
-                      Tab(text: isChinese ? '预览' : 'Preview'),
-                      Tab(text: isChinese ? '原文' : 'Source'),
-                    ]),
-                  const SizedBox(height: AppSpacing.compact),
-                  Expanded(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: AppColors.panelDeepFor(brightness),
-                        border:
-                            Border.all(color: AppColors.outlineFor(brightness)),
-                        borderRadius:
-                            BorderRadius.circular(AppSpacing.radiusControl),
-                      ),
-                      child: TabBarView(children: [
-                        if (isMarkdown)
-                          SingleChildScrollView(
-                            padding: AppSpacing.tilePadding,
-                            child: MarkdownBody(
-                              key: const ValueKey(
-                                  'markdown-file-preview-rendered'),
-                              data: content,
-                              selectable: true,
-                              onTapLink: (_, href, __) =>
-                                  _handleAssistantMarkdownLinkTap(
-                                href,
-                                sourceFile: file,
-                              ),
-                            ),
-                          ),
-                        SingleChildScrollView(
-                          padding: AppSpacing.tilePadding,
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: SelectableText.rich(
-                              _AssistantCodeSyntaxHighlighter(Theme.of(context))
-                                  .format(content),
-                              key: const ValueKey(
-                                  'markdown-file-preview-content'),
-                            ),
-                          ),
-                        ),
-                      ]),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+      builder: (context) => SessionFilePreview(
+        access: SessionFileAccess(
+            file: file,
+            client: _client,
+            sessionId: _session.id,
+            rootPath: _client.peekProject(_session.projectId)?.rootPath),
+        onOpenLink: (href) =>
+            _handleAssistantMarkdownLinkTap(href, sourceFile: file),
+        sourceBuilder: (context, content) => SelectableText.rich(
+          _AssistantCodeSyntaxHighlighter(Theme.of(context)).format(content),
+          key: const ValueKey('markdown-file-preview-content'),
         ),
       ),
     );
-  }
-
-  void _showFilePreviewError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    if (mounted &&
+        !_isMobilePlatform &&
+        _pendingApproval == null &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      _messageInputFocusNode.requestFocus();
+    }
   }
 
   Widget _buildAssistantImageCard(

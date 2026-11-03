@@ -1,4 +1,4 @@
-{ lib, stdenv, fetchurl, autoPatchelfHook, makeWrapper, alsa-lib, gtk3, glib, gst_all_1 }:
+{ lib, stdenv, fetchurl, autoPatchelfHook, makeWrapper, alsa-lib, gtk3, webkitgtk_4_1, glib, gst_all_1 }:
 
 stdenv.mkDerivation rec {
   pname = "omni-code";
@@ -10,7 +10,7 @@ stdenv.mkDerivation rec {
   };
 
   nativeBuildInputs = [ autoPatchelfHook makeWrapper ];
-  buildInputs = [ alsa-lib gtk3 glib gst_all_1.gstreamer gst_all_1.gst-plugins-base ];
+  buildInputs = [ alsa-lib gtk3 webkitgtk_4_1 glib gst_all_1.gstreamer gst_all_1.gst-plugins-base ];
   autoPatchelfIgnoreMissingDeps = [ "libjvm.so" ];
 
   unpackPhase = ''

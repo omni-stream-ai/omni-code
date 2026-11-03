@@ -10320,6 +10320,17 @@ void main() {
 
   testWidgets('Markdown file preview defaults to rendered and can show source',
       (tester) async {
+    // File IO completes in the real async zone, including after tab transitions.
+    Future<void> settlePreview() async {
+      await tester.runAsync(() async {
+        for (var i = 0; i < 8; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+        }
+      });
+      await tester.pumpAndSettle();
+    }
+
     const recorderChannel = MethodChannel('com.llfbandit.record/messages');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(recorderChannel, (_) async => null);
@@ -10357,32 +10368,44 @@ void main() {
       await tester.tap(find.text('Open notes'));
       await Future<void>.delayed(const Duration(milliseconds: 100));
     });
-    await tester.pumpAndSettle();
+    await settlePreview();
     expect(find.byKey(const ValueKey('markdown-file-preview-rendered')),
         findsOneWidget);
     expect(find.text('Heading'), findsOneWidget);
     await tester.tap(find.text('Source'));
-    await tester.pumpAndSettle();
+    await settlePreview();
     expect(find.byKey(const ValueKey('markdown-file-preview-content')),
         findsOneWidget);
     expect(find.textContaining('# Heading'), findsOneWidget);
     await tester.tap(find.text('Preview'));
-    await tester.pumpAndSettle();
+    await settlePreview();
     await tester.runAsync(() async {
       await tester.tap(find.text('Open child'));
       await Future<void>.delayed(const Duration(milliseconds: 100));
     });
-    await tester.pumpAndSettle();
+    await settlePreview();
     expect(find.text('child notes.md'), findsOneWidget);
     expect(find.text('Child document'), findsOneWidget);
     await tester.runAsync(() async {
       await tester.tap(find.text('Open sibling'));
       await Future<void>.delayed(const Duration(milliseconds: 100));
     });
-    await tester.pumpAndSettle();
+    await settlePreview();
     expect(find.text('sibling.md'), findsOneWidget);
     expect(find.text('Sibling document'), findsOneWidget);
-  });
+    for (var i = 0; i < 3; i++) {
+      await tester.tap(find.byTooltip('Close').last);
+      await settlePreview();
+    }
+    final input = find.byKey(const Key('session-message-input'));
+    expect(_primaryFocusIsWithin(tester, input), isTrue);
+    await tester.enterText(input, 'draft');
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pump();
+    expect(tester.widget<TextField>(input).controller!.text, 'draf');
+  },
+      variant:
+          const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
 
   testWidgets('assistant replies render styled code blocks', (tester) async {
     final semantics = tester.ensureSemantics();

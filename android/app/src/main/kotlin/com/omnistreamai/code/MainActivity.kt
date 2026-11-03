@@ -19,6 +19,35 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 class MainActivity : FlutterActivity() {
+    private var pendingSave: MethodChannel.Result? = null
+    private var pendingSaveFile: File? = null
+    private val saveRequestCode = 4301
+
+    @Deprecated("Activity result compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != saveRequestCode) return
+        val result = pendingSave ?: return
+        val source = pendingSaveFile
+        pendingSave = null
+        pendingSaveFile = null
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null || source == null) {
+            result.success(null)
+            return
+        }
+        Thread {
+            try {
+                val output = contentResolver.openOutputStream(uri)
+                    ?: throw java.io.IOException("Cannot open destination")
+                output.use { target -> source.inputStream().use { it.copyTo(target) } }
+                runOnUiThread { result.success(uri.toString()) }
+            } catch (error: Exception) {
+                runOnUiThread { result.error("SAVE_FAILED", error.message, null) }
+            }
+        }.start()
+    }
+
     private val updateChannel = "omni_code/app_update"
 
     private fun configureWebViewProxy(host: String?, result: MethodChannel.Result) {
@@ -56,6 +85,30 @@ class MainActivity : FlutterActivity() {
                             webView.post {
                                 val ime = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                                 result.success(ime.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT))
+                            }
+                        }
+                    }
+                    "saveDocument" -> {
+                        val path = call.argument<String>("path")
+                        val name = call.argument<String>("name")
+                        if (pendingSave != null) {
+                            result.error("SAVE_BUSY", "A save dialog is already open", null)
+                        } else if (path == null || !File(path).isFile) {
+                            result.error("FILE_NOT_FOUND", "Download file does not exist", null)
+                        } else {
+                            pendingSave = result
+                            pendingSaveFile = File(path)
+                            try {
+                                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                    addCategory(Intent.CATEGORY_OPENABLE)
+                                    type = call.argument<String>("mime") ?: "application/octet-stream"
+                                    putExtra(Intent.EXTRA_TITLE, name ?: File(path).name)
+                                }
+                                startActivityForResult(intent, saveRequestCode)
+                            } catch (error: Exception) {
+                                pendingSave = null
+                                pendingSaveFile = null
+                                result.error("SAVE_FAILED", error.message, null)
                             }
                         }
                     }

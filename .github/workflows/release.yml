@@ -352,6 +352,7 @@ jobs:
             default-jdk-headless \
             libasound2-dev \
             libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
             liblzma-dev \
             libcurl4-openssl-dev \
             libgstreamer1.0-dev \

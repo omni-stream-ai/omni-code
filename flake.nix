@@ -38,6 +38,7 @@
           packages = with pkgs; [
             flutter
             gtk3
+            webkitgtk_4_1
             pkg-config
             jdk
             alsa-lib

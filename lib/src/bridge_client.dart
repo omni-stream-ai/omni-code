@@ -891,6 +891,33 @@ class BridgeClient {
     return all;
   }
 
+  Future<Map<String, dynamic>> fileInfo(String path,
+      {required String sessionId}) async {
+    final response = await _httpClient.get(
+        Uri.parse('$baseUrl/files/info')
+            .replace(queryParameters: {'path': path, 'session_id': sessionId}),
+        headers: _defaultHeaders);
+    if (response.statusCode != 200) {
+      throw Exception(_extractErrorMessage(response));
+    }
+    return _decodeApiData(response.body);
+  }
+
+  Future<http.StreamedResponse> openFileStream(String path,
+      {required String sessionId}) async {
+    final request = http.Request(
+        'GET',
+        Uri.parse('$baseUrl/files')
+            .replace(queryParameters: {'path': path, 'session_id': sessionId}))
+      ..headers.addAll(_defaultHeaders);
+    final response = await _httpClient.send(request);
+    if (response.statusCode != 200) {
+      throw Exception(
+          _extractErrorMessageFromBody(await response.stream.bytesToString()));
+    }
+    return response;
+  }
+
   Future<BridgeFileResponse> readFile(
     String path, {
     String? projectId,
