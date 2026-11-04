@@ -67,6 +67,7 @@ class AppSettings {
     required this.cachedAgents,
     required this.lastSelectedProviderByProject,
     required this.desktopNavigationCollapsed,
+    this.recentSessionsCurrentProjectOnly = true,
     required this.desktopHomeRailCollapsed,
     required this.desktopSessionRailCollapsed,
     required this.voiceComposerMode,
@@ -113,6 +114,7 @@ class AppSettings {
   final List<AgentSummary> cachedAgents;
   final Map<String, String?> lastSelectedProviderByProject;
   final bool desktopNavigationCollapsed;
+  final bool recentSessionsCurrentProjectOnly;
   final bool desktopHomeRailCollapsed;
   final bool desktopSessionRailCollapsed;
   final bool voiceComposerMode;
@@ -240,6 +242,7 @@ class AppSettings {
     List<AgentSummary>? cachedAgents,
     Map<String, String?>? lastSelectedProviderByProject,
     bool? desktopNavigationCollapsed,
+    bool? recentSessionsCurrentProjectOnly,
     bool? desktopHomeRailCollapsed,
     bool? desktopSessionRailCollapsed,
     bool? voiceComposerMode,
@@ -311,6 +314,8 @@ class AppSettings {
       ),
       desktopNavigationCollapsed:
           desktopNavigationCollapsed ?? this.desktopNavigationCollapsed,
+      recentSessionsCurrentProjectOnly: recentSessionsCurrentProjectOnly ??
+          this.recentSessionsCurrentProjectOnly,
       desktopHomeRailCollapsed:
           desktopHomeRailCollapsed ?? this.desktopHomeRailCollapsed,
       desktopSessionRailCollapsed:
@@ -384,6 +389,7 @@ class AppSettings {
       ],
       'last_selected_provider_by_project': lastSelectedProviderByProject,
       'desktop_navigation_collapsed': desktopNavigationCollapsed,
+      'recent_sessions_current_project_only': recentSessionsCurrentProjectOnly,
       'desktop_home_rail_collapsed': desktopHomeRailCollapsed,
       'desktop_session_rail_collapsed': desktopSessionRailCollapsed,
       'voice_composer_mode': voiceComposerMode,
@@ -521,6 +527,11 @@ class AppSettings {
         json,
         'desktop_navigation_collapsed',
         defaults.desktopNavigationCollapsed,
+      ),
+      recentSessionsCurrentProjectOnly: _readBool(
+        json,
+        'recent_sessions_current_project_only',
+        defaults.recentSessionsCurrentProjectOnly,
       ),
       desktopHomeRailCollapsed: _readBool(
         json,

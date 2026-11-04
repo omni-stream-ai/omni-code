@@ -1,4 +1,13 @@
 {
+  "recentSessionsScope": "Recent session scope",
+  "recentSessionsCurrentProject": "Current project",
+  "recentSessionsAllProjects": "All projects",
+  "acceptanceRequestTimedOutTitle": "Acceptance service timed out",
+  "acceptanceRequestTimedOutHint": "The service did not respond within 10 minutes. The task may still be running. Refresh its status before starting again.",
+  "acceptanceRequestFailedTitle": "Could not complete the acceptance request",
+  "acceptanceRequestFailedHint": "Check your connection to Bridge, then refresh the status and try again. Existing acceptance records are preserved.",
+  "acceptanceRefreshStatus": "Refresh status",
+  "acceptanceErrorDetails": "View error details",
   "@@locale": "en",
   "appTitle": "Omni Code",
   "settingsTitle": "Settings",

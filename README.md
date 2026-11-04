@@ -25,7 +25,13 @@ See also: [Plugin Writing Guide](https://github.com/omni-stream-ai/omni-code-plu
 
 ## Preview
 
-![Omni Code](preview/omni-code-showcase.png)
+| Workspace | Conversation | Commands |
+| :---: | :---: | :---: |
+| <a href="designs/current/README.md"><img src="designs/current/previews/mobile-home-light.png" width="240" alt="Workspace"></a> | <a href="designs/current/README.md"><img src="designs/current/previews/mobile-session-markdown-dark.png" width="240" alt="Conversation"></a> | <a href="designs/current/README.md"><img src="designs/current/previews/mobile-session-commands-light.png" width="240" alt="Commands"></a> |
+
+Current Flutter screens · Mobile and desktop · Light and dark themes
+
+[Explore the full screenshot gallery →](designs/current/README.md)
 
 ## Roadmap (V1)
 

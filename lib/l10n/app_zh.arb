@@ -1,4 +1,13 @@
 {
+  "recentSessionsScope": "最近会话范围",
+  "recentSessionsCurrentProject": "当前项目",
+  "recentSessionsAllProjects": "所有项目",
+  "acceptanceRequestTimedOutTitle": "等待验收服务超时",
+  "acceptanceRequestTimedOutHint": "等待已超过 10 分钟。任务可能仍在后台运行，请先刷新状态，确认后再决定是否重新开始。",
+  "acceptanceRequestFailedTitle": "暂时无法完成验收操作",
+  "acceptanceRequestFailedHint": "请检查与 Bridge 的连接，然后刷新状态重试。已有验收记录会保留。",
+  "acceptanceRefreshStatus": "刷新状态",
+  "acceptanceErrorDetails": "查看错误详情",
   "@@locale": "zh",
   "appTitle": "Omni Code",
   "settingsTitle": "设置",

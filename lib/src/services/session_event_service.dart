@@ -25,6 +25,7 @@ class SessionEventService extends NavigatorObserver {
   final Set<String> _refreshesInFlight = {};
   final Set<String> _refreshesPending = {};
   final Map<String, String> _notifiedApprovalRequestIds = {};
+  final Map<String, SessionSummary> _observedSessions = {};
   final Map<String, (SessionSummary, ApprovalRequest)> _approvalDialogQueue =
       {};
   final Set<String> _shownApprovalDialogKeys = {};
@@ -150,6 +151,8 @@ class SessionEventService extends NavigatorObserver {
     SessionSummary? previous,
     SessionSummary current,
   ) async {
+    previous = _observedSessions[current.id] ?? previous;
+    _observedSessions[current.id] = current;
     final locale = WidgetsBinding.instance.platformDispatcher.locale;
     final l10n = lookupAppLocalizations(
       AppLocalizations.supportedLocales.firstWhere(
@@ -157,15 +160,26 @@ class SessionEventService extends NavigatorObserver {
         orElse: () => AppLocalizations.supportedLocales.first,
       ),
     );
+    if (current.unreadCount == 0 &&
+        (previous == null || previous.unreadCount > 0)) {
+      await _notifications.cancelSessionActivityNotifications(current.id);
+    }
     final request = current.pendingApproval;
     if (current.status == SessionStatus.awaitingApproval && request != null) {
+      final oldRequestId = _notifiedApprovalRequestIds[current.id] ??
+          previous?.pendingApproval?.requestId;
+      if (oldRequestId != null && oldRequestId != request.requestId) {
+        await _notifications.cancelApprovalRequestNotification(current.id,
+            requestId: oldRequestId);
+      }
       if (current.id == _activeSessionId) {
         _removeQueuedApprovalDialogs(current.id);
       } else {
         _queueApprovalDialog(current, request);
       }
       final lastRequestId = _notifiedApprovalRequestIds[current.id];
-      if (lastRequestId != request.requestId) {
+      if (lastRequestId != request.requestId &&
+          !pushService.remoteNotificationsRegistered) {
         _notifiedApprovalRequestIds[current.id] = request.requestId;
         try {
           await _notifications.showApprovalRequestNotification(
@@ -182,9 +196,15 @@ class SessionEventService extends NavigatorObserver {
           rethrow;
         }
       }
+      _notifiedApprovalRequestIds[current.id] = request.requestId;
       return;
     }
-    _notifiedApprovalRequestIds.remove(current.id);
+    // An awaiting status without a hydrated payload is not a resolution.
+    if (current.status == SessionStatus.awaitingApproval) return;
+    final resolvedRequestId = _notifiedApprovalRequestIds.remove(current.id) ??
+        previous?.pendingApproval?.requestId;
+    await _notifications.cancelApprovalRequestNotification(current.id,
+        requestId: resolvedRequestId);
     _removeQueuedApprovalDialogs(current.id);
 
     if (previous == null || current.id == _activeSessionId) return;
@@ -397,6 +417,8 @@ class SessionEventService extends NavigatorObserver {
       );
       if (choice != null) {
         await _client.submitApproval(session.id, request.requestId, choice);
+        await _notifications.cancelApprovalRequestNotification(session.id,
+            requestId: request.requestId);
       }
     } catch (error) {
       if (context.mounted) {
@@ -475,6 +497,7 @@ class SessionEventService extends NavigatorObserver {
     _refreshesInFlight.clear();
     _refreshesPending.clear();
     _notifiedApprovalRequestIds.clear();
+    _observedSessions.clear();
     _approvalDialogQueue.clear();
     _shownApprovalDialogKeys.clear();
   }

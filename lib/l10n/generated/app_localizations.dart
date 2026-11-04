@@ -98,6 +98,60 @@ abstract class AppLocalizations {
     Locale('zh')
   ];
 
+  /// No description provided for @recentSessionsScope.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent session scope'**
+  String get recentSessionsScope;
+
+  /// No description provided for @recentSessionsCurrentProject.
+  ///
+  /// In en, this message translates to:
+  /// **'Current project'**
+  String get recentSessionsCurrentProject;
+
+  /// No description provided for @recentSessionsAllProjects.
+  ///
+  /// In en, this message translates to:
+  /// **'All projects'**
+  String get recentSessionsAllProjects;
+
+  /// No description provided for @acceptanceRequestTimedOutTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Acceptance service timed out'**
+  String get acceptanceRequestTimedOutTitle;
+
+  /// No description provided for @acceptanceRequestTimedOutHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The service did not respond within 10 minutes. The task may still be running. Refresh its status before starting again.'**
+  String get acceptanceRequestTimedOutHint;
+
+  /// No description provided for @acceptanceRequestFailedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not complete the acceptance request'**
+  String get acceptanceRequestFailedTitle;
+
+  /// No description provided for @acceptanceRequestFailedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Check your connection to Bridge, then refresh the status and try again. Existing acceptance records are preserved.'**
+  String get acceptanceRequestFailedHint;
+
+  /// No description provided for @acceptanceRefreshStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh status'**
+  String get acceptanceRefreshStatus;
+
+  /// No description provided for @acceptanceErrorDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'View error details'**
+  String get acceptanceErrorDetails;
+
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:

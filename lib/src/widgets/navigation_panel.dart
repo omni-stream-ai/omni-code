@@ -1,13 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../app_routes.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
+import '../settings/app_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 
 typedef AgentLabelResolver = String Function(String agentId);
+
+const _recentSessionScopeSvg = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path d="M4 6h16M7 12h10M10 18h4" fill="none" stroke="#000000"
+    stroke-width="2" stroke-linecap="round"/>
+</svg>
+''';
 
 class NavigationPanel extends StatelessWidget {
   const NavigationPanel({
@@ -56,10 +65,21 @@ class NavigationPanel extends StatelessWidget {
   final VoidCallback? onToggleCollapsed;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: appSettingsController,
+        builder: (context, _) => _buildPanel(context),
+      );
+
+  Widget _buildPanel(BuildContext context) {
     final brightness = Theme.of(context).brightness;
     final muted = AppColors.mutedFor(brightness);
     final text = AppColors.textFor(brightness);
+    final currentProjectOnly =
+        appSettingsController.settings.recentSessionsCurrentProjectOnly;
+    final visibleSessions = recentSessions.where((session) =>
+        !currentProjectOnly ||
+        activeProjectId == null ||
+        session.projectId == activeProjectId);
     final hasRecentContent = showRecentContent &&
         (recentSessions.isNotEmpty || recentProjects.isNotEmpty);
 
@@ -146,13 +166,74 @@ class NavigationPanel extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (recentSessions.isNotEmpty) ...[
-                    NavigationSectionLabel(
-                      label: context.l10n.recentSessionsTitle,
-                      collapsed: collapsed,
-                      icon: Icons.schedule_rounded,
+                    Row(
+                      children: [
+                        Expanded(
+                            child: NavigationSectionLabel(
+                          label: context.l10n.recentSessionsTitle,
+                          collapsed: collapsed,
+                          icon: Icons.schedule_rounded,
+                        )),
+                        if (!collapsed)
+                          PopupMenuButton<bool>(
+                            key: const Key('navigation-recent-session-scope'),
+                            initialValue: currentProjectOnly,
+                            tooltip:
+                                '${context.l10n.recentSessionsScope}: ${currentProjectOnly ? context.l10n.recentSessionsCurrentProject : context.l10n.recentSessionsAllProjects}',
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 7),
+                              decoration: BoxDecoration(
+                                color: AppColors.panelDeepFor(brightness),
+                                borderRadius: BorderRadius.circular(
+                                    AppSpacing.radiusControl),
+                                border: Border.all(
+                                    color: AppColors.outlineFor(brightness)),
+                              ),
+                              child: RepaintBoundary(
+                                key: const Key(
+                                    'navigation-recent-session-scope-icon'),
+                                child: SvgPicture.string(
+                                  _recentSessionScopeSvg,
+                                  width: 18,
+                                  height: 18,
+                                  colorFilter:
+                                      ColorFilter.mode(text, BlendMode.srcIn),
+                                  excludeFromSemantics: true,
+                                ),
+                              ),
+                            ),
+                            itemBuilder: (_) => [
+                              _scopeMenuItem(context,
+                                  value: true,
+                                  selected: currentProjectOnly,
+                                  label: context
+                                      .l10n.recentSessionsCurrentProject),
+                              _scopeMenuItem(context,
+                                  value: false,
+                                  selected: !currentProjectOnly,
+                                  label:
+                                      context.l10n.recentSessionsAllProjects),
+                            ],
+                            onSelected: (value) async {
+                              try {
+                                await appSettingsController.save(
+                                    appSettingsController.settings.copyWith(
+                                        recentSessionsCurrentProjectOnly:
+                                            value));
+                              } catch (error) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.maybeOf(context)
+                                      ?.showSnackBar(
+                                          SnackBar(content: Text('$error')));
+                                }
+                              }
+                            },
+                          ),
+                      ],
                     ),
                     const SizedBox(height: AppSpacing.compact),
-                    ...recentSessions.take(5).map(
+                    ...visibleSessions.take(5).map(
                           (session) => Padding(
                             padding: const EdgeInsets.only(
                               bottom: AppSpacing.compact,
@@ -246,6 +327,53 @@ class NavigationPanel extends StatelessWidget {
                 : Text(context.l10n.newSession),
           ),
       ],
+    );
+  }
+
+  PopupMenuItem<bool> _scopeMenuItem(
+    BuildContext context, {
+    required bool value,
+    required bool selected,
+    required String label,
+  }) {
+    final brightness = Theme.of(context).brightness;
+    final accent = AppColors.accentBlueFor(brightness);
+    return PopupMenuItem<bool>(
+      key: Key('navigation-session-scope-$value'),
+      value: value,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      child: Semantics(
+        selected: selected,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color:
+                selected ? accent.withValues(alpha: 0.14) : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+          ),
+          child: Row(children: [
+            SizedBox(
+                width: 18,
+                height: 18,
+                child: selected
+                    ? SvgPicture.string(
+                        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+                        key: const Key(
+                            'navigation-session-scope-selected-check'),
+                        colorFilter: ColorFilter.mode(accent, BlendMode.srcIn),
+                        excludeFromSemantics: true,
+                      )
+                    : null),
+            const SizedBox(width: 8),
+            Flexible(
+                child: Text(label,
+                    style: TextStyle(
+                      color: selected ? accent : AppColors.textFor(brightness),
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                    ))),
+          ]),
+        ),
+      ),
     );
   }
 

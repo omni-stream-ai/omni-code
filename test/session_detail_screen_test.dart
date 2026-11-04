@@ -315,66 +315,87 @@ void main() {
     expect(find.text('test/example_test.dart'), findsNothing);
   });
 
-  testWidgets('marks a visible v2 assistant reply as read', (tester) async {
-    final state = _domainStateJson([
-      _messageJson(
-        id: 'user-1',
-        sessionId: 'session-1',
-        role: 'user',
-        content: 'Question',
-        createdAt: '2026-05-09T10:00:00.000Z',
-      ),
-      _messageJson(
-        id: 'assistant-1',
-        sessionId: 'session-1',
-        role: 'assistant',
-        content: 'Answer',
-        createdAt: '2026-05-09T10:00:01.000Z',
-      ),
-    ]);
-    (state['session'] as Map<String, dynamic>)['unread_count'] = 1;
-    var readRequests = 0;
-    final client = BridgeClient(
-      httpClient: _FakeHttpClient((request) async {
-        if (request.method == 'GET' &&
-            request.url.path == '/v2/sessions/session-1/state') {
-          return http.Response(
-            jsonEncode({'data': state}),
-            200,
-            headers: {'content-type': 'application/json'},
-          );
-        }
-        if (request.method == 'GET' &&
-            request.url.path == '/v2/sessions/session-1/events') {
-          return http.Response(
-            '',
-            200,
-            headers: {'content-type': 'text/event-stream'},
-          );
-        }
-        if (request.method == 'PUT' &&
-            request.url.path == '/v2/sessions/session-1/read-state') {
-          readRequests += 1;
-          return http.Response('', 204);
-        }
-        return http.Response('not found', 404);
-      }),
-    );
-
-    await tester.pumpWidget(
-      _TestApp(
-        home: SessionDetailScreen(
-          session: _session(unreadCount: 1),
-          client: client,
-          enableSpeechServices: false,
+  for (final background in [false, true]) {
+    testWidgets(
+        background
+            ? 'background replies remain unread until session refocus'
+            : 'marks a visible v2 assistant reply as read', (tester) async {
+      if (background) {
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        addTearDown(() => tester.binding
+            .handleAppLifecycleStateChanged(AppLifecycleState.resumed));
+      }
+      final state = _domainStateJson([
+        _messageJson(
+          id: 'user-1',
+          sessionId: 'session-1',
+          role: 'user',
+          content: 'Question',
+          createdAt: '2026-05-09T10:00:00.000Z',
         ),
-      ),
-    );
-    await tester.pump();
-    await tester.pump();
+        _messageJson(
+          id: 'assistant-1',
+          sessionId: 'session-1',
+          role: 'assistant',
+          content: 'Answer',
+          createdAt: '2026-05-09T10:00:01.000Z',
+        ),
+      ]);
+      (state['session'] as Map<String, dynamic>)['unread_count'] = 1;
+      var readRequests = 0;
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/v2/sessions/session-1/state') {
+            return http.Response(
+              jsonEncode({'data': state}),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          if (request.method == 'GET' &&
+              request.url.path == '/v2/sessions/session-1/events') {
+            return http.Response(
+              '',
+              200,
+              headers: {'content-type': 'text/event-stream'},
+            );
+          }
+          if (request.method == 'PUT' &&
+              request.url.path == '/v2/sessions/session-1/read-state') {
+            readRequests += 1;
+            return http.Response('', 204);
+          }
+          return http.Response('not found', 404);
+        }),
+      );
 
-    expect(readRequests, 1);
-  });
+      await tester.pumpWidget(
+        _TestApp(
+          home: SessionDetailScreen(
+            session: _session(unreadCount: 1),
+            client: client,
+            enableSpeechServices: false,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      if (background) {
+        expect(readRequests, 0);
+        expect(_fakeNotifications().cancelledIds, isEmpty);
+        tester.binding
+            .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        await tester.pump();
+        await tester.pump();
+        expect(readRequests, greaterThan(0));
+      } else {
+        expect(readRequests, 1);
+      }
+      expect(_fakeNotifications().cancelledIds, contains('session-1'.hashCode));
+    });
+  }
 
   testWidgets('v2 tools stay between the assistant segments that surround them',
       (tester) async {
@@ -584,6 +605,7 @@ void main() {
 
   testWidgets('loads current session title from bridge on first open',
       (tester) async {
+    var detailRequests = 0;
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
         if (request.method == 'GET' &&
@@ -604,6 +626,10 @@ void main() {
         }
         if (request.method == 'GET' &&
             request.url.path == '/sessions/session-1') {
+          detailRequests++;
+          if (detailRequests == 1) {
+            return http.Response('temporarily unavailable', 503);
+          }
           return http.Response(
             jsonEncode({
               'data': {
@@ -629,23 +655,45 @@ void main() {
     );
     await tester.pump();
 
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
     expect(find.text('Bridge Generated Title'), findsOneWidget);
+    expect(detailRequests, 2);
   });
 
   testWidgets('syncs updated session summary from parent widget',
       (tester) async {
+    final client = _clientForMessages(const []);
     await tester.pumpWidget(
       _TestApp(
         home: SessionDetailScreen(
           session: _session(title: 'Stale Title'),
-          client: _clientForMessages(const []),
+          client: client,
           enableSpeechServices: false,
         ),
       ),
     );
     await tester.pump();
 
-    expect(find.text('Stale Title'), findsOneWidget);
+    // The domain snapshot supplies the current title before a parent update.
+    expect(find.text('Test Session'), findsOneWidget);
+    expect(client.peekSessions()!.single.title, 'Test Session');
+
+    final shared = client.peekSessions()!.single.copyWith(
+          title: 'Shared live title',
+          updatedAt: DateTime(2026, 5, 9, 10, 0, 30),
+        );
+    client.syncSessionSummary(shared);
+    await tester.pump();
+    expect(find.text('Shared live title'), findsOneWidget);
+    // A delayed detail response must not roll the shared title back.
+    client.syncSessionSummary(shared.copyWith(
+      title: 'Delayed old title',
+      updatedAt: DateTime(2026, 5, 9),
+    ));
+    await tester.pump();
+    expect(find.text('Shared live title'), findsOneWidget);
+    expect(client.peekSessionById(shared.id)!.title, 'Shared live title');
 
     await tester.pumpWidget(
       _TestApp(
@@ -666,6 +714,29 @@ void main() {
 
     expect(find.text('Fresh Title'), findsOneWidget);
     expect(find.text('Stale Title'), findsNothing);
+  });
+
+  testWidgets('header and sidebar share live session titles', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1600, 900);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final client = _clientForMessages(const []);
+    await tester.pumpWidget(_TestApp(
+      home: SessionDetailScreen(
+        session: _session(),
+        client: client,
+        enableSpeechServices: false,
+      ),
+    ));
+    await tester.pump();
+    client.syncSessionSummary(client.peekSessions()!.single.copyWith(
+          title: 'Shared sidebar and header title',
+          updatedAt: DateTime(2026, 5, 10),
+        ));
+    await tester.pump();
+    expect(find.text('Shared sidebar and header title'), findsNWidgets(2));
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('stale message load does not overwrite newer session content',
@@ -1989,6 +2060,7 @@ void main() {
   });
 
   testWidgets('slash input shows command suggestions', (tester) async {
+    var commandRequests = 0;
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
         if (request.method == 'GET' &&
@@ -2008,6 +2080,10 @@ void main() {
           );
         }
         if (request.method == 'GET' && request.url.path == '/agents/commands') {
+          commandRequests++;
+          if (commandRequests == 1) {
+            return http.Response('temporarily unavailable', 503);
+          }
           return http.Response(
             jsonEncode({
               'data': [
@@ -2063,6 +2139,7 @@ void main() {
     expect(find.text('/review'), findsOneWidget);
     expect(find.text('Review the diff'), findsOneWidget);
     expect(find.text('/summarize'), findsOneWidget);
+    expect(commandRequests, 2);
     final panel = find.byKey(const Key('session-command-suggestions'));
     expect(tester.getSize(panel).height, lessThanOrEqualTo(280));
     expect(
@@ -14833,6 +14910,15 @@ class _FakeBridgeRealtimeAsrService extends BridgeRealtimeAsrService {
 class _FakeAndroidFlutterLocalNotificationsPlugin
     extends AndroidFlutterLocalNotificationsPlugin {
   final List<_ShownNotification> shownNotifications = <_ShownNotification>[];
+  final List<int> cancelledIds = [];
+
+  @override
+  Future<void> cancel({required int id, String? tag}) async {
+    cancelledIds.add(id);
+  }
+
+  @override
+  Future<List<ActiveNotification>> getActiveNotifications() async => [];
 
   @override
   Future<bool> initialize({

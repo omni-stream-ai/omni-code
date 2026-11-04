@@ -9,6 +9,35 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get recentSessionsScope => '最近会话范围';
+
+  @override
+  String get recentSessionsCurrentProject => '当前项目';
+
+  @override
+  String get recentSessionsAllProjects => '所有项目';
+
+  @override
+  String get acceptanceRequestTimedOutTitle => '等待验收服务超时';
+
+  @override
+  String get acceptanceRequestTimedOutHint =>
+      '等待已超过 10 分钟。任务可能仍在后台运行，请先刷新状态，确认后再决定是否重新开始。';
+
+  @override
+  String get acceptanceRequestFailedTitle => '暂时无法完成验收操作';
+
+  @override
+  String get acceptanceRequestFailedHint =>
+      '请检查与 Bridge 的连接，然后刷新状态重试。已有验收记录会保留。';
+
+  @override
+  String get acceptanceRefreshStatus => '刷新状态';
+
+  @override
+  String get acceptanceErrorDetails => '查看错误详情';
+
+  @override
   String get appTitle => 'Omni Code';
 
   @override

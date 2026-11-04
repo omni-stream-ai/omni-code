@@ -1,11 +1,16 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../app_routes.dart';
 import '../models.dart';
 import '../settings/app_settings.dart';
+import 'notification_delivery.dart';
+import 'notification_delivery_stub.dart';
 
 @pragma('vm:entry-point')
 void notificationTapBackground(NotificationResponse response) {
@@ -24,6 +29,37 @@ String truncateNotificationBody(String body, int maxChars) {
 }
 
 class NotificationService {
+  NotificationService({NotificationDelivery? delivery}) : _delivery = delivery;
+
+  NotificationDelivery? _delivery;
+  final NotificationDelivery _fallbackDelivery = MemoryNotificationDelivery();
+  final Map<int, int> _notificationEpochs = {};
+
+  Future<void> _deliverOnce(SessionSummary session, String kind, String body,
+      Future<void> Function() show) {
+    final requestId =
+        kind == 'approval' ? session.pendingApproval?.requestId : null;
+    final key = sha256
+        .convert(utf8.encode(jsonEncode([
+          appSettingsController.settings.bridgeUrl,
+          session.id,
+          kind,
+          requestId ?? body.trim(),
+        ])))
+        .toString();
+    final id = kind == 'approval'
+        ? approvalNotificationId(session.id, requestId)
+        : activityNotificationId(session.id, error: kind == 'error');
+    final epoch = _notificationEpochs[id] ?? 0;
+    return (_delivery ?? _fallbackDelivery).deliver(
+      key,
+      requestId == null ? const Duration(seconds: 10) : const Duration(days: 1),
+      () async {
+        if ((_notificationEpochs[id] ?? 0) == epoch) await show();
+      },
+    );
+  }
+
   static const _replyChannelId = 'omni_code_replies_v2';
   static const _silentReplyChannelId = 'omni_code_replies_silent_v2';
   static const _replyChannelName = 'Agent Replies';
@@ -40,7 +76,103 @@ class NotificationService {
   final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
   SessionSummary? _pendingSession;
 
+  static int approvalNotificationId(String sessionId, String? requestId) {
+    return _stableNotificationId('$sessionId::approval::$requestId');
+  }
+
+  static int activityNotificationId(String sessionId, {bool error = false}) =>
+      _stableNotificationId('$sessionId::${error ? 'error' : 'reply'}');
+
+  static int _stableNotificationId(String value) {
+    final bytes = sha256.convert(utf8.encode(value)).bytes;
+    return ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) &
+        0x7fffffff;
+  }
+
+  Future<void> _cancel(int id, {String? tag}) async {
+    _notificationEpochs[id] = (_notificationEpochs[id] ?? 0) + 1;
+    try {
+      await _plugin.cancel(id: id, tag: tag);
+    } catch (_) {
+      // Notification cleanup must not interrupt reading or approval handling.
+    }
+  }
+
+  Future<void> _cancelAndroidTags(bool Function(String) matches) async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      for (final notification in await _plugin.getActiveNotifications()) {
+        final tag = notification.tag;
+        final id = notification.id;
+        if (tag != null && id != null && matches(tag)) {
+          await _cancel(id, tag: tag);
+        }
+      }
+    } catch (_) {
+      // Some platform implementations cannot enumerate delivered notifications.
+    }
+  }
+
+  Future<void> cancelSessionActivityNotifications(String sessionId) async {
+    await cancelAssistantReplyNotification(sessionId);
+    await _cancel(activityNotificationId(sessionId, error: true));
+    await _cancel('$sessionId::error'.hashCode);
+    await _cancelAndroidTags((tag) => tag == sessionId);
+    await _cancelIosPush(sessionId, 'activity');
+  }
+
+  Future<void> cancelApprovalRequestNotification(String sessionId,
+      {String? requestId}) async {
+    await _cancel(approvalNotificationId(sessionId, requestId),
+        tag: '$sessionId::approval::${requestId ?? ''}');
+    await _cancel('$sessionId::approval'.hashCode);
+    final prefix = '$sessionId::approval::';
+    await _cancelAndroidTags((tag) => requestId == null
+        ? tag.startsWith(prefix)
+        : tag == '$prefix$requestId');
+    if (requestId == null &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS)) {
+      try {
+        for (final notification in await _plugin.getActiveNotifications()) {
+          final payload = notification.payload;
+          if (notification.id == null || payload == null) continue;
+          try {
+            final decoded = jsonDecode(payload);
+            final session = decoded is Map ? decoded['session'] : null;
+            if (session is Map &&
+                session['id'] == sessionId &&
+                session['status'] == 'awaiting_approval') {
+              await _cancel(notification.id!);
+            }
+          } on FormatException {
+            // Ignore notifications from other integrations.
+          }
+        }
+      } catch (_) {
+        // Enumeration is optional on older platform implementations.
+      }
+    }
+    await _cancelIosPush(sessionId, 'approval', requestId: requestId);
+  }
+
+  Future<void> _cancelIosPush(String sessionId, String kind,
+      {String? requestId}) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
+    try {
+      await const MethodChannel('omni_code/notification_cleanup')
+          .invokeMethod<void>('clear', {
+        'session_id': sessionId,
+        'kind': kind,
+        'request_id': requestId,
+      });
+    } catch (_) {
+      // Older native clients may not expose cleanup for remote notifications.
+    }
+  }
+
   Future<void> initialize() async {
+    _delivery ??= createNotificationDelivery();
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
     const darwinSettings = DarwinInitializationSettings(
@@ -170,31 +302,36 @@ class NotificationService {
       appSettingsController.settings.notificationSoundMode,
       important: false,
     );
-    await _plugin.show(
-      id: session.id.hashCode,
-      title: session.title,
-      body: trimmedBody,
-      notificationDetails: _notificationDetails(
-        playSound: playSound,
-        approval: false,
-      ),
-      payload: jsonEncode({
-        'session': {
-          'id': session.id,
-          'project_id': session.projectId,
-          'title': session.title,
-          'agent': session.agentId,
-          'status': _statusName(session.status),
-          'updated_at': session.updatedAt.toIso8601String(),
-          'unread_count': session.unreadCount,
-          'last_message_preview': session.lastMessagePreview,
-        },
-      }),
-    );
+    await _deliverOnce(
+        session,
+        'reply',
+        body,
+        () => _plugin.show(
+              id: activityNotificationId(session.id),
+              title: session.title,
+              body: trimmedBody,
+              notificationDetails: _notificationDetails(
+                playSound: playSound,
+                approval: false,
+              ),
+              payload: jsonEncode({
+                'session': {
+                  'id': session.id,
+                  'project_id': session.projectId,
+                  'title': session.title,
+                  'agent': session.agentId,
+                  'status': _statusName(session.status),
+                  'updated_at': session.updatedAt.toIso8601String(),
+                  'unread_count': session.unreadCount,
+                  'last_message_preview': session.lastMessagePreview,
+                },
+              }),
+            ));
   }
 
-  Future<void> cancelAssistantReplyNotification(String sessionId) {
-    return _plugin.cancel(id: sessionId.hashCode);
+  Future<void> cancelAssistantReplyNotification(String sessionId) async {
+    await _cancel(activityNotificationId(sessionId));
+    await _cancel(sessionId.hashCode);
   }
 
   Future<void> showRemoteAssistantReplyNotification({
@@ -259,27 +396,34 @@ class NotificationService {
       appSettingsController.settings.notificationSoundMode,
       important: true,
     );
-    await _plugin.show(
-      id: '${session.id}::approval'.hashCode,
-      title: title,
-      body: trimmedBody,
-      notificationDetails: _notificationDetails(
-        playSound: playSound,
-        approval: true,
-      ),
-      payload: jsonEncode({
-        'session': {
-          'id': session.id,
-          'project_id': session.projectId,
-          'title': session.title,
-          'agent': session.agentId,
-          'status': _statusName(session.status),
-          'updated_at': session.updatedAt.toIso8601String(),
-          'unread_count': session.unreadCount,
-          'last_message_preview': session.lastMessagePreview,
-        },
-      }),
-    );
+    await _deliverOnce(
+        session,
+        'approval',
+        body,
+        () => _plugin.show(
+              id: approvalNotificationId(
+                  session.id, session.pendingApproval?.requestId),
+              title: title,
+              body: trimmedBody,
+              notificationDetails: _notificationDetails(
+                playSound: playSound,
+                approval: true,
+                tag:
+                    '${session.id}::approval::${session.pendingApproval?.requestId ?? ''}',
+              ),
+              payload: jsonEncode({
+                'session': {
+                  'id': session.id,
+                  'project_id': session.projectId,
+                  'title': session.title,
+                  'agent': session.agentId,
+                  'status': _statusName(session.status),
+                  'updated_at': session.updatedAt.toIso8601String(),
+                  'unread_count': session.unreadCount,
+                  'last_message_preview': session.lastMessagePreview,
+                },
+              }),
+            ));
   }
 
   Future<void> showSessionErrorNotification(
@@ -292,40 +436,46 @@ class NotificationService {
       appSettingsController.settings.notificationMaxChars,
     );
     if (trimmedBody.isEmpty) return;
-    await _plugin.show(
-      id: '${session.id}::error'.hashCode,
-      title: title,
-      body: trimmedBody,
-      notificationDetails: _notificationDetails(
-        playSound: shouldPlayNotificationSound(
-          appSettingsController.settings.notificationSoundMode,
-          important: true,
-        ),
-        approval: false,
-      ),
-      payload: jsonEncode({
-        'session': {
-          'id': session.id,
-          'project_id': session.projectId,
-          'title': session.title,
-          'agent': session.agentId,
-          'status': _statusName(session.status),
-          'updated_at': session.updatedAt.toIso8601String(),
-          'unread_count': session.unreadCount,
-          'last_message_preview': session.lastMessagePreview,
-        },
-      }),
-    );
+    await _deliverOnce(
+        session,
+        'error',
+        body,
+        () => _plugin.show(
+              id: activityNotificationId(session.id, error: true),
+              title: title,
+              body: trimmedBody,
+              notificationDetails: _notificationDetails(
+                playSound: shouldPlayNotificationSound(
+                  appSettingsController.settings.notificationSoundMode,
+                  important: true,
+                ),
+                approval: false,
+              ),
+              payload: jsonEncode({
+                'session': {
+                  'id': session.id,
+                  'project_id': session.projectId,
+                  'title': session.title,
+                  'agent': session.agentId,
+                  'status': _statusName(session.status),
+                  'updated_at': session.updatedAt.toIso8601String(),
+                  'unread_count': session.unreadCount,
+                  'last_message_preview': session.lastMessagePreview,
+                },
+              }),
+            ));
   }
 
   NotificationDetails _notificationDetails({
     required bool playSound,
     required bool approval,
+    String? tag,
   }) {
     return NotificationDetails(
       android: AndroidNotificationDetails(
         playSound ? _replyChannelId : _silentReplyChannelId,
         playSound ? _replyChannelName : 'Silent Agent Replies',
+        tag: tag,
         channelDescription: _replyChannelDescription,
         importance: playSound ? Importance.max : Importance.high,
         priority: Priority.high,

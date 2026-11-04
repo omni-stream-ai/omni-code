@@ -1,5 +1,4 @@
 import 'acceptance_screen.dart';
-import '../widgets/acceptance_ui.dart';
 import 'dart:async';
 import 'dart:ui';
 import 'dart:convert';
@@ -346,6 +345,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   final Set<String> _handledPiUiRequestIds = <String>{};
   List<AgentCommand> _agentCommands = const [];
   bool _loadingAgentCommands = false;
+  String? _agentCommandsSessionId;
+  Timer? _agentCommandsRetryTimer;
+  Timer? _sessionDetailRetryTimer;
   List<FileCompletionItem> _fileCompletions = const [];
   int _selectedCommandSuggestionIndex = 0;
   int _selectedFileCompletionIndex = 0;
@@ -391,6 +393,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   _ComposerSettingsPanelSection? _composerSettingsPanelSection;
 
   BridgeClient get _client => widget.client ?? bridgeClient;
+
+  String get _sessionTitle =>
+      _client.peekSessionById(_session.id)?.title ?? _session.title;
+
+  void _handleSessionCacheChanged() {
+    if (mounted) setState(() {});
+  }
 
   String? get _gitStatusLabel {
     final status = _gitStatus;
@@ -744,6 +753,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       interval: const Duration(milliseconds: 80),
     );
     WidgetsBinding.instance.addObserver(this);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _appInForeground =
+        lifecycle == null || lifecycle == AppLifecycleState.resumed;
     _audioRecordingService =
         widget.audioRecordingService ?? AudioRecordingService();
     _speechInputService = widget.speechInputService ?? SpeechInputService();
@@ -752,6 +764,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         BridgeRealtimeAsrService(client: _client);
     _localVadService = widget.localVadService ?? LocalVadService();
     _session = widget.session;
+    _client.sessionCacheRevision.addListener(_handleSessionCacheChanged);
     _speechRouteSignature = _currentSpeechRouteSignature();
     _voiceComposerMode = appSettingsController.settings.voiceComposerMode;
     _overrideProviderId = _session.providerId;
@@ -1047,6 +1060,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ..clear()
         ..addAll(diffsByKey.values);
       _session = _session.copyWith(
+        title: state.session.title,
         status: status,
         updatedAt: state.session.updatedAt,
         unreadCount: state.session.unreadCount,
@@ -1068,6 +1082,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _syncSessionSummaryCache();
     unawaited(_markVisibleBridgeReplyRead());
     if (previousApprovalId != effectivePendingApproval?.requestId) {
+      if (previousApprovalId != null) {
+        unawaited(notificationService.cancelApprovalRequestNotification(
+            _session.id,
+            requestId: previousApprovalId));
+      }
       if (effectivePendingApproval != null) {
         _announcePendingApproval(effectivePendingApproval);
       } else {
@@ -1115,7 +1134,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   @override
   void dispose() {
+    _client.sessionCacheRevision.removeListener(_handleSessionCacheChanged);
     _flushStreamingMessageCache();
+    _agentCommandsRetryTimer?.cancel();
+    _sessionDetailRetryTimer?.cancel();
     for (final future in _videoFileFutures.values) {
       unawaited(future.then((file) {
         if (file.existsSync()) {
@@ -1170,6 +1192,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   @override
   void didUpdateWidget(covariant SessionDetailScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final previousClient = oldWidget.client ?? bridgeClient;
+    if (previousClient != _client) {
+      previousClient.sessionCacheRevision
+          .removeListener(_handleSessionCacheChanged);
+      _client.sessionCacheRevision.addListener(_handleSessionCacheChanged);
+    }
     final previousSession = oldWidget.session;
     final nextSession = widget.session;
     if (previousSession.id == nextSession.id &&
@@ -1210,7 +1238,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       }
     });
 
+    _syncSessionSummaryCache();
     if (sessionChanged) {
+      _agentCommands = const [];
+      unawaited(_loadAgentCommands());
       _startDomainController();
       _subscribeToPiExtensionEvents();
     }
@@ -1218,10 +1249,21 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (ModalRoute.of(context)?.isCurrent ?? true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_markVisibleBridgeReplyRead());
+      });
+    }
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _appInForeground = true;
       _syncCallModeOrbAnimation();
+      unawaited(_markVisibleBridgeReplyRead());
       if (_creatingSession) {
         return;
       }
@@ -1319,13 +1361,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Future<void> _loadAgentCommands() async {
-    if (_loadingAgentCommands) {
+    final sessionId = _session.id;
+    if (_loadingAgentCommands && _agentCommandsSessionId == sessionId) {
       return;
     }
+    _agentCommandsRetryTimer?.cancel();
+    _agentCommandsSessionId = sessionId;
     _loadingAgentCommands = true;
     try {
-      final commands = await _client.listAgentCommands(sessionId: _session.id);
-      if (!mounted) {
+      final commands = await _client.listAgentCommands(sessionId: sessionId);
+      if (!mounted || _session.id != sessionId) {
         return;
       }
       setState(() {
@@ -1334,9 +1379,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       });
       _syncComposerSuggestionsOverlayAfterFrame();
     } catch (_) {
-      // Suggestions are optional; keep composer usable if this endpoint fails.
+      if (mounted && _session.id == sessionId) {
+        _agentCommandsRetryTimer =
+            Timer(const Duration(seconds: 5), _loadAgentCommands);
+      }
     } finally {
-      _loadingAgentCommands = false;
+      if (_agentCommandsSessionId == sessionId) {
+        _loadingAgentCommands = false;
+      }
     }
   }
 
@@ -1364,8 +1414,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _commandSuggestionsDismissed = false;
       _selectedCommandSuggestionIndex = 0;
       needsRebuild = true;
-      if (query.startsWith(r'$') &&
-          !_agentCommands.any((command) => command.name.startsWith(r'$'))) {
+      if ((query.startsWith('/') && _agentCommands.isEmpty) ||
+          (query.startsWith(r'$') &&
+              !_agentCommands
+                  .any((command) => command.name.startsWith(r'$')))) {
         unawaited(_loadAgentCommands());
       }
     }
@@ -1397,6 +1449,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     setState(() {});
+    if (_composerHasInteractiveFocus) {
+      unawaited(_markVisibleBridgeReplyRead());
+    }
     _syncComposerSuggestionsOverlayAfterFrame();
   }
 
@@ -1904,6 +1959,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (_creatingSession) {
       return;
     }
+    _sessionDetailRetryTimer?.cancel();
     final requestToken = ++_sessionDetailRequestToken;
     final sessionId = _session.id;
     try {
@@ -1923,7 +1979,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       });
       _syncSessionSummaryCache();
     } catch (_) {
-      // Best effort — git info is supplementary.
+      if (mounted &&
+          sessionId == _session.id &&
+          requestToken == _sessionDetailRequestToken) {
+        _sessionDetailRetryTimer =
+            Timer(const Duration(seconds: 5), _loadSessionDetail);
+      }
     }
   }
 
@@ -1959,7 +2020,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return AppNavigationScaffold(
       activeRoute: AppRouteKind.session,
       recentProjects: _client.peekProjects() ?? const <ProjectSummary>[],
-      recentSessions: _client.peekSessions() ?? const <SessionSummary>[],
+      recentSessions: _client.peekRecentSessions() ?? const <SessionSummary>[],
       activeProjectId: _session.projectId,
       activeSessionId: _session.id,
       onNavigateHome: () => Navigator.of(context).popUntil(
@@ -2086,7 +2147,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               excludeFromSemantics: _sessionRestoreError == null,
               child: AppBackHeader(
                 key: const Key('session-header-back-title'),
-                title: _session.title,
+                title: _sessionTitle,
                 subtitle: _gitStatusLabel,
                 onTap: _goBackFromSession,
                 showLeadingIcon: false,
@@ -2117,7 +2178,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       excludeFromSemantics: _sessionRestoreError == null,
       child: AppBackHeader(
         key: const Key('session-header-back-title'),
-        title: _session.title,
+        title: _sessionTitle,
         subtitle: _gitStatusLabel,
         onTap: _goBackFromSession,
         titleStyle: theme.textTheme.titleLarge?.copyWith(
@@ -2263,10 +2324,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                       profileId: _session.profileId ?? 'default')));
             },
           ),
-        AcceptanceIntro(
+        _buildSessionHeaderActionTile(
           key: const Key('session-header-acceptance-button'),
-          title: context.l10n.acceptanceTitle,
-          subtitle: context.l10n.acceptanceEntryHint,
+          label: context.l10n.acceptanceTitle,
+          icon: Icons.fact_check_outlined,
           onTap: () {
             _sessionHeaderMenuController.close();
             Navigator.of(context).push(MaterialPageRoute<void>(
@@ -6879,6 +6940,13 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Future<void> _markVisibleBridgeReplyRead() async {
+    if (!mounted ||
+        !_appInForeground ||
+        !(ModalRoute.of(context)?.isCurrent ?? true)) {
+      return;
+    }
+    unawaited(
+        notificationService.cancelSessionActivityNotifications(_session.id));
     if (_session.unreadCount == 0 || _messages.isEmpty) {
       return;
     }
@@ -8076,6 +8144,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Future<void> _submitApproval(String choice) async {
     final approval = _pendingApproval;
+    final sessionId = _session.id;
     if (approval == null || _submittingApproval) {
       return;
     }
@@ -8086,7 +8155,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     });
 
     try {
-      await _client.submitApproval(_session.id, approval.requestId, choice);
+      await _client.submitApproval(sessionId, approval.requestId, choice);
+      await notificationService.cancelApprovalRequestNotification(sessionId,
+          requestId: approval.requestId);
       if (!mounted || _pendingApproval?.requestId != approval.requestId) {
         return;
       }

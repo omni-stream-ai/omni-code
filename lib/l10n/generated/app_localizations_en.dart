@@ -9,6 +9,36 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get recentSessionsScope => 'Recent session scope';
+
+  @override
+  String get recentSessionsCurrentProject => 'Current project';
+
+  @override
+  String get recentSessionsAllProjects => 'All projects';
+
+  @override
+  String get acceptanceRequestTimedOutTitle => 'Acceptance service timed out';
+
+  @override
+  String get acceptanceRequestTimedOutHint =>
+      'The service did not respond within 10 minutes. The task may still be running. Refresh its status before starting again.';
+
+  @override
+  String get acceptanceRequestFailedTitle =>
+      'Could not complete the acceptance request';
+
+  @override
+  String get acceptanceRequestFailedHint =>
+      'Check your connection to Bridge, then refresh the status and try again. Existing acceptance records are preserved.';
+
+  @override
+  String get acceptanceRefreshStatus => 'Refresh status';
+
+  @override
+  String get acceptanceErrorDetails => 'View error details';
+
+  @override
   String get appTitle => 'Omni Code';
 
   @override

@@ -417,7 +417,8 @@ class _SpeechSettingsScreenState extends State<SpeechSettingsScreen> {
     final useWideDesktop = AppResponsiveLayout.isWideDesktopWidth(
         MediaQuery.sizeOf(context).width);
     final recentProjects = _client.peekProjects() ?? const <ProjectSummary>[];
-    final recentSessions = _client.peekSessions() ?? const <SessionSummary>[];
+    final recentSessions =
+        _client.peekRecentSessions() ?? const <SessionSummary>[];
     final desktopSidebarCollapsed =
         appSettingsController.settings.desktopNavigationCollapsed;
     return AppNavigationScaffold(

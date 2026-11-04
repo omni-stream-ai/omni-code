@@ -3,6 +3,20 @@ import 'package:omni_code/src/models.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 
 void main() {
+  test('recent session scope defaults to current project and round-trips', () {
+    expect(AppSettings.defaults().recentSessionsCurrentProjectOnly, isTrue);
+    expect(AppSettings.fromJson({}).recentSessionsCurrentProjectOnly, isTrue);
+    final restored = AppSettings.fromJson(AppSettings.defaults()
+        .copyWith(recentSessionsCurrentProjectOnly: false)
+        .toJson());
+    expect(restored.recentSessionsCurrentProjectOnly, isFalse);
+    expect(
+        restored
+            .copyWith(autoSpeakReplies: true)
+            .recentSessionsCurrentProjectOnly,
+        isFalse);
+  });
+
   test('error reporting defaults to enabled and round-trips', () {
     expect(AppSettings.defaults().errorReportingEnabled, isTrue);
 

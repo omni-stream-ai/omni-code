@@ -644,7 +644,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       activeRoute: AppRouteKind.home,
       backgroundColor: AppColors.boardFor(brightness),
       recentProjects: _client.peekProjects() ?? const <ProjectSummary>[],
-      recentSessions: _client.peekSessions() ?? const <SessionSummary>[],
+      recentSessions: _client.peekRecentSessions() ?? const <SessionSummary>[],
       onNavigateHome: () {},
       onNavigateProjects: _openProjects,
       onNavigateSettings: _openSettings,
@@ -1689,7 +1689,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       activeRoute: AppRouteKind.projects,
       backgroundColor: AppColors.boardFor(brightness),
       recentProjects: _client.peekProjects() ?? const <ProjectSummary>[],
-      recentSessions: _client.peekSessions() ?? const <SessionSummary>[],
+      recentSessions: _client.peekRecentSessions() ?? const <SessionSummary>[],
       desktopBreakpoint: AppResponsiveLayout.desktopBreakpoint,
       desktopSidebarWidth: AppResponsiveLayout.desktopSidebarWidth,
       desktopSidebarCollapsedWidth:

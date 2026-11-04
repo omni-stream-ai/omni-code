@@ -20,6 +20,43 @@ http.Response response(Object? data, {int status = 200}) => http.Response(
     );
 
 void main() {
+  testWidgets('timeout shows recovery card and hides misleading empty state',
+      (tester) async {
+    var fail = true;
+    final client = BridgeClient(httpClient: MockClient((request) async {
+      if (fail) throw TimeoutException('Future not completed');
+      if (request.url.path == '/v2/runtime-plugins/x11box-acceptance') {
+        return response({
+          'installation': {'phase': 'ready'}
+        });
+      }
+      return response([]);
+    }));
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: AcceptanceScreen(client: client),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Acceptance service timed out'), findsOneWidget);
+    expect(find.text('Future not completed'), findsNothing);
+    expect(find.textContaining('No acceptance'), findsNothing);
+    await tester.ensureVisible(find.text('View error details'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('View error details'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('TimeoutException'), findsOneWidget);
+    fail = false;
+    await tester.ensureVisible(find.text('Refresh status'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refresh status'));
+    await tester.pumpAndSettle();
+    expect(find.text('Acceptance service timed out'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   test(
       'project environment requests preserve project scope and custom configuration',
       () async {
@@ -516,6 +553,12 @@ void main() {
           findsNothing);
       if (fails) {
         expect(find.byType(AcceptanceDetailScreen), findsNothing);
+        expect(find.text('Could not complete the acceptance request'),
+            findsOneWidget);
+        await tester.ensureVisible(find.text('View error details'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('View error details'));
+        await tester.pumpAndSettle();
         expect(find.textContaining('Requirement history is unavailable'),
             findsOneWidget);
       } else {

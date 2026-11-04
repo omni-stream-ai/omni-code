@@ -153,9 +153,11 @@ void main() {
   );
   for (final desktop in [false, true]) {
     for (final dark in [false, true]) {
-      for (final page in ['home', 'session', 'project', 'settings']) {
+      for (final page in ['home', 'session', 'project', 'settings', 'session-markdown', 'session-tools', 'session-tools-history', 'session-tools-detail', 'session-diff-summary', 'session-diff', 'session-running', 'session-failed', 'session-commands', 'session-command-filter', 'session-command-applied', 'session-skills', 'session-files']) {
         final name = '${desktop ? 'desktop' : 'mobile'}-$page-${dark ? 'dark' : 'light'}';
         testWidgets('capture current app $name', (tester) async {
+          // Render actual blurred shadows instead of solid test silhouettes.
+          debugDisableShadows = false;
           tester.view.physicalSize = desktop ? const Size(1440, 900) : const Size(390, 844);
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.resetPhysicalSize);
@@ -163,13 +165,13 @@ void main() {
           final Widget screen = switch (page) {
             'home' => HomeScreen(client: _dashboardClient()),
             'project' => ProjectDetailScreen(project: _projects.first, client: _dashboardClient()),
-            'session' => SessionDetailScreen(
+            _ when page.startsWith('session') => SessionDetailScreen(
               session: _previewSession.copyWith(
                 id: _imagePreviewSession.id,
                 title: _imagePreviewSession.title,
                 status: SessionStatus.idle,
               ),
-              client: _imagePreviewSessionClient(),
+              client: _imagePreviewSessionClient(scene: page),
               enableSpeechServices: false,
               audioRecordingService: _FakeAudioRecordingService(),
               speechInputService: _FakeSpeechInputService(),
@@ -185,8 +187,50 @@ void main() {
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 200));
           await tester.pump(const Duration(milliseconds: 500));
-          await expectLater(find.byType(MaterialApp),
-            matchesGoldenFile('designs/current/previews/$name.png'));
+          if (['session-commands', 'session-command-filter', 'session-command-applied', 'session-skills', 'session-files'].contains(page)) {
+            final input = find.byKey(const Key('session-message-input'));
+            await tester.tap(input);
+            await tester.enterText(input, switch (page) {
+              'session-command-filter' => '/rev',
+              'session-skills' => r'$skill',
+              'session-files' => 'Open @lib/',
+              _ => '/',
+            });
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 400));
+            await tester.pump();
+            expect(find.byKey(Key(page == 'session-files'
+                ? 'session-file-suggestions' : 'session-command-suggestions')), findsOneWidget);
+            if (page == 'session-command-applied') {
+              await tester.tap(find.text('/review'));
+              await tester.pump();
+              expect(tester.widget<TextField>(input).controller!.text, '/review ');
+              expect(find.byKey(const Key('session-command-suggestions')), findsNothing);
+            }
+          }
+          if (page == 'session-tools-history' || page == 'session-tools-detail') {
+            await tester.tap(find.textContaining('Command · Completed'));
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 300));
+            expect(find.byType(AlertDialog), findsOneWidget);
+            if (page == 'session-tools-detail') {
+              await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.byType(InkWell)).last);
+              await tester.pump();
+              await tester.pump(const Duration(milliseconds: 300));
+            }
+          }
+          if (page == 'session-diff') {
+            await tester.tap(find.text('lib/greeting.dart'));
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 300));
+            expect(find.textContaining('diff --git'), findsOneWidget);
+          }
+          try {
+            await expectLater(find.byType(MaterialApp),
+              matchesGoldenFile('designs/current/previews/$name.png'));
+          } finally {
+            debugDisableShadows = true;
+          }
           await tester.pumpWidget(const SizedBox.shrink());
           await tester.pump();
         }, skip: !const bool.fromEnvironment('UPDATE_CURRENT_APP_PREVIEWS'));
@@ -215,6 +259,7 @@ Future<void> _loadPreviewFonts() async {
     ]);
   }
   await _loadFontFamily('monospace', const [
+    'designs/assets/fonts/Roboto-Regular.ttf',
     '/usr/share/fonts/OTF/NotoSansMonoCJKsc-Regular.otf',
   ]);
 
@@ -797,9 +842,40 @@ BridgeClient _dashboardClient() {
   );
 }
 
-BridgeClient _imagePreviewSessionClient() {
+BridgeClient _imagePreviewSessionClient({String scene = 'session'}) {
+  final messages = scene == 'session' ? _imagePreviewMessages : [
+    _messageJson(id: 'scene-user', sessionId: _imagePreviewSession.id, role: 'user',
+      content: 'Update the greeting and verify the change.', createdAt: '2026-05-29T09:14:00.000Z'),
+    _messageJson(id: 'scene-answer', sessionId: _imagePreviewSession.id, role: 'assistant',
+      content: scene == 'session-markdown'
+        ? '## Implementation\n\nUpdated **greeting** with `name` support.\n\n- Preserve the default greeting\n- Add a named greeting\n\n```dart\nString greet(String name) {\n  return "Hello!";\n}\n```\n\n| Check | Result |\n| --- | --- |\n| Analyze | Passed |\n| Tests | 12 passed |\n\n> Ready for review.\n\n[Flutter documentation](https://flutter.dev)'
+        : scene == 'session-running' ? 'Inspecting the greeting implementation and running checks.'
+        : scene == 'session-failed' ? 'The test command failed. Review the output before retrying.'
+        : 'Updated the greeting. The change is ready for review.',
+      createdAt: '2026-05-29T09:14:08.000Z'),
+  ];
   return BridgeClient(
     httpClient: _FakeHttpClient((request) async {
+      if (request.url.path == '/agents/commands') {
+        return _jsonResponse([{
+          'kind': 'codex',
+          'commands': [
+            {'name': '/review', 'description': 'Review the current changes', 'aliases': ['/rev']},
+            {'name': '/compact', 'description': 'Summarize the conversation to save context'},
+            {'name': '/status', 'description': 'Show session status and token usage'},
+            {'name': '/model', 'description': 'Choose the model for this session'},
+            {'name': r'$skill-creator', 'description': 'Create or update a Codex skill'},
+            {'name': r'$skill-installer', 'description': 'Install skills from a repository'},
+          ],
+        }]);
+      }
+      if (request.url.path == '/files/completions') {
+        return _jsonResponse([
+          {'path': 'lib/src/', 'is_dir': true},
+          {'path': 'lib/main.dart', 'is_dir': false},
+          {'path': 'lib/bootstrap.dart', 'is_dir': false},
+        ]);
+      }
       if (request.url.path == '/v2/codex/profiles') return _jsonResponse([]);
       if (request.url.path == '/v2/sessions/${_imagePreviewSession.id}/state') {
         final date = '2026-05-29T09:14:00.000Z';
@@ -809,16 +885,37 @@ BridgeClient _imagePreviewSessionClient() {
           'attachments': <Object>[],
         };
         return _jsonResponse({
-          'session': {..._sessionJson(_imagePreviewSession), 'created_at': date, 'version': 1},
+          'session': {..._sessionJson(_imagePreviewSession), 'created_at': date, 'version': 1, 'status': scene == 'session-running' ? 'running' : scene == 'session-failed' ? 'failed' : 'idle', 'active_turn_id': scene == 'session-running' ? 'preview-turn' : null},
           'cursor': 0,
           'turns': [{
-            'id': 'preview-turn', 'sequence': 1, 'version': 1, 'status': 'completed',
-            'input_mode': 'text', 'user_message': message(_imagePreviewMessages.first, 'user'),
-            'segments': [for (final item in _imagePreviewMessages.skip(1)) {
+            'id': 'preview-turn', 'sequence': 1, 'version': 1, 'status': scene == 'session-running' ? 'running' : scene == 'session-failed' ? 'failed' : 'completed',
+            'input_mode': 'text', 'user_message': message(messages.first, 'user'),
+            'segments': [for (final item in messages.skip(1)) {
               'id': 'segment-${item['id']}', 'sequence': 1, 'revision': 1,
               'kind': 'assistant_message', 'state': 'completed',
               'message': message(item, 'final'), 'activities': <Object>[],
-            }], 'artifacts': <Object>[],
+            },
+            if ((scene.startsWith('session-tools') || ['session-running', 'session-failed'].contains(scene))) {
+              'id': 'execution', 'sequence': 3, 'revision': 1,
+              'kind': 'execution', 'state': scene == 'session-running' ? 'running' : 'completed',
+              'activities': [for (final (index, title) in [
+                '[command:completed] rg -n greet lib (exit 0)',
+                scene == 'session-running' ? '[command:running] flutter test' :
+                scene == 'session-failed' ? '[command:completed] flutter test (exit 1)\nExpected: Hello, Alex!\nActual: Hello!' :
+                '[command:completed] flutter test (exit 0)\n00:02 +12: All tests passed!',
+              ].indexed) {
+                'id': 'tool-$index', 'turn_id': 'preview-turn', 'segment_id': 'execution',
+                'sequence': index + 1, 'revision': 1, 'kind': 'tool_result',
+                'state': scene == 'session-running' && index == 1 ? 'running' : scene == 'session-failed' && index == 1 ? 'failed' : 'completed',
+                'title': title, 'secondary': <String>[], 'payload': <String, Object?>{},
+                'created_at': date, 'updated_at': date,
+              }],
+            }], 'artifacts': [if (scene.startsWith('session-diff')) {
+              'id': 'diff', 'turn_id': 'preview-turn', 'kind': 'turn_cumulative_diff', 'revision': 1,
+              'created_at': date, 'updated_at': date,
+              'payload': {'files': ['lib/greeting.dart'], 'added': 1, 'removed': 1,
+                'patch': 'diff --git a/lib/greeting.dart b/lib/greeting.dart\n--- a/lib/greeting.dart\n+++ b/lib/greeting.dart\n@@ -1 +1 @@\n-String greet() => "Hello!";\n+String greet(String name) => name;'},
+            }],
           }],
         });
       }

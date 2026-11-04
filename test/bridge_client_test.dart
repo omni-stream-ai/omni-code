@@ -1338,6 +1338,69 @@ void main() {
   });
 
   group('BridgeClient listSessions', () {
+    test('sidebar order remains stable until a streamed turn ends', () {
+      final client = BridgeClient();
+      final a = _session(id: 'a', projectId: 'project-1', updatedAt: DateTime(2026, 5, 5, 10));
+      final b = _session(id: 'b', projectId: 'project-2', updatedAt: DateTime(2026, 5, 5, 11));
+      client.debugSeedSessions([a, b]);
+      List<String> order() => client.peekRecentSessions()!.map((session) => session.id).toList();
+      expect(order(), ['b', 'a']);
+      for (final status in [SessionStatus.running, SessionStatus.waiting, SessionStatus.awaitingApproval]) {
+        client.syncSessionSummary(a.copyWith(status: status,
+          updatedAt: DateTime(2026, 5, 5, 12), lastMessagePreview: 'streamed text'));
+        expect(order(), ['b', 'a']);
+        expect(client.peekSessionById('a')!.lastMessagePreview, 'streamed text');
+      }
+      // A list refresh must preserve the same ordering while the turn is busy.
+      client.debugSeedSessions([a.copyWith(status: SessionStatus.running,
+        updatedAt: DateTime(2026, 5, 5, 13)), b]);
+      expect(order(), ['b', 'a']);
+      client.syncSessionSummary(a.copyWith(status: SessionStatus.idle,
+        updatedAt: DateTime(2026, 5, 5, 14)));
+      expect(order(), ['a', 'b']);
+      client.syncSessionSummary(b.copyWith(status: SessionStatus.running,
+        updatedAt: DateTime(2026, 5, 5, 15)));
+      expect(order(), ['a', 'b']);
+      client.syncSessionSummary(b.copyWith(status: SessionStatus.failed,
+        updatedAt: DateTime(2026, 5, 5, 16)));
+      expect(order(), ['b', 'a']);
+    });
+
+    for (final domain in [false, true]) {
+      test('list refresh retains newer shared titles (domain=$domain)', () async {
+        final client = BridgeClient(
+          httpClient: _FakeHttpClient((_) async => http.Response(
+            jsonEncode({'data': [{
+              'id': 'session-1',
+              'project_id': 'project-1',
+              'title': 'Old title',
+              'agent': 'codex',
+              'status': 'idle',
+              'updated_at': '2026-05-05T09:00:00.000',
+              'unread_count': 0,
+            }]}),
+            200,
+            headers: {'content-type': 'application/json'},
+          )),
+        );
+        client.debugSeedSessions([
+          _session(id: 'session-1', projectId: 'project-1',
+            title: 'Current title', updatedAt: DateTime(2026, 5, 5, 10)),
+          _session(id: 'removed', projectId: 'project-1',
+            updatedAt: DateTime(2026, 5, 5, 10)),
+        ]);
+        final sessions = domain
+            ? await client.listDomainSessions(forceRefresh: true)
+            : await client.listSessions(forceRefresh: true);
+        expect(sessions.single.title, 'Current title');
+        expect(client.peekSessionById('session-1')!.title, 'Current title');
+        expect(client.peekSessionById('removed'), isNull);
+        expect(client.peekProjectSessions('project-1')!
+            .firstWhere((session) => session.id == 'session-1').title,
+            'Current title');
+      });
+    }
+
     test('sorts sessions by updatedAt descending and seeds cache', () async {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {

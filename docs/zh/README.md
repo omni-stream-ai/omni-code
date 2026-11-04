@@ -25,7 +25,13 @@ Omni Code 是一个跨平台 Flutter 客户端，支持桌面端和移动端，�
 
 ## 预览
 
-![Omni Code](../../preview/omni-code-showcase.png)
+| 工作台 | 会话内容 | 命令建议 |
+| :---: | :---: | :---: |
+| <a href="../../designs/current/README.md"><img src="../../designs/current/previews/mobile-home-light.png" width="240" alt="工作台"></a> | <a href="../../designs/current/README.md"><img src="../../designs/current/previews/mobile-session-markdown-dark.png" width="240" alt="会话内容"></a> | <a href="../../designs/current/README.md"><img src="../../designs/current/previews/mobile-session-commands-light.png" width="240" alt="命令建议"></a> |
+
+当前 Flutter 实际界面 · 移动端与桌面端 · 深浅主题
+
+[浏览完整界面图册 →](../../designs/current/README.md)
 
 ## 路线图 (V1)
 

@@ -167,7 +167,7 @@ class _ModelProviderScreenState extends State<ModelProviderScreen> {
     final recentProjects =
         bridgeClient.peekProjects() ?? const <ProjectSummary>[];
     final recentSessions =
-        bridgeClient.peekSessions() ?? const <SessionSummary>[];
+        bridgeClient.peekRecentSessions() ?? const <SessionSummary>[];
     final desktopSidebarCollapsed =
         appSettingsController.settings.desktopNavigationCollapsed;
     return AppNavigationScaffold(

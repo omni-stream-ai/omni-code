@@ -11,6 +11,56 @@ import 'package:omni_code/src/services/session_event_service.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('remote approval resolution clears only the completed request',
+      () async {
+    final client = _SessionClient([_waitingSession('approval-1')]);
+    final notifications = _RecordingNotifications();
+    final service =
+        SessionEventService(client: client, notifications: notifications);
+    addTearDown(() async {
+      service.dispose();
+      await client.close();
+    });
+    await service.synchronizeForTest();
+    client.sessions = [_waitingSession('approval-2')];
+    await service.synchronizeForTest();
+    expect(notifications.cancelledApprovals,
+        contains(('session-1', 'approval-1')));
+    expect(notifications.cancelledApprovals,
+        isNot(contains(('session-1', 'approval-2'))));
+    client.sessions = [
+      client.sessions.single.copyWith(clearPendingApproval: true)
+    ];
+    await service.synchronizeForTest();
+    expect(notifications.cancelledApprovals,
+        isNot(contains(('session-1', 'approval-2'))));
+    client.sessions = [
+      client.sessions.single
+          .copyWith(status: SessionStatus.running, clearPendingApproval: true)
+    ];
+    await service.synchronizeForTest();
+    expect(notifications.cancelledApprovals,
+        contains(('session-1', 'approval-2')));
+  });
+
+  test('another client marking a reply read clears the notification', () async {
+    final unread = _waitingSession('approval-1').copyWith(
+        status: SessionStatus.idle, clearPendingApproval: true, unreadCount: 1);
+    final client = _SessionClient([unread]);
+    final notifications = _RecordingNotifications();
+    final service =
+        SessionEventService(client: client, notifications: notifications);
+    addTearDown(() async {
+      service.dispose();
+      await client.close();
+    });
+    await service.synchronizeForTest();
+    expect(notifications.viewedSessions, isEmpty);
+    client.sessions = [unread.copyWith(unreadCount: 0)];
+    await service.synchronizeForTest();
+    expect(notifications.viewedSessions, ['session-1']);
+  });
+
   test('initial sync recovers a pending approval notification', () async {
     final client = _SessionClient([_waitingSession('approval-1')]);
     final notifications = _RecordingNotifications();
@@ -212,6 +262,10 @@ class _SessionClient extends BridgeClient {
   }
 
   @override
+  Future<SessionDetail> getSession(String sessionId) async => SessionDetail(
+      session: sessions.firstWhere((session) => session.id == sessionId));
+
+  @override
   List<SessionSummary>? peekSessions() => sessions;
 
   @override
@@ -265,6 +319,19 @@ class _DelayedSessionClient extends BridgeClient {
 
 class _RecordingNotifications extends NotificationService {
   final List<String> approvalRequestIds = [];
+  final List<(String, String?)> cancelledApprovals = [];
+  final List<String> viewedSessions = [];
+
+  @override
+  Future<void> cancelApprovalRequestNotification(String sessionId,
+      {String? requestId}) async {
+    cancelledApprovals.add((sessionId, requestId));
+  }
+
+  @override
+  Future<void> cancelSessionActivityNotifications(String sessionId) async {
+    viewedSessions.add(sessionId);
+  }
 
   @override
   Future<void> showApprovalRequestNotification(

@@ -21,6 +21,66 @@ import '../theme/app_spacing.dart';
 import '../widgets/app_card.dart';
 import '../widgets/acceptance_ui.dart';
 
+class _AcceptanceRequestError extends StatelessWidget {
+  const _AcceptanceRequestError({required this.error, this.onRefresh});
+
+  final Object error;
+  final VoidCallback? onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    final colors = Theme.of(context).colorScheme;
+    final timedOut = error is TimeoutException;
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(timedOut ? Icons.hourglass_empty_rounded : Icons.error_outline,
+                color: colors.error),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                    timedOut
+                        ? l.acceptanceRequestTimedOutTitle
+                        : l.acceptanceRequestFailedTitle,
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text(
+                    timedOut
+                        ? l.acceptanceRequestTimedOutHint
+                        : l.acceptanceRequestFailedHint,
+                    style: TextStyle(color: colors.onSurfaceVariant)),
+              ],
+            )),
+          ]),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh),
+            label: Text(l.acceptanceRefreshStatus),
+          ),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: Text(l.acceptanceErrorDetails,
+                style: Theme.of(context).textTheme.bodySmall),
+            children: [
+              Align(
+                  alignment: Alignment.centerLeft,
+                  child: SelectableText(error.toString(),
+                      style: Theme.of(context).textTheme.bodySmall))
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 String acceptancePhaseLabel(BuildContext context, String phase) {
   final l = context.l10n;
   return switch (phase) {
@@ -315,10 +375,11 @@ class _AcceptanceScreenState extends State<AcceptanceScreen> {
                         if (loading)
                           const Center(child: CircularProgressIndicator()),
                         if (error != null)
-                          SelectableText('$error',
-                              style: TextStyle(
-                                  color: Theme.of(context).colorScheme.error)),
-                        if (!loading && runs.isEmpty)
+                          _AcceptanceRequestError(
+                            error: error!,
+                            onRefresh: busy || refreshing ? null : refresh,
+                          ),
+                        if (!loading && error == null && runs.isEmpty)
                           AppCard(
                               child: Padding(
                                   padding:

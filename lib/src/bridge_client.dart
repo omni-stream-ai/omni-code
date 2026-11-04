@@ -102,7 +102,26 @@ class BridgeClient {
   final http.Client _httpClient;
   final ValueNotifier<int> sessionCacheRevision = ValueNotifier<int>(0);
   _CacheEntry<List<ProjectSummary>>? _projectsCache;
-  _CacheEntry<List<SessionSummary>>? _sessionsCache;
+  _CacheEntry<List<SessionSummary>>? _sessionsCacheValue;
+  final Map<String, DateTime> _recentSessionActivityAt = {};
+
+  _CacheEntry<List<SessionSummary>>? get _sessionsCache => _sessionsCacheValue;
+
+  set _sessionsCache(_CacheEntry<List<SessionSummary>>? cache) {
+    final sessions = cache?.value ?? const <SessionSummary>[];
+    final ids = sessions.map((session) => session.id).toSet();
+    _recentSessionActivityAt.removeWhere((id, _) => !ids.contains(id));
+    for (final session in sessions) {
+      final busy = session.status == SessionStatus.running ||
+          session.status == SessionStatus.waiting ||
+          session.status == SessionStatus.awaitingApproval;
+      if (!busy || !_recentSessionActivityAt.containsKey(session.id)) {
+        _recentSessionActivityAt[session.id] = session.updatedAt;
+      }
+    }
+    _sessionsCacheValue = cache;
+  }
+
   _CacheEntry<List<AgentSummary>>? _agentsCache;
   final Map<String, _CacheEntry<List<SessionSummary>>> _projectSessionsCache =
       {};
@@ -196,7 +215,7 @@ class BridgeClient {
                   'Content-Type': 'application/json'
                 },
                 body: jsonEncode(body)))
-        .timeout(const Duration(seconds: 180));
+        .timeout(const Duration(minutes: 10));
     _assertJsonResponse(response);
     return (jsonDecode(response.body) as Map<String, dynamic>)['data'];
   }
@@ -587,7 +606,7 @@ class BridgeClient {
     _assertJsonResponse(response);
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
     final items = payload['data'] as List<dynamic>;
-    final sessions = sortSessionsForDisplay(_visibleSessions(
+    final sessions = _reconcileSessionList(_visibleSessions(
       items
           .map((item) => SessionSummary.fromJson(item as Map<String, dynamic>)),
     ));
@@ -634,7 +653,7 @@ class BridgeClient {
     }
     _assertJsonResponse(response);
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    final sessions = sortSessionsForDisplay(_visibleSessions(
+    final sessions = _reconcileSessionList(_visibleSessions(
       (payload['data'] as List<dynamic>)
           .map((item) => SessionSummary.fromJson(item as Map<String, dynamic>)),
     ));
@@ -684,6 +703,32 @@ class BridgeClient {
   List<SessionSummary>? peekSessions() {
     _purgeInternalAcceptanceSessions();
     return _sessionsCache?.value;
+  }
+
+  SessionSummary? peekSessionById(String sessionId) =>
+      peekSessions()?.where((session) => session.id == sessionId).firstOrNull;
+
+  /// Sidebar activity advances when a reply finishes, not for each streamed token.
+  List<SessionSummary>? peekRecentSessions() {
+    final sessions = peekSessions();
+    if (sessions == null) return null;
+    return sessions.toList()
+      ..sort((left, right) {
+        final order = (_recentSessionActivityAt[right.id] ?? right.updatedAt)
+            .compareTo(_recentSessionActivityAt[left.id] ?? left.updatedAt);
+        return order != 0 ? order : left.id.compareTo(right.id);
+      });
+  }
+
+  List<SessionSummary> _reconcileSessionList(
+      Iterable<SessionSummary> incoming) {
+    final sessions = incoming.toList();
+    final ids = sessions.map((session) => session.id).toSet();
+    return _mergeSessions(
+      cached: (_sessionsCache?.value ?? const <SessionSummary>[])
+          .where((session) => ids.contains(session.id)),
+      incoming: sessions,
+    );
   }
 
   List<AgentSummary>? peekAgents() => _agentsCache?.value;
