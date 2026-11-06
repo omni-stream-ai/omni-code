@@ -918,6 +918,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     if (state.session.id != _session.id) return;
+    final existingMessagesById = <String, ChatMessage>{
+      for (final message
+          in _client.peekSessionMessages(_session.id) ?? const <ChatMessage>[])
+        message.id: message,
+      for (final message in _messages) message.id: message,
+    };
     _domainActivityStates.clear();
     final messages = <ChatMessage>[];
     final diffsByKey = <String, _SessionDiffEntry>{};
@@ -947,8 +953,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         final message = segment.message;
         if (message != null &&
             visibleAssistantSegmentIds.contains(segment.id)) {
-          final projected =
-              _domainMessageToChat(message, MessageRole.assistant);
+          var projected = _domainMessageToChat(message, MessageRole.assistant);
+          // Recover streamed text before filtering empty placeholder snapshots.
+          final existing = existingMessagesById[projected.id];
+          if (existing != null) {
+            projected = _preserveStreamingAssistantContent(
+              existing: existing,
+              incoming: projected,
+            );
+          }
           if (projected.content.trim().isNotEmpty) messages.add(projected);
         }
         for (final activity in segment.activities) {
@@ -1029,12 +1042,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             : preserveActiveSessionStatus
                 ? _session.status
                 : domainStatus;
-    final existingMessagesById = <String, ChatMessage>{
-      for (final message
-          in _client.peekSessionMessages(_session.id) ?? const <ChatMessage>[])
-        message.id: message,
-      for (final message in _messages) message.id: message,
-    };
     for (var index = 0; index < messages.length; index += 1) {
       final incoming = messages[index];
       final existing = existingMessagesById[incoming.id];
@@ -1108,7 +1115,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _maybeNotifyAssistantMessage(finalMessage.id);
       }
     }
-    _maybeAutoScrollToBottom();
+    // Pagination changes the transcript without requesting a jump to the reply.
+    if (!_expandingHistory && controller?.loadingOlderTurns != true) {
+      _maybeAutoScrollToBottom();
+    }
   }
 
   ChatMessage _domainMessageToChat(
@@ -10132,7 +10142,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (!_callModeEnabled || !_callModeAllowInterruptions) {
       return false;
     }
-    final canStream = _selectedRealtimeAsrPluginSupportsStreaming();
+    final canStream = _usesBridgeRealtimeSpeechForCallMode();
     if (!canStream) {
       return false;
     }

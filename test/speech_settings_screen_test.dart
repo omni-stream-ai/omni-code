@@ -17,7 +17,8 @@ void main() {
     appSettingsController.debugReplaceSettings(AppSettings.defaults());
   });
 
-  testWidgets('shows Linux system speech availability hints', (tester) async {
+  testWidgets('Linux supports system TTS and explains unavailable system ASR',
+      (tester) async {
     await tester.pumpWidget(
       _TestApp(
         home: _speechSettingsScreen(
@@ -32,7 +33,7 @@ void main() {
       find.text(
         'System TTS is not available on Linux yet. Choose a cloud provider to enable playback.',
       ),
-      findsWidgets,
+      findsNothing,
     );
     expect(
       find.text(

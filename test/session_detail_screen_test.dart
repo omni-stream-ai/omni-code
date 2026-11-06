@@ -100,38 +100,38 @@ void main() {
         addTearDown(tester.view.resetDevicePixelRatio);
       }
       BridgeClient createClient() => BridgeClient(
-        httpClient: _StreamingEventHttpClient(
-          events: events.stream,
-          handler: (request) async {
-            if (request.method == 'POST' &&
-                request.url.path.contains('/pi-ui/')) {
-              submissions++;
-              events.add(utf8.encode(_eventStreamBody([
-                {
-                  'type': 'pi_extension_ui_resolved',
-                  'payload': {'request_id': request.url.pathSegments.last},
-                },
-              ])));
-              return http.Response('', 204);
-            }
-            if (request.url.path == '/sessions/session-1/messages') {
-              return http.Response(jsonEncode({'data': <Object>[]}), 200);
-            }
-            if (request.url.path.endsWith('/pi-ui') ||
-                request.url.path.endsWith('/pi-commands')) {
-              return http.Response(jsonEncode({'data': <Object>[]}), 200);
-            }
-            return http.Response('not found', 404);
-          },
-        ),
-      );
+            httpClient: _StreamingEventHttpClient(
+              events: events.stream,
+              handler: (request) async {
+                if (request.method == 'POST' &&
+                    request.url.path.contains('/pi-ui/')) {
+                  submissions++;
+                  events.add(utf8.encode(_eventStreamBody([
+                    {
+                      'type': 'pi_extension_ui_resolved',
+                      'payload': {'request_id': request.url.pathSegments.last},
+                    },
+                  ])));
+                  return http.Response('', 204);
+                }
+                if (request.url.path == '/sessions/session-1/messages') {
+                  return http.Response(jsonEncode({'data': <Object>[]}), 200);
+                }
+                if (request.url.path.endsWith('/pi-ui') ||
+                    request.url.path.endsWith('/pi-commands')) {
+                  return http.Response(jsonEncode({'data': <Object>[]}), 200);
+                }
+                return http.Response('not found', 404);
+              },
+            ),
+          );
       Widget app() => _TestApp(
-        home: SessionDetailScreen(
-          session: _session().copyWith(agentId: agentId),
-          client: createClient(),
-          enableSpeechServices: false,
-        ),
-      );
+            home: _sessionScreen(
+              session: _session().copyWith(agentId: agentId),
+              client: createClient(),
+              enableSpeechServices: false,
+            ),
+          );
       await tester.pumpWidget(Directionality(
         textDirection: TextDirection.ltr,
         child: Row(children: [
@@ -168,10 +168,12 @@ void main() {
         'payload': {'title': 'Local approval'},
       });
       await tester.pumpAndSettle();
-      await tester.tap(find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.byType(FilledButton),
-      ).first);
+      await tester.tap(find
+          .descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(FilledButton),
+          )
+          .first);
       await tester.pumpAndSettle();
       expect(submissions, 1);
       expect(find.byType(AlertDialog), findsNothing);
@@ -291,7 +293,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages(const []),
           enableSpeechServices: false,
@@ -365,7 +367,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForDomainState(state),
           enableSpeechServices: false,
@@ -466,7 +468,7 @@ void main() {
 
       await tester.pumpWidget(
         _TestApp(
-          home: SessionDetailScreen(
+          home: _sessionScreen(
             session: _session(unreadCount: 1),
             client: client,
             enableSpeechServices: false,
@@ -581,7 +583,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForDomainState(state),
           enableSpeechServices: false,
@@ -633,7 +635,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -664,7 +666,7 @@ void main() {
               child: TextButton(
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
-                    builder: (_) => SessionDetailScreen(
+                    builder: (_) => _sessionScreen(
                       session: _session(),
                       client: _clientForMessages(const []),
                       enableSpeechServices: false,
@@ -740,7 +742,7 @@ void main() {
     );
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(title: 'New session'),
           client: client,
           enableSpeechServices: false,
@@ -760,7 +762,7 @@ void main() {
     final client = _clientForMessages(const []);
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(title: 'Stale Title'),
           client: client,
           enableSpeechServices: false,
@@ -791,7 +793,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(
             title: 'Fresh Title',
             status: SessionStatus.running,
@@ -817,7 +819,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     final client = _clientForMessages(const []);
     await tester.pumpWidget(_TestApp(
-      home: SessionDetailScreen(
+      home: _sessionScreen(
         session: _session(),
         client: client,
         enableSpeechServices: false,
@@ -898,7 +900,7 @@ void main() {
     );
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(title: 'Session One'),
           client: client,
           enableSpeechServices: false,
@@ -909,7 +911,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(title: 'Session Two').copyWith(
             id: 'session-2',
             updatedAt: DateTime(2026, 5, 9, 10, 1),
@@ -1052,7 +1054,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -1142,7 +1144,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(runtimeSessionRef: 'runtime-session-1'),
           client: client,
           enableSpeechServices: false,
@@ -1178,7 +1180,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages(const []),
           enableSpeechServices: false,
@@ -1237,7 +1239,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages(const []),
           enableSpeechServices: false,
@@ -1269,7 +1271,7 @@ void main() {
       _TestApp(
         home: ValueListenableBuilder<SessionSummary>(
           valueListenable: session,
-          builder: (context, value, child) => SessionDetailScreen(
+          builder: (context, value, child) => _sessionScreen(
             session: value,
             client: _clientForMessages(const []),
             enableSpeechServices: false,
@@ -1300,7 +1302,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(
             runtimeSessionRef: 'thread-123',
             model: 'gpt-5.6-sol',
@@ -1380,7 +1382,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -1465,7 +1467,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -1533,7 +1535,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -1587,7 +1589,7 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'session_status',
+            'type': 'session.updated',
             'payload': {'status': 'idle'},
           },
         ]),
@@ -1707,7 +1709,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -1816,7 +1818,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -1921,7 +1923,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -2016,7 +2018,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -2121,7 +2123,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -2213,7 +2215,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -2287,7 +2289,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -2364,7 +2366,7 @@ void main() {
     );
 
     await tester.pumpWidget(_TestApp(
-      home: SessionDetailScreen(
+      home: _sessionScreen(
         session: _session(),
         client: client,
         enableSpeechServices: false,
@@ -2587,7 +2589,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -2659,7 +2661,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -2731,7 +2733,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -2800,7 +2802,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -2868,7 +2870,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -2924,7 +2926,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -2990,7 +2992,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -3065,7 +3067,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -3135,7 +3137,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -3160,7 +3162,7 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'session_status',
+            'type': 'session.updated',
             'payload': {'status': 'idle'},
           }
         ]),
@@ -3214,7 +3216,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -3230,11 +3232,11 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'session_status',
+            'type': 'session.updated',
             'payload': {'status': 'idle'},
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'assistant-1',
               sessionId: 'session-1',
@@ -3291,7 +3293,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -3307,17 +3309,17 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': 'First part',
+              'content': 'First part',
             },
           },
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': ' and second part',
+              'content': 'First part and second part',
             },
           },
         ]),
@@ -3388,7 +3390,7 @@ void main() {
     );
 
     await tester.pumpWidget(_TestApp(
-      home: SessionDetailScreen(
+      home: _sessionScreen(
         session: _session(),
         client: client,
         enableSpeechServices: false,
@@ -3452,7 +3454,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           key: const ValueKey('first-session-page'),
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
@@ -3467,17 +3469,17 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': 'Reply received',
+              'content': 'Reply received',
             },
           },
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': 'Reply received from the event stream',
+              'content': 'Reply received from the event stream',
             },
           },
         ]),
@@ -3489,7 +3491,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           key: const ValueKey('reopened-session-page'),
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
@@ -3516,6 +3518,14 @@ void main() {
     );
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'GET' && request.url.path.endsWith('/state')) {
+          final id = request.url.pathSegments[2];
+          final state = _domainStateJson([], sessionId: id);
+          (state['session'] as Map)['title'] =
+              id == firstSession.id ? firstSession.title : secondSession.title;
+          return http.Response(jsonEncode({'data': state}), 200,
+              headers: {'content-type': 'application/json'});
+        }
         if (request.method == 'GET' && request.url.path.endsWith('/messages')) {
           return http.Response(
             jsonEncode({'data': []}),
@@ -3561,7 +3571,7 @@ void main() {
           }
           return MaterialPageRoute<void>(
             settings: settings,
-            builder: (_) => SessionDetailScreen(
+            builder: (_) => _sessionScreen(
               session: session,
               client: client,
               enableSpeechServices: false,
@@ -3627,7 +3637,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -3641,10 +3651,10 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-live',
-              'delta': 'Live streamed assistant message',
+              'content': 'Live streamed assistant message',
             },
           },
         ]),
@@ -3698,7 +3708,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -3712,21 +3722,21 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': 'First part',
+              'content': 'First part',
             },
           },
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': ' and second part',
+              'content': 'First part and second part',
             },
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'assistant-1',
               sessionId: 'session-1',
@@ -3781,7 +3791,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -3795,17 +3805,17 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': 'First part',
+              'content': 'First part',
             },
           },
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': 'First part and second part',
+              'content': 'First part and second part',
             },
           },
         ]),
@@ -3848,7 +3858,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -3862,14 +3872,14 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': 'Old wording',
+              'content': 'Old wording',
             },
           },
           {
-            'type': 'message_snapshot',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
               'content': 'Revised wording',
@@ -3915,7 +3925,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -3929,7 +3939,7 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'bridge-user-1',
               sessionId: 'session-1',
@@ -3939,7 +3949,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'bridge-assistant-1',
               sessionId: 'session-1',
@@ -3949,7 +3959,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'provider-assistant-1',
               sessionId: 'session-1',
@@ -4006,7 +4016,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -4020,7 +4030,7 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'bridge-user-1',
               sessionId: 'session-1',
@@ -4030,7 +4040,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'bridge-assistant-1',
               sessionId: 'session-1',
@@ -4040,16 +4050,17 @@ void main() {
             ),
           },
           {
-            'type': 'message_snapshot',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'bridge-assistant-1',
               'content': 'Looking through the repository now.',
             },
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'provider-assistant-1',
+              replacesId: 'bridge-assistant-1',
               sessionId: 'session-1',
               role: 'assistant',
               content: 'I found two changed files and one untracked directory.',
@@ -4104,7 +4115,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -4118,24 +4129,24 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': 'First segment. Second',
+              'content': 'First segment. Second',
             },
           },
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': 'First segment.',
+              'content': 'First segment.',
             },
           },
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': 'First segment. Second segment. Third segment.',
+              'content': 'First segment. Second segment. Third segment.',
             },
           },
         ]),
@@ -4181,7 +4192,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -4195,7 +4206,7 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_snapshot',
+            'type': 'message.updated',
             'payload': {
               'session_id': 'session-1',
               'message_id': 'assistant-1',
@@ -4203,7 +4214,7 @@ void main() {
             },
           },
           {
-            'type': 'message_snapshot',
+            'type': 'message.updated',
             'payload': {
               'session_id': 'session-1',
               'message_id': 'assistant-1',
@@ -4251,7 +4262,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -4265,7 +4276,7 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'assistant-1',
               sessionId: 'session-1',
@@ -4275,7 +4286,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'assistant-1',
               sessionId: 'session-1',
@@ -4331,7 +4342,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -4345,7 +4356,7 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'assistant-1',
               sessionId: 'session-1',
@@ -4355,7 +4366,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'assistant-1',
               sessionId: 'session-1',
@@ -4416,7 +4427,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -4430,17 +4441,17 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': 'First block',
+              'content': 'First block',
             },
           },
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': '\n\n---\n\nSecond block',
+              'content': 'First block\n\n---\n\nSecond block',
             },
           },
         ]),
@@ -4490,7 +4501,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -4504,17 +4515,17 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': 'First block',
+              'content': 'First block',
             },
           },
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-1',
-              'delta': 'First block\n\n---\n\nSecond block',
+              'content': 'First block\n\n---\n\nSecond block',
             },
           },
         ]),
@@ -4540,6 +4551,7 @@ void main() {
       (tester) async {
     final events = StreamController<List<int>>.broadcast();
     final sendCompleter = Completer<http.Response>();
+    String? sentUserId;
     final client = BridgeClient(
       httpClient: _StreamingEventHttpClient(
         events: events.stream,
@@ -4560,6 +4572,8 @@ void main() {
           }
           if (request.method == 'POST' &&
               request.url.path == '/sessions/session-1/messages') {
+            sentUserId = (jsonDecode(request.body)
+                as Map<String, dynamic>)['client_message_id'] as String;
             return sendCompleter.future;
           }
           return http.Response('not found', 404);
@@ -4569,7 +4583,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -4595,9 +4609,9 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
-              id: 'server-user-1',
+              id: sentUserId!,
               sessionId: 'session-1',
               role: 'user',
               content: 'Repeat me once',
@@ -4605,7 +4619,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'server-reply-1',
               sessionId: 'session-1',
@@ -4628,7 +4642,7 @@ void main() {
         jsonEncode({
           'data': {
             'user_message': _messageJson(
-              id: 'server-user-1',
+              id: sentUserId!,
               sessionId: 'session-1',
               role: 'user',
               content: 'Repeat me once',
@@ -4656,6 +4670,7 @@ void main() {
   testWidgets('post response does not insert timeline messages before sse',
       (tester) async {
     final events = StreamController<List<int>>.broadcast();
+    String? sentUserId;
     final client = BridgeClient(
       httpClient: _StreamingEventHttpClient(
         events: events.stream,
@@ -4676,6 +4691,8 @@ void main() {
           }
           if (request.method == 'POST' &&
               request.url.path == '/sessions/session-1/messages') {
+            sentUserId = (jsonDecode(request.body)
+                as Map<String, dynamic>)['client_message_id'] as String;
             return http.Response(
               jsonEncode({
                 'data': {
@@ -4706,7 +4723,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -4732,9 +4749,9 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
-              id: 'provider-user-1',
+              id: sentUserId!,
               sessionId: 'session-1',
               role: 'user',
               content: 'Repeat me once',
@@ -4742,7 +4759,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'provider-reply-1',
               sessionId: 'session-1',
@@ -4791,7 +4808,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -4805,7 +4822,7 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'local-user-1',
               sessionId: 'session-1',
@@ -4815,7 +4832,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'local-assistant-1',
               sessionId: 'session-1',
@@ -4825,7 +4842,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'local-user-1',
               sessionId: 'session-1',
@@ -4835,7 +4852,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'local-assistant-1',
               sessionId: 'session-1',
@@ -4890,7 +4907,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -4904,7 +4921,7 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'user-1',
               sessionId: 'session-1',
@@ -4914,7 +4931,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'user-2',
               sessionId: 'session-1',
@@ -5022,7 +5039,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -5135,7 +5152,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -5149,7 +5166,7 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'local-user-1',
               sessionId: 'session-1',
@@ -5159,7 +5176,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'local-assistant-1',
               sessionId: 'session-1',
@@ -5179,17 +5196,17 @@ void main() {
     await tester.pump();
 
     expect(find.text('提交推送'), findsOneWidget);
-    expect(find.text('我先检查当前工作区状态和分支，然后提交并推送。'), findsOneWidget);
+    expect(find.text('我先检查当前工作区状态和分支，然后提交并推送。'), findsNothing);
     expect(
       find.text('我先检查当前工作区状态和分支，然后提交并推送。当前分支是 feat/desktop。'),
-      findsNothing,
+      findsOneWidget,
     );
 
     events.add(
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'session_status',
+            'type': 'session.updated',
             'payload': {'status': 'idle'},
           },
         ]),
@@ -5211,7 +5228,7 @@ void main() {
       tester
           .getTopLeft(find.text('我先检查当前工作区状态和分支，然后提交并推送。当前分支是 feat/desktop。'))
           .dy,
-      lessThan(tester.getTopLeft(find.text('提交推送')).dy),
+      greaterThan(tester.getTopLeft(find.text('提交推送')).dy),
     );
 
     await events.close();
@@ -5284,7 +5301,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -5298,7 +5315,7 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'user-1',
               sessionId: 'session-1',
@@ -5308,7 +5325,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'assistant-1',
               sessionId: 'session-1',
@@ -5318,7 +5335,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'local-user-2',
               sessionId: 'session-1',
@@ -5409,7 +5426,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -5423,7 +5440,7 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'local-user-1',
               sessionId: 'session-1',
@@ -5433,7 +5450,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'local-assistant-1',
               sessionId: 'session-1',
@@ -5487,35 +5504,34 @@ void main() {
       var currentState = snapshot('approval-1', 0);
       final events = StreamController<List<int>>.broadcast();
       final submitGate = Completer<http.Response>();
-      final submitting =
-          update == 'late-submit' ||
+      final submitting = update == 'late-submit' ||
           update == 'new-request' ||
           update == 'two-clients';
       BridgeClient createClient() => BridgeClient(
-        httpClient: _StreamingEventHttpClient(
-          events: events.stream,
-          handler: (request) async {
-            if (request.method == 'GET' &&
-                request.url.path.endsWith('/state')) {
-              return http.Response(
-                jsonEncode({'data': currentState}),
-                200,
-                headers: {'content-type': 'application/json'},
-              );
-            }
-            if (request.method == 'POST' &&
-                request.url.path.contains('/approvals/')) {
-              return submitGate.future;
-            }
-            return http.Response('not found', 404);
-          },
-        ),
-      );
-      Widget screen() => SessionDetailScreen(
-        session: _session(),
-        client: createClient(),
-        enableSpeechServices: false,
-      );
+            httpClient: _StreamingEventHttpClient(
+              events: events.stream,
+              handler: (request) async {
+                if (request.method == 'GET' &&
+                    request.url.path.endsWith('/state')) {
+                  return http.Response(
+                    jsonEncode({'data': currentState}),
+                    200,
+                    headers: {'content-type': 'application/json'},
+                  );
+                }
+                if (request.method == 'POST' &&
+                    request.url.path.contains('/approvals/')) {
+                  return submitGate.future;
+                }
+                return http.Response('not found', 404);
+              },
+            ),
+          );
+      Widget screen() => _sessionScreen(
+            session: _session(),
+            client: createClient(),
+            enableSpeechServices: false,
+          );
       if (update == 'two-clients') {
         tester.view.devicePixelRatio = 1;
         tester.view.physicalSize = const Size(1600, 900);
@@ -5576,7 +5592,12 @@ void main() {
       expect(find.text('first command'), findsNothing);
       if (update == 'new-request') {
         expect(find.text('second command'), findsWidgets);
-        expect(tester.widget<FilledButton>(find.byKey(const Key('session-approval-accept-button'))).onPressed, isNotNull);
+        expect(
+            tester
+                .widget<FilledButton>(
+                    find.byKey(const Key('session-approval-accept-button')))
+                .onPressed,
+            isNotNull);
       }
       await tester.pumpWidget(const SizedBox.shrink());
       await events.close();
@@ -5626,7 +5647,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -5652,6 +5673,13 @@ void main() {
     await tester.pump();
     await tester.pump();
 
+    for (var i = 0;
+        i < 8 &&
+            FocusManager.instance.primaryFocus?.debugLabel !=
+                'session-approval-primary-focus';
+        i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
       'session-approval-primary-focus',
@@ -5685,7 +5713,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -5783,7 +5811,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -5843,7 +5871,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -5922,7 +5950,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -6007,7 +6035,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -6103,7 +6131,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -6185,7 +6213,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -6284,7 +6312,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -6362,7 +6390,7 @@ void main() {
   testWidgets('composer action icons are reachable by tab', (tester) async {
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages(const <Map<String, dynamic>>[]),
           enableSpeechServices: false,
@@ -6426,7 +6454,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages(const <Map<String, dynamic>>[]),
           enableSpeechServices: false,
@@ -6476,7 +6504,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages(const <Map<String, dynamic>>[]),
           enableSpeechServices: false,
@@ -6596,7 +6624,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -6620,7 +6648,7 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'assistant-tool-anchor',
               sessionId: 'session-1',
@@ -6630,7 +6658,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'system-tool-1',
               sessionId: 'session-1',
@@ -6748,7 +6776,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -6772,7 +6800,7 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'assistant-tool-anchor-2',
               sessionId: 'session-1',
@@ -6782,7 +6810,7 @@ void main() {
             ),
           },
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'system-tool-2',
               sessionId: 'session-1',
@@ -6887,7 +6915,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -6949,7 +6977,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages(const <Map<String, dynamic>>[]),
           speechInputService: speechService,
@@ -7034,7 +7062,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -7070,7 +7098,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages(_conversationMessages(12)),
           enableSpeechServices: false,
@@ -7105,7 +7133,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages(const <Map<String, dynamic>>[]),
           enableSpeechServices: false,
@@ -7197,7 +7225,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(title: 'New session'),
           client: client,
           enableSpeechServices: false,
@@ -7288,7 +7316,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -7386,7 +7414,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(briefReplyMode: true),
           client: client,
           enableSpeechServices: false,
@@ -7482,7 +7510,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(briefReplyMode: true),
           client: client,
           enableSpeechServices: false,
@@ -7563,7 +7591,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -7622,7 +7650,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -7676,7 +7704,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -7727,7 +7755,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -7778,7 +7806,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -7837,7 +7865,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -7904,7 +7932,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -7961,7 +7989,7 @@ void main() {
         }
       }
       await tester.pumpWidget(_TestApp(
-          home: SessionDetailScreen(
+          home: _sessionScreen(
         session: _session(),
         client: _clientForDomainState(state),
         enableSpeechServices: false,
@@ -8036,7 +8064,7 @@ void main() {
           ),
         );
         await tester.pumpWidget(_TestApp(
-          home: SessionDetailScreen(
+          home: _sessionScreen(
             session: _session().copyWith(status: SessionStatus.running),
             client: client,
             enableSpeechServices: false,
@@ -8156,7 +8184,9 @@ void main() {
                       200);
                 }
                 if (request.method == 'POST' &&
-                    request.url.path == '/v2/sessions/session-1/turns') {
+                    request.url.path ==
+                        '/v2/sessions/session-1/turns/turn-1/recover') {
+                  cancellations += 1;
                   final body = jsonDecode(request.body) as Map<String, dynamic>;
                   continuations.add(body);
                   state = _domainStateJson([
@@ -8181,7 +8211,7 @@ void main() {
                 return http.Response('not found', 404);
               }));
       await tester.pumpWidget(_TestApp(
-          home: SessionDetailScreen(
+          home: _sessionScreen(
               session: _session().copyWith(status: SessionStatus.running),
               client: client,
               enableSpeechServices: false)));
@@ -8261,7 +8291,7 @@ void main() {
 
       await tester.pumpWidget(
         _TestApp(
-          home: SessionDetailScreen(
+          home: _sessionScreen(
             session: _session().copyWith(status: SessionStatus.running),
             client: client,
             enableSpeechServices: false,
@@ -8294,7 +8324,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -8346,7 +8376,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -8418,7 +8448,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -8478,7 +8508,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -8571,7 +8601,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -8644,7 +8674,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -8668,7 +8698,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -8694,7 +8724,7 @@ void main() {
     expect(
       requests
           .where((request) =>
-              request.url.queryParameters['before_id'] == 'user-28')
+              request.url.queryParameters['before_sequence'] == '28')
           .length,
       1,
     );
@@ -8705,19 +8735,21 @@ void main() {
     final requests = <http.Request>[];
     final messages = _conversationMessages(30);
     final olderPage = Completer<http.Response>();
+    final all = _domainStateJson(messages);
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
         if (request.method == 'GET' &&
-            request.url.path == '/sessions/session-1/messages') {
+            request.url.path == '/v2/sessions/session-1/state') {
           requests.add(request);
-          final beforeId = request.url.queryParameters['before_id'];
+          final beforeId = request.url.queryParameters['before_sequence'];
           if (beforeId == null) {
             return http.Response(
               jsonEncode({
                 'data': {
-                  'messages': messages.sublist(54, 60),
-                  'has_more': true,
-                  'next_cursor': 'user-28',
+                  ...all,
+                  'turns': (all['turns'] as List).sublist(27, 30),
+                  'has_more_turns': true,
+                  'next_before_sequence': 28,
                 },
               }),
               200,
@@ -8740,7 +8772,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -8755,6 +8787,14 @@ void main() {
     await tester.drag(messageList, const Offset(0, 1200));
     await tester.pump();
 
+    final scroll = tester
+        .state<ScrollableState>(find
+            .descendant(of: messageList, matching: find.byType(Scrollable))
+            .first)
+        .position;
+    scroll.jumpTo(
+        scroll.pixels.clamp(scroll.minScrollExtent, scroll.maxScrollExtent));
+    await tester.pump();
     final anchor = find.byKey(const ValueKey('user-message-bubble-user-28'));
     expect(anchor, findsOneWidget);
     final anchorTopBefore = tester.getTopLeft(anchor).dy;
@@ -8765,9 +8805,10 @@ void main() {
       http.Response(
         jsonEncode({
           'data': {
-            'messages': messages.sublist(48, 54),
-            'has_more': true,
-            'next_cursor': 'user-25',
+            ...all,
+            'turns': (all['turns'] as List).sublist(24, 27),
+            'has_more_turns': true,
+            'next_before_sequence': 25,
           },
         }),
         200,
@@ -8782,7 +8823,7 @@ void main() {
     expect(anchor, findsOneWidget);
     expect(tester.getTopLeft(anchor).dy, closeTo(anchorTopBefore, 1));
     expect(find.text('Question 28'), findsOneWidget);
-    expect(requests.last.url.queryParameters['before_id'], 'user-28');
+    expect(requests.last.url.queryParameters['before_sequence'], '28');
   });
 
   testWidgets('overlapping history page does not render duplicate messages',
@@ -8834,7 +8875,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -8916,7 +8957,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -9015,7 +9056,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -9035,7 +9076,7 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_created',
+            'type': 'message.completed',
             'payload': _messageJson(
               id: 'assistant-2',
               sessionId: 'session-1',
@@ -9194,7 +9235,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -9309,7 +9350,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -9323,17 +9364,17 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-2',
-              'delta': 'Streamed first part',
+              'content': 'Streamed first part',
             },
           },
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-2',
-              'delta': ' and final part',
+              'content': 'Streamed first part and final part',
             },
           },
         ]),
@@ -9438,7 +9479,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -9452,10 +9493,10 @@ void main() {
       utf8.encode(
         _eventStreamBody([
           {
-            'type': 'message_delta',
+            'type': 'message.updated',
             'payload': {
               'message_id': 'assistant-2',
-              'delta': 'Stale streamed content',
+              'content': 'Stale streamed content',
             },
           },
         ]),
@@ -9479,14 +9520,11 @@ void main() {
 
   testWidgets('scroll to bottom button appears after reading older history',
       (tester) async {
-    final client = _clientForPaginatedMessages(
-      _conversationMessages(30),
-      requests: <http.Request>[],
-    );
+    final client = _clientForMessages(_conversationMessages(30));
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -9508,12 +9546,13 @@ void main() {
         )
         .opacity;
 
+    await tester.pumpAndSettle();
     expect(buttonOpacity(), 0);
 
     final messageList = find.byType(ListView).first;
     await tester.drag(messageList, const Offset(0, 900));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 180));
+    await tester.pumpAndSettle();
 
     expect(buttonOpacity(), 1);
 
@@ -9537,7 +9576,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -9566,7 +9605,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -9627,7 +9666,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -9712,7 +9751,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -9797,7 +9836,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -9883,7 +9922,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -9955,7 +9994,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -10044,7 +10083,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -10113,7 +10152,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -10190,7 +10229,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -10250,7 +10289,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -10332,7 +10371,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -10400,7 +10439,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -10460,7 +10499,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -10528,7 +10567,7 @@ void main() {
           createdAt: '2026-05-09T10:00:01.000'),
     ]);
     await tester.pumpWidget(_TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
       session: _session(),
       client: client,
       enableSpeechServices: false,
@@ -10599,7 +10638,7 @@ void main() {
 
       await tester.pumpWidget(
         _TestApp(
-          home: SessionDetailScreen(
+          home: _sessionScreen(
             session: _session(),
             client: client,
             enableSpeechServices: false,
@@ -10631,7 +10670,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -10640,7 +10679,11 @@ void main() {
     );
     await tester.pump();
 
-    final markdown = find.byType(MarkdownBody);
+    final markdown = find.descendant(
+      of: find.byKey(
+          const ValueKey('assistant-message-bubble-assistant-multiline')),
+      matching: find.byType(MarkdownBody),
+    );
     expect(markdown, findsOneWidget);
     expect(
       find.ancestor(of: markdown, matching: find.byType(SelectionArea)),
@@ -10662,7 +10705,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages(messages),
           enableSpeechServices: false,
@@ -10719,7 +10762,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -10772,7 +10815,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -10814,7 +10857,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -10827,7 +10870,7 @@ void main() {
         find.byKey(const ValueKey('assistant-message-bubble-assistant-wide'));
     expect(bubbleFinder, findsOneWidget);
     expect(tester.getSize(bubbleFinder).width, greaterThan(500));
-    expect(tester.getSize(bubbleFinder).width, lessThanOrEqualTo(620));
+    expect(tester.getSize(bubbleFinder).width, lessThanOrEqualTo(800));
   });
 
   testWidgets('user reply bubble expands on wider layouts', (tester) async {
@@ -10853,7 +10896,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -10866,7 +10909,7 @@ void main() {
         find.byKey(const ValueKey('user-message-bubble-user-wide'));
     expect(bubbleFinder, findsOneWidget);
     expect(tester.getSize(bubbleFinder).width, greaterThan(500));
-    expect(tester.getSize(bubbleFinder).width, lessThanOrEqualTo(620));
+    expect(tester.getSize(bubbleFinder).width, lessThanOrEqualTo(800));
   });
 
   testWidgets('user image message bubble shrinks around image preview',
@@ -10892,7 +10935,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -10922,7 +10965,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -10974,7 +11017,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -11024,7 +11067,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -11077,7 +11120,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           audioRecordingService: audioService,
@@ -11142,7 +11185,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           speechInputService: speechService,
@@ -11199,7 +11242,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages(const []),
           audioRecordingService: audioService,
@@ -11231,7 +11274,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages(const []),
           audioRecordingService: audioService,
@@ -11347,7 +11390,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           audioRecordingService: audioService,
@@ -11467,7 +11510,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           audioRecordingService: audioService,
@@ -11512,7 +11555,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -11624,7 +11667,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           audioRecordingService: audioService,
@@ -11673,7 +11716,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -11723,7 +11766,7 @@ void main() {
     final ttsService = _FakeTtsService(systemAvailable: false);
     final cancelledSessionIds = <String>[];
     final client = BridgeClient(
-      httpClient: _FakeHttpClient((request) async {
+      httpClient: _FakeHttpClient.running((request) async {
         if (request.method == 'GET' &&
             request.url.path == '/sessions/session-1/messages') {
           return http.Response(
@@ -11767,7 +11810,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(status: SessionStatus.running),
           client: client,
           audioRecordingService: audioService,
@@ -11807,7 +11850,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -11885,7 +11928,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -11936,7 +11979,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -11986,7 +12029,7 @@ void main() {
     final ttsService = _FakeTtsService(systemAvailable: false);
     final cancelledSessionIds = <String>[];
     final client = BridgeClient(
-      httpClient: _FakeHttpClient((request) async {
+      httpClient: _FakeHttpClient.running((request) async {
         if (request.method == 'GET' &&
             request.url.path == '/sessions/session-1/messages') {
           return http.Response(
@@ -12027,7 +12070,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(status: SessionStatus.running),
           client: client,
           audioRecordingService: audioService,
@@ -12096,7 +12139,7 @@ void main() {
     final ttsService = _FakeTtsService(systemAvailable: false);
     final cancelledSessionIds = <String>[];
     final client = BridgeClient(
-      httpClient: _FakeHttpClient((request) async {
+      httpClient: _FakeHttpClient.running((request) async {
         if (request.method == 'GET' &&
             request.url.path == '/sessions/session-1/messages') {
           return http.Response(
@@ -12137,7 +12180,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(status: SessionStatus.running),
           client: client,
           audioRecordingService: audioService,
@@ -12240,7 +12283,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           audioRecordingService: audioService,
@@ -12319,7 +12362,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           audioRecordingService: audioService,
@@ -12432,7 +12475,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           audioRecordingService: audioService,
@@ -12473,7 +12516,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -12519,7 +12562,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -12581,7 +12624,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -12674,7 +12717,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -12727,7 +12770,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -12759,7 +12802,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -12849,7 +12892,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           speechInputService: speechService,
@@ -12884,7 +12927,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages(const <Map<String, dynamic>>[]),
           speechInputService: speechService,
@@ -12922,7 +12965,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages(const <Map<String, dynamic>>[]),
           speechInputService: speechService,
@@ -12984,7 +13027,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           speechInputService: speechService,
@@ -13024,7 +13067,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -13093,7 +13136,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: _clientForMessages([
             _messageJson(
@@ -13156,7 +13199,11 @@ void main() {
           return http.Response(
             _eventStreamBody([
               {
-                'type': 'message_created',
+                'type': 'session.updated',
+                'payload': {'status': 'running'}
+              },
+              {
+                'type': 'message.completed',
                 'payload': _messageJson(
                   id: 'assistant-speaking-1',
                   sessionId: 'session-1',
@@ -13176,7 +13223,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           ttsService: ttsService,
@@ -13231,7 +13278,11 @@ void main() {
           return http.Response(
             _eventStreamBody([
               {
-                'type': 'message_created',
+                'type': 'session.updated',
+                'payload': {'status': 'running'}
+              },
+              {
+                'type': 'message.completed',
                 'payload': _messageJson(
                   id: 'assistant-lockscreen-1',
                   sessionId: 'session-1',
@@ -13251,7 +13302,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           ttsService: ttsService,
@@ -13300,7 +13351,7 @@ void main() {
           return http.Response(
             _eventStreamBody([
               {
-                'type': 'message_created',
+                'type': 'message.completed',
                 'payload': _messageJson(
                   id: 'assistant-before-approval-1',
                   sessionId: 'session-1',
@@ -13336,7 +13387,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -13351,6 +13402,9 @@ void main() {
     eventGate.complete();
     await tester.pump(const Duration(milliseconds: 400));
 
+    for (var i = 0; i < 8 && notifications.shownNotifications.isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
     expect(notifications.shownNotifications, hasLength(1));
     final notification = notifications.shownNotifications.single;
     expect(notification.title, 'Waiting for approval');
@@ -13370,7 +13424,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(
             status: SessionStatus.awaitingApproval,
             pendingApproval: approval,
@@ -13436,7 +13490,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -13491,7 +13545,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(
             status: SessionStatus.awaitingApproval,
             pendingApproval: approval,
@@ -13519,8 +13573,10 @@ void main() {
     );
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
-        if (request.method == 'GET' && request.url.path == '/v2/sessions/session-1/state') {
-          return http.Response(jsonEncode({'data': _approvalDomainState(approval)}), 200,
+        if (request.method == 'GET' &&
+            request.url.path == '/v2/sessions/session-1/state') {
+          return http.Response(
+              jsonEncode({'data': _approvalDomainState(approval)}), 200,
               headers: {'content-type': 'application/json'});
         }
 
@@ -13552,7 +13608,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(
             status: SessionStatus.awaitingApproval,
             pendingApproval: approval,
@@ -13629,7 +13685,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(status: SessionStatus.running),
           client: client,
           enableSpeechServices: false,
@@ -13649,7 +13705,12 @@ void main() {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
         if (request.method == 'GET' &&
-            request.url.path == '/sessions/session-1/messages') {
+            request.url.path == '/v2/sessions/session-1/state') {
+          return http.Response(jsonEncode({'data': _domainStateJson([])}), 200,
+              headers: {'content-type': 'application/json'});
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/v2/sessions/session-1/turns') {
           return http.Response('boom', 500);
         }
         if (request.method == 'GET' &&
@@ -13666,13 +13727,20 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
         ),
       ),
     );
+    await tester.pump();
+
+    await tester.enterText(
+        find.byKey(const Key('session-message-input')), 'Send a message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
     await tester.pump();
 
     expect(
@@ -13702,7 +13770,12 @@ void main() {
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
         if (request.method == 'GET' &&
-            request.url.path == '/sessions/session-1/messages') {
+            request.url.path == '/v2/sessions/session-1/state') {
+          return http.Response(jsonEncode({'data': _domainStateJson([])}), 200,
+              headers: {'content-type': 'application/json'});
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/v2/sessions/session-1/turns') {
           return http.Response('boom', 500);
         }
         if (request.method == 'GET' &&
@@ -13719,13 +13792,20 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
         ),
       ),
     );
+    await tester.pump();
+
+    await tester.enterText(
+        find.byKey(const Key('session-message-input')), 'Send a message');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
     await tester.pump();
 
     expect(
@@ -13763,7 +13843,7 @@ void main() {
       return http.Response('not found', 404);
     }));
     await tester.pumpWidget(_TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
       session: _session().copyWith(profileId: 'work', profileName: 'Work'),
       client: client,
       enableSpeechServices: false,
@@ -13820,7 +13900,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -13872,7 +13952,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(),
           client: client,
           enableSpeechServices: false,
@@ -13931,7 +14011,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(reasoningEffort: ReasoningEffort.high),
           client: client,
           enableSpeechServices: false,
@@ -13991,7 +14071,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session(reasoningEffort: ReasoningEffort.high),
           client: client,
           enableSpeechServices: false,
@@ -14056,7 +14136,7 @@ void main() {
 
     await tester.pumpWidget(
       _TestApp(
-        home: SessionDetailScreen(
+        home: _sessionScreen(
           session: _session().copyWith(
             status: SessionStatus.awaitingApproval,
             pendingApproval: approval,
@@ -14074,6 +14154,38 @@ void main() {
     expect(find.text('rm -rf /tmp/safe-test'), findsNothing);
   });
 }
+
+SessionDetailScreen _sessionScreen({
+  Key? key,
+  required SessionSummary session,
+  Future<SessionSummary>? sessionInitializer,
+  BridgeClient? client,
+  bool enableSpeechServices = true,
+  AudioRecordingService? audioRecordingService,
+  SpeechInputService? speechInputService,
+  TtsService? ttsService,
+  BridgeRealtimeAsrService? bridgeRealtimeAsrService,
+  LocalVadService? localVadService,
+  Future<List<String>> Function()? pickImages,
+  Future<String?> Function()? readClipboardText,
+  Future<List<String>> Function()? readClipboardAttachments,
+}) =>
+    SessionDetailScreen(
+      key: key,
+      session: session,
+      sessionInitializer: sessionInitializer,
+      client: client,
+      enableSpeechServices: enableSpeechServices,
+      audioRecordingService: audioRecordingService,
+      speechInputService: speechInputService,
+      ttsService: ttsService,
+      bridgeRealtimeAsrService: bridgeRealtimeAsrService,
+      localVadService: localVadService ??
+          LocalVadService(backendFactory: () async => _FakeLocalVadBackend()),
+      pickImages: pickImages,
+      readClipboardText: readClipboardText,
+      readClipboardAttachments: readClipboardAttachments,
+    );
 
 class _TestApp extends StatelessWidget {
   const _TestApp({
@@ -14257,6 +14369,7 @@ Map<String, dynamic> _domainStateJson(
   int cursor = 0,
   String status = 'idle',
   String sessionId = 'session-1',
+  bool stableTurnIds = false,
 }) {
   final turns = <Map<String, dynamic>>[];
   Map<String, dynamic>? currentTurn;
@@ -14268,14 +14381,16 @@ Map<String, dynamic> _domainStateJson(
       final user = role == 'user'
           ? message
           : _messageJson(
-              id: 'synthetic-user-$turnSequence',
+              id: stableTurnIds
+                  ? 'synthetic-user-${message['id']}'
+                  : 'synthetic-user-$turnSequence',
               sessionId: sessionId,
               role: 'user',
               content: '',
               createdAt: message['created_at'] as String,
             );
       currentTurn = {
-        'id': 'turn-$turnSequence',
+        'id': stableTurnIds ? 'turn-${user['id']}' : 'turn-$turnSequence',
         'session_id': sessionId,
         'sequence': turnSequence,
         'version': 1,
@@ -14361,7 +14476,7 @@ Map<String, dynamic> _domainMessageJson(
       'sequence': 1,
       'revision': 1,
       'purpose': purpose,
-      'state': 'completed',
+      'state': message['state'] ?? 'completed',
       'content': message['content'],
       'attachments': <Map<String, dynamic>>[],
       'created_at': message['created_at'],
@@ -14372,45 +14487,37 @@ BridgeClient _clientForPaginatedMessages(
   List<Map<String, dynamic>> messages, {
   required List<http.Request> requests,
 }) {
-  return BridgeClient(
-    httpClient: _FakeHttpClient((request) async {
-      if (request.method == 'GET' &&
-          request.url.path == '/sessions/session-1/messages') {
-        requests.add(request);
-        final beforeId = request.url.queryParameters['before_id'];
-        final limit =
-            int.tryParse(request.url.queryParameters['limit'] ?? '') ?? 50;
-        final endExclusive = beforeId == null
-            ? messages.length
-            : messages.indexWhere((message) => message['id'] == beforeId);
-        final boundedEnd = endExclusive < 0
-            ? messages.length
-            : endExclusive.clamp(0, messages.length).toInt();
-        final start = math.max(0, boundedEnd - limit);
-        final pageMessages = messages.sublist(start, boundedEnd);
-        return http.Response(
+  final all = _domainStateJson(messages);
+  final turns = (all['turns'] as List).cast<Map<String, dynamic>>();
+  return BridgeClient(httpClient: _FakeHttpClient((request) async {
+    if (request.method == 'GET' &&
+        request.url.path == '/v2/sessions/session-1/state') {
+      requests.add(request);
+      final before =
+          int.tryParse(request.url.queryParameters['before_sequence'] ?? '');
+      final eligible = turns
+          .where((turn) => before == null || (turn['sequence'] as int) < before)
+          .toList();
+      final page = eligible.skip(math.max(0, eligible.length - 3)).toList();
+      return http.Response(
           jsonEncode({
             'data': {
-              'messages': pageMessages,
-              'has_more': start > 0,
-              'next_cursor': start > 0 ? pageMessages.first['id'] : null,
-            },
+              ...all,
+              'turns': page,
+              'has_more_turns': eligible.length > page.length,
+              'next_before_sequence':
+                  eligible.length > page.length ? page.first['sequence'] : null,
+            }
           }),
           200,
-          headers: {'content-type': 'application/json'},
-        );
-      }
-      if (request.method == 'GET' &&
-          request.url.path == '/sessions/session-1/events') {
-        return http.Response(
-          '',
-          200,
-          headers: {'content-type': 'text/event-stream'},
-        );
-      }
-      return http.Response('not found', 404);
-    }),
-  );
+          headers: {'content-type': 'application/json'});
+    }
+    if (request.method == 'GET' && request.url.path.endsWith('/events')) {
+      return http.Response('', 200,
+          headers: {'content-type': 'text/event-stream'});
+    }
+    return http.Response('not found', 404);
+  }));
 }
 
 List<Map<String, dynamic>> _conversationMessages(int turnCount) {
@@ -14447,8 +14554,10 @@ Map<String, dynamic> _messageJson({
   required String role,
   required String content,
   required String createdAt,
+  String? replacesId,
 }) {
   return {
+    if (replacesId != null) 'replaces_id': replacesId,
     'id': id,
     'session_id': sessionId,
     'role': role,
@@ -14501,29 +14610,115 @@ ApprovalRequest _approvalRequest({
   );
 }
 
-String _eventStreamBody(List<Map<String, dynamic>> events) {
-  return events.map((event) {
-    if (event['type'] == 'approval_requested' || event['type'] == 'approval_resolved') {
-      final requested = event['type'] == 'approval_requested';
-      final payload = event['payload'] as Map<String, dynamic>;
-      final approval = requested ? ApprovalRequest.fromJson(
-          (payload['request'] as Map<String, dynamic>?) ?? payload) : null;
-      final id = requested ? 1 : 2;
-      final state = _approvalDomainState(approval, cursor: id);
-      final data = jsonEncode({
-        'event_id': id, 'event_type': 'activity.updated',
-        'payload': {'coalesced': true, 'session': state['session'], 'turn': (state['turns'] as List).single},
-      });
-      return 'id: $id\ndata: $data\n\n';
+String _eventStreamBody(List<Map<String, dynamic>> events) => events
+    .map((event) => 'event: session\ndata: ${jsonEncode(event)}\n\n')
+    .join();
+
+// The HTTP fixtures below expose the same atomic turn snapshots as the v2
+// Bridge API. Message contents are complete revisions, never provider deltas.
+class _DomainFixtureEvents {
+  final messages = <Map<String, dynamic>>[];
+  var cursor = 0;
+  var status = 'idle';
+  ApprovalRequest? approval;
+
+  Map<String, dynamic> snapshot(List<Map<String, dynamic>> initial,
+      {String sessionId = 'session-1'}) {
+    final persisted = {for (final message in messages) message['id']: message};
+    for (final message in initial) {
+      persisted[message['id']] = Map<String, dynamic>.from(message);
     }
-    return 'event: session\ndata: ${jsonEncode(event)}\n\n';
-  }).join();
+    messages
+      ..clear()
+      ..addAll(persisted.values);
+    return _domainStateJson(messages,
+        sessionId: sessionId,
+        cursor: cursor,
+        status: status,
+        stableTurnIds: true);
+  }
+
+  Stream<List<int>> stream(Stream<List<int>> input) async* {
+    await for (final line
+        in input.transform(utf8.decoder).transform(const LineSplitter())) {
+      if (!line.startsWith('data:')) continue;
+      final event = jsonDecode(line.substring(5)) as Map<String, dynamic>;
+      if (event.containsKey('event_type')) {
+        yield utf8
+            .encode('id: ${event['event_id']}\ndata: ${jsonEncode(event)}\n\n');
+        continue;
+      }
+      final payload = event['payload'] as Map<String, dynamic>? ?? {};
+      switch (event['type']) {
+        case 'message.updated':
+        case 'message.completed':
+          if (payload['replaces_id'] != null) {
+            messages.removeWhere(
+                (message) => message['id'] == payload['replaces_id']);
+          }
+          final id = (payload['id'] ?? payload['message_id']) as String;
+          final index = messages.indexWhere((message) => message['id'] == id);
+          final completed = event['type'] == 'message.completed';
+          final message = <String, dynamic>{
+            'id': id,
+            'session_id': 'session-1',
+            'role': 'assistant',
+            'created_at': '2026-05-09T10:00:01.000Z',
+            if (index >= 0) ...messages[index],
+            ...payload,
+            'state': completed ? 'completed' : 'running',
+          };
+          if (index >= 0) {
+            messages[index] = message;
+          } else {
+            messages.add(message);
+          }
+          status = completed ? 'idle' : 'running';
+        case 'session.updated':
+          status = payload['status'] as String;
+        case 'approval_requested':
+          approval = ApprovalRequest.fromJson(
+              (payload['request'] as Map<String, dynamic>?) ?? payload);
+        case 'approval_resolved':
+          approval = null;
+        default:
+          // Pi extension UI requests travel on their separate legacy channel.
+          continue;
+      }
+      final state = event['type'] == 'approval_requested' ||
+              event['type'] == 'approval_resolved'
+          ? _approvalDomainState(approval, cursor: cursor)
+          : _domainStateJson(messages,
+              cursor: cursor, status: status, stableTurnIds: true);
+      final turns = state['turns'] as List;
+      for (final turn in turns.isEmpty ? [null] : turns) {
+        cursor += 1;
+        final session = state['session'] as Map<String, dynamic>;
+        session['version'] = cursor + 1;
+        if (turn != null) turn['version'] = cursor + 1;
+        final data = {
+          'event_id': cursor,
+          'event_type': 'turn.updated',
+          'payload': {
+            'coalesced': true,
+            'session': session,
+            if (turn != null) 'turn': turn,
+          },
+        };
+        yield utf8.encode('id: $cursor\ndata: ${jsonEncode(data)}\n\n');
+      }
+    }
+  }
 }
 
 class _FakeHttpClient extends http.BaseClient {
   _FakeHttpClient(this._handler);
+  _FakeHttpClient.running(this._handler) {
+    _domainEvents.status = 'running';
+  }
 
   final Future<http.Response> Function(http.Request request) _handler;
+  final _domainEvents = _DomainFixtureEvents();
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
@@ -14543,7 +14738,9 @@ class _FakeHttpClient extends http.BaseClient {
             false;
     return http.StreamedResponse(
       isEventStream
-          ? _openEventStream(response.bodyBytes)
+          ? (request.url.path.startsWith('/v2/')
+              ? _domainEvents.stream(_openEventStream(response.bodyBytes))
+              : _openEventStream(response.bodyBytes))
           : Stream.value(response.bodyBytes),
       response.statusCode,
       headers: response.headers,
@@ -14647,7 +14844,7 @@ class _FakeHttpClient extends http.BaseClient {
       }
       return http.Response(
         jsonEncode({
-          'data': _domainStateJson(messages, sessionId: sessionId),
+          'data': _domainEvents.snapshot(messages, sessionId: sessionId),
         }),
         200,
         headers: {'content-type': 'application/json'},
@@ -14725,12 +14922,33 @@ class _UploadingBridgeClient extends BridgeClient {
 
 class _StreamingEventHttpClient extends http.BaseClient {
   _StreamingEventHttpClient({
-    required this.events,
+    required Stream<List<int>> events,
     required this.handler,
-  });
+  }) : events = events.asBroadcastStream() {
+    _domainEvents.stream(this.events).listen((chunk) {
+      _eventHistory.add(chunk);
+      _domainStream.add(chunk);
+    }, onError: _domainStream.addError, onDone: _domainStream.close);
+  }
+
+  final _eventHistory = <List<int>>[];
+  final _domainStream = StreamController<List<int>>.broadcast();
+
+  Stream<List<int>> _replayDomainEvents(int after) =>
+      Stream.multi((controller) {
+        for (final chunk in _eventHistory) {
+          final id =
+              int.parse(utf8.decode(chunk).split('\n').first.substring(4));
+          if (id > after) controller.add(chunk);
+        }
+        final subscription = _domainStream.stream.listen(controller.add,
+            onError: controller.addError, onDone: controller.close);
+        controller.onCancel = subscription.cancel;
+      });
 
   final Stream<List<int>> events;
   final Future<http.Response> Function(http.Request request) handler;
+  final _domainEvents = _DomainFixtureEvents();
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
@@ -14738,7 +14956,10 @@ class _StreamingEventHttpClient extends http.BaseClient {
         (request.url.path == '/sessions/session-1/events' ||
             request.url.path == '/v2/sessions/session-1/events')) {
       return http.StreamedResponse(
-        events,
+        request.url.path.startsWith('/v2/')
+            ? _replayDomainEvents(
+                int.parse(request.url.queryParameters['after'] ?? '0'))
+            : events,
         200,
         headers: {'content-type': 'text/event-stream'},
         request: request,
@@ -14763,7 +14984,7 @@ class _StreamingEventHttpClient extends http.BaseClient {
           : ((data as Map<String, dynamic>)['messages'] as List<dynamic>)
               .cast<Map<String, dynamic>>();
       response = http.Response(
-        jsonEncode({'data': _domainStateJson(messages)}),
+        jsonEncode({'data': _domainEvents.snapshot(messages)}),
         200,
         headers: {'content-type': 'application/json'},
       );

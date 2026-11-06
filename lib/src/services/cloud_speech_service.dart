@@ -5,7 +5,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
-import '../bridge_client.dart' show SynthesizedSpeech;
+import '../bridge_client.dart' show BridgeClient, SynthesizedSpeech;
 import '../l10n/current_l10n.dart';
 import '../l10n/app_locale.dart';
 import '../plugins/speech_plugin_models.dart';
@@ -48,6 +48,10 @@ class CloudSpeechService {
     );
     if (ttsPlugin != null) {
       return _synthesizeWithPlugin(text, ttsPlugin.manifest);
+    }
+    if (settings.ttsProvider == TtsProvider.bridgeLocal) {
+      return BridgeClient(httpClient: _httpClient)
+          .synthesizeSpeech(text, stream: settings.bridgeLocalTtsStreaming);
     }
     throw StateError('Unsupported cloud TTS provider: ${settings.ttsProvider}');
   }

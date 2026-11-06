@@ -1,9 +1,33 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omni_code/src/services/notification_delivery_io.dart';
+import 'package:omni_code/src/services/notification_delivery_stub.dart';
 
 void main() {
+  test('memory delivery works after its constructor scheduler stops', () async {
+    final deferred = <void Function()>[];
+    final delivery = runZoned(
+      MemoryNotificationDelivery.new,
+      zoneSpecification: ZoneSpecification(
+        scheduleMicrotask: (self, parent, zone, callback) =>
+            deferred.add(callback),
+      ),
+    );
+    var deliveries = 0;
+    try {
+      await delivery.deliver('approval', const Duration(days: 1), () async {
+        deliveries += 1;
+      }).timeout(const Duration(seconds: 1));
+      expect(deliveries, 1);
+    } finally {
+      for (final callback in deferred) {
+        callback();
+      }
+    }
+  });
+
   final sharedDirectory =
       Platform.environment['TEST_NOTIFICATION_DELIVERY_DIRECTORY'];
   test('independent process notification worker', () async {

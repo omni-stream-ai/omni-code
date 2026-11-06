@@ -6,6 +6,7 @@ import 'package:omni_code/src/app_routes.dart';
 import 'package:omni_code/src/models.dart';
 import 'package:omni_code/src/screens/session_detail_screen.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
+import 'package:omni_code/src/services/session_event_service.dart';
 import 'package:omni_code/src/settings/app_settings_store.dart';
 
 void main() {
@@ -18,6 +19,9 @@ void main() {
     await tester.pumpWidget(const OmniCodeApp());
 
     expect(find.byType(Scaffold), findsWidgets);
+    await tester.pumpWidget(const SizedBox.shrink());
+    sessionEventService.dispose();
+    await tester.pump();
   });
 
   testWidgets('session route uses passed summary without route loader',
