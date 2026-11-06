@@ -343,6 +343,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   String? _speechError;
   ApprovalRequest? _pendingApproval;
   final Set<String> _handledPiUiRequestIds = <String>{};
+  final Map<String, DialogRoute<Object?>> _piUiDialogRoutes = {};
   List<AgentCommand> _agentCommands = const [];
   bool _loadingAgentCommands = false;
   String? _agentCommandsSessionId;
@@ -816,7 +817,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _eventsReconnectTimer?.cancel();
     unawaited(_eventsSubscription?.cancel());
     _eventsSubscription = null;
-    if (_session.agentId != 'pi') return;
+    // Codex user input and MCP elicitation also use this UI event channel.
     _eventsSubscription = _client.subscribeToSessionEvents(_session.id).listen(
       (event) {
         final data = event['data'];
@@ -824,7 +825,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         final type = data['type'];
         if (type == 'pi_extension_ui_requested' ||
             type == 'pi_extension_ui_resolved' ||
-            type == 'pi_extension_commands_updated') {
+            type == 'pi_extension_commands_updated' ||
+            type == 'pi_ui_requested' ||
+            type == 'pi_ui_resolved' ||
+            type == 'pi_commands_updated') {
           _handleBridgeEvent(event);
         }
       },
@@ -833,7 +837,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       cancelOnError: true,
     );
     unawaited(_loadPendingPiExtensionUi());
-    unawaited(_loadPiExtensionCommands());
+    if (_session.agentId == 'pi') {
+      unawaited(_loadPiExtensionCommands());
+    }
   }
 
   Future<void> _loadPiExtensionCommands() async {
@@ -867,7 +873,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final sessionId = _session.id;
     try {
       final requests = await _client.listPendingPiExtensionUi(sessionId);
-      if (!mounted || _session.id != sessionId || _session.agentId != 'pi') {
+      if (!mounted || _session.id != sessionId) {
         return;
       }
       for (final request in requests) {
@@ -881,7 +887,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   void _schedulePiExtensionEventsReconnect() {
-    if (!mounted || _creatingSession || _session.agentId != 'pi') return;
+    if (!mounted || _creatingSession) return;
     _eventsReconnectTimer?.cancel();
     _eventsReconnectTimer = Timer(
       const Duration(seconds: 2),
@@ -7842,7 +7848,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         break;
       case 'pi_extension_ui_resolved':
       case 'pi_ui_resolved':
-        _handledPiUiRequestIds.remove('${payload['request_id']}');
+        final requestId = '${payload['request_id']}';
+        _handledPiUiRequestIds.remove(requestId);
+        final route = _piUiDialogRoutes.remove(requestId);
+        if (route != null && route.isActive) {
+          route.navigator?.removeRoute(route);
+        }
         break;
       case 'pi_extension_commands_updated':
       case 'pi_commands_updated':
@@ -7928,7 +7939,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           cancelled = value == null;
           break;
         case 'mcp_elicitation':
-          value = await showMcpElicitation(context, request.payload);
+          value = await _showPiUiDialog<Object?>(
+            request: request,
+            barrierDismissible: false,
+            builder: (_) => McpElicitationDialog(params: request.payload),
+          );
           cancelled = value == null;
           break;
         case 'custom':
@@ -7938,6 +7953,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         default:
           cancelled = true;
           break;
+      }
+      if (!mounted || !_handledPiUiRequestIds.contains(request.requestId)) {
+        return;
       }
       await _client.submitPiExtensionUiResponse(
         _session.id,
@@ -7952,6 +7970,31 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
   }
 
+  Future<T?> _showPiUiDialog<T>({
+    required PiExtensionUiRequest request,
+    required WidgetBuilder builder,
+    bool barrierDismissible = true,
+  }) async {
+    if (!mounted || !_handledPiUiRequestIds.contains(request.requestId)) {
+      return null;
+    }
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final route = DialogRoute<Object?>(
+      context: context,
+      builder: builder,
+      barrierDismissible: barrierDismissible,
+      themes: InheritedTheme.capture(from: context, to: navigator.context),
+    );
+    _piUiDialogRoutes[request.requestId] = route;
+    try {
+      return (await navigator.push(route)) as T?;
+    } finally {
+      if (identical(_piUiDialogRoutes[request.requestId], route)) {
+        _piUiDialogRoutes.remove(request.requestId);
+      }
+    }
+  }
+
   Future<Object?> _showPiConfirm(PiExtensionUiRequest request) async {
     if (!mounted) return null;
     final payload = request.payload;
@@ -7960,8 +8003,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final isCapability = payload.containsKey('capability') ||
         payload.containsKey('permission') ||
         payload['persist'] != null;
-    return showDialog<Object?>(
-      context: context,
+    return _showPiUiDialog<Object?>(
+      request: request,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
         title: Text(title),
@@ -7995,8 +8038,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (!mounted) return null;
     final rawOptions = request.payload['options'];
     final options = rawOptions is List ? rawOptions : const [];
-    return showDialog<Object?>(
-      context: context,
+    return _showPiUiDialog<Object?>(
+      request: request,
       builder: (dialogContext) => SimpleDialog(
         title: Text(
             '${request.payload['title'] ?? request.extensionId ?? 'Pi plugin'}'),
@@ -8025,8 +8068,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           '${request.payload['value'] ?? request.payload['default'] ?? request.payload['defaultValue'] ?? ''}',
     );
     try {
-      return await showDialog<String>(
-        context: context,
+      return await _showPiUiDialog<String>(
+        request: request,
         builder: (dialogContext) => AlertDialog(
           title: Text(
               '${request.payload['title'] ?? request.extensionId ?? 'Pi plugin'}'),

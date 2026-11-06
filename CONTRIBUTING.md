@@ -16,6 +16,12 @@ flutter analyze
 sh scripts/setup-git-hooks.sh
 ```
 
+MP4 playback uses `video_player`, with `fvp` providing the Linux and Windows
+backends. Call `initializeVideoPlayback()` before creating any video controller.
+Linux uses software decoding so playback also works without GPU video drivers.
+The Nix development shell supplies the native runtime libraries; source packages
+fetch a pinned MDK SDK before the isolated build starts.
+
 Run `sh scripts/setup-git-hooks.sh` once after cloning to enable the local
 `commit-msg` hook.
 

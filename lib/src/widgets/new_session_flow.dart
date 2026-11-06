@@ -72,6 +72,8 @@ Future<void> startNewSessionFlow(
       client: resolvedClient,
       initialProviderId: appSettingsController
           .settings.lastSelectedProviderByProject[project!.id],
+      initialModel:
+          appSettingsController.settings.lastSelectedModelByProject[project.id],
     ),
   );
   if (sessionResult == null || !context.mounted) {
@@ -86,6 +88,10 @@ Future<void> startNewSessionFlow(
       appSettingsController.settings.copyWith(
         lastSelectedAgent: sessionResult.$2,
         lastSelectedProviderByProject: savedProviderSelections,
+        lastSelectedModelByProject: {
+          ...appSettingsController.settings.lastSelectedModelByProject,
+          project.id: sessionResult.$4,
+        },
       ),
     ),
   );

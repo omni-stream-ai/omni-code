@@ -81,6 +81,13 @@ set_target_properties(${BINARY_NAME}
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# fvp renders video into Flutter textures with libepoxy. Declare the dependency
+# explicitly so isolated toolchains can discover its headers and library.
+if(TARGET fvp_plugin)
+  pkg_check_modules(OMNI_EPOXY REQUIRED IMPORTED_TARGET epoxy)
+  target_link_libraries(fvp_plugin PRIVATE PkgConfig::OMNI_EPOXY)
+endif()
+
 # Workaround for flutter_soloud bug: its linux/CMakeLists.txt never links the
 # ALSA backend library, so snd_* symbols stay undefined and dlopen() fails at
 # runtime. Append the ALSA library to the plugin target here, after the plugin

@@ -9,10 +9,12 @@ import 'src/app.dart';
 import 'src/services/notification_service.dart';
 import 'src/services/push_service.dart';
 import 'src/services/sentry_service.dart';
+import 'src/services/video_playback.dart';
 import 'src/settings/app_settings.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  initializeVideoPlayback();
   usePathUrlStrategy();
   await appSettingsController.load();
   await runWithSentry(

@@ -10,6 +10,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_all_linux/webview_all_linux.dart';
 import 'package:webview_windows/webview_windows.dart' as windows;
 import '../services/session_file_access.dart';
+import 'session_markdown_table.dart';
 
 class SessionFilePreview extends StatefulWidget {
   const SessionFilePreview(
@@ -142,15 +143,32 @@ class _SessionFilePreviewState extends State<SessionFilePreview> {
                 isPreviewTextFile(path) &&
                 (snapshot.data!['size'] as num? ?? 0) <= 2 * 1024 * 1024;
             final preview = html || (text && markdown);
+            final colors = Theme.of(context).colorScheme;
+            final toolbarButtonStyle = IconButton.styleFrom(
+              minimumSize: const Size.square(44),
+              maximumSize: const Size.square(44),
+              iconSize: 20,
+              padding: const EdgeInsets.all(10),
+            );
             return DefaultTabController(
                 length: preview ? 2 : 1,
                 child: Column(children: [
                   Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                       child: Row(children: [
-                        Icon(html
-                            ? Icons.html_rounded
-                            : Icons.description_outlined),
+                        Container(
+                          padding: const EdgeInsets.all(9),
+                          decoration: BoxDecoration(
+                            color: colors.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                              html
+                                  ? Icons.html_rounded
+                                  : Icons.description_outlined,
+                              size: 20,
+                              color: colors.primary),
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                             child: Text(name,
@@ -160,16 +178,81 @@ class _SessionFilePreviewState extends State<SessionFilePreview> {
                                 overflow: TextOverflow.ellipsis,
                                 style:
                                     Theme.of(context).textTheme.titleMedium)),
+                        const SizedBox(width: 12),
+                        if (markdown)
+                          IconButton(
+                            style: toolbarButtonStyle,
+                            key: const ValueKey('file-preview-download'),
+                            tooltip: _saving
+                                ? t('Downloading…', '下载中…')
+                                : t('Download', '下载'),
+                            onPressed: snapshot.hasData && !_saving
+                                ? () => _download(name)
+                                : null,
+                            icon: _saving
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2))
+                                : const Icon(Icons.download_rounded, size: 20),
+                          ),
+                        if (markdown) const SizedBox(width: 8),
                         IconButton(
+                            style: toolbarButtonStyle,
                             tooltip: t('Close', '关闭'),
                             onPressed: () => Navigator.pop(context),
-                            icon: const Icon(Icons.close_rounded)),
+                            icon: const Icon(Icons.close_rounded, size: 20)),
                       ])),
                   if (preview)
-                    TabBar(tabs: [
-                      Tab(text: t('Preview', '预览')),
-                      Tab(text: t('Source', '原文'))
-                    ]),
+                    if (markdown)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              color: colors.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: TabBar(
+                              isScrollable: true,
+                              tabAlignment: TabAlignment.start,
+                              dividerColor: Colors.transparent,
+                              indicatorSize: TabBarIndicatorSize.tab,
+                              automaticIndicatorColorAdjustment: false,
+                              indicator: BoxDecoration(
+                                color: colors.primary,
+                                borderRadius: BorderRadius.circular(7),
+                              ),
+                              splashBorderRadius: BorderRadius.circular(7),
+                              labelColor: colors.onPrimary,
+                              unselectedLabelColor: colors.onSurfaceVariant,
+                              labelStyle: const TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w700),
+                              unselectedLabelStyle: const TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w500),
+                              labelPadding:
+                                  const EdgeInsets.symmetric(horizontal: 20),
+                              tabs: [
+                                Tab(height: 40, text: t('Preview', '预览')),
+                                Tab(height: 40, text: t('Source', '原文')),
+                              ],
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      TabBar(tabs: [
+                        Tab(text: t('Preview', '预览')),
+                        Tab(text: t('Source', '原文'))
+                      ]),
+                  if (markdown)
+                    Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: colors.outlineVariant.withValues(alpha: 0.5)),
                   Expanded(
                       child: snapshot.hasError
                           ? Center(child: SelectableText('${snapshot.error}'))
@@ -191,22 +274,10 @@ class _SessionFilePreviewState extends State<SessionFilePreview> {
                                                 ? const Center(
                                                     child:
                                                         CircularProgressIndicator())
-                                                : SingleChildScrollView(
-                                                    padding:
-                                                        const EdgeInsets.all(
-                                                            16),
-                                                    child: MarkdownBody(
-                                                        key: const ValueKey(
-                                                            'markdown-file-preview-rendered'),
-                                                        data: data.data!,
-                                                        selectable: true,
-                                                        onTapLink:
-                                                            (_, href, __) {
-                                                          if (href != null) {
-                                                            widget.onOpenLink(
-                                                                href);
-                                                          }
-                                                        }))),
+                                                : _MarkdownDocument(
+                                                    data: data.data!,
+                                                    onOpenLink:
+                                                        widget.onOpenLink)),
                                   if (text || html)
                                     _source()
                                   else
@@ -218,30 +289,144 @@ class _SessionFilePreviewState extends State<SessionFilePreview> {
                         child: SelectableText(_saveError!,
                             style: TextStyle(
                                 color: Theme.of(context).colorScheme.error))),
-                  Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Align(
-                          alignment: Alignment.centerRight,
-                          child: FilledButton.icon(
-                            key: const ValueKey('file-preview-download'),
-                            onPressed: snapshot.hasData && !_saving
-                                ? () => _download(name)
-                                : null,
-                            icon: _saving
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2))
-                                : const Icon(Icons.download_rounded),
-                            label: Text(_saving
-                                ? t('Downloading…', '下载中…')
-                                : t('Download', '下载')),
-                          ))),
+                  if (!markdown)
+                    Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Align(
+                            alignment: Alignment.centerRight,
+                            child: FilledButton.icon(
+                              key: const ValueKey('file-preview-download'),
+                              onPressed: snapshot.hasData && !_saving
+                                  ? () => _download(name)
+                                  : null,
+                              icon: _saving
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2))
+                                  : const Icon(Icons.download_rounded),
+                              label: Text(_saving
+                                  ? t('Downloading…', '下载中…')
+                                  : t('Download', '下载')),
+                            ))),
                 ]));
           },
         )),
       );
+}
+
+class _MarkdownDocument extends StatelessWidget {
+  const _MarkdownDocument({required this.data, required this.onOpenLink});
+
+  final String data;
+  final void Function(String) onOpenLink;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final body = theme.textTheme.bodyLarge!.copyWith(
+      fontSize: 16,
+      height: 1.75,
+      color: colors.onSurface,
+    );
+    TextStyle heading(double size) => body.copyWith(
+          fontSize: size,
+          height: 1.35,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.3,
+        );
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final compact = constraints.maxWidth < 600;
+      return ColoredBox(
+        color: colors.surface,
+        child: Scrollbar(
+          child: SingleChildScrollView(
+            key: const PageStorageKey('markdown-document-scroll'),
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 0 : 32,
+              vertical: compact ? 0 : 28,
+            ),
+            child: Center(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 860),
+                width: double.infinity,
+                padding: compact
+                    ? const EdgeInsets.fromLTRB(20, 24, 20, 48)
+                    : const EdgeInsets.fromLTRB(56, 48, 56, 64),
+                child: MarkdownBody(
+                  key: const ValueKey('markdown-file-preview-rendered'),
+                  data: data,
+                  selectable: true,
+                  blockSyntaxes: const [SessionTableSyntax()],
+                  builders: {'session-table': SessionTableBuilder(onOpenLink)},
+                  styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                    p: body,
+                    h1: heading(compact ? 28 : 32),
+                    h2: heading(24),
+                    h3: heading(20),
+                    h4: heading(18),
+                    h5: heading(16),
+                    h6: heading(16).copyWith(color: colors.onSurfaceVariant),
+                    h1Padding: const EdgeInsets.only(bottom: 12),
+                    h2Padding: const EdgeInsets.only(top: 20, bottom: 8),
+                    h3Padding: const EdgeInsets.only(top: 8, bottom: 4),
+                    blockSpacing: 16,
+                    listIndent: 24,
+                    listBullet: body.copyWith(color: colors.onSurfaceVariant),
+                    a: body.copyWith(
+                      color: colors.primary,
+                      decoration: TextDecoration.underline,
+                      decorationColor: colors.primary,
+                    ),
+                    code: body.copyWith(
+                      fontFamily: 'monospace',
+                      fontSize: 13,
+                      height: 1.6,
+                      backgroundColor: colors.surfaceContainerHighest,
+                    ),
+                    codeblockPadding: const EdgeInsets.all(16),
+                    codeblockDecoration: BoxDecoration(
+                      color: colors.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: colors.outlineVariant.withValues(alpha: 0.6)),
+                    ),
+                    blockquote: body.copyWith(color: colors.onSurfaceVariant),
+                    blockquotePadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    blockquoteDecoration: BoxDecoration(
+                      color: colors.surfaceContainerLow,
+                      border: Border(
+                        left: BorderSide(color: colors.primary, width: 3),
+                      ),
+                    ),
+                    tableHead: body.copyWith(
+                        fontSize: 14, fontWeight: FontWeight.w600),
+                    tableBody: body.copyWith(fontSize: 14),
+                    tableCellsPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    tableBorder: TableBorder.all(
+                        color: colors.outlineVariant, width: 0.5),
+                    horizontalRuleDecoration: BoxDecoration(
+                      border: Border(
+                        top: BorderSide(color: colors.outlineVariant),
+                      ),
+                    ),
+                  ),
+                  onTapLink: (_, href, __) {
+                    if (href != null) onOpenLink(href);
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    });
+  }
 }
 
 class SessionHtmlPreview extends StatefulWidget {

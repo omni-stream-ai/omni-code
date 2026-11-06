@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' show ViewFocusEvent, ViewFocusState, ViewFocusDirection;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,6 +21,222 @@ http.Response response(Object? data, {int status = 200}) => http.Response(
     );
 
 void main() {
+  for (final background in ['window', 'app']) {
+    testWidgets('new approval appears without restoring $background focus',
+        (tester) async {
+      var pending = false;
+      Map<String, dynamic> data() => {
+            ...runJson(),
+            'pending_approvals': [
+              if (pending)
+                {
+                  'session_id': 'acceptance-agent',
+                  'request': {
+                    'request_id': 'focus-request',
+                    'command': 'build focused app'
+                  }
+                }
+            ]
+          };
+      final client =
+          BridgeClient(httpClient: MockClient((_) async => response(data())));
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AcceptanceDetailScreen(
+            run: AcceptanceRun.fromJson(data()), client: client),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      void focus(ViewFocusState state) =>
+          tester.binding.handleViewFocusChanged(ViewFocusEvent(
+              viewId: tester.view.viewId,
+              state: state,
+              direction: ViewFocusDirection.undefined));
+      if (background == 'window') {
+        focus(ViewFocusState.unfocused);
+      } else if (background == 'app') {
+        tester.binding
+            .handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      }
+      pending = true;
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+          find.byKey(const Key('acceptance-approval-dialog')), findsOneWidget);
+      expect(find.text('build focused app'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      if (background == 'window') {
+        focus(ViewFocusState.focused);
+      } else if (background == 'app') {
+        tester.binding
+            .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      }
+    });
+  }
+
+  testWidgets(
+      'acceptance approval retains failed requests and supports rejection',
+      (tester) async {
+    var attempts = 0;
+    var pending = true;
+    Map<String, dynamic> data() => {
+          ...runJson(),
+          'pending_approvals': [
+            if (pending)
+              {
+                'session_id': 'acceptance-agent',
+                'request': {'request_id': 'r1', 'command': 'build app'}
+              }
+          ]
+        };
+    final client = BridgeClient(httpClient: MockClient((request) async {
+      if (request.method == 'POST') {
+        attempts++;
+        if (attempts == 1) {
+          return http.Response('{"message":"Temporary failure"}', 500);
+        }
+        expect(jsonDecode(request.body)['choice'], 'decline');
+        pending = false;
+        return http.Response('', 204);
+      }
+      return response(data());
+    }));
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: AcceptanceDetailScreen(
+          run: AcceptanceRun.fromJson(data()), client: client),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const Key('acceptance-approval-accept')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('Temporary failure'), findsOneWidget);
+    expect(find.byKey(const Key('acceptance-approval-dialog')), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Reject'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(attempts, 2);
+    expect(find.byKey(const Key('acceptance-approval-dialog')), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  for (final detail in [false, true]) {
+    testWidgets(
+        'acceptance ${detail ? 'detail' : 'list'} shows internal agent approval and submits once',
+        (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      var pending = true;
+      var submissions = 0;
+      final submitted = Completer<http.Response>();
+      Map<String, dynamic> data() => {
+            ...runJson(),
+            'pending_approvals': [
+              if (pending)
+                {
+                  'session_id': 'acceptance-environment-agent',
+                  'request': {
+                    'request_id': 0,
+                    'kind': 'command_execution',
+                    'reason': 'Build the frozen application',
+                    'command': 'flutter build linux --release',
+                    'auto_approval_reason': 'Build needs approval',
+                    'allow_accept_for_session': true,
+                    'allow_cancel': true,
+                    'resolvable': true
+                  }
+                }
+            ]
+          };
+      final client = BridgeClient(httpClient: MockClient((request) async {
+        if (request.method == 'POST') {
+          expect(request.url.path,
+              '/v2/sessions/acceptance-environment-agent/approvals/0');
+          expect(jsonDecode(request.body)['choice'], 'accept');
+          submissions++;
+          return submitted.future;
+        }
+        return switch (request.url.path) {
+          '/v2/runtime-plugins/x11box-acceptance' => response({
+              'installation': {'phase': 'ready'}
+            }),
+          '/v2/acceptance' => response([data()]),
+          '/v2/acceptance/run-a' => response(data()),
+          _ => response([]),
+        };
+      }));
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: detail
+            ? AcceptanceDetailScreen(
+                run: AcceptanceRun.fromJson(data()), client: client)
+            : AcceptanceScreen(client: client),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+          find.byKey(const Key('acceptance-approval-dialog')), findsOneWidget);
+      expect(find.text('flutter build linux --release'), findsOneWidget);
+      expect(find.text('Build needs approval'), findsOneWidget);
+      final approve = find.byKey(const Key('acceptance-approval-accept'));
+      await tester.tap(approve);
+      await tester.pump();
+      expect(tester.widget<FilledButton>(approve).onPressed, isNull);
+      expect(submissions, 1);
+      pending = false;
+      submitted.complete(http.Response('', 204));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('acceptance-approval-dialog')), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('acceptance approval closes when another client resolves it',
+      (tester) async {
+    var pending = true;
+    Map<String, dynamic> data() => {
+          ...runJson(),
+          'pending_approvals': [
+            if (pending)
+              {
+                'session_id': 'acceptance-agent',
+                'request': {'request_id': 'approval-1', 'command': 'build app'}
+              }
+          ]
+        };
+    final client =
+        BridgeClient(httpClient: MockClient((_) async => response(data())));
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: AcceptanceDetailScreen(
+          run: AcceptanceRun.fromJson(data()), client: client),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('acceptance-approval-dialog')), findsOneWidget);
+    pending = false;
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('acceptance-approval-dialog')), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('timeout shows recovery card and hides misleading empty state',
       (tester) async {
     var fail = true;

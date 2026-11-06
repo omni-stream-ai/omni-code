@@ -9,6 +9,7 @@
 #include <file_selector_windows/file_selector_windows.h>
 #include <firebase_core/firebase_core_plugin_c_api.h>
 #include <flutter_tts/flutter_tts_plugin.h>
+#include <fvp/fvp_plugin_c_api.h>
 #include <irondash_engine_context/irondash_engine_context_plugin_c_api.h>
 #include <record_windows/record_windows_plugin_c_api.h>
 #include <sentry_flutter/sentry_flutter_plugin.h>
@@ -24,6 +25,8 @@ void RegisterPlugins(flutter::PluginRegistry* registry) {
       registry->GetRegistrarForPlugin("FirebaseCorePluginCApi"));
   FlutterTtsPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("FlutterTtsPlugin"));
+  FvpPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("FvpPluginCApi"));
   IrondashEngineContextPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("IrondashEngineContextPluginCApi"));
   RecordWindowsPluginCApiRegisterWithRegistrar(

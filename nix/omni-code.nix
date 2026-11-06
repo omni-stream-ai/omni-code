@@ -1,17 +1,43 @@
 {
   lib,
+  stdenv,
+  autoPatchelfHook,
+  fetchurl,
   flutter,
   alsa-lib,
   cmake,
   gtk3,
+  libepoxy,
   webkitgtk_4_1,
   gst_all_1,
   makeWrapper,
   writeShellScriptBin,
   zlib,
+  libpulseaudio,
+  lz4,
+  libGL,
+  libx11,
+  libxcb,
+  wayland,
+  libgbm,
+  libdrm,
+  xz,
+  freetype,
+  harfbuzz,
+  fontconfig,
+  fribidi,
 }:
 
 let
+  videoRuntimeLibraries = [
+    alsa-lib libpulseaudio lz4 libGL libx11 libxcb wayland
+    libgbm libdrm xz zlib freetype harfbuzz fontconfig fribidi
+    stdenv.cc.cc.lib
+  ];
+  mdkSdk = fetchurl {
+    url = "https://github.com/wang-bin/mdk-sdk/releases/download/v0.40.1/mdk-sdk-linux-x64.tar.xz";
+    sha256 = "e53a38b6bcdce99cea852ecff25b0e4acc67539418a04b7c27868c24c130021d";
+  };
   versionLine = lib.findFirst
     (line: lib.hasPrefix "version: " line)
     (throw "version is missing from pubspec.yaml")
@@ -49,6 +75,30 @@ flutter.buildFlutterApplication {
   };
 
   pubspecLock = lib.importJSON ./pubspec.lock.json;
+  # CMake normally downloads MDK into the fvp package. Nix dependencies are
+  # read-only and builds have no network, so prepare a fixed, patched SDK first.
+  customSourceBuilders.fvp = { src, version, ... }: stdenv.mkDerivation {
+    pname = "pub-fvp";
+    inherit src version;
+    inherit (src) passthru;
+    nativeBuildInputs = [ autoPatchelfHook ];
+    buildInputs = videoRuntimeLibraries;
+    dontBuild = true;
+    installPhase = ''
+      runHook preInstall
+      cp -r . "$out"
+      chmod -R u+w "$out"
+      tar xf ${mdkSdk} -C "$out/linux"
+      rm -rf "$out/linux/mdk-sdk/bin"
+      find "$out/linux/mdk-sdk" -name '*.dsym' -delete
+      substituteInPlace "$out/linux/CMakeLists.txt" \
+        --replace-fail 'include(../cmake/deps.cmake)' \
+          'include(mdk-sdk/lib/cmake/FindMDK.cmake)' \
+        --replace-fail 'fvp_setup_deps()' ""
+      printf '#pragma once\n#define FVP_VERSION "%s"\n' "${version}" > "$out/lib/src/version.h"
+      runHook postInstall
+    '';
+  };
   dontUseCmakeConfigure = true;
 
   preBuild = ''
@@ -62,6 +112,7 @@ flutter.buildFlutterApplication {
   buildInputs = [
     alsa-lib
     gtk3
+    libepoxy
     webkitgtk_4_1
     gst_all_1.gstreamer
     gst_all_1.gst-plugins-base

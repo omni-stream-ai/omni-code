@@ -86,6 +86,100 @@ Future<void> _enterCallModeFromHeader(WidgetTester tester) async {
 }
 
 void main() {
+  for (final agentId in ['pi', 'codex']) {
+    testWidgets(
+        'remote UI approval resolution closes only its dialog for $agentId',
+        (tester) async {
+      final events = StreamController<List<int>>.broadcast();
+      var submissions = 0;
+      final clientCount = agentId == 'codex' ? 2 : 1;
+      if (clientCount == 2) {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(1600, 900);
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+      }
+      BridgeClient createClient() => BridgeClient(
+        httpClient: _StreamingEventHttpClient(
+          events: events.stream,
+          handler: (request) async {
+            if (request.method == 'POST' &&
+                request.url.path.contains('/pi-ui/')) {
+              submissions++;
+              events.add(utf8.encode(_eventStreamBody([
+                {
+                  'type': 'pi_extension_ui_resolved',
+                  'payload': {'request_id': request.url.pathSegments.last},
+                },
+              ])));
+              return http.Response('', 204);
+            }
+            if (request.url.path == '/sessions/session-1/messages') {
+              return http.Response(jsonEncode({'data': <Object>[]}), 200);
+            }
+            if (request.url.path.endsWith('/pi-ui') ||
+                request.url.path.endsWith('/pi-commands')) {
+              return http.Response(jsonEncode({'data': <Object>[]}), 200);
+            }
+            return http.Response('not found', 404);
+          },
+        ),
+      );
+      Widget app() => _TestApp(
+        home: SessionDetailScreen(
+          session: _session().copyWith(agentId: agentId),
+          client: createClient(),
+          enableSpeechServices: false,
+        ),
+      );
+      await tester.pumpWidget(Directionality(
+        textDirection: TextDirection.ltr,
+        child: Row(children: [
+          for (var i = 0; i < clientCount; i++) Expanded(child: app()),
+        ]),
+      ));
+      await tester.pumpAndSettle();
+
+      void emit(String type, Map<String, dynamic> payload) {
+        events.add(utf8.encode(_eventStreamBody([
+          {'type': type, 'payload': payload},
+        ])));
+      }
+
+      for (final id in ['first', 'second']) {
+        emit('pi_extension_ui_requested', {
+          'request_id': id,
+          'method': 'confirm',
+          'payload': {'title': 'Approve $id', 'message': 'Allow access?'},
+        });
+        await tester.pumpAndSettle();
+      }
+      expect(find.text('Approve second'), findsNWidgets(clientCount));
+      emit('pi_extension_ui_resolved', {'request_id': 'first'});
+      await tester.pumpAndSettle();
+      expect(find.text('Approve second'), findsNWidgets(clientCount));
+      emit('pi_extension_ui_resolved', {'request_id': 'second'});
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(submissions, 0);
+      emit('pi_extension_ui_requested', {
+        'request_id': 'local',
+        'method': 'confirm',
+        'payload': {'title': 'Local approval'},
+      });
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(FilledButton),
+      ).first);
+      await tester.pumpAndSettle();
+      expect(submissions, 1);
+      expect(find.byType(AlertDialog), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await events.close();
+    });
+  }
+
   test('history refresh resolves only SSE messages present on the server', () {
     final createdAt = DateTime.parse('2026-05-09T10:00:00.000Z');
     final resolved = resolveTransientLiveMessageIdsForServerRefresh(

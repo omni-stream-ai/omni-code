@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   file_selector_linux
+  fvp
   irondash_engine_context
   record_linux
   sentry_flutter

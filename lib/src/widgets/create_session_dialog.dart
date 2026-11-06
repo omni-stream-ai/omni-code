@@ -19,10 +19,12 @@ class CreateSessionDialog extends StatefulWidget {
     super.key,
     this.client,
     this.initialProviderId,
+    this.initialModel,
   });
 
   final BridgeClient? client;
   final String? initialProviderId;
+  final String? initialModel;
 
   @override
   State<CreateSessionDialog> createState() => _CreateSessionDialogState();
@@ -32,7 +34,7 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
   final _titleController = TextEditingController();
   String _agent = appSettingsController.settings.lastSelectedAgent;
   late String? _providerId = widget.initialProviderId;
-  String? _model;
+  late String? _model = widget.initialModel;
   List<ModelProviderConfig> _allProviders = const [];
   List<String> _providerModels = const [];
   List<AgentSummary> _agentOptions = const [];
@@ -72,6 +74,10 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
   }
 
   void _normalizeProviderSelection() {
+    // An empty list during loading is not evidence that a saved provider vanished.
+    if (_loadingProviders) {
+      return;
+    }
     if (isAutoProviderId(_providerId)) {
       if (_providers.isEmpty) {
         _providerId = null;
@@ -152,8 +158,8 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
       }
       setState(() {
         _allProviders = providers;
-        _normalizeProviderSelection();
         _loadingProviders = false;
+        _normalizeProviderSelection();
       });
       unawaited(_loadModelsForSelectedProvider());
     } catch (_) {
@@ -426,7 +432,7 @@ class _CreateSessionDialogState extends State<CreateSessionDialog> {
             const SizedBox(height: AppSpacing.stack),
             DropdownButtonFormField<String?>(
               key: const Key('new-session-model-selector'),
-              initialValue: _model,
+              initialValue: _providerModels.contains(_model) ? _model : null,
               items: [
                 DropdownMenuItem<String?>(
                   value: null,

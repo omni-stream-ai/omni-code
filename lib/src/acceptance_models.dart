@@ -1,3 +1,18 @@
+import 'models.dart';
+
+class AcceptanceApproval {
+  const AcceptanceApproval({required this.sessionId, required this.request});
+  factory AcceptanceApproval.fromJson(Map<String, dynamic> json) =>
+      AcceptanceApproval(
+        sessionId: json['session_id'] as String,
+        request:
+            ApprovalRequest.fromJson(json['request'] as Map<String, dynamic>),
+      );
+  final String sessionId;
+  final ApprovalRequest request;
+  String get key => '$sessionId:${request.requestId}';
+}
+
 class AcceptanceInstallation {
   const AcceptanceInstallation({required this.phase, this.error});
   factory AcceptanceInstallation.fromJson(Map<String, dynamic> json) =>
@@ -36,6 +51,7 @@ class AcceptanceRun {
       this.testPlan,
       this.planMessages = const [],
       this.environment,
+      this.pendingApprovals = const [],
       this.environmentReused = false});
 
   factory AcceptanceRun.fromJson(Map<String, dynamic> json) {
@@ -69,6 +85,11 @@ class AcceptanceRun {
       automationError: json['automation_error'] as String?,
       requirements: json['requirements'] as String?,
       sessionId: json['session_id'] as String?,
+      pendingApprovals:
+          (json['pending_approvals'] as List<dynamic>? ?? const [])
+              .map((item) =>
+                  AcceptanceApproval.fromJson(item as Map<String, dynamic>))
+              .toList(),
       environment: json['environment'] == null
           ? null
           : AcceptanceEnvironment.fromJson(
@@ -104,6 +125,7 @@ class AcceptanceRun {
   final AcceptanceTestPlan? testPlan;
   final List<AcceptancePlanMessage> planMessages;
   final AcceptanceEnvironment? environment;
+  final List<AcceptanceApproval> pendingApprovals;
   final bool environmentReused;
   bool get running => phase == 'running';
   bool get terminal => phase == 'completed' || phase == 'failed';

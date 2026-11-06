@@ -1020,6 +1020,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
         client: _client,
         initialProviderId: appSettingsController
             .settings.lastSelectedProviderByProject[_project.id],
+        initialModel: appSettingsController
+            .settings.lastSelectedModelByProject[_project.id],
       ),
     );
     if (result == null) {
@@ -1034,6 +1036,10 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
         appSettingsController.settings.copyWith(
           lastSelectedAgent: result.$2,
           lastSelectedProviderByProject: savedProviderSelections,
+          lastSelectedModelByProject: {
+            ...appSettingsController.settings.lastSelectedModelByProject,
+            _project.id: result.$4,
+          },
         ),
       ),
     );

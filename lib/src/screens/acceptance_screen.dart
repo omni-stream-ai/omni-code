@@ -20,6 +20,7 @@ import '../models.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_card.dart';
 import '../widgets/acceptance_ui.dart';
+import '../widgets/acceptance_approval_dialog.dart';
 
 class _AcceptanceRequestError extends StatelessWidget {
   const _AcceptanceRequestError({required this.error, this.onRefresh});
@@ -114,7 +115,8 @@ class AcceptanceScreen extends StatefulWidget {
   State<AcceptanceScreen> createState() => _AcceptanceScreenState();
 }
 
-class _AcceptanceScreenState extends State<AcceptanceScreen> {
+class _AcceptanceScreenState extends State<AcceptanceScreen>
+    with AcceptanceApprovalPresenter<AcceptanceScreen> {
   BridgeClient get client => widget.client ?? bridgeClient;
   AcceptanceInstallation? installation;
   List<AcceptanceRun> runs = [];
@@ -163,6 +165,7 @@ class _AcceptanceScreenState extends State<AcceptanceScreen> {
             .toList();
         error = null;
       });
+      unawaited(presentAcceptanceApprovals(client, runs, refresh));
     } catch (e) {
       if (mounted) setState(() => error = e);
     } finally {
@@ -464,7 +467,12 @@ class _AcceptanceScreenState extends State<AcceptanceScreen> {
                                         ]),
                                     if (run.automationProgress.isNotEmpty) ...[
                                       const SizedBox(height: 10),
-                                      Text(run.automationProgress,
+                                      Text(
+                                          run.pendingApprovals.isNotEmpty
+                                              ? context.l10n
+                                                  .agentAwaitingPermission(
+                                                      'Agent')
+                                              : run.automationProgress,
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
@@ -672,7 +680,9 @@ class AcceptanceDetailScreen extends StatefulWidget {
 }
 
 class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
-    with WidgetsBindingObserver {
+    with
+        WidgetsBindingObserver,
+        AcceptanceApprovalPresenter<AcceptanceDetailScreen> {
   late AcceptanceRun run = widget.run;
   Uint8List? preview;
   Timer? timer;
@@ -685,9 +695,7 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
     WidgetsBinding.instance.addObserver(this);
     unawaited(refresh());
     timer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (!run.terminal &&
-          !busy &&
-          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      if (!run.terminal && !busy) {
         unawaited(refresh());
       }
     });
@@ -716,6 +724,7 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
         run = value;
         error = null;
       });
+      unawaited(presentAcceptanceApprovals(widget.client, [run], refresh));
       if (value.running) {
         final image = await widget.client.acceptancePreview(run.id);
         if (mounted) setState(() => preview = image);
@@ -909,7 +918,10 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
               AcceptanceJourney(run: run),
               if (run.automationProgress.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text(run.automationProgress,
+                Text(
+                    run.pendingApprovals.isNotEmpty
+                        ? context.l10n.agentAwaitingPermission('Agent')
+                        : run.automationProgress,
                     style: TextStyle(color: colors.onSurface)),
               ],
               if (run.checklist.isNotEmpty) ...[

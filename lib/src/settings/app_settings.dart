@@ -66,6 +66,7 @@ class AppSettings {
     required this.lastSelectedAgent,
     required this.cachedAgents,
     required this.lastSelectedProviderByProject,
+    this.lastSelectedModelByProject = const {},
     required this.desktopNavigationCollapsed,
     this.recentSessionsCurrentProjectOnly = true,
     required this.desktopHomeRailCollapsed,
@@ -113,6 +114,7 @@ class AppSettings {
   final String lastSelectedAgent;
   final List<AgentSummary> cachedAgents;
   final Map<String, String?> lastSelectedProviderByProject;
+  final Map<String, String?> lastSelectedModelByProject;
   final bool desktopNavigationCollapsed;
   final bool recentSessionsCurrentProjectOnly;
   final bool desktopHomeRailCollapsed;
@@ -241,6 +243,7 @@ class AppSettings {
     String? lastSelectedAgent,
     List<AgentSummary>? cachedAgents,
     Map<String, String?>? lastSelectedProviderByProject,
+    Map<String, String?>? lastSelectedModelByProject,
     bool? desktopNavigationCollapsed,
     bool? recentSessionsCurrentProjectOnly,
     bool? desktopHomeRailCollapsed,
@@ -307,6 +310,9 @@ class AppSettings {
       callModeWakeWords: _normalizeCallModeWakeWords(
           callModeWakeWords ?? this.callModeWakeWords),
       lastSelectedAgent: lastSelectedAgent ?? this.lastSelectedAgent,
+      lastSelectedModelByProject: Map<String, String?>.unmodifiable(
+        lastSelectedModelByProject ?? this.lastSelectedModelByProject,
+      ),
       cachedAgents:
           List<AgentSummary>.unmodifiable(cachedAgents ?? this.cachedAgents),
       lastSelectedProviderByProject: Map<String, String?>.unmodifiable(
@@ -388,6 +394,7 @@ class AppSettings {
         for (final agent in cachedAgents) agent.toJson(),
       ],
       'last_selected_provider_by_project': lastSelectedProviderByProject,
+      'last_selected_model_by_project': lastSelectedModelByProject,
       'desktop_navigation_collapsed': desktopNavigationCollapsed,
       'recent_sessions_current_project_only': recentSessionsCurrentProjectOnly,
       'desktop_home_rail_collapsed': desktopHomeRailCollapsed,
@@ -522,6 +529,9 @@ class AppSettings {
           json,
           'last_selected_provider_by_project',
         ),
+      ),
+      lastSelectedModelByProject: Map<String, String?>.unmodifiable(
+        _readNullableStringMap(json, 'last_selected_model_by_project'),
       ),
       desktopNavigationCollapsed: _readBool(
         json,

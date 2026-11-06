@@ -352,6 +352,8 @@ jobs:
             default-jdk-headless \
             libasound2-dev \
             libgtk-3-dev \
+            libepoxy-dev \
+            libpulse0 liblz4-1 libgl1 libgbm1 libdrm2 libx11-xcb1 \
             libwebkit2gtk-4.1-dev \
             liblzma-dev \
             libcurl4-openssl-dev \

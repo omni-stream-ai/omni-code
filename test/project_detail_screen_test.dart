@@ -757,14 +757,14 @@ void main() {
     expect(find.byType(AlertDialog), findsOneWidget);
   });
 
-  testWidgets(
-      'create session dialog defaults to last selected provider for project',
+  testWidgets('create session dialog restores provider and model for project',
       (tester) async {
     appSettingsController.debugReplaceSettings(
       AppSettings.defaults().copyWith(
         lastSelectedProviderByProject: const {
           'project-1': 'provider-2',
         },
+        lastSelectedModelByProject: const {'project-1': 'saved-model'},
       ),
     );
     final client = BridgeClient(
@@ -826,6 +826,7 @@ void main() {
                   },
                   {
                     'id': 'provider-2',
+                    'model': 'saved-model',
                     'name': 'Provider Two',
                     'base_url': 'https://example.com/v2',
                     'format': 'codex',
@@ -843,6 +844,10 @@ void main() {
       }),
     );
 
+    // Reopening normally has cached agents before providers load.
+    // The saved provider must survive the still-empty provider list.
+    await client.listAgents();
+
     await tester.pumpWidget(
       _TestApp(
         home: Builder(
@@ -856,6 +861,8 @@ void main() {
                       client: client,
                       initialProviderId: appSettingsController
                           .settings.lastSelectedProviderByProject['project-1'],
+                      initialModel: appSettingsController
+                          .settings.lastSelectedModelByProject['project-1'],
                     ),
                   );
                 },
@@ -872,6 +879,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Provider Two'), findsOneWidget);
+    final modelField = tester.widget<DropdownButtonFormField<String?>>(
+      find.byKey(const Key('new-session-model-selector')),
+    );
+    expect(modelField.initialValue, 'saved-model');
   });
 
   testWidgets(
