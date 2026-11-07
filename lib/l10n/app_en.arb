@@ -1189,5 +1189,50 @@
   "acceptanceVideoForward": "Forward 10 seconds",
   "acceptanceBuildNext": "Next: review configuration",
   "acceptanceBuildContinue": "Save and continue",
-  "acceptanceDesktopConnecting": "Connecting to the acceptance desktop…"
+  "acceptanceDesktopConnecting": "Connecting to the acceptance desktop…",
+  "desktopShortcutsTitle": "Keyboard shortcuts",
+  "desktopShortcutsHelp": "Customize desktop shortcuts. Changes take effect immediately and are saved automatically.",
+  "shortcutSearch": "Open search",
+  "shortcutNewWindow": "New window",
+  "shortcutNewSession": "New session",
+  "shortcutSettings": "Open settings",
+  "shortcutHome": "Go to home",
+  "shortcutProjects": "Open projects",
+  "shortcutToggleNavigation": "Toggle navigation sidebar",
+  "shortcutGoBack": "Go back",
+  "shortcutChange": "Change shortcut",
+  "shortcutDisabled": "Disabled",
+  "shortcutDisable": "Disable shortcut",
+  "shortcutReset": "Restore default",
+  "shortcutResetAll": "Restore all defaults",
+  "shortcutRecordHelp": "Press a key combination. Use Ctrl, Alt or Cmd/Meta with a key, or a function key (F1–F24). Escape cancels.",
+  "shortcutInvalid": "Use a modifier with a key, or a function key (F1–F24).",
+  "shortcutConflict": "This shortcut is already assigned to {action}.",
+  "@shortcutConflict": {
+    "placeholders": {
+      "action": {
+        "type": "String"
+      }
+    }
+  },
+  "desktopWindowFailed": "Could not open a new window: {error}",
+  "@desktopWindowFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "shortcutSearchHint": "Search projects and sessions…",
+  "shortcutsHeroTitle": "Make the workspace feel familiar",
+  "shortcutsAutoSaved": "Saved automatically",
+  "shortcutsEditHint": "Click a key combination to change it. Your choices are kept after restarting.",
+  "shortcutsGroupCreate": "Search & create",
+  "shortcutsGroupNavigate": "Workspace navigation",
+  "shortcutCustomized": "Customized",
+  "shortcutPressKeys": "Press your new shortcut",
+  "shortcutGuide": "Shortcut guide",
+  "shortcutSelect": "Select",
+  "shortcutOpen": "Open",
+  "shortcutSearchEntry": "Search"
 }

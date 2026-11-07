@@ -28,6 +28,8 @@ import 'pi_plugins_screen.dart';
 import 'acceptance_screen.dart';
 import 'ai_approval_prompt_screen.dart';
 import 'speech_settings_screen.dart';
+import 'keyboard_shortcuts_screen.dart';
+import '../shortcuts/desktop_shortcut.dart';
 import '../../l10n/generated/app_localizations.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -395,6 +397,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildReplyBehaviorSection(context, l10n, formValueTextStyle),
           const SizedBox(height: AppSpacing.fieldGap),
           _buildSystemSection(context, l10n),
+          if (supportsDesktopShortcuts) ...[
+            const SizedBox(height: AppSpacing.fieldGap),
+            _buildKeyboardShortcutsSection(context, l10n),
+          ],
           const SizedBox(height: AppSpacing.compact),
           _buildUpdateSection(context, l10n, theme, formValueTextStyle),
         ],
@@ -586,11 +592,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _buildAiApprovalSection(context, l10n, formValueTextStyle),
         const SizedBox(height: AppSpacing.fieldGap),
         _buildSystemSection(context, l10n),
+        if (supportsDesktopShortcuts) ...[
+          const SizedBox(height: AppSpacing.fieldGap),
+          _buildKeyboardShortcutsSection(context, l10n),
+        ],
         const SizedBox(height: AppSpacing.fieldGap),
         _buildUpdateSection(context, l10n, theme, formValueTextStyle),
       ],
     );
   }
+
+  Widget _buildKeyboardShortcutsSection(
+          BuildContext context, AppLocalizations l10n) =>
+      AppCard(
+        key: const Key('keyboard-shortcuts-settings'),
+        onTap: () =>
+            Navigator.of(context).pushNamed(KeyboardShortcutsScreen.routeName),
+        padding: AppSpacing.cardPadding,
+        child: Row(children: [
+          const Icon(Icons.keyboard_outlined),
+          const SizedBox(width: AppSpacing.stack),
+          Expanded(
+              child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(l10n.desktopShortcutsTitle),
+              const SizedBox(height: 3),
+              Text(l10n.shortcutsEditHint,
+                  style: Theme.of(context).textTheme.bodySmall),
+            ],
+          )),
+          const Icon(Icons.chevron_right_rounded),
+        ]),
+      );
 
   Widget _buildSpeechSection(BuildContext context, AppLocalizations l10n) {
     final theme = Theme.of(context);

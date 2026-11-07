@@ -6,6 +6,10 @@ import '../app_routes.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
 import '../settings/app_settings.dart';
+import '../screens/keyboard_shortcuts_screen.dart';
+import '../shortcuts/desktop_shortcut.dart';
+import '../shortcuts/desktop_shortcut_scope.dart';
+import '../shortcuts/shortcut_keycaps.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 
@@ -41,6 +45,7 @@ class NavigationPanel extends StatelessWidget {
     this.onBeforeNavigate,
     this.headerStyle = NavigationHeaderStyle.compact,
     this.onToggleCollapsed,
+    this.showDesktopShortcuts = false,
   });
 
   final AppRouteKind activeRoute;
@@ -63,6 +68,7 @@ class NavigationPanel extends StatelessWidget {
   final VoidCallback? onBeforeNavigate;
   final NavigationHeaderStyle headerStyle;
   final VoidCallback? onToggleCollapsed;
+  final bool showDesktopShortcuts;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -74,6 +80,10 @@ class NavigationPanel extends StatelessWidget {
     final brightness = Theme.of(context).brightness;
     final muted = AppColors.mutedFor(brightness);
     final text = AppColors.textFor(brightness);
+    final shortcutScope = DesktopShortcutScope.maybeOf(context);
+    final showShortcuts = showDesktopShortcuts &&
+        supportsDesktopShortcuts &&
+        shortcutScope != null;
     final currentProjectOnly =
         appSettingsController.settings.recentSessionsCurrentProjectOnly;
     final visibleSessions = recentSessions.where((session) =>
@@ -101,8 +111,10 @@ class NavigationPanel extends StatelessWidget {
               ),
             if (onToggleCollapsed != null)
               IconButton(
-                tooltip:
-                    collapsed ? 'Expand navigation' : 'Collapse navigation',
+                tooltip: showShortcuts
+                    ? shortcutTooltip(context.l10n.shortcutToggleNavigation,
+                        DesktopShortcutAction.toggleNavigation)
+                    : (collapsed ? 'Expand navigation' : 'Collapse navigation'),
                 onPressed: onToggleCollapsed,
                 style: IconButton.styleFrom(
                   backgroundColor: AppColors.panelDeepFor(brightness),
@@ -133,31 +145,93 @@ class NavigationPanel extends StatelessWidget {
           ),
         ],
         const SizedBox(height: AppSpacing.section),
-        NavigationPrimaryItem(
-          collapsed: collapsed,
-          label: context.l10n.appTitle,
-          icon: Icons.home_outlined,
-          onTap: _wrapAction(onNavigateHome),
-          active: activeRoute == AppRouteKind.home,
-        ),
+        if (showShortcuts) ...[
+          Tooltip(
+            message: shortcutTooltip(
+                context.l10n.shortcutSearch, DesktopShortcutAction.search),
+            child: OutlinedButton(
+              key: const Key('navigation-open-search'),
+              onPressed: _wrapAction(
+                  () => shortcutScope.onInvoke(DesktopShortcutAction.search)),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(38),
+                padding: EdgeInsets.symmetric(horizontal: collapsed ? 0 : 10),
+              ),
+              child: collapsed
+                  ? const Icon(Icons.search_rounded, size: 18)
+                  : Row(children: [
+                      const Icon(Icons.search_rounded, size: 17),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(context.l10n.shortcutSearchEntry)),
+                      const Flexible(
+                          child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: ActionShortcutHint(
+                                  action: DesktopShortcutAction.search))),
+                    ]),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.compact),
+          Tooltip(
+            message: shortcutTooltip(context.l10n.shortcutNewWindow,
+                DesktopShortcutAction.newWindow),
+            child: TextButton(
+              key: const Key('navigation-new-window'),
+              onPressed: _wrapAction(() =>
+                  shortcutScope.onInvoke(DesktopShortcutAction.newWindow)),
+              style: TextButton.styleFrom(
+                  padding:
+                      EdgeInsets.symmetric(horizontal: collapsed ? 0 : 10)),
+              child: collapsed
+                  ? const Icon(Icons.open_in_new_rounded, size: 17)
+                  : Row(children: [
+                      const Icon(Icons.open_in_new_rounded, size: 17),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(context.l10n.shortcutNewWindow)),
+                      const Flexible(
+                          child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: ActionShortcutHint(
+                                  action: DesktopShortcutAction.newWindow))),
+                    ]),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.compact),
+        ],
+        Tooltip(
+            message: shortcutTooltip(
+                context.l10n.shortcutHome, DesktopShortcutAction.home),
+            child: NavigationPrimaryItem(
+              collapsed: collapsed,
+              label: context.l10n.appTitle,
+              icon: Icons.home_outlined,
+              onTap: _wrapAction(onNavigateHome),
+              active: activeRoute == AppRouteKind.home,
+            )),
         const SizedBox(height: AppSpacing.compact),
-        NavigationPrimaryItem(
-          collapsed: collapsed,
-          label: context.l10n.projectsTitle,
-          icon: Icons.folder_open_outlined,
-          onTap: _wrapAction(onNavigateProjects),
-          active: activeRoute == AppRouteKind.projects ||
-              activeRoute == AppRouteKind.project ||
-              activeRoute == AppRouteKind.session,
-        ),
+        Tooltip(
+            message: shortcutTooltip(
+                context.l10n.shortcutProjects, DesktopShortcutAction.projects),
+            child: NavigationPrimaryItem(
+              collapsed: collapsed,
+              label: context.l10n.projectsTitle,
+              icon: Icons.folder_open_outlined,
+              onTap: _wrapAction(onNavigateProjects),
+              active: activeRoute == AppRouteKind.projects ||
+                  activeRoute == AppRouteKind.project ||
+                  activeRoute == AppRouteKind.session,
+            )),
         const SizedBox(height: AppSpacing.compact),
-        NavigationPrimaryItem(
-          collapsed: collapsed,
-          label: context.l10n.settingsTitle,
-          icon: Icons.settings_outlined,
-          onTap: _wrapAction(onNavigateSettings),
-          active: activeRoute == AppRouteKind.settings,
-        ),
+        Tooltip(
+            message: shortcutTooltip(
+                context.l10n.shortcutSettings, DesktopShortcutAction.settings),
+            child: NavigationPrimaryItem(
+              collapsed: collapsed,
+              label: context.l10n.settingsTitle,
+              icon: Icons.settings_outlined,
+              onTap: _wrapAction(onNavigateSettings),
+              active: activeRoute == AppRouteKind.settings,
+            )),
         if (hasRecentContent) ...[
           const SizedBox(height: AppSpacing.section),
           Expanded(
@@ -307,25 +381,70 @@ class NavigationPanel extends StatelessWidget {
           ),
         ] else
           const Spacer(),
-        if (onNewSession != null)
-          FilledButton(
-            key: const Key('navigation-new-session-button'),
-            onPressed: _wrapAction(onNewSession!),
-            style: FilledButton.styleFrom(
-              minimumSize: Size.fromHeight(collapsed ? 46 : 48),
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.tileX),
-              backgroundColor: text,
-              foregroundColor: brightness == Brightness.dark
-                  ? AppColors.darkPanel
-                  : Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-              ),
+        if (showShortcuts) ...[
+          Tooltip(
+            message: context.l10n.desktopShortcutsTitle,
+            child: TextButton(
+              key: const Key('navigation-shortcut-guide'),
+              onPressed: _wrapAction(() => Navigator.of(context)
+                  .pushNamed(KeyboardShortcutsScreen.routeName)),
+              child: collapsed
+                  ? const Icon(Icons.keyboard_outlined, size: 18)
+                  : Row(children: [
+                      const Icon(Icons.keyboard_outlined, size: 17),
+                      const SizedBox(width: 8),
+                      Flexible(child: Text(context.l10n.shortcutGuide)),
+                    ]),
             ),
-            child: collapsed
-                ? const Icon(Icons.add_rounded, size: 18)
-                : Text(context.l10n.newSession),
           ),
+          const SizedBox(height: 8),
+        ],
+        if (onNewSession != null)
+          Tooltip(
+              message: shortcutTooltip(
+                  context.l10n.newSession, DesktopShortcutAction.newSession),
+              child: FilledButton(
+                key: const Key('navigation-new-session-button'),
+                onPressed: _wrapAction(onNewSession!),
+                style: FilledButton.styleFrom(
+                  minimumSize: Size.fromHeight(collapsed ? 46 : 48),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: AppSpacing.tileX),
+                  backgroundColor: text,
+                  foregroundColor: brightness == Brightness.dark
+                      ? AppColors.darkPanel
+                      : Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(AppSpacing.radiusControl),
+                  ),
+                ),
+                child: collapsed
+                    ? const Icon(Icons.add_rounded, size: 18)
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                            Flexible(child: Text(context.l10n.newSession)),
+                            if (showShortcuts &&
+                                resolveDesktopShortcut(
+                                        appSettingsController
+                                            .settings.desktopShortcuts,
+                                        DesktopShortcutAction.newSession) !=
+                                    null) ...[
+                              const SizedBox(width: 8),
+                              Flexible(
+                                  child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: ActionShortcutHint(
+                                          action:
+                                              DesktopShortcutAction.newSession,
+                                          foregroundColor:
+                                              brightness == Brightness.dark
+                                                  ? AppColors.darkPanel
+                                                  : Colors.white))),
+                            ],
+                          ]),
+              )),
       ],
     );
   }

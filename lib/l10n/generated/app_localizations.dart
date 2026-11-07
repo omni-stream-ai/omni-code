@@ -5161,6 +5161,192 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Connecting to the acceptance desktop…'**
   String get acceptanceDesktopConnecting;
+
+  /// No description provided for @desktopShortcutsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Keyboard shortcuts'**
+  String get desktopShortcutsTitle;
+
+  /// No description provided for @desktopShortcutsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Customize desktop shortcuts. Changes take effect immediately and are saved automatically.'**
+  String get desktopShortcutsHelp;
+
+  /// No description provided for @shortcutSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Open search'**
+  String get shortcutSearch;
+
+  /// No description provided for @shortcutNewWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'New window'**
+  String get shortcutNewWindow;
+
+  /// No description provided for @shortcutNewSession.
+  ///
+  /// In en, this message translates to:
+  /// **'New session'**
+  String get shortcutNewSession;
+
+  /// No description provided for @shortcutSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open settings'**
+  String get shortcutSettings;
+
+  /// No description provided for @shortcutHome.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to home'**
+  String get shortcutHome;
+
+  /// No description provided for @shortcutProjects.
+  ///
+  /// In en, this message translates to:
+  /// **'Open projects'**
+  String get shortcutProjects;
+
+  /// No description provided for @shortcutToggleNavigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle navigation sidebar'**
+  String get shortcutToggleNavigation;
+
+  /// No description provided for @shortcutGoBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Go back'**
+  String get shortcutGoBack;
+
+  /// No description provided for @shortcutChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change shortcut'**
+  String get shortcutChange;
+
+  /// No description provided for @shortcutDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled'**
+  String get shortcutDisabled;
+
+  /// No description provided for @shortcutDisable.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable shortcut'**
+  String get shortcutDisable;
+
+  /// No description provided for @shortcutReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore default'**
+  String get shortcutReset;
+
+  /// No description provided for @shortcutResetAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore all defaults'**
+  String get shortcutResetAll;
+
+  /// No description provided for @shortcutRecordHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Press a key combination. Use Ctrl, Alt or Cmd/Meta with a key, or a function key (F1–F24). Escape cancels.'**
+  String get shortcutRecordHelp;
+
+  /// No description provided for @shortcutInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a modifier with a key, or a function key (F1–F24).'**
+  String get shortcutInvalid;
+
+  /// No description provided for @shortcutConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'This shortcut is already assigned to {action}.'**
+  String shortcutConflict(String action);
+
+  /// No description provided for @desktopWindowFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open a new window: {error}'**
+  String desktopWindowFailed(String error);
+
+  /// No description provided for @shortcutSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search projects and sessions…'**
+  String get shortcutSearchHint;
+
+  /// No description provided for @shortcutsHeroTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Make the workspace feel familiar'**
+  String get shortcutsHeroTitle;
+
+  /// No description provided for @shortcutsAutoSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved automatically'**
+  String get shortcutsAutoSaved;
+
+  /// No description provided for @shortcutsEditHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Click a key combination to change it. Your choices are kept after restarting.'**
+  String get shortcutsEditHint;
+
+  /// No description provided for @shortcutsGroupCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Search & create'**
+  String get shortcutsGroupCreate;
+
+  /// No description provided for @shortcutsGroupNavigate.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspace navigation'**
+  String get shortcutsGroupNavigate;
+
+  /// No description provided for @shortcutCustomized.
+  ///
+  /// In en, this message translates to:
+  /// **'Customized'**
+  String get shortcutCustomized;
+
+  /// No description provided for @shortcutPressKeys.
+  ///
+  /// In en, this message translates to:
+  /// **'Press your new shortcut'**
+  String get shortcutPressKeys;
+
+  /// No description provided for @shortcutGuide.
+  ///
+  /// In en, this message translates to:
+  /// **'Shortcut guide'**
+  String get shortcutGuide;
+
+  /// No description provided for @shortcutSelect.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get shortcutSelect;
+
+  /// No description provided for @shortcutOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get shortcutOpen;
+
+  /// No description provided for @shortcutSearchEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get shortcutSearchEntry;
 }
 
 class _AppLocalizationsDelegate

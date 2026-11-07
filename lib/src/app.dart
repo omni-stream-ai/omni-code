@@ -16,6 +16,8 @@ import 'screens/model_provider_screen.dart';
 import 'screens/pi_plugins_screen.dart';
 import 'screens/acceptance_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/keyboard_shortcuts_screen.dart';
+import 'shortcuts/app_desktop_shortcuts.dart';
 import 'screens/speech_settings_screen.dart';
 import 'services/notification_service.dart';
 import 'services/session_event_service.dart';
@@ -34,6 +36,7 @@ class OmniCodeApp extends StatefulWidget {
 }
 
 class _OmniCodeAppState extends State<OmniCodeApp> {
+  final _desktopShortcutObserver = DesktopShortcutNavigatorObserver();
   final SentryNavigatorObserver _sentryNavigatorObserver =
       SentryNavigatorObserver();
 
@@ -64,6 +67,7 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
           debugShowCheckedModeBanner: false,
           navigatorKey: notificationService.navigatorKey,
           navigatorObservers: [
+            _desktopShortcutObserver,
             sessionEventService,
             _sentryNavigatorObserver,
           ],
@@ -80,7 +84,11 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
           themeMode: themeMode,
           builder: (context, child) => SessionCacheScope(
             notifier: bridgeClient.sessionCacheRevision,
-            child: child ?? const SizedBox.shrink(),
+            child: AppDesktopShortcuts(
+              navigatorKey: notificationService.navigatorKey,
+              observer: _desktopShortcutObserver,
+              child: child ?? const SizedBox.shrink(),
+            ),
           ),
           onGenerateInitialRoutes: _generateInitialRoutes,
           onGenerateRoute: _buildRoute,
@@ -111,6 +119,9 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
   }
 
   Route<dynamic> _resolveRoute(RouteSettings settings) {
+    if (settings.name == KeyboardShortcutsScreen.routeName) {
+      return _pageRoute(settings, const KeyboardShortcutsScreen());
+    }
     final arguments = settings.arguments;
     if (settings.name == ProjectDetailScreen.routeName &&
         arguments is ProjectSummary) {

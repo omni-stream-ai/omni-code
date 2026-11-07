@@ -94,6 +94,8 @@ nix profile install github:omni-stream-ai/omni-code#omni-code
 
 ## 开发
 
+桌面端支持可自定义并自动保存的[键盘快捷键](keyboard-shortcuts.md)，包括搜索、新窗口、新会话和导航操作。
+
 ```bash
 flutter pub get
 flutter run

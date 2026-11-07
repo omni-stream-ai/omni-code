@@ -11,6 +11,9 @@ import '../l10n/app_locale.dart';
 import '../models.dart';
 import '../responsive/app_responsive_layout.dart';
 import '../settings/app_settings.dart';
+import '../shortcuts/desktop_shortcut.dart';
+import '../shortcuts/desktop_shortcut_scope.dart';
+import '../shortcuts/shortcut_keycaps.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
@@ -1349,6 +1352,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final l10n = context.l10n;
     return _SearchBar(
       key: const Key('home-dashboard-search-field'),
+      showShortcutHint: true,
       controller: _searchController,
       hintText: '${l10n.searchProjects} · ${l10n.searchSessions}',
       onChanged: (value) {
@@ -3903,51 +3907,87 @@ class _SearchBar extends StatelessWidget {
     required this.hintText,
     required this.onChanged,
     required this.onClear,
+    this.showShortcutHint = false,
   });
 
   final TextEditingController controller;
   final String hintText;
   final ValueChanged<String> onChanged;
   final VoidCallback onClear;
+  final bool showShortcutHint;
 
   @override
   Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    return TextField(
-      controller: controller,
-      onChanged: onChanged,
-      decoration: InputDecoration(
-        hintText: hintText,
-        prefixIcon: const Icon(Icons.search_rounded, size: 18),
-        suffixIcon: controller.text.isEmpty
-            ? null
-            : IconButton(
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  side: BorderSide.none,
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size.square(18),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                onPressed: onClear,
-                icon: const Icon(Icons.close_rounded, size: 18),
+    return AnimatedBuilder(
+        animation: appSettingsController,
+        builder: (context, _) {
+          final brightness = Theme.of(context).brightness;
+          final scope = DesktopShortcutScope.maybeOf(context);
+          final showHint = showShortcutHint &&
+              supportsDesktopShortcuts &&
+              scope != null &&
+              resolveDesktopShortcut(
+                      appSettingsController.settings.desktopShortcuts,
+                      DesktopShortcutAction.search) !=
+                  null;
+          return TextField(
+            controller: controller,
+            onChanged: onChanged,
+            decoration: InputDecoration(
+              hintText: hintText,
+              prefixIcon: const Icon(Icons.search_rounded, size: 18),
+              suffixIcon: controller.text.isEmpty && !showHint
+                  ? null
+                  : Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (controller.text.isNotEmpty)
+                        IconButton(
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            side: BorderSide.none,
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size.square(18),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: onClear,
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                        ),
+                      if (showHint)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Tooltip(
+                            message: shortcutTooltip(
+                                context.l10n.shortcutSearch,
+                                DesktopShortcutAction.search),
+                            child: TextButton(
+                              key: const Key('home-search-shortcut-hint'),
+                              onPressed: () =>
+                                  scope.onInvoke(DesktopShortcutAction.search),
+                              style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6)),
+                              child: const ActionShortcutHint(
+                                  action: DesktopShortcutAction.search),
+                            ),
+                          ),
+                        ),
+                    ]),
+              filled: true,
+              fillColor: AppColors.panelFor(brightness),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.tileX,
+                vertical: AppSpacing.tileY,
               ),
-        filled: true,
-        fillColor: AppColors.panelFor(brightness),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.tileX,
-          vertical: AppSpacing.tileY,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-          borderSide: BorderSide(color: AppColors.outlineFor(brightness)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-          borderSide: BorderSide(color: AppColors.outlineFor(brightness)),
-        ),
-      ),
-    );
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+                borderSide: BorderSide(color: AppColors.outlineFor(brightness)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+                borderSide: BorderSide(color: AppColors.outlineFor(brightness)),
+              ),
+            ),
+          );
+        });
   }
 }
 

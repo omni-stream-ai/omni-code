@@ -1187,5 +1187,50 @@
   "acceptanceVideoForward": "前进 10 秒",
   "acceptanceBuildNext": "下一步：检查配置",
   "acceptanceBuildContinue": "保存并继续",
-  "acceptanceDesktopConnecting": "正在连接验收桌面…"
+  "acceptanceDesktopConnecting": "正在连接验收桌面…",
+  "desktopShortcutsTitle": "键盘快捷键",
+  "desktopShortcutsHelp": "自定义桌面端快捷键，修改后立即生效并自动保存。",
+  "shortcutSearch": "打开搜索",
+  "shortcutNewWindow": "新建窗口",
+  "shortcutNewSession": "新建会话",
+  "shortcutSettings": "打开设置",
+  "shortcutHome": "返回首页",
+  "shortcutProjects": "打开项目列表",
+  "shortcutToggleNavigation": "展开或收起导航栏",
+  "shortcutGoBack": "返回上一页",
+  "shortcutChange": "修改快捷键",
+  "shortcutDisabled": "已禁用",
+  "shortcutDisable": "禁用快捷键",
+  "shortcutReset": "恢复默认",
+  "shortcutResetAll": "恢复全部默认值",
+  "shortcutRecordHelp": "请按下组合键：Ctrl、Alt 或 Cmd/Meta 加其他按键，或 F1–F24 功能键。按 Esc 取消。",
+  "shortcutInvalid": "请使用带修饰键的组合键，或 F1–F24 功能键。",
+  "shortcutConflict": "此快捷键已分配给“{action}”。",
+  "@shortcutConflict": {
+    "placeholders": {
+      "action": {
+        "type": "String"
+      }
+    }
+  },
+  "desktopWindowFailed": "无法打开新窗口：{error}",
+  "@desktopWindowFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "shortcutSearchHint": "搜索项目和会话…",
+  "shortcutsHeroTitle": "用熟悉的按键，专注手头的工作",
+  "shortcutsAutoSaved": "自动保存",
+  "shortcutsEditHint": "点击按键组合即可修改，重启后仍会保留你的设置。",
+  "shortcutsGroupCreate": "搜索与创建",
+  "shortcutsGroupNavigate": "工作区导航",
+  "shortcutCustomized": "已自定义",
+  "shortcutPressKeys": "请按下新的快捷键",
+  "shortcutGuide": "快捷键指南",
+  "shortcutSelect": "选择",
+  "shortcutOpen": "打开",
+  "shortcutSearchEntry": "搜索"
 }

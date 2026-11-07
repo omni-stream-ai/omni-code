@@ -2762,4 +2762,102 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get acceptanceDesktopConnecting => '正在连接验收桌面…';
+
+  @override
+  String get desktopShortcutsTitle => '键盘快捷键';
+
+  @override
+  String get desktopShortcutsHelp => '自定义桌面端快捷键，修改后立即生效并自动保存。';
+
+  @override
+  String get shortcutSearch => '打开搜索';
+
+  @override
+  String get shortcutNewWindow => '新建窗口';
+
+  @override
+  String get shortcutNewSession => '新建会话';
+
+  @override
+  String get shortcutSettings => '打开设置';
+
+  @override
+  String get shortcutHome => '返回首页';
+
+  @override
+  String get shortcutProjects => '打开项目列表';
+
+  @override
+  String get shortcutToggleNavigation => '展开或收起导航栏';
+
+  @override
+  String get shortcutGoBack => '返回上一页';
+
+  @override
+  String get shortcutChange => '修改快捷键';
+
+  @override
+  String get shortcutDisabled => '已禁用';
+
+  @override
+  String get shortcutDisable => '禁用快捷键';
+
+  @override
+  String get shortcutReset => '恢复默认';
+
+  @override
+  String get shortcutResetAll => '恢复全部默认值';
+
+  @override
+  String get shortcutRecordHelp =>
+      '请按下组合键：Ctrl、Alt 或 Cmd/Meta 加其他按键，或 F1–F24 功能键。按 Esc 取消。';
+
+  @override
+  String get shortcutInvalid => '请使用带修饰键的组合键，或 F1–F24 功能键。';
+
+  @override
+  String shortcutConflict(String action) {
+    return '此快捷键已分配给“$action”。';
+  }
+
+  @override
+  String desktopWindowFailed(String error) {
+    return '无法打开新窗口：$error';
+  }
+
+  @override
+  String get shortcutSearchHint => '搜索项目和会话…';
+
+  @override
+  String get shortcutsHeroTitle => '用熟悉的按键，专注手头的工作';
+
+  @override
+  String get shortcutsAutoSaved => '自动保存';
+
+  @override
+  String get shortcutsEditHint => '点击按键组合即可修改，重启后仍会保留你的设置。';
+
+  @override
+  String get shortcutsGroupCreate => '搜索与创建';
+
+  @override
+  String get shortcutsGroupNavigate => '工作区导航';
+
+  @override
+  String get shortcutCustomized => '已自定义';
+
+  @override
+  String get shortcutPressKeys => '请按下新的快捷键';
+
+  @override
+  String get shortcutGuide => '快捷键指南';
+
+  @override
+  String get shortcutSelect => '选择';
+
+  @override
+  String get shortcutOpen => '打开';
+
+  @override
+  String get shortcutSearchEntry => '搜索';
 }

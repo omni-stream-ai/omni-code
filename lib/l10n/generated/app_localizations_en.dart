@@ -2896,4 +2896,105 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get acceptanceDesktopConnecting =>
       'Connecting to the acceptance desktop…';
+
+  @override
+  String get desktopShortcutsTitle => 'Keyboard shortcuts';
+
+  @override
+  String get desktopShortcutsHelp =>
+      'Customize desktop shortcuts. Changes take effect immediately and are saved automatically.';
+
+  @override
+  String get shortcutSearch => 'Open search';
+
+  @override
+  String get shortcutNewWindow => 'New window';
+
+  @override
+  String get shortcutNewSession => 'New session';
+
+  @override
+  String get shortcutSettings => 'Open settings';
+
+  @override
+  String get shortcutHome => 'Go to home';
+
+  @override
+  String get shortcutProjects => 'Open projects';
+
+  @override
+  String get shortcutToggleNavigation => 'Toggle navigation sidebar';
+
+  @override
+  String get shortcutGoBack => 'Go back';
+
+  @override
+  String get shortcutChange => 'Change shortcut';
+
+  @override
+  String get shortcutDisabled => 'Disabled';
+
+  @override
+  String get shortcutDisable => 'Disable shortcut';
+
+  @override
+  String get shortcutReset => 'Restore default';
+
+  @override
+  String get shortcutResetAll => 'Restore all defaults';
+
+  @override
+  String get shortcutRecordHelp =>
+      'Press a key combination. Use Ctrl, Alt or Cmd/Meta with a key, or a function key (F1–F24). Escape cancels.';
+
+  @override
+  String get shortcutInvalid =>
+      'Use a modifier with a key, or a function key (F1–F24).';
+
+  @override
+  String shortcutConflict(String action) {
+    return 'This shortcut is already assigned to $action.';
+  }
+
+  @override
+  String desktopWindowFailed(String error) {
+    return 'Could not open a new window: $error';
+  }
+
+  @override
+  String get shortcutSearchHint => 'Search projects and sessions…';
+
+  @override
+  String get shortcutsHeroTitle => 'Make the workspace feel familiar';
+
+  @override
+  String get shortcutsAutoSaved => 'Saved automatically';
+
+  @override
+  String get shortcutsEditHint =>
+      'Click a key combination to change it. Your choices are kept after restarting.';
+
+  @override
+  String get shortcutsGroupCreate => 'Search & create';
+
+  @override
+  String get shortcutsGroupNavigate => 'Workspace navigation';
+
+  @override
+  String get shortcutCustomized => 'Customized';
+
+  @override
+  String get shortcutPressKeys => 'Press your new shortcut';
+
+  @override
+  String get shortcutGuide => 'Shortcut guide';
+
+  @override
+  String get shortcutSelect => 'Select';
+
+  @override
+  String get shortcutOpen => 'Open';
+
+  @override
+  String get shortcutSearchEntry => 'Search';
 }

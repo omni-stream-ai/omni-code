@@ -7,6 +7,7 @@ import '../models.dart';
 import '../plugins/speech_plugin_models.dart';
 import '../plugins/speech_plugin_registry.dart';
 import 'app_settings_store.dart';
+import '../shortcuts/desktop_shortcut.dart';
 
 const _defaultUpdateManifestUrl =
     'https://github.com/omni-stream-ai/omni-code/releases/latest/download/update.json';
@@ -32,6 +33,7 @@ enum NotificationSoundMode { all, importantOnly, muted }
 @immutable
 class AppSettings {
   const AppSettings({
+    this.desktopShortcuts = const {},
     required this.bridgeUrl,
     required this.bridgeToken,
     required this.clientId,
@@ -81,6 +83,7 @@ class AppSettings {
   });
 
   final String bridgeUrl;
+  final Map<DesktopShortcutAction, DesktopKeyBinding?> desktopShortcuts;
   final String bridgeToken;
   final String clientId;
   final String pendingClientAuthRequestId;
@@ -209,6 +212,7 @@ class AppSettings {
   }
 
   AppSettings copyWith({
+    Map<DesktopShortcutAction, DesktopKeyBinding?>? desktopShortcuts,
     String? bridgeUrl,
     String? bridgeToken,
     String? clientId,
@@ -262,6 +266,8 @@ class AppSettings {
     Map<String, Map<String, String>>? speechPluginSettingsByPluginId,
   }) {
     return AppSettings(
+      desktopShortcuts:
+          Map.unmodifiable(desktopShortcuts ?? this.desktopShortcuts),
       bridgeUrl: bridgeUrl ?? this.bridgeUrl,
       bridgeToken: bridgeToken ?? this.bridgeToken,
       clientId: clientId ?? this.clientId,
@@ -361,6 +367,10 @@ class AppSettings {
 
   Map<String, dynamic> toJson() {
     return {
+      'desktop_shortcuts': {
+        for (final entry in desktopShortcuts.entries)
+          entry.key.name: entry.value?.toJson(),
+      },
       'bridge_url': bridgeUrl,
       'bridge_token': bridgeToken,
       'client_id': clientId,
@@ -412,6 +422,7 @@ class AppSettings {
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     final defaults = AppSettings.defaults();
     return AppSettings(
+      desktopShortcuts: parseDesktopShortcuts(json['desktop_shortcuts']),
       bridgeUrl: _readString(json, 'bridge_url').trim().isNotEmpty
           ? _readString(json, 'bridge_url').trim()
           : defaults.bridgeUrl,

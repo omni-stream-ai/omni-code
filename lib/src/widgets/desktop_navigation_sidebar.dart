@@ -79,6 +79,7 @@ class DesktopNavigationSidebar extends StatelessWidget {
         onToggleCollapsed: onToggleCollapsed,
         showRecentContent: activeRoute != AppRouteKind.home,
         headerStyle: NavigationHeaderStyle.compact,
+        showDesktopShortcuts: true,
       ),
     );
   }
