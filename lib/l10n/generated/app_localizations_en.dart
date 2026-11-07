@@ -2829,4 +2829,71 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get executionContinueMessage =>
       'Continue the unfinished task. First check existing execution results and active processes, then resume the remaining steps without repeating completed operations.';
+
+  @override
+  String get acceptanceBuildTitle => 'Build & dependencies';
+
+  @override
+  String get acceptanceBuildHint =>
+      'Project files are checked first. Edit any field; unknown values stay empty. Commands and output paths are relative to the project root.';
+
+  @override
+  String get acceptanceBuildLanguage => 'Language / framework';
+
+  @override
+  String get acceptanceBuildManager => 'Package manager';
+
+  @override
+  String get acceptanceBuildInstall => 'Install dependencies';
+
+  @override
+  String get acceptanceBuildCommand => 'Build command';
+
+  @override
+  String get acceptanceBuildStart => 'Start command';
+
+  @override
+  String get acceptanceBuildOutput => 'Output directory';
+
+  @override
+  String get acceptanceBuildEmpty => 'Not detected — enter a value';
+
+  @override
+  String get acceptanceBuildAgent => 'Identify again with Agent';
+
+  @override
+  String get acceptanceBuildDetecting =>
+      'Agent is analyzing project configuration…';
+
+  @override
+  String get acceptanceBuildProposal => 'Review detected configuration';
+
+  @override
+  String get acceptanceBuildApply => 'Apply to form';
+
+  @override
+  String get acceptanceBuildEvidence => 'Detected project files';
+
+  @override
+  String get acceptanceBuildReview =>
+      'Review and save configuration to continue';
+
+  @override
+  String get acceptanceVideoLoading => 'Loading acceptance recording…';
+
+  @override
+  String get acceptanceVideoBack => 'Back 10 seconds';
+
+  @override
+  String get acceptanceVideoForward => 'Forward 10 seconds';
+
+  @override
+  String get acceptanceBuildNext => 'Next: review configuration';
+
+  @override
+  String get acceptanceBuildContinue => 'Save and continue';
+
+  @override
+  String get acceptanceDesktopConnecting =>
+      'Connecting to the acceptance desktop…';
 }

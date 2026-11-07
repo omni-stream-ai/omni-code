@@ -5035,6 +5035,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Continue the unfinished task. First check existing execution results and active processes, then resume the remaining steps without repeating completed operations.'**
   String get executionContinueMessage;
+
+  /// No description provided for @acceptanceBuildTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Build & dependencies'**
+  String get acceptanceBuildTitle;
+
+  /// No description provided for @acceptanceBuildHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Project files are checked first. Edit any field; unknown values stay empty. Commands and output paths are relative to the project root.'**
+  String get acceptanceBuildHint;
+
+  /// No description provided for @acceptanceBuildLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Language / framework'**
+  String get acceptanceBuildLanguage;
+
+  /// No description provided for @acceptanceBuildManager.
+  ///
+  /// In en, this message translates to:
+  /// **'Package manager'**
+  String get acceptanceBuildManager;
+
+  /// No description provided for @acceptanceBuildInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Install dependencies'**
+  String get acceptanceBuildInstall;
+
+  /// No description provided for @acceptanceBuildCommand.
+  ///
+  /// In en, this message translates to:
+  /// **'Build command'**
+  String get acceptanceBuildCommand;
+
+  /// No description provided for @acceptanceBuildStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start command'**
+  String get acceptanceBuildStart;
+
+  /// No description provided for @acceptanceBuildOutput.
+  ///
+  /// In en, this message translates to:
+  /// **'Output directory'**
+  String get acceptanceBuildOutput;
+
+  /// No description provided for @acceptanceBuildEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Not detected — enter a value'**
+  String get acceptanceBuildEmpty;
+
+  /// No description provided for @acceptanceBuildAgent.
+  ///
+  /// In en, this message translates to:
+  /// **'Identify again with Agent'**
+  String get acceptanceBuildAgent;
+
+  /// No description provided for @acceptanceBuildDetecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent is analyzing project configuration…'**
+  String get acceptanceBuildDetecting;
+
+  /// No description provided for @acceptanceBuildProposal.
+  ///
+  /// In en, this message translates to:
+  /// **'Review detected configuration'**
+  String get acceptanceBuildProposal;
+
+  /// No description provided for @acceptanceBuildApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply to form'**
+  String get acceptanceBuildApply;
+
+  /// No description provided for @acceptanceBuildEvidence.
+  ///
+  /// In en, this message translates to:
+  /// **'Detected project files'**
+  String get acceptanceBuildEvidence;
+
+  /// No description provided for @acceptanceBuildReview.
+  ///
+  /// In en, this message translates to:
+  /// **'Review and save configuration to continue'**
+  String get acceptanceBuildReview;
+
+  /// No description provided for @acceptanceVideoLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading acceptance recording…'**
+  String get acceptanceVideoLoading;
+
+  /// No description provided for @acceptanceVideoBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back 10 seconds'**
+  String get acceptanceVideoBack;
+
+  /// No description provided for @acceptanceVideoForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Forward 10 seconds'**
+  String get acceptanceVideoForward;
+
+  /// No description provided for @acceptanceBuildNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next: review configuration'**
+  String get acceptanceBuildNext;
+
+  /// No description provided for @acceptanceBuildContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Save and continue'**
+  String get acceptanceBuildContinue;
+
+  /// No description provided for @acceptanceDesktopConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to the acceptance desktop…'**
+  String get acceptanceDesktopConnecting;
 }
 
 class _AppLocalizationsDelegate

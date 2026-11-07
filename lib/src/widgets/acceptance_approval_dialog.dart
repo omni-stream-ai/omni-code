@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../acceptance_models.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
+import 'acceptance_ui.dart';
 
 /// Both acceptance routes use the same approval presentation and submission flow.
 mixin AcceptanceApprovalPresenter<T extends StatefulWidget> on State<T> {
@@ -129,6 +130,7 @@ class _AcceptanceApprovalDialogState extends State<AcceptanceApprovalDialog> {
       canPop: false,
       child: AlertDialog(
         key: const Key('acceptance-approval-dialog'),
+        icon: Icon(Icons.rule_rounded, color: acceptanceAccent(context)),
         title: Text(l.agentAwaitingPermission('Agent')),
         content: SizedBox(
             width: 560,
@@ -141,8 +143,17 @@ class _AcceptanceApprovalDialogState extends State<AcceptanceApprovalDialog> {
                       SelectableText(request.reason!),
                     if (request.command?.isNotEmpty == true) ...[
                       const SizedBox(height: 12),
-                      SelectableText(request.command!,
-                          style: const TextStyle(fontFamily: 'monospace')),
+                      Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(12)),
+                          child: SelectableText(request.command!,
+                              style: const TextStyle(
+                                  fontFamily: 'monospace', fontSize: 13))),
                     ],
                     if (request.autoApprovalReason?.isNotEmpty == true) ...[
                       const SizedBox(height: 12),

@@ -7,15 +7,20 @@ import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../widgets/app_card.dart';
 import '../widgets/acceptance_ui.dart';
+import '../widgets/acceptance_build_form.dart';
 
 const _dockerfileTemplate =
     'FROM {{BASE_IMAGE}}\nUSER root\nRUN apt-get update && apt-get install -y --no-install-recommends git unzip xz-utils && rm -rf /var/lib/apt/lists/*\nUSER x11box\nWORKDIR /workspace\n';
 
 class AcceptanceEnvironmentScreen extends StatefulWidget {
   const AcceptanceEnvironmentScreen(
-      {super.key, required this.client, required this.projectId});
+      {super.key,
+      required this.client,
+      required this.projectId,
+      this.reviewBeforeStart = false});
   final BridgeClient client;
   final String projectId;
+  final bool reviewBeforeStart;
   @override
   State<AcceptanceEnvironmentScreen> createState() =>
       _AcceptanceEnvironmentScreenState();
@@ -24,6 +29,23 @@ class AcceptanceEnvironmentScreen extends StatefulWidget {
 class _AcceptanceEnvironmentScreenState
     extends State<AcceptanceEnvironmentScreen> {
   AcceptanceEnvironmentSettings? settings;
+  AcceptanceBuildDetection? detection;
+  final buildFields = {
+    for (final key in AcceptanceBuildConfiguration.fields)
+      key: TextEditingController()
+  };
+  bool detecting = false;
+  AcceptanceBuildConfiguration get buildConfiguration =>
+      AcceptanceBuildConfiguration(values: {
+        for (final entry in buildFields.entries)
+          entry.key: entry.value.text.trim()
+      });
+  void applyBuild(AcceptanceBuildConfiguration value) {
+    for (final entry in buildFields.entries) {
+      entry.value.text = value.values[entry.key] ?? '';
+    }
+  }
+
   final dockerfile = TextEditingController();
   final image = TextEditingController();
   String mode = 'auto';
@@ -38,6 +60,9 @@ class _AcceptanceEnvironmentScreenState
 
   @override
   void dispose() {
+    for (final controller in buildFields.values) {
+      controller.dispose();
+    }
     dockerfile.dispose();
     image.dispose();
     super.dispose();
@@ -50,6 +75,10 @@ class _AcceptanceEnvironmentScreenState
       if (!mounted) return;
       setState(() {
         settings = value;
+        detection = value.detection;
+        applyBuild(value.config.build ??
+            value.detection?.configuration ??
+            const AcceptanceBuildConfiguration());
         mode = value.config.mode;
         dockerfile.text = value.config.dockerfile.isEmpty
             ? _dockerfileTemplate
@@ -79,17 +108,88 @@ class _AcceptanceEnvironmentScreenState
           widget.projectId,
           AcceptanceEnvironmentConfig(
               mode: mode,
+              build: buildConfiguration,
               dockerfile: mode == 'dockerfile' ? dockerfile.text : '',
               image: mode == 'image' ? image.text.trim() : ''),
           rebuild: rebuild);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(context.l10n.acceptanceEnvironmentSaved)));
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) setState(() => error = e);
     } finally {
       if (mounted) setState(() => saving = false);
+    }
+  }
+
+  Future<void> identify() async {
+    if (saving || detecting) return;
+    setState(() {
+      detecting = true;
+      error = null;
+    });
+    try {
+      final result = await widget.client.detectAcceptanceBuild(widget.projectId,
+          agent: true, current: buildConfiguration);
+      if (!mounted) return;
+      setState(() => detecting = false);
+      final labels = acceptanceBuildLabels(context);
+      final accepted = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+                title: Text(context.l10n.acceptanceBuildProposal),
+                content: SizedBox(
+                    width: 560,
+                    child: SingleChildScrollView(
+                        child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final key in AcceptanceBuildConfiguration.fields)
+                          Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(labels[key]!,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelLarge),
+                                    const SizedBox(height: 4),
+                                    SelectableText(result.configuration
+                                                .values[key]?.isNotEmpty ==
+                                            true
+                                        ? result.configuration.values[key]!
+                                        : context.l10n.acceptanceBuildEmpty),
+                                  ]))
+                      ],
+                    ))),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: Text(context.l10n.cancel)),
+                  FilledButton(
+                      key: const Key('acceptance-build-apply'),
+                      onPressed: () => Navigator.pop(context, true),
+                      child: Text(context.l10n.acceptanceBuildApply)),
+                ],
+              ));
+      if (accepted == true && mounted) {
+        setState(() {
+          detection = result;
+          applyBuild(result.configuration);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => error = e);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e.toString(),
+                maxLines: 3, overflow: TextOverflow.ellipsis)));
+      }
+    } finally {
+      if (mounted) setState(() => detecting = false);
     }
   }
 
@@ -104,6 +204,30 @@ class _AcceptanceEnvironmentScreenState
     };
     return Scaffold(
       appBar: AppBar(title: Text(l.acceptanceEnvironmentTitle)),
+      bottomNavigationBar: settings == null
+          ? null
+          : SafeArea(
+              top: false,
+              child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: Center(
+                      heightFactor: 1,
+                      child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 728),
+                          child: SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                  key: const Key('acceptance-environment-save'),
+                                  onPressed: saving || detecting ? null : save,
+                                  icon: saving
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2))
+                                      : const Icon(Icons.check),
+                                  label:
+                                      Text(l.acceptanceEnvironmentSave))))))),
       body: SafeArea(
           child: loading
               ? const Center(child: CircularProgressIndicator())
@@ -116,7 +240,9 @@ class _AcceptanceEnvironmentScreenState
                         children: [
                           AcceptanceIntro(
                               title: l.acceptanceEnvironmentOverview,
-                              subtitle: l.acceptanceEnvironmentHint,
+                              subtitle: widget.reviewBeforeStart
+                                  ? l.acceptanceBuildReview
+                                  : l.acceptanceEnvironmentHint,
                               icon: Icons.layers_outlined),
                           const SizedBox(height: 16),
                           if (error != null) ...[
@@ -129,6 +255,15 @@ class _AcceptanceEnvironmentScreenState
                               TextButton(onPressed: load, child: Text(l.retry)),
                           ],
                           if (settings != null) ...[
+                            if (mode == 'auto') ...[
+                              AcceptanceBuildForm(
+                                  controllers: buildFields,
+                                  onIdentify: identify,
+                                  busy: saving || detecting,
+                                  detecting: detecting,
+                                  detection: detection),
+                              const SizedBox(height: 16),
+                            ],
                             AppCard(
                                 child: Column(
                                     crossAxisAlignment:
@@ -239,17 +374,6 @@ class _AcceptanceEnvironmentScreenState
                                           l.acceptanceEnvironmentRebuildHint)),
                                 ])),
                             const SizedBox(height: 12),
-                            FilledButton.icon(
-                                key: const Key('acceptance-environment-save'),
-                                onPressed: saving ? null : save,
-                                icon: saving
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2))
-                                    : const Icon(Icons.check),
-                                label: Text(l.acceptanceEnvironmentSave)),
                             if (settings!.current != null) ...[
                               const SizedBox(height: 20),
                               AcceptanceEnvironmentCard(

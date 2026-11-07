@@ -2698,4 +2698,68 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get executionContinueMessage =>
       '继续未完成的任务。先核对已有执行结果和当前进程，从尚未完成的步骤继续，避免重复执行已完成的操作。';
+
+  @override
+  String get acceptanceBuildTitle => '打包与依赖';
+
+  @override
+  String get acceptanceBuildHint =>
+      '已先通过项目文件识别。所有字段均可修改，未识别到的留空。命令和产物路径相对项目根目录。';
+
+  @override
+  String get acceptanceBuildLanguage => '技术栈';
+
+  @override
+  String get acceptanceBuildManager => '包管理器';
+
+  @override
+  String get acceptanceBuildInstall => '依赖安装命令';
+
+  @override
+  String get acceptanceBuildCommand => '打包命令';
+
+  @override
+  String get acceptanceBuildStart => '启动命令';
+
+  @override
+  String get acceptanceBuildOutput => '产物目录';
+
+  @override
+  String get acceptanceBuildEmpty => '未识别，可手动填写';
+
+  @override
+  String get acceptanceBuildAgent => '让 Agent 再次识别';
+
+  @override
+  String get acceptanceBuildDetecting => 'Agent 正在分析项目配置…';
+
+  @override
+  String get acceptanceBuildProposal => '检查识别结果';
+
+  @override
+  String get acceptanceBuildApply => '应用到表单';
+
+  @override
+  String get acceptanceBuildEvidence => '识别依据';
+
+  @override
+  String get acceptanceBuildReview => '检查并保存配置后继续验收';
+
+  @override
+  String get acceptanceVideoLoading => '正在加载验收录像…';
+
+  @override
+  String get acceptanceVideoBack => '后退 10 秒';
+
+  @override
+  String get acceptanceVideoForward => '前进 10 秒';
+
+  @override
+  String get acceptanceBuildNext => '下一步：检查配置';
+
+  @override
+  String get acceptanceBuildContinue => '保存并继续';
+
+  @override
+  String get acceptanceDesktopConnecting => '正在连接验收桌面…';
 }

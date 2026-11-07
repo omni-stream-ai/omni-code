@@ -221,6 +221,14 @@ class _AcceptanceScreenState extends State<AcceptanceScreen>
               sessionScoped: widget.sessionId != null,
             ));
     if (input == null || !mounted || busy || creating) return;
+    if (widget.automatic) {
+      final reviewed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+          builder: (_) => AcceptanceEnvironmentScreen(
+              client: client,
+              projectId: input.projectId,
+              reviewBeforeStart: true)));
+      if (reviewed != true || !mounted || busy || creating) return;
+    }
     setState(() {
       creating = true;
       error = null;
@@ -417,6 +425,40 @@ class _AcceptanceScreenState extends State<AcceptanceScreen>
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(children: [
+                                      Container(
+                                          padding: const EdgeInsets.all(9),
+                                          margin:
+                                              const EdgeInsets.only(right: 12),
+                                          decoration: BoxDecoration(
+                                              color: (run.passed == false ||
+                                                          run.phase == 'failed'
+                                                      ? Theme.of(context)
+                                                          .colorScheme
+                                                          .error
+                                                      : acceptanceAccent(
+                                                          context))
+                                                  .withValues(alpha: .1),
+                                              borderRadius:
+                                                  BorderRadius.circular(12)),
+                                          child: Icon(
+                                              run.passed == true
+                                                  ? Icons.task_alt_rounded
+                                                  : run.passed == false ||
+                                                          run.phase == 'failed'
+                                                      ? Icons
+                                                          .error_outline_rounded
+                                                      : run.terminal
+                                                          ? Icons
+                                                              .stop_circle_outlined
+                                                          : Icons
+                                                              .pending_outlined,
+                                              color: run.passed == false ||
+                                                      run.phase == 'failed'
+                                                  ? Theme.of(context)
+                                                      .colorScheme
+                                                      .error
+                                                  : acceptanceAccent(context),
+                                              size: 22)),
                                       Expanded(
                                           child: Text(
                                               projects
@@ -558,6 +600,7 @@ class _StartDialogState extends State<_StartDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+        icon: Icon(Icons.fact_check_outlined, color: acceptanceAccent(context)),
         title: Text(widget.automatic
             ? context.l10n.acceptanceStart
             : context.l10n.acceptanceRemoteDesktop),
@@ -653,6 +696,7 @@ class _StartDialogState extends State<_StartDialog> {
               onPressed: () => Navigator.pop(context),
               child: Text(context.l10n.cancel)),
           FilledButton(
+              key: const Key('acceptance-start-next'),
               onPressed: () => Navigator.pop(
                   context,
                   _RunInput(
@@ -664,7 +708,7 @@ class _StartDialogState extends State<_StartDialog> {
                         : requirements.text.trim(),
                   )),
               child: Text(widget.automatic
-                  ? context.l10n.acceptanceStart
+                  ? context.l10n.acceptanceBuildNext
                   : context.l10n.acceptanceRemoteDesktop))
         ],
       );
@@ -858,6 +902,11 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
         .length;
     final automationFailedWhileRunning =
         run.running && run.automation == 'failed';
+    final statusColor = automationFailedWhileRunning ||
+            run.passed == false ||
+            run.phase == 'failed'
+        ? colors.error
+        : acceptanceAccent(context);
     final heading = run.passed != null
         ? (run.passed! ? l.acceptancePass : l.acceptanceFail)
         : automationFailedWhileRunning
@@ -889,10 +938,8 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
         child: _AcceptanceBody(children: [
           AppCard(
             color: Color.alphaBlend(
-                acceptanceAccent(context).withValues(alpha: .08),
-                colors.surface),
-            borderSide: BorderSide(
-                color: acceptanceAccent(context).withValues(alpha: .2)),
+                statusColor.withValues(alpha: .08), colors.surface),
+            borderSide: BorderSide(color: statusColor.withValues(alpha: .2)),
             padding: const EdgeInsets.all(20),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -905,7 +952,7 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
                             : run.passed == true
                                 ? Icons.task_alt_rounded
                                 : Icons.fact_check_outlined,
-                    color: colors.onSurface,
+                    color: statusColor,
                     size: 28),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1618,7 +1665,8 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen>
         appBar: fullscreen
             ? null
             : AppBar(
-                title: Text(widget.title),
+                title: Text(widget.title,
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
                 actions: [
                   IconButton(
                       onPressed:
@@ -1674,24 +1722,44 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen>
                   ),
                 ),
               ),
-            if (loading) const LinearProgressIndicator(),
+            if (loading)
+              Positioned.fill(
+                  child: IgnorePointer(
+                      child: ColoredBox(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surface
+                              .withValues(alpha: .9),
+                          child: Center(
+                              child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                CircularProgressIndicator(
+                                    color: acceptanceAccent(context)),
+                                const SizedBox(height: 16),
+                                Text(l.acceptanceDesktopConnecting),
+                              ]))))),
             if (loadError != null)
               Center(
-                  child: Padding(
+                  child: SingleChildScrollView(
                 padding: AppSpacing.screenPadding,
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.error_outline, size: 40),
-                  const SizedBox(height: 16),
-                  Text(l.acceptanceOpenFailed,
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  SelectableText(loadError!, textAlign: TextAlign.center),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                      onPressed: loading ? null : () => loadDesktop(),
-                      icon: const Icon(Icons.refresh),
-                      label: Text(l.retry)),
-                ]),
+                child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: AppCard(
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.error_outline, size: 40),
+                      const SizedBox(height: 16),
+                      Text(l.acceptanceOpenFailed,
+                          style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 8),
+                      SelectableText(loadError!, textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                          onPressed: loading ? null : () => loadDesktop(),
+                          icon: const Icon(Icons.refresh),
+                          label: Text(l.retry)),
+                    ]))),
               )),
           ]),
         ),

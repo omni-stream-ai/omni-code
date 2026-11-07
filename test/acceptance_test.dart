@@ -331,6 +331,9 @@ void main() {
       home: AcceptanceEnvironmentScreen(client: client, projectId: 'project-a'),
     ));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+        find.byKey(const Key('acceptance-environment-mode')), 300,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(find.byKey(const Key('acceptance-environment-mode')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Custom Dockerfile').last);
@@ -611,6 +614,11 @@ void main() {
       if (request.url.path == '/v2/acceptance/run-a') {
         return response({...runJson(), 'phase': 'completed'});
       }
+      if (request.url.path.endsWith('/acceptance-environment')) {
+        return response({
+          'config': {'mode': 'auto'}
+        });
+      }
       throw StateError(request.url.path);
     }));
     await tester.pumpWidget(MaterialApp(
@@ -622,9 +630,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start acceptance'));
     await tester.pumpAndSettle();
-    final start = find.widgetWithText(FilledButton, 'Start acceptance');
+    final start = find.byKey(const Key('acceptance-start-next'));
     expect(tester.widget<FilledButton>(start).onPressed, isNotNull);
     await tester.tap(start);
+    await tester.pumpAndSettle();
+    expect(command, isNull);
+    await saveBuildReview(tester);
     await tester.pumpAndSettle();
     expect(command, '');
     expect(tester.takeException(), isNull);
@@ -728,6 +739,11 @@ void main() {
           case '/v2/acceptance/run-a':
             return response({...runJson(), 'phase': 'completed'});
         }
+        if (request.url.path.endsWith('/acceptance-environment')) {
+          return response({
+            'config': {'mode': 'auto'}
+          });
+        }
         throw StateError(request.url.path);
       }));
       await tester.pumpWidget(MaterialApp(
@@ -742,8 +758,10 @@ void main() {
           .onPressed!;
       await tester.tap(find.text('Start acceptance'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Start acceptance'));
-      await tester.pump();
+      await tester.tap(find.byKey(const Key('acceptance-start-next')));
+      await tester.pumpAndSettle();
+      expect(creations, 0);
+      await saveBuildReview(tester);
       expect(
           find.byKey(const Key('acceptance-creation-loading')), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsWidgets);
@@ -835,6 +853,11 @@ void main() {
         case '/v2/acceptance/run-a':
           return response(complete);
       }
+      if (request.url.path.endsWith('/acceptance-environment')) {
+        return response({
+          'config': {'mode': 'auto'}
+        });
+      }
       throw StateError(request.url.path);
     }));
     await tester.pumpWidget(MaterialApp(
@@ -852,7 +875,10 @@ void main() {
     await tester.enterText(
         find.byKey(const Key('acceptance-requirements-input')),
         'Only verify PDF export and permissions');
-    await tester.tap(find.widgetWithText(FilledButton, 'Start acceptance'));
+    await tester.tap(find.byKey(const Key('acceptance-start-next')));
+    await tester.pumpAndSettle();
+    expect(submitted, isNull);
+    await saveBuildReview(tester);
     await tester.pumpAndSettle();
     expect(submitted!['session_id'], 'session-a');
     expect(
@@ -906,3 +932,12 @@ Map<String, dynamic> runJson() => {
       'created_at': '2026-10-16T00:00:00Z',
       'artifacts': [],
     };
+
+Future<void> saveBuildReview(WidgetTester tester) async {
+  expect(find.byType(AcceptanceEnvironmentScreen), findsOneWidget);
+  final save = find.byKey(const Key('acceptance-environment-save'));
+  await tester.ensureVisible(save);
+  await tester.tap(save);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 350));
+}

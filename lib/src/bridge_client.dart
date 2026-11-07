@@ -269,6 +269,17 @@ class BridgeClient {
               '/v2/projects/${Uri.encodeComponent(projectId)}/acceptance-environment')
           as Map<String, dynamic>);
 
+  Future<AcceptanceBuildDetection> detectAcceptanceBuild(String projectId,
+          {bool agent = false,
+          AcceptanceBuildConfiguration current =
+              const AcceptanceBuildConfiguration()}) async =>
+      AcceptanceBuildDetection.fromJson(await _acceptanceRequest(
+          '/v2/projects/${Uri.encodeComponent(projectId)}/acceptance-environment/detect',
+          body: {
+            'agent': agent,
+            'current': current.toJson()
+          }) as Map<String, dynamic>);
+
   Future<AcceptanceEnvironmentSettings> saveAcceptanceEnvironment(
           String projectId, AcceptanceEnvironmentConfig config,
           {bool rebuild = false}) async =>

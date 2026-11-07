@@ -181,18 +181,65 @@ class AcceptancePlanMessage {
   final String role, content;
 }
 
+class AcceptanceBuildConfiguration {
+  const AcceptanceBuildConfiguration({this.values = const {}});
+  static const fields = [
+    'language',
+    'package_manager',
+    'install_command',
+    'build_command',
+    'start_command',
+    'artifact_directory'
+  ];
+  factory AcceptanceBuildConfiguration.fromJson(Map<String, dynamic> json) =>
+      AcceptanceBuildConfiguration(values: {
+        for (final key in fields) key: json[key] as String? ?? '',
+      });
+  final Map<String, String> values;
+  Map<String, dynamic> toJson() => {
+        for (final key in fields) key: values[key] ?? '',
+      };
+}
+
+class AcceptanceBuildDetection {
+  const AcceptanceBuildDetection(
+      {this.configuration = const AcceptanceBuildConfiguration(),
+      this.evidence = const [],
+      this.warnings = const []});
+  factory AcceptanceBuildDetection.fromJson(Map<String, dynamic> json) =>
+      AcceptanceBuildDetection(
+        configuration: AcceptanceBuildConfiguration.fromJson(
+            json['configuration'] as Map<String, dynamic>? ?? const {}),
+        evidence:
+            (json['evidence'] as List<dynamic>? ?? const []).cast<String>(),
+        warnings:
+            (json['warnings'] as List<dynamic>? ?? const []).cast<String>(),
+      );
+  final AcceptanceBuildConfiguration configuration;
+  final List<String> evidence, warnings;
+}
+
 class AcceptanceEnvironmentConfig {
   const AcceptanceEnvironmentConfig(
-      {this.mode = 'auto', this.dockerfile = '', this.image = ''});
+      {this.mode = 'auto', this.dockerfile = '', this.image = '', this.build});
   factory AcceptanceEnvironmentConfig.fromJson(Map<String, dynamic> json) =>
       AcceptanceEnvironmentConfig(
+        build: json['build'] == null
+            ? null
+            : AcceptanceBuildConfiguration.fromJson(
+                json['build'] as Map<String, dynamic>),
         mode: json['mode'] as String? ?? 'auto',
         dockerfile: json['dockerfile'] as String? ?? '',
         image: json['image'] as String? ?? '',
       );
   final String mode, dockerfile, image;
-  Map<String, dynamic> toJson() =>
-      {'mode': mode, 'dockerfile': dockerfile, 'image': image};
+  final AcceptanceBuildConfiguration? build;
+  Map<String, dynamic> toJson() => {
+        'mode': mode,
+        'dockerfile': dockerfile,
+        'image': image,
+        'build': build?.toJson()
+      };
 }
 
 class AcceptanceEnvironment {
@@ -234,10 +281,15 @@ class AcceptanceEnvironmentImage {
 class AcceptanceEnvironmentSettings {
   const AcceptanceEnvironmentSettings(
       {this.config = const AcceptanceEnvironmentConfig(),
+      this.detection,
       this.current,
       this.available = const []});
   factory AcceptanceEnvironmentSettings.fromJson(Map<String, dynamic> json) =>
       AcceptanceEnvironmentSettings(
+        detection: json['detection'] == null
+            ? null
+            : AcceptanceBuildDetection.fromJson(
+                json['detection'] as Map<String, dynamic>),
         config: AcceptanceEnvironmentConfig.fromJson(
             json['config'] as Map<String, dynamic>? ?? const {}),
         current: json['current'] == null
@@ -250,6 +302,7 @@ class AcceptanceEnvironmentSettings {
             .toList(),
       );
   final AcceptanceEnvironmentConfig config;
+  final AcceptanceBuildDetection? detection;
   final AcceptanceEnvironment? current;
   final List<AcceptanceEnvironmentImage> available;
 }

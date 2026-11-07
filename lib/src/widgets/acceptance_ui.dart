@@ -104,6 +104,10 @@ class AcceptanceJourney extends StatelessWidget {
                         : manual
                             ? 0
                             : 1;
+    final failed = value != null &&
+        (value.phase == 'failed' ||
+            value.automation == 'failed' ||
+            value.passed == false);
     final loading = value != null &&
         !value.terminal &&
         value.automation != 'failed' &&
@@ -116,8 +120,8 @@ class AcceptanceJourney extends StatelessWidget {
                 value.automatic &&
                 !const ['awaiting_confirmation', 'completed']
                     .contains(value.automation)));
-    final accent = acceptanceAccent(context);
     final theme = Theme.of(context);
+    final accent = failed ? theme.colorScheme.error : acceptanceAccent(context);
     return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       for (var i = 0; i < labels.length; i++)
         Expanded(
@@ -148,9 +152,11 @@ class AcceptanceJourney extends StatelessWidget {
                             color: accent,
                           ))
                       : Icon(
-                          i < stage && value?.phase != 'failed'
-                              ? Icons.check_rounded
-                              : icons[i],
+                          failed && i == stage
+                              ? Icons.error_outline_rounded
+                              : i < stage
+                                  ? Icons.check_rounded
+                                  : icons[i],
                           size: 19,
                           color: i <= stage
                               ? accent

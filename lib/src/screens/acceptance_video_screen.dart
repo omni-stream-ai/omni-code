@@ -7,6 +7,8 @@ import 'package:video_player/video_player.dart';
 
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
+import '../widgets/acceptance_ui.dart';
+import '../widgets/app_card.dart';
 
 class AcceptanceVideoScreen extends StatefulWidget {
   const AcceptanceVideoScreen({
@@ -102,18 +104,40 @@ class _AcceptanceVideoScreenState extends State<AcceptanceVideoScreen> {
       body: SafeArea(
           child: error != null
               ? Center(
-                  child: Padding(
+                  child: SingleChildScrollView(
                       padding: const EdgeInsets.all(24),
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text(l.acceptanceVideoError),
-                        const SizedBox(height: 8),
-                        Text(error!,
-                            maxLines: 4, overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: 16),
-                        FilledButton(onPressed: load, child: Text(l.retry)),
-                      ])))
+                      child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 560),
+                          child: AppCard(
+                              child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                Icon(Icons.videocam_off_outlined,
+                                    size: 40,
+                                    color: Theme.of(context).colorScheme.error),
+                                const SizedBox(height: 16),
+                                Text(l.acceptanceVideoError,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium),
+                                const SizedBox(height: 12),
+                                ExpansionTile(
+                                    title: Text(l.acceptanceDetails),
+                                    children: [SelectableText(error!)]),
+                                const SizedBox(height: 16),
+                                FilledButton.icon(
+                                    onPressed: load,
+                                    icon: const Icon(Icons.refresh_rounded),
+                                    label: Text(l.retry)),
+                              ])))))
               : player == null || !player.value.isInitialized
-                  ? const Center(child: CircularProgressIndicator())
+                  ? Center(
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      CircularProgressIndicator(
+                          color: acceptanceAccent(context)),
+                      const SizedBox(height: 20),
+                      Text(l.acceptanceVideoLoading),
+                    ]))
                   : ValueListenableBuilder<VideoPlayerValue>(
                       valueListenable: player,
                       builder: (context, value, _) => Column(children: [
@@ -121,16 +145,20 @@ class _AcceptanceVideoScreenState extends State<AcceptanceVideoScreen> {
                             child: Center(
                                 child: AspectRatio(
                                     aspectRatio: value.aspectRatio,
-                                    child: VideoPlayer(player)))),
+                                    child: ColoredBox(
+                                        color: Colors.black,
+                                        child: VideoPlayer(player))))),
                         Padding(
                             padding: const EdgeInsets.all(16),
                             child: Column(children: [
                               VideoProgressIndicator(player,
+                                  colors: VideoProgressColors(
+                                      playedColor: acceptanceAccent(context)),
                                   allowScrubbing: true,
                                   padding:
                                       const EdgeInsets.symmetric(vertical: 12)),
                               Row(children: [
-                                IconButton(
+                                IconButton.filledTonal(
                                     tooltip: value.isPlaying
                                         ? l.acceptanceVideoPause
                                         : l.acceptanceVideoPlay,
@@ -141,11 +169,36 @@ class _AcceptanceVideoScreenState extends State<AcceptanceVideoScreen> {
                                         ? Icons.pause_rounded
                                         : Icons.play_arrow_rounded)),
                                 const SizedBox(width: 8),
-                                Text([
-                                  timestamp(value.position),
-                                  timestamp(value.duration)
-                                ].join(' / ')),
-                                const Spacer(),
+                                Expanded(
+                                    child: Text(
+                                        [
+                                          timestamp(value.position),
+                                          timestamp(value.duration)
+                                        ].join(' / '),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis)),
+                                IconButton(
+                                    tooltip: l.acceptanceVideoBack,
+                                    onPressed: () => player.seekTo(Duration(
+                                        milliseconds:
+                                            (value.position.inMilliseconds -
+                                                    10000)
+                                                .clamp(
+                                                    0,
+                                                    value.duration
+                                                        .inMilliseconds))),
+                                    icon: const Icon(Icons.replay_10_rounded)),
+                                IconButton(
+                                    tooltip: l.acceptanceVideoForward,
+                                    onPressed: () => player.seekTo(Duration(
+                                        milliseconds:
+                                            (value.position.inMilliseconds +
+                                                    10000)
+                                                .clamp(
+                                                    0,
+                                                    value.duration
+                                                        .inMilliseconds))),
+                                    icon: const Icon(Icons.forward_10_rounded)),
                                 IconButton(
                                     tooltip: l.acceptanceVideoReplay,
                                     onPressed: () async {

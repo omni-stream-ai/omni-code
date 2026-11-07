@@ -85,7 +85,12 @@ class _AcceptancePlanCardState extends State<AcceptancePlanCard> {
         Expanded(
             child: Text(l.acceptancePlanTitle,
                 style: theme.textTheme.titleMedium)),
-        Text('v${plan.version}', style: theme.textTheme.bodySmall),
+        Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+                color: colors.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(20)),
+            child: Text('v${plan.version}', style: theme.textTheme.labelSmall)),
       ]),
       const SizedBox(height: 8),
       Text(plan.approved ? l.acceptancePlanApproved : l.acceptancePlanHint,
@@ -136,13 +141,39 @@ class _AcceptancePlanCardState extends State<AcceptancePlanCard> {
                     icon: const Icon(Icons.delete_outline_rounded, size: 20)),
               ],
             ]),
+            const SizedBox(height: 8),
             for (final (step, text) in item.steps.indexed)
               Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text('${step + 1}) $text')),
-            const SizedBox(height: 8),
-            Text('${l.acceptancePlanExpected}：${item.expected}',
-                style: TextStyle(color: acceptanceAccent(context))),
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                            width: 28,
+                            child: Text('${step + 1}.',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: colors.onSurfaceVariant))),
+                        Expanded(child: Text(text)),
+                      ])),
+            const SizedBox(height: 12),
+            Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    color: acceptanceAccent(context).withValues(alpha: .07),
+                    border: Border(
+                        left: BorderSide(
+                            color: acceptanceAccent(context), width: 3)),
+                    borderRadius: BorderRadius.circular(8)),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(l.acceptancePlanExpected,
+                          style: theme.textTheme.labelMedium
+                              ?.copyWith(color: acceptanceAccent(context))),
+                      const SizedBox(height: 4),
+                      Text(item.expected),
+                    ])),
           ]),
         ),
       if (plan.notes.isNotEmpty)
