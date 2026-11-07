@@ -70,11 +70,12 @@ flutter.buildFlutterApplication {
         ".idea"
         ".vscode"
         "build"
+        "dist"
         "result"
       ];
   };
 
-  pubspecLock = lib.importJSON ./pubspec.lock.json;
+  autoPubspecLock = ../pubspec.lock;
   # CMake normally downloads MDK into the fvp package. Nix dependencies are
   # read-only and builds have no network, so prepare a fixed, patched SDK first.
   customSourceBuilders.fvp = { src, version, ... }: stdenv.mkDerivation {
@@ -106,6 +107,7 @@ flutter.buildFlutterApplication {
   '';
 
   nativeBuildInputs = [
+    autoPatchelfHook
     cmake
     makeWrapper
   ];
@@ -118,7 +120,9 @@ flutter.buildFlutterApplication {
     gst_all_1.gst-plugins-base
     zlib.out
     zlib.dev
-  ];
+  ] ++ videoRuntimeLibraries;
+  # Keep the same optional JNI asset policy as the prebuilt package.
+  autoPatchelfIgnoreMissingDeps = [ "libjvm.so" ];
 
   CMAKE_LIBRARY_PATH = "${zlib.out}/lib";
   CMAKE_INCLUDE_PATH = "${zlib.dev}/include";

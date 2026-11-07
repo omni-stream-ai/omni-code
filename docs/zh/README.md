@@ -45,9 +45,18 @@ Omni Code 是一个跨平台 Flutter 客户端，支持桌面端和移动端，�
 | --- | --- |
 | Android | [APK (arm64)](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-android-arm64-v8a.apk) · [APK (arm)](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-android-armeabi-v7a.apk) · [APK (x86_64)](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-android-x86_64.apk) |
 | Windows | [zip](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-windows-x86_64.zip) |
-| Linux | [tar.gz](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-linux-x86_64.tar.gz) |
+| Linux | [AppImage](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-linux-x86_64.AppImage) · [tar.gz](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-linux-x86_64.tar.gz) |
 | macOS | Homebrew ↓ |
 | iOS | 自行编译 |
+
+Linux 下载包面向 x86_64、glibc 2.35 及以上、具备 X11/Wayland 桌面和图形驱动的系统。
+两种格式都包含 GTK、WebKit 辅助程序、音频库和 GStreamer 插件；glibc、标准 C/C++
+运行库和图形驱动使用系统提供的版本。
+
+AppImage 添加执行权限后即可运行；没有 FUSE 时可使用
+`./omni-code-linux-x86_64.AppImage --appimage-extract-and-run`。tar.gz 解压后运行
+`./omni-code-linux-x86_64/AppRun`，并保留完整目录。NixOS 请使用下方项目自带的 Nix 包，
+普通 Linux 下载包使用的是常规发行版的动态加载器路径。
 
 **Homebrew（macOS）：**
 
@@ -95,6 +104,25 @@ flutter run
 ```bash
 nix develop --command flutter run -d linux
 ```
+
+`nix develop --command flutter build linux --release` 也会修正 bundle 中的原生库，
+让本地构建结果能在 NixOS 开发环境之外直接运行；这个 Nix 构建结果不是供其他发行版
+使用的通用发布包。
+
+在 Ubuntu 22.04 构建基线上生成两种发布格式：
+
+```bash
+bash scripts/install-linux-build-deps.sh
+flutter pub get
+flutter build linux --release
+bash scripts/download-linux-packaging-tools.sh
+bash scripts/package-linux.sh
+bash scripts/test-linux-release.sh
+```
+
+CI 会检查每个 ELF 库的依赖，拒绝超出基线的 glibc 版本要求，并在只安装桌面平台
+组件的 Ubuntu 22.04 和 Debian 12 容器中验证两种格式。启动检查要求应用在 Xvfb 中
+实际渲染出第一个 Flutter 画面。
 
 ## 贡献
 

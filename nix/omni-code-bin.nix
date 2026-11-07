@@ -27,7 +27,11 @@ stdenv.mkDerivation rec {
   installPhase = ''
     mkdir -p $out/opt/omni-code $out/bin $out/share/applications $out/share/metainfo $out/share/licenses/omni-code
     cp -r . $out/opt/omni-code/
-    makeWrapper $out/opt/omni-code/omni_code $out/bin/omni-code \
+    launcher="$out/opt/omni-code/omni_code"
+    if [ -x "$out/opt/omni-code/AppRun" ]; then
+      launcher="$out/opt/omni-code/AppRun"
+    fi
+    makeWrapper "$launcher" $out/bin/omni-code \
       --prefix GST_PLUGIN_SYSTEM_PATH_1_0 : ${lib.makeSearchPath "lib/gstreamer-1.0" [ gst_all_1.gst-plugins-base ]}
     install -Dm644 ${./omni-code.desktop} $out/share/applications/omni-code.desktop
     install -Dm644 ${./omni-code.metainfo.xml} $out/share/metainfo/com.omnistreamai.code.metainfo.xml

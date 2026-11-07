@@ -34,7 +34,9 @@
       });
 
       devShells = forAllSystems (pkgs: {
-        default = pkgs.mkShell {
+        default = let
+          prepareLinuxBundle = pkgs.callPackage ./nix/prepare-linux-bundle.nix { };
+        in pkgs.mkShell {
           packages = with pkgs; [
             flutter
             gtk3
@@ -47,7 +49,11 @@
             gst_all_1.gst-plugins-base
             zlib.out
             zlib.dev
-          ];
+          ] ++ [ prepareLinuxBundle ];
+
+          # Flutter's install step must fix every prebuilt native library, not
+          # just supply LD_LIBRARY_PATH while the build shell is active.
+          OMNI_CODE_LINUX_BUNDLE_PREPARER = "${prepareLinuxBundle}/bin/omni-code-prepare-linux-bundle";
 
           # JNI needs the JDK home, rather than the root of its Nix output.
           JAVA_HOME = pkgs.jdk.home;

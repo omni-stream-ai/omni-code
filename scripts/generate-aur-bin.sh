@@ -41,7 +41,11 @@ package() {
     install -Dm644 "\$srcdir/omni-code.png" "\$pkgdir/usr/share/icons/hicolor/512x512/apps/omni-code.png"
 
     install -d "\$pkgdir/usr/bin"
-    ln -sf "/opt/omni-code/omni_code" "\$pkgdir/usr/bin/omni-code"
+    if [ -x "\$pkgdir/opt/omni-code/AppRun" ]; then
+        ln -sf "/opt/omni-code/AppRun" "\$pkgdir/usr/bin/omni-code"
+    else
+        ln -sf "/opt/omni-code/omni_code" "\$pkgdir/usr/bin/omni-code"
+    fi
 }
 EOF
 

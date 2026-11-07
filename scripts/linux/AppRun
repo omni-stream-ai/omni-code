@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -e
+
+APPDIR="$(cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd)"
+export APPDIR
+original_gdk_backend="${GDK_BACKEND-}"
+
+# linuxdeploy plugins provide the GTK schemas, loaders and GStreamer helpers
+# as well as shared libraries. The archive and AppImage use the same hooks.
+for hook in "$APPDIR"/omni-code-hooks/*.sh; do
+  if [[ -f "$hook" ]]; then
+    # shellcheck disable=SC1090
+    source "$hook"
+  fi
+done
+
+# GTK's packaging plugin defaults to X11. Preserve the user's backend choice
+# and otherwise let GTK select Wayland or X11 from the desktop session.
+if [[ -n "$original_gdk_backend" ]]; then
+  export GDK_BACKEND="$original_gdk_backend"
+else
+  unset GDK_BACKEND
+fi
+export LD_LIBRARY_PATH="$APPDIR/lib:$APPDIR/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export ALSA_CONFIG_DIR="${ALSA_CONFIG_DIR:-$APPDIR/usr/share/alsa}"
+export ALSA_CONFIG_PATH="${ALSA_CONFIG_PATH:-$ALSA_CONFIG_DIR/alsa.conf}"
+if [[ ! -f /etc/fonts/fonts.conf ]]; then
+  export FONTCONFIG_PATH="${FONTCONFIG_PATH:-$APPDIR/etc/fonts}"
+fi
+export WEBKIT_EXEC_PATH="$APPDIR/usr/libexec/webkit2gtk-4.1"
+if [[ -d "$WEBKIT_EXEC_PATH/injected-bundle" ]]; then
+  export WEBKIT_INJECTED_BUNDLE_PATH="$WEBKIT_EXEC_PATH/injected-bundle"
+fi
+exec "$APPDIR/omni_code" "$@"

@@ -45,9 +45,20 @@ Current Flutter screens · Mobile and desktop · Light and dark themes
 | --- | --- |
 | Android | [APK (arm64)](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-android-arm64-v8a.apk) · [APK (arm)](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-android-armeabi-v7a.apk) · [APK (x86_64)](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-android-x86_64.apk) |
 | Windows | [zip](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-windows-x86_64.zip) |
-| Linux | [tar.gz](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-linux-x86_64.tar.gz) |
+| Linux | [AppImage](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-linux-x86_64.AppImage) · [tar.gz](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-linux-x86_64.tar.gz) |
 | macOS | Homebrew ↓ |
 | iOS | Build from source |
+
+Linux downloads target x86_64 systems with glibc 2.35 or newer and a working
+X11/Wayland desktop and graphics drivers. GTK, WebKit helpers, audio libraries
+and GStreamer plugins are included in both formats. The host's glibc, standard
+C/C++ runtime and graphics drivers are not bundled.
+
+For AppImage, make the download executable and run it. On systems without FUSE,
+use `./omni-code-linux-x86_64.AppImage --appimage-extract-and-run`. For the archive,
+extract it and run `./omni-code-linux-x86_64/AppRun`. Keep the complete directory.
+NixOS users should use the project's Nix packages below; ordinary Linux release
+binaries assume a conventional system dynamic loader.
 
 **Homebrew (macOS):**
 
@@ -94,6 +105,25 @@ On Nix / NixOS, use the development shell to include the native Linux dependenci
 ```bash
 nix develop --command flutter run -d linux
 ```
+
+`nix develop --command flutter build linux --release` fixes the native libraries
+in the installed bundle too, so the result can run outside the development shell
+on NixOS. This is a Nix build, not a portable release for other distributions.
+
+To produce both portable formats on the Ubuntu 22.04 build baseline:
+
+```bash
+bash scripts/install-linux-build-deps.sh
+flutter pub get
+flutter build linux --release
+bash scripts/download-linux-packaging-tools.sh
+bash scripts/package-linux.sh
+bash scripts/test-linux-release.sh
+```
+
+CI audits every ELF library, rejects glibc requirements newer than the baseline,
+and tests both formats in Ubuntu 22.04 and Debian 12 containers with only desktop
+platform packages. A smoke test must render the first Flutter frame in Xvfb.
 
 Sentry error and performance monitoring is enabled only when a DSN is supplied:
 

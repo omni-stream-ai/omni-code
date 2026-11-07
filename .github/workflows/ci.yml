@@ -24,3 +24,29 @@ jobs:
 
       - name: Flutter analyze
         run: flutter analyze
+
+  linux-packaging:
+    name: Linux Release Packaging
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install Linux build dependencies
+        run: bash scripts/install-linux-build-deps.sh
+      - name: Test dependency verification
+        run: python3 -m unittest discover -s scripts/tests -v
+      - name: Build the Linux Release bundle
+        env:
+          SENTRY_NATIVE_BACKEND: none
+          CURL_ROOT: /usr
+        run: |
+          flutter pub get
+          flutter build linux --release
+      - name: Package and test both Linux formats
+        run: |
+          bash scripts/download-linux-packaging-tools.sh
+          bash scripts/package-linux.sh
+          bash scripts/test-linux-release.sh

@@ -187,3 +187,19 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endif()
+
+# Nix development builds also need to run outside `nix develop`. Prebuilt
+# plugins do not inherit the runner's link paths, so fix the complete installed
+# bundle after all native libraries and assets have been copied.
+if(DEFINED ENV{OMNI_CODE_LINUX_BUNDLE_PREPARER})
+  install(CODE "
+    execute_process(
+      COMMAND \"$ENV{OMNI_CODE_LINUX_BUNDLE_PREPARER}\"
+              \"${CMAKE_INSTALL_PREFIX}\"
+      RESULT_VARIABLE _omni_prepare_result
+    )
+    if(NOT _omni_prepare_result EQUAL 0)
+      message(FATAL_ERROR \"omni_code: native runtime dependencies are incomplete\")
+    endif()
+  " COMPONENT Runtime)
+endif()
