@@ -21,6 +21,41 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
+  test('Linux startup cleanup skips notifications that were never delivered',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    final linuxPlatform = _LinuxNotificationPlatform();
+    FlutterLocalNotificationsPlatform.instance = linuxPlatform;
+    final service = NotificationService();
+    for (var index = 0; index < 1000; index++) {
+      await service.cancelSessionActivityNotifications('session-$index');
+      await service.cancelApprovalRequestNotification('session-$index');
+    }
+    expect(linuxPlatform.cancelled, isEmpty);
+  });
+
+  test('Linux cleanup cancels delivered notifications and preserves others',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    final replyId = NotificationService.activityNotificationId('session-1');
+    final approvalId =
+        NotificationService.approvalNotificationId('session-1', 'request-1');
+    final otherReplyId =
+        NotificationService.activityNotificationId('session-2');
+    final linuxPlatform = _LinuxNotificationPlatform()
+      ..systemIds.addAll({replyId: 1, approvalId: 2, otherReplyId: 3});
+    FlutterLocalNotificationsPlatform.instance = linuxPlatform;
+    final service = NotificationService();
+    await service.cancelSessionActivityNotifications('session-1');
+    expect(linuxPlatform.cancelled, [replyId]);
+    expect(
+        linuxPlatform.systemIds.keys, containsAll([approvalId, otherReplyId]));
+    await service.cancelApprovalRequestNotification('session-1',
+        requestId: 'request-1');
+    expect(linuxPlatform.cancelled, [replyId, approvalId]);
+    expect(linuxPlatform.systemIds.keys, [otherReplyId]);
+  });
+
   test('iOS remote cleanup carries the exact approval request', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     const channel = MethodChannel('omni_code/notification_cleanup');
@@ -160,6 +195,20 @@ class _GatedDelivery implements NotificationDelivery {
       String key, Duration retention, Future<void> Function() show) async {
     await ready.future;
     await show();
+  }
+}
+
+class _LinuxNotificationPlatform extends LinuxFlutterLocalNotificationsPlugin {
+  final Map<int, int> systemIds = {};
+  final List<int> cancelled = [];
+
+  @override
+  Future<Map<int, int>> getSystemIdMap() async => Map.of(systemIds);
+
+  @override
+  Future<void> cancel({required int id}) async {
+    cancelled.add(id);
+    systemIds.remove(id);
   }
 }
 

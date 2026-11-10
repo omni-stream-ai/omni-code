@@ -5,6 +5,8 @@ enum DesktopShortcutAction {
   search,
   newWindow,
   newSession,
+  previousSession,
+  nextSession,
   settings,
   home,
   projects,
@@ -136,6 +138,11 @@ DesktopKeyBinding defaultDesktopShortcut(DesktopShortcutAction action) {
     DesktopShortcutAction.search => (LogicalKeyboardKey.keyP, false),
     DesktopShortcutAction.newWindow => (LogicalKeyboardKey.keyN, false),
     DesktopShortcutAction.newSession => (LogicalKeyboardKey.keyN, true),
+    DesktopShortcutAction.previousSession => (
+        LogicalKeyboardKey.arrowUp,
+        false
+      ),
+    DesktopShortcutAction.nextSession => (LogicalKeyboardKey.arrowDown, false),
     DesktopShortcutAction.settings => (LogicalKeyboardKey.comma, false),
     DesktopShortcutAction.home => (LogicalKeyboardKey.keyH, true),
     DesktopShortcutAction.projects => (LogicalKeyboardKey.keyP, true),
@@ -145,7 +152,12 @@ DesktopKeyBinding defaultDesktopShortcut(DesktopShortcutAction action) {
   if (action == DesktopShortcutAction.goBack) {
     return DesktopKeyBinding(key, alt: !mac, meta: mac);
   }
-  return DesktopKeyBinding(key, control: !mac, meta: mac, shift: shift);
+  return DesktopKeyBinding(key,
+      control: !mac,
+      meta: mac,
+      shift: shift,
+      alt: action == DesktopShortcutAction.previousSession ||
+          action == DesktopShortcutAction.nextSession);
 }
 
 /// Missing entries use platform defaults; explicit null disables an action.

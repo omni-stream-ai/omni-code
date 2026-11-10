@@ -93,6 +93,8 @@ class _KeyboardShortcutsScreenState extends State<KeyboardShortcutsScreen> {
                     ]),
                     const SizedBox(height: AppSpacing.section),
                     _buildGroup(context, l10n.shortcutsGroupNavigate, const [
+                      DesktopShortcutAction.previousSession,
+                      DesktopShortcutAction.nextSession,
                       DesktopShortcutAction.settings,
                       DesktopShortcutAction.home,
                       DesktopShortcutAction.projects,
@@ -205,6 +207,8 @@ class _KeyboardShortcutsScreenState extends State<KeyboardShortcutsScreen> {
       DesktopShortcutAction.search => Icons.search_rounded,
       DesktopShortcutAction.newWindow => Icons.open_in_new_rounded,
       DesktopShortcutAction.newSession => Icons.add_comment_outlined,
+      DesktopShortcutAction.previousSession => Icons.arrow_upward_rounded,
+      DesktopShortcutAction.nextSession => Icons.arrow_downward_rounded,
       DesktopShortcutAction.settings => Icons.settings_outlined,
       DesktopShortcutAction.home => Icons.home_outlined,
       DesktopShortcutAction.projects => Icons.folder_open_outlined,

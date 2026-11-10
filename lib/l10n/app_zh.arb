@@ -341,8 +341,12 @@
   "callModeSpeechPauseRangeError": "请输入 {min}-{max} ms 之间的数值。",
   "@callModeSpeechPauseRangeError": {
     "placeholders": {
-      "min": { "type": "int" },
-      "max": { "type": "int" }
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
     }
   },
   "callModeSpeechPauseBridgeOnlyHint": "这个停顿时长目前会精确作用在 Omni Bridge Local 的实时通话模式上。其他 ASR 提供方可能仍使用各自内置的停顿策略。",
@@ -521,6 +525,8 @@
   "phaseCompleted": "已完成",
   "phaseStarted": "已开始",
   "draftPending": "待同步",
+  "draftQueued": "排队中",
+  "draftQueuedDescription": "等待 agent 接收这条消息",
   "draftFailed": "发送失败，点击重发",
   "whisperApiKeyRequired": "请先在设置中填写 Whisper/OpenAI API Key",
   "whisperAsrRequestFailed": "Whisper ASR 请求失败 ({statusCode}): {body}",
@@ -743,7 +749,11 @@
   "confirm": "确认",
   "fieldRequired": "此项为必填",
   "unknownRoute": "未知路由：{route}",
-  "@unknownRoute": { "placeholders": { "route": {} } },
+  "@unknownRoute": {
+    "placeholders": {
+      "route": {}
+    }
+  },
   "recentProjectsTitle": "最近项目",
   "more": "更多",
   "subtitles": "字幕",
@@ -795,27 +805,61 @@
   "inFocus": "焦点",
   "upNext": "下一步",
   "threadsCount": "{count} 个线程",
-  "@threadsCount": { "placeholders": { "count": { "type": "int" } } },
+  "@threadsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "nothingUrgentWaiting": "当前没有紧急等待项。",
   "visibleProjectsCount": "{count} 个可见",
-  "@visibleProjectsCount": { "placeholders": { "count": { "type": "int" } } },
+  "@visibleProjectsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "authorizationNeeded": "需要授权",
   "connectedBridge": "已连接 • {address}",
-  "@connectedBridge": { "placeholders": { "address": {} } },
+  "@connectedBridge": {
+    "placeholders": {
+      "address": {}
+    }
+  },
   "status": "状态",
   "collapseStatus": "收起状态",
   "pendingApprovals": "待审批",
   "waitingActionsNeedReview": "{count} 个等待操作需要审批",
-  "@waitingActionsNeedReview": { "placeholders": { "count": { "type": "int" } } },
+  "@waitingActionsNeedReview": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "noApprovalsWaiting": "当前没有等待审批的操作",
   "bridgeStatus": "Bridge 状态",
   "voiceDevice": "语音 / 设备",
   "activeSessionsMicrophoneReady": "{count} 个活跃会话 • 麦克风就绪",
-  "@activeSessionsMicrophoneReady": { "placeholders": { "count": { "type": "int" } } },
+  "@activeSessionsMicrophoneReady": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "microphoneReadySystemSpeechAvailable": "麦克风就绪 • 系统语音可用",
   "projectsOverview": "项目概览",
   "activeProjectsCount": "{count} 个活跃项目",
-  "@activeProjectsCount": { "placeholders": { "count": { "type": "int" } } },
+  "@activeProjectsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "quickActions": "快捷操作",
   "quickActionsBody": "打开项目或调整设置",
   "pluginManifest": "插件清单",
@@ -826,7 +870,11 @@
   "savingPluginSettings": "正在保存插件设置...",
   "savedToSettings": "已保存到设置。",
   "pluginSettingsSaveFailed": "保存插件设置失败。\n\n原始错误：\n{error}",
-  "@pluginSettingsSaveFailed": { "placeholders": { "error": {} } },
+  "@pluginSettingsSaveFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "fillRequiredPluginSettings": "使用此插件前，请先填写下方必填设置。",
   "defaultTtsTestText": "Hello from Omni Code speech settings.",
   "systemTtsTestUnavailable": "当前平台无法测试系统 TTS。请选择一个 TTS 插件后在这里测试播放。",
@@ -839,17 +887,33 @@
   "playing": "播放中...",
   "play": "播放",
   "batchAsrAuthOrParameterError": "认证或参数错误。请确认 APPID 和 API Key（Access Token）正确。\n\n原始错误：\n{error}",
-  "@batchAsrAuthOrParameterError": { "placeholders": { "error": {} } },
+  "@batchAsrAuthOrParameterError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "batchAsrAuthenticationFailed": "认证失败。请确认 API Key 正确，并且已为该服务启用。\n\n原始错误：\n{error}",
-  "@batchAsrAuthenticationFailed": { "placeholders": { "error": {} } },
+  "@batchAsrAuthenticationFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "batchAsrAccessDenied": "访问被拒绝。请确认 API Key 拥有所选 Resource ID 的权限。\n\n原始错误：\n{error}",
-  "@batchAsrAccessDenied": { "placeholders": { "error": {} } },
+  "@batchAsrAccessDenied": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "microphonePermissionRequired": "需要麦克风权限。",
   "recordingStartedSpeakThenStop": "录音已开始。说一句短句后停止。",
   "transcribingRecordedAudio": "正在转写录音...",
   "transcriptionSucceeded": "转写成功。",
   "transcriptionSucceededWithText": "转写成功：{text}",
-  "@transcriptionSucceededWithText": { "placeholders": { "text": {} } },
+  "@transcriptionSucceededWithText": {
+    "placeholders": {
+      "text": {}
+    }
+  },
   "testBatchAsr": "测试批量 ASR",
   "batchAsrTestDescription": "批量 ASR 测试会录制一小段音频，再用当前已保存的语音配置进行转写。",
   "record": "录音",
@@ -857,16 +921,32 @@
   "stopAndTranscribe": "停止并转写",
   "recordingSpeakThenStop": "录音中...说一句短句后停止。",
   "realtimeAsrAuthenticationRejected": "当前服务拒绝了实时语音认证。请检查所选插件凭据，尤其是 API Key 和 Resource ID。\n\n原始错误：\n{error}",
-  "@realtimeAsrAuthenticationRejected": { "placeholders": { "error": {} } },
+  "@realtimeAsrAuthenticationRejected": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "realtimeAsrAccessRefused": "当前服务拒绝实时语音访问。请确认 API Key 已为所选火山引擎语音资源启用，并且 Resource ID 与购买的时长版或并发版完全一致。\n\n原始错误：\n{error}",
-  "@realtimeAsrAccessRefused": { "placeholders": { "error": {} } },
+  "@realtimeAsrAccessRefused": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "realtimeAsrStartFailed": "当前服务无法启动实时语音。这通常表示所选插件没有提供有效的实时 websocket 端点。\n\n原始错误：\n{error}",
-  "@realtimeAsrStartFailed": { "placeholders": { "error": {} } },
+  "@realtimeAsrStartFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "startingRealtimeSpeechTest": "正在开始实时语音测试...",
   "realtimeTranscriptReceived": "已收到实时转写。",
   "realtimeSpeechComingThrough": "实时语音已接入。",
   "realtimeSpeechComingThroughWithText": "实时语音已接入：{text}",
-  "@realtimeSpeechComingThroughWithText": { "placeholders": { "text": {} } },
+  "@realtimeSpeechComingThroughWithText": {
+    "placeholders": {
+      "text": {}
+    }
+  },
   "listeningSpeakShortSentence": "正在聆听。请说一句短句。",
   "testRealtimeAsr": "测试实时 ASR",
   "realtimeAsrSystemTestDescription": "实时 ASR 测试会使用当前已保存的系统语音输入。",
@@ -903,14 +983,26 @@
   "systemBatchAsrTestUnavailable": "系统默认不提供批量 ASR 测试。请选择一个批量 ASR 插件后测试转写。",
   "selectedPluginNotInstalled": "所选插件尚未安装，无法测试。",
   "selectedPluginMissingCapabilityConfig": "所选插件没有提供 {capability} 配置，无法测试。",
-  "@selectedPluginMissingCapabilityConfig": { "placeholders": { "capability": {} } },
+  "@selectedPluginMissingCapabilityConfig": {
+    "placeholders": {
+      "capability": {}
+    }
+  },
   "expectedTtsEndpoint": "OpenAI 兼容 TTS 端点",
   "expectedTranscriptionEndpoint": "OpenAI 兼容转写端点",
   "expectedRealtimeWebsocketEndpoint": "实时 websocket 端点",
   "currentSelectionMissingExpectedEndpoint": "当前选择没有提供 {expected}，因此无法测试。",
-  "@currentSelectionMissingExpectedEndpoint": { "placeholders": { "expected": {} } },
+  "@currentSelectionMissingExpectedEndpoint": {
+    "placeholders": {
+      "expected": {}
+    }
+  },
   "currentSelectionMissingRequiredSetting": "当前选择缺少 {setting}，因此无法测试。",
-  "@currentSelectionMissingRequiredSetting": { "placeholders": { "setting": {} } },
+  "@currentSelectionMissingRequiredSetting": {
+    "placeholders": {
+      "setting": {}
+    }
+  },
   "currentSelectionMissingRealtimeWebsocketUrl": "当前选择缺少实时 websocket URL，因此无法测试。",
   "currentSelectionInvalidRealtimeWebsocketUrl": "当前选择的实时 websocket URL 无效，因此无法测试。",
   "currentSelectionNonStreamingEndpoint": "当前选择指向非流式端点，因此无法测试。请先配置实时 websocket URL。",
@@ -918,21 +1010,47 @@
   "installBeforeSelectingPlugin": "请先安装，再选择此插件。",
   "fillRequiredPluginSettingsBeforeTesting": "测试前请先填写必填设置。",
   "commandSucceeded": "命令执行成功：{command}",
-  "@commandSucceeded": { "placeholders": { "command": {} } },
+  "@commandSucceeded": {
+    "placeholders": {
+      "command": {}
+    }
+  },
   "commandFailed": "命令执行失败（{exitCode}）：{stderr}",
-  "@commandFailed": { "placeholders": { "exitCode": { "type": "int" }, "stderr": {} } },
+  "@commandFailed": {
+    "placeholders": {
+      "exitCode": {
+        "type": "int"
+      },
+      "stderr": {}
+    }
+  },
   "missingKey": "缺少密钥",
   "keySaved": "密钥已保存",
   "pluginApiKeyTitle": "{pluginName} · API Key",
-  "@pluginApiKeyTitle": { "placeholders": { "pluginName": {} } },
+  "@pluginApiKeyTitle": {
+    "placeholders": {
+      "pluginName": {}
+    }
+  },
   "savePluginSettings": "保存插件设置",
   "saveAndUse": "保存并使用",
   "additionalPluginSettings": "附加插件设置",
   "bridgeErrorWithStatus": "Bridge 错误（{status}）：{error}",
-  "@bridgeErrorWithStatus": { "placeholders": { "status": {}, "error": {} } },
+  "@bridgeErrorWithStatus": {
+    "placeholders": {
+      "status": {},
+      "error": {}
+    }
+  },
   "noEnrollmentAudioRecorded": "没有录到用于录入的音频。",
   "defaultSpeakerName": "说话人 {index}",
-  "@defaultSpeakerName": { "placeholders": { "index": { "type": "int" } } },
+  "@defaultSpeakerName": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
   "gitClean": "干净",
   "gitDirty": "有改动",
   "gitStaged": "已暂存",
@@ -941,31 +1059,41 @@
   "gitAhead": "领先 {count} 个提交",
   "@gitAhead": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "gitBehind": "落后 {count} 个提交",
   "@gitBehind": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "gitChangedCount": "{count} 项变更",
   "@gitChangedCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "gitStagedCount": "{count} 个暂存",
   "@gitStagedCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "gitUnstagedCount": "{count} 个修改",
   "@gitUnstagedCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationSound": "通知声音",
@@ -993,17 +1121,31 @@
   "piPluginValidate": "重新校验",
   "piPluginValidationFailed": "校验失败",
   "piPluginLoadFailed": "无法加载 Pi 插件：{error}",
-  "@piPluginLoadFailed": { "placeholders": { "error": {} } },
+  "@piPluginLoadFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "piPluginOperationFailed": "插件操作失败：{error}",
-  "@piPluginOperationFailed": { "placeholders": { "error": {} } },
+  "@piPluginOperationFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "piPluginPermissionWarning": "扩展会以 Pi 的权限在 Bridge 主机运行。请只安装可信代码。",
   "piPluginRemoveConfirm": "卸载 {name}？",
-  "@piPluginRemoveConfirm": { "placeholders": { "name": {} } },
+  "@piPluginRemoveConfirm": {
+    "placeholders": {
+      "name": {}
+    }
+  },
   "piPluginNextTurnHint": "更改会从下一轮 Pi 会话起生效。",
   "gitUntrackedCount": "{count} 个未跟踪",
   "@gitUntrackedCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "acceptanceTitle": "应用验收",
@@ -1038,7 +1180,11 @@
   "acceptanceRequirementsTitle": "本次验收需求",
   "acceptanceRequirementSources": "依据 {count} 条用户消息整理",
   "@acceptanceRequirementSources": {
-    "placeholders": {"count": {"type": "int"}}
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "acceptanceRemoteDesktop": "打开远程桌面",
   "acceptanceEmpty": "暂无验收记录",
@@ -1167,6 +1313,46 @@
   "executionRecovering": "正在继续任务",
   "executionRecoveryFailed": "未能继续任务，请检查当前状态后重试。",
   "executionContinueMessage": "继续未完成的任务。先核对已有执行结果和当前进程，从尚未完成的步骤继续，避免重复执行已完成的操作。",
+  "relayTitle": "Relay 远程连接",
+  "relayUse": "使用 Relay 连接",
+  "relayUrl": "Relay 地址",
+  "relayDeviceName": "客户端名称",
+  "relayLogin": "登录 Relay",
+  "relayRefresh": "刷新服务",
+  "relayLogout": "退出 Relay 登录",
+  "relayVerify": "打开 Relay 网页，用同一账号登录并批准下方设备码。",
+  "relayOpenLogin": "打开登录网页",
+  "relayNoServices": "暂无 Omni Code 服务，请先在电脑端开启远程访问。",
+  "relayOnline": "在线",
+  "relayOffline": "离线",
+  "relayConnect": "连接",
+  "relayRequestAccess": "申请访问",
+  "relayHost": "电脑端远程访问",
+  "relayHostHint": "通过直连管理 Bridge；启用后随 Bridge 自动连接 Relay，无需单独运行 Connector。",
+  "relayServiceName": "服务名称",
+  "relayConnecting": "正在连接",
+  "relayDisabled": "远程访问已关闭",
+  "relayLoginEnable": "登录并开启远程访问",
+  "relayEnable": "开启远程访问",
+  "relayDisable": "关闭远程访问",
+  "relayDevices": "管理远程设备",
+  "relayPolicy": "新设备访问策略",
+  "relayPolicyAuto": "同账号自动允许",
+  "relayPolicyApproval": "逐个批准",
+  "relayApprove": "批准",
+  "relayRevoke": "撤销",
+  "relayKick": "踢出并要求重新登录",
+  "relayBan": "封禁",
+  "relayUnban": "解除封禁",
+  "relayLoginRequired": "Relay 登录已失效，请在设置中重新登录。",
+  "relayFailure": "Relay 操作失败：{error}",
+  "@relayFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "acceptanceBuildTitle": "打包与依赖",
   "acceptanceBuildHint": "已先通过项目文件识别。所有字段均可修改，未识别到的留空。命令和产物路径相对项目根目录。",
   "acceptanceBuildLanguage": "技术栈",
@@ -1182,17 +1368,13 @@
   "acceptanceBuildApply": "应用到表单",
   "acceptanceBuildEvidence": "识别依据",
   "acceptanceBuildReview": "检查并保存配置后继续验收",
-  "acceptanceVideoLoading": "正在加载验收录像…",
-  "acceptanceVideoBack": "后退 10 秒",
-  "acceptanceVideoForward": "前进 10 秒",
-  "acceptanceBuildNext": "下一步：检查配置",
-  "acceptanceBuildContinue": "保存并继续",
-  "acceptanceDesktopConnecting": "正在连接验收桌面…",
   "desktopShortcutsTitle": "键盘快捷键",
   "desktopShortcutsHelp": "自定义桌面端快捷键，修改后立即生效并自动保存。",
   "shortcutSearch": "打开搜索",
   "shortcutNewWindow": "新建窗口",
   "shortcutNewSession": "新建会话",
+  "shortcutPreviousSession": "上一个最近会话",
+  "shortcutNextSession": "下一个最近会话",
   "shortcutSettings": "打开设置",
   "shortcutHome": "返回首页",
   "shortcutProjects": "打开项目列表",
@@ -1222,6 +1404,12 @@
     }
   },
   "shortcutSearchHint": "搜索项目和会话…",
+  "acceptanceVideoLoading": "正在加载验收录像…",
+  "acceptanceVideoBack": "后退 10 秒",
+  "acceptanceVideoForward": "前进 10 秒",
+  "acceptanceBuildNext": "下一步：检查配置",
+  "acceptanceBuildContinue": "保存并继续",
+  "acceptanceDesktopConnecting": "正在连接验收桌面…",
   "shortcutsHeroTitle": "用熟悉的按键，专注手头的工作",
   "shortcutsAutoSaved": "自动保存",
   "shortcutsEditHint": "点击按键组合即可修改，重启后仍会保留你的设置。",
@@ -1232,5 +1420,12 @@
   "shortcutGuide": "快捷键指南",
   "shortcutSelect": "选择",
   "shortcutOpen": "打开",
-  "shortcutSearchEntry": "搜索"
+  "shortcutSearchEntry": "搜索",
+  "relayAccessAllowed": "允许访问",
+  "relayAccessApprovalRequired": "需要批准",
+  "relayAccessPending": "等待批准",
+  "relayAccessRevoked": "访问已撤销",
+  "relayAccessBanned": "设备已封禁",
+  "relayAccessLoginRequired": "需要重新登录",
+  "relayCheckConnection": "请在设置中检查 Relay 登录、服务状态和访问权限。"
 }

@@ -1,8 +1,30 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:convert';
+import 'dart:math';
 import 'package:omni_code/src/services/sentry_service.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 void main() {
+  test('filters Relay identity keys and private device pairing capabilities',
+      () {
+    final random = Random.secure();
+    final key = base64UrlEncode(List.generate(32, (_) => random.nextInt(256)));
+    final breadcrumb = sanitizeSentryBreadcrumb(
+        Breadcrumb(data: {
+          'relay': {
+            'client_key': key,
+            'device_code': key,
+            'token': key,
+            'service_id': 'service'
+          }
+        }),
+        Hint())!;
+    final value = breadcrumb.data!['relay'] as Map;
+    expect(value['client_key'], '[Filtered]');
+    expect(value['device_code'], '[Filtered]');
+    expect(value['token'], '[Filtered]');
+    expect(value['service_id'], 'service');
+  });
   group('SentryConfiguration', () {
     test('is disabled without a DSN', () {
       final configuration = SentryConfiguration.parse(

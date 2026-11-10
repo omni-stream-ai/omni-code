@@ -6,6 +6,8 @@ extension DesktopShortcutLabel on DesktopShortcutAction {
         DesktopShortcutAction.search => l10n.shortcutSearch,
         DesktopShortcutAction.newWindow => l10n.shortcutNewWindow,
         DesktopShortcutAction.newSession => l10n.shortcutNewSession,
+        DesktopShortcutAction.previousSession => l10n.shortcutPreviousSession,
+        DesktopShortcutAction.nextSession => l10n.shortcutNextSession,
         DesktopShortcutAction.settings => l10n.shortcutSettings,
         DesktopShortcutAction.home => l10n.shortcutHome,
         DesktopShortcutAction.projects => l10n.shortcutProjects,

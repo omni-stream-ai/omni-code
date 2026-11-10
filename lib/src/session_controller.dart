@@ -176,6 +176,37 @@ class SessionController extends ChangeNotifier {
     connectionState = SessionConnectionState.connected;
   }
 
+  Future<SessionSteeringResult> steer(
+    String turnId,
+    String content, {
+    required String commandId,
+    required String userMessageId,
+    List<DomainAttachment> attachments = const [],
+  }) async {
+    if (_disposed || _state?.session.activeTurnId != turnId) {
+      return SessionSteeringResult.stale;
+    }
+    final result = await _client.steerDomainTurn(
+      sessionId,
+      turnId,
+      content,
+      commandId: commandId,
+      userMessageId: userMessageId,
+      attachments: attachments,
+    );
+    if (result == SessionSteeringResult.accepted && !_disposed) {
+      final visible =
+          _state?.turns.any(
+            (turn) => turn.segments.any(
+              (segment) => segment.message?.id == userMessageId,
+            ),
+          ) ??
+          false;
+      if (!visible) await recover();
+    }
+    return result;
+  }
+
   Future<PendingSessionCommand> send(
     String content, {
     String inputMode = 'text',

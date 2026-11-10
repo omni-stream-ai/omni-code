@@ -11,6 +11,11 @@ import '../l10n/app_locale.dart';
 import '../plugins/speech_plugin_models.dart';
 import '../plugins/speech_plugin_registry.dart';
 import '../settings/app_settings.dart';
+import '../relay/relay_settings.dart';
+import 'realtime_socket.dart';
+import 'realtime_socket_io.dart'
+    if (dart.library.html) 'realtime_socket_web.dart' as transport;
+export 'realtime_socket.dart';
 
 class BridgeRealtimeAsrUtterance {
   const BridgeRealtimeAsrUtterance({
@@ -821,20 +826,18 @@ class BridgeRealtimeAsrService {
     }
     final baseUrl = switch (resolvedConfig?.resolvedTransport) {
       SpeechPluginTransport.bridgeOpenAiCompatible =>
-        resolvedConfig?.baseUrl.trim().isNotEmpty == true
-            ? resolvedConfig!.baseUrl.trim()
-            : _client.baseUrl,
+        _effectiveBridgeBaseUrl(resolvedConfig?.baseUrl),
       _ => _client.baseUrl,
     };
     final baseUri = Uri.parse(baseUrl);
     return baseUri.replace(
       scheme: baseUri.scheme == 'https' ? 'wss' : 'ws',
-      path: websocketPath,
+      path: baseUri.path.replaceFirst(RegExp(r'/$'), '') +
+          (websocketPath.startsWith('/') ? websocketPath : '/$websocketPath'),
     );
   }
 
   Map<String, dynamic> _headers() {
-    final settings = appSettingsController.settings;
     final manifest = _activeRealtimePluginManifest;
     final realtimeConfig =
         manifest == null ? null : _resolvedRealtimePluginConfig(manifest);
@@ -868,13 +871,22 @@ class BridgeRealtimeAsrService {
       }
       return headers;
     }
-    final headers = <String, dynamic>{
-      'X-Omni-Code-Client-Id': settings.clientId,
-    };
-    if (settings.bridgeToken.trim().isNotEmpty) {
-      headers['Authorization'] = 'Bearer ${settings.bridgeToken.trim()}';
+    _effectiveBridgeBaseUrl(realtimeConfig?.baseUrl);
+    return _client.transportHeaders;
+  }
+
+  String _effectiveBridgeBaseUrl(String? configured) {
+    final value = configured?.trim() ?? '';
+    final settings = appSettingsController.settings;
+    if (settings.relay.enabled) {
+      if (value.isEmpty ||
+          value == settings.bridgeUrl ||
+          value == _client.baseUrl) {
+        return _client.baseUrl;
+      }
+      throw const RelayException('bridge_override_requires_direct_connection');
     }
-    return headers;
+    return value.isEmpty ? _client.baseUrl : value;
   }
 
   String _volcengineSaucResourceId(
@@ -1006,10 +1018,7 @@ class BridgeRealtimeAsrService {
     Uri uri, {
     Map<String, dynamic>? headers,
   }) {
-    return WebSocket.connect(
-      uri.toString(),
-      headers: headers,
-    ).then(_IoBridgeRealtimeSocket.new);
+    return transport.connectRealtimeSocket(uri, headers: headers);
   }
 
   String _pluginLocaleTag() {
@@ -1031,31 +1040,6 @@ class BridgeRealtimeAsrService {
         '${value.substring(16, 20)}-'
         '${value.substring(20)}';
   }
-}
-
-abstract class BridgeRealtimeSocket {
-  Stream<dynamic> get messages;
-
-  void add(dynamic data);
-
-  Future<void> close();
-}
-
-class _IoBridgeRealtimeSocket implements BridgeRealtimeSocket {
-  _IoBridgeRealtimeSocket(this._socket);
-
-  final WebSocket _socket;
-
-  @override
-  Stream<dynamic> get messages => _socket;
-
-  @override
-  void add(dynamic data) {
-    _socket.add(data);
-  }
-
-  @override
-  Future<void> close() => _socket.close();
 }
 
 typedef BridgeRealtimeWebSocketConnector = Future<BridgeRealtimeSocket>

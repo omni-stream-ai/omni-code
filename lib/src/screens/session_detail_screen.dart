@@ -1,6 +1,5 @@
 import 'acceptance_screen.dart';
 import 'dart:async';
-import 'dart:ui';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -40,6 +39,7 @@ import '../services/local_vad_service.dart';
 import '../services/speech_input_service.dart';
 import '../services/tts_service.dart';
 import '../settings/app_settings.dart';
+import '../shortcuts/recent_session_shortcuts.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/anchored_overlay_panel.dart';
@@ -263,11 +263,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   final Map<String, String> _transientLiveMessageTurnUserIds =
       <String, String>{};
   final Map<String, _LocalMessageDraft> _localMessageStates = {};
+  final Map<String, DomainEntityState> _domainInputStates = {};
+  bool _steeringUnavailable = false;
   final Map<String, Future<File>> _videoFileFutures = {};
   final Map<String, _MessageImageReferencesCacheEntry> _imageReferencesCache =
       {};
   late SessionSummary _session;
   SessionController? _domainController;
+  final _conversationRevision = ValueNotifier<int>(0);
   final List<ChatMessage> _messages = [];
   final List<_SessionDiffEntry> _sessionDiffs = <_SessionDiffEntry>[];
   late String _speechRouteSignature;
@@ -378,7 +381,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   bool _hasMoreOlderMessages = false;
   bool _autoBackfillHistoryScheduled = false;
   final Map<String, GlobalKey> _turnKeys = <String, GlobalKey>{};
-  final Map<String, GlobalKey> _messageAnchorKeys = <String, GlobalKey>{};
+  final Map<(String, String), GlobalKey> _messageAnchorKeys = {};
   String? _olderMessagesCursor;
   String? _dismissedErrorBannerMessage;
   String? _overrideProviderId;
@@ -675,8 +678,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   void _syncComposerFocusForSessionStatus(SessionStatus status) {
     if (status == SessionStatus.idle || status == SessionStatus.interrupted) {
       _requestComposerFocusAfterFrame(consumeReturnRequest: true);
-      unawaited(_dispatchQueuedLocalMessageIfPossible());
     }
+    unawaited(_dispatchQueuedLocalMessageIfPossible());
   }
 
   Widget _buildComposerActionIconButton({
@@ -806,6 +809,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   void _startDomainController() {
     _disposeDomainController();
+    _steeringUnavailable = false;
+    _domainInputStates.clear();
     final controller =
         SessionController(client: _client, sessionId: _session.id)
           ..addListener(_handleDomainStateChanged);
@@ -925,7 +930,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       for (final message in _messages) message.id: message,
     };
     _domainActivityStates.clear();
+    _domainInputStates.clear();
     final messages = <ChatMessage>[];
+    final queuedInputs = <ChatMessage>[];
     final diffsByKey = <String, _SessionDiffEntry>{};
     ApprovalRequest? pendingApproval;
     for (final turn in state.turns) {
@@ -933,7 +940,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       final projectedAssistantSegments = <String, DomainSegment>{};
       for (final segment in turn.segments) {
         final message = segment.message;
-        if (message != null) {
+        if (message != null && message.purpose != DomainMessagePurpose.user) {
           final baseId = message.id.replaceFirst(RegExp(r':\d+$'), '');
           final key = message.purpose == DomainMessagePurpose.finalReply &&
                   message.state == DomainEntityState.completed
@@ -951,6 +958,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           .toSet();
       for (final segment in turn.segments) {
         final message = segment.message;
+        if (message != null && message.purpose == DomainMessagePurpose.user) {
+          _domainInputStates[message.id] = message.state;
+          final projected = _domainMessageToChat(message, MessageRole.user);
+          if (message.state == DomainEntityState.pending ||
+              message.state == DomainEntityState.failed) {
+            queuedInputs.add(projected);
+          } else {
+            messages.add(projected);
+          }
+        }
         if (message != null &&
             visibleAssistantSegmentIds.contains(segment.id)) {
           var projected = _domainMessageToChat(message, MessageRole.assistant);
@@ -1005,6 +1022,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         }
       }
     }
+    messages.addAll(queuedInputs);
     final domainStatus = switch (state.session.status) {
       DomainSessionStatus.running => SessionStatus.running,
       DomainSessionStatus.awaitingApproval => SessionStatus.awaitingApproval,
@@ -1017,8 +1035,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         latestTurnStatus == DomainTurnStatus.failed;
     final terminalSnapshot =
         state.session.activeTurnId == null && hasTerminalTurn;
-    final acceptedUserMessageIds =
-        state.turns.map((turn) => turn.userMessage.id).toSet();
+    final acceptedUserMessageIds = {
+      ...state.turns.map((turn) => turn.userMessage.id),
+      ..._domainInputStates.keys,
+    };
     final hasPendingLocalMessage = _localMessageStates.entries.any(
       (entry) =>
           !acceptedUserMessageIds.contains(entry.key) &&
@@ -1060,7 +1080,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     messages.addAll(localMessages);
     final previousStatus = _session.status;
     final previousApprovalId = _pendingApproval?.requestId;
-    setState(() {
+    final summaryChanged = _session.title != state.session.title ||
+        previousStatus != status ||
+        _session.unreadCount != state.session.unreadCount ||
+        _session.lastMessagePreview != state.session.lastMessagePreview ||
+        !_sameApproval(_pendingApproval, effectivePendingApproval);
+    final restoreError = controller?.error?.toString();
+    final rebuildPage = summaryChanged ||
+        _loadingMessages ||
+        _sessionRestoreError != restoreError ||
+        _callModeEnabled;
+    void applyProjection() {
       for (final messageId in serverMessageIds) {
         _localMessageStates.remove(messageId);
       }
@@ -1088,12 +1118,23 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _submittedApprovalRequestId = null;
       }
       _loadingMessages = false;
-      _sessionRestoreError = controller?.error?.toString();
+      _sessionRestoreError = restoreError;
       _reconcileSubmittedApprovalState();
-    });
+    }
+
+    // Streaming revisions change the transcript and execution card. Keep the
+    // navigation, composer and session details intact until metadata changes.
+    if (rebuildPage) {
+      setState(applyProjection);
+    } else {
+      applyProjection();
+    }
+    _conversationRevision.value++;
     _cacheCurrentSessionMessages();
-    _syncSessionSummaryCache();
-    unawaited(_markVisibleBridgeReplyRead());
+    if (rebuildPage) {
+      _syncSessionSummaryCache();
+      unawaited(_markVisibleBridgeReplyRead());
+    }
     if (previousApprovalId != effectivePendingApproval?.requestId) {
       if (previousApprovalId != null) {
         unawaited(notificationService.cancelApprovalRequestNotification(
@@ -1119,7 +1160,19 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (!_expandingHistory && controller?.loadingOlderTurns != true) {
       _maybeAutoScrollToBottom();
     }
+    _syncComposerFocusForSessionStatus(status);
   }
+
+  bool _sameApproval(ApprovalRequest? left, ApprovalRequest? right) =>
+      left?.requestId == right?.requestId &&
+      left?.kind == right?.kind &&
+      left?.command == right?.command &&
+      left?.reason == right?.reason &&
+      left?.autoApprovalReason == right?.autoApprovalReason &&
+      left?.autoApprovalReasonKind == right?.autoApprovalReasonKind &&
+      left?.allowAcceptForSession == right?.allowAcceptForSession &&
+      left?.allowCancel == right?.allowCancel &&
+      left?.resolvable == right?.resolvable;
 
   ChatMessage _domainMessageToChat(
     DomainMessage message,
@@ -1166,6 +1219,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     WidgetsBinding.instance.removeObserver(this);
     _eventsSubscription?.cancel();
     _disposeDomainController();
+    _conversationRevision.dispose();
     _eventsReconnectTimer?.cancel();
     _speechStatusAutoDismissTimer?.cancel();
     _callModeSpeechHintTimer?.cancel();
@@ -2007,6 +2061,28 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   @override
   Widget build(BuildContext context) {
     SessionCacheScope.watch(context);
+    return RecentSessionShortcuts(
+      activeProjectId: _session.projectId,
+      activeSessionId: _session.id,
+      recentSessions: _client.peekRecentSessions() ?? const <SessionSummary>[],
+      onOpenSession: _openRecentSession,
+      child: _buildScreen(context),
+    );
+  }
+
+  void _openRecentSession(SessionSummary session) {
+    if (session.id == _session.id) return;
+    final currentRoute = ModalRoute.of(context);
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      AppRoutes.session(session.projectId, session.id),
+      (route) =>
+          route != currentRoute &&
+          AppRoutes.parse(route.settings.name).kind != AppRouteKind.session,
+      arguments: session,
+    );
+  }
+
+  Widget _buildScreen(BuildContext context) {
     _scheduleCallModeOrbAnimationSync();
     if (_callModeEnabled) {
       return _buildCallModeScaffold(context);
@@ -2020,8 +2096,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _session.status == SessionStatus.awaitingApproval ||
         _pendingApproval != null;
     final canCancelReply = hasActiveTurn && !_cancellingReply;
-    final turns = _turns;
-    final showHistoryLoader = _expandingHistory;
     final approvalCardMaxHeight = MediaQuery.of(context).size.height * 0.36;
     final systemSpeechUnavailableMessage = _systemSpeechUnavailableStatus;
     final callModeUnavailableMessage = _callModeUnavailableMessage;
@@ -2052,17 +2126,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           arguments: project,
         );
       },
-      onOpenSession: (session) {
-        if (session.id == _session.id) {
-          return;
-        }
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRoutes.session(session.projectId, session.id),
-          (route) =>
-              AppRoutes.parse(route.settings.name).kind != AppRouteKind.session,
-          arguments: session,
-        );
-      },
+      onOpenSession: _openRecentSession,
       onNewSession: _startNewSession,
       onNewSessionForProject: (project) => startNewSessionFlow(
         context,
@@ -2080,8 +2144,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       bodyBuilder: (context, useDesktopSidebar, constraints) {
         if (useDesktopSidebar) {
           return _buildDesktopBody(
-            turns: turns,
-            showHistoryLoader: showHistoryLoader,
             approvalCardMaxHeight: approvalCardMaxHeight,
             canCancelReply: canCancelReply,
             hasActiveTurn: hasActiveTurn,
@@ -2094,8 +2156,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           );
         }
         return _buildMobileBody(
-          turns: turns,
-          showHistoryLoader: showHistoryLoader,
           approvalCardMaxHeight: approvalCardMaxHeight,
           canCancelReply: canCancelReply,
           hasActiveTurn: hasActiveTurn,
@@ -2489,8 +2549,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Widget _buildMobileBody({
-    required List<_ConversationTurn> turns,
-    required bool showHistoryLoader,
     required double approvalCardMaxHeight,
     required bool canCancelReply,
     required bool hasActiveTurn,
@@ -2501,23 +2559,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required String? callModeUnavailableMessage,
     required ThemeData theme,
   }) {
-    final topBanners = _buildTopBanners(
-      approvalCardMaxHeight: approvalCardMaxHeight,
-      showPendingApprovalInline: false,
-    );
     return Column(
       children: [
         _buildMobileSessionTopBar(
           theme: theme,
           callModeUnavailableMessage: callModeUnavailableMessage,
         ),
-        ...topBanners,
+        _buildLiveTopBanners(approvalCardMaxHeight: approvalCardMaxHeight),
         Expanded(
           child: RepaintBoundary(
-            child: _buildConversationPane(
-              turns: turns,
-              showHistoryLoader: showHistoryLoader,
-            ),
+            child: _buildConversationPane(),
           ),
         ),
         if (_pendingApproval != null)
@@ -2541,8 +2592,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Widget _buildDesktopBody({
-    required List<_ConversationTurn> turns,
-    required bool showHistoryLoader,
     required double approvalCardMaxHeight,
     required bool canCancelReply,
     required bool hasActiveTurn,
@@ -2568,16 +2617,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                 theme: theme,
                 callModeUnavailableMessage: callModeUnavailableMessage,
               ),
-              ..._buildTopBanners(
-                approvalCardMaxHeight: approvalCardMaxHeight,
-                showPendingApprovalInline: false,
-              ),
+              _buildLiveTopBanners(
+                  approvalCardMaxHeight: approvalCardMaxHeight),
               Expanded(
                 child: RepaintBoundary(
-                  child: _buildConversationPane(
-                    turns: turns,
-                    showHistoryLoader: showHistoryLoader,
-                  ),
+                  child: _buildConversationPane(),
                 ),
               ),
               if (_pendingApproval != null)
@@ -2700,27 +2744,39 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return widgets;
   }
 
-  Widget _buildConversationPane({
-    required List<_ConversationTurn> turns,
-    required bool showHistoryLoader,
-  }) {
-    _pruneViewportAnchorKeys(turns);
-    return _SessionConversationPane(
-      creatingSession: _creatingSession,
-      loadingMessages: _loadingMessages,
-      turns: turns,
-      showHistoryLoader: showHistoryLoader,
-      showScrollToBottomAction: _showScrollToBottomAction,
-      scrollController: _scrollController,
-      desktopSidebarBreakpoint: AppResponsiveLayout.desktopBreakpoint,
-      desktopContentMaxWidth: _desktopContentMaxWidth,
-      onScrollNotification: _handleScrollNotification,
-      onScrollToBottom: _handleScrollToBottomPressed,
-      historyLoaderBuilder: _buildHistoryLoader,
-      turnBuilder: _buildTurn,
-      turnKeyBuilder: _turnKeyFor,
-    );
-  }
+  Widget _buildLiveTopBanners({required double approvalCardMaxHeight}) =>
+      ValueListenableBuilder<int>(
+        valueListenable: _conversationRevision,
+        builder: (context, _, child) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: _buildTopBanners(
+            approvalCardMaxHeight: approvalCardMaxHeight,
+            showPendingApprovalInline: false,
+          ),
+        ),
+      );
+
+  Widget _buildConversationPane() => ValueListenableBuilder<int>(
+      valueListenable: _conversationRevision,
+      builder: (context, _, child) {
+        final turns = _turns;
+        _pruneViewportAnchorKeys(turns);
+        return _SessionConversationPane(
+          creatingSession: _creatingSession,
+          loadingMessages: _loadingMessages,
+          turns: turns,
+          showHistoryLoader: _expandingHistory,
+          showScrollToBottomAction: _showScrollToBottomAction,
+          scrollController: _scrollController,
+          desktopSidebarBreakpoint: AppResponsiveLayout.desktopBreakpoint,
+          desktopContentMaxWidth: _desktopContentMaxWidth,
+          onScrollNotification: _handleScrollNotification,
+          onScrollToBottom: _handleScrollToBottomPressed,
+          historyLoaderBuilder: _buildHistoryLoader,
+          turnBuilder: _buildTurn,
+          turnKeyBuilder: _turnKeyFor,
+        );
+      });
 
   GlobalKey _turnKeyFor(_ConversationTurn turn) {
     return _turnKeys.putIfAbsent(
@@ -2729,21 +2785,24 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
-  GlobalKey _messageAnchorKeyFor(ChatMessage message) {
+  GlobalKey _messageAnchorKeyFor(String turnId, ChatMessage message) {
+    // Imported history may reuse provider message IDs in different turns.
+    // A shared GlobalKey would move the render subtree out of the other turn,
+    // leaving its cached sliver layout blank until the next scroll.
     return _messageAnchorKeys.putIfAbsent(
-      message.id,
-      () => GlobalKey(debugLabel: 'session-message-${message.id}'),
+      (turnId, message.id),
+      () => GlobalKey(debugLabel: 'session-message-$turnId-${message.id}'),
     );
   }
 
   void _pruneViewportAnchorKeys(List<_ConversationTurn> turns) {
     final visibleTurnIds = turns.map((turn) => turn.id).toSet();
     _turnKeys.removeWhere((id, _) => !visibleTurnIds.contains(id));
-    final visibleMessageIds = <String>{
+    final visibleMessageIds = <(String, String)>{
       for (final turn in turns) ...[
-        if (turn.userMessage != null) turn.userMessage!.id,
+        if (turn.userMessage != null) (turn.id, turn.userMessage!.id),
         for (final entry in turn.entries)
-          if (entry.assistantMessage case final message?) message.id,
+          if (entry.assistantMessage case final message?) (turn.id, message.id),
       ],
     };
     _messageAnchorKeys.removeWhere(
@@ -5018,6 +5077,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               if (turn.userMessage != null)
                 _buildUserMessage(
                   turn.userMessage!,
+                  turnId: turn.id,
                   maxWidth: messageBubbleMaxWidth,
                 ),
               for (var index = 0; index < turn.entries.length; index += 1) ...[
@@ -5031,6 +5091,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                     _buildAssistantMessageDivider(messageBubbleMaxWidth),
                   _buildAssistantMessage(
                     turn.entries[index].assistantMessage!,
+                    turnId: turn.id,
                     maxWidth: messageBubbleMaxWidth,
                     compactTopSpacing: index > 0,
                     compactBottomSpacing: index < turn.entries.length - 1,
@@ -5124,66 +5185,38 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
-  Widget _buildUserMessage(ChatMessage message, {required double maxWidth}) {
+  Widget _buildUserMessage(
+    ChatMessage message, {
+    required String turnId,
+    required double maxWidth,
+  }) {
     final localState = _localMessageStates[message.id];
-    final canRetry = localState?.state == _LocalMessageState.failed;
+    final inputState = _domainInputStates[message.id];
+    final canRetry = localState?.state == _LocalMessageState.failed ||
+        inputState == DomainEntityState.failed;
+    final stateLabel = inputState == DomainEntityState.pending
+        ? context.l10n.draftQueued
+        : inputState == DomainEntityState.failed
+            ? context.l10n.draftFailed
+            : localState?.label(context);
     final canRestoreQueued = localState?.state == _LocalMessageState.queued;
+    final isQueued = !canRetry && _isQueuedInput(message.id);
     final brightness = Theme.of(context).brightness;
-    final bubbleTextColor = AppColors.userMessageOnSurfaceFor(brightness);
+    final bubbleTextColor = stateLabel == null
+        ? AppColors.userMessageOnSurfaceFor(brightness)
+        : AppColors.textFor(brightness);
     final imageReferences = _imageReferencesFor(message);
-    final bubble = KeyedSubtree(
-      key: _messageAnchorKeyFor(message),
-      child: Container(
-        key: ValueKey('user-message-bubble-${message.id}'),
-        margin: const EdgeInsets.only(bottom: AppSpacing.stack),
-        padding: AppSpacing.cardPadding,
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        decoration: BoxDecoration(
-          color: AppColors.userMessageSurfaceFor(brightness),
-          borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildMarkdownMessageBody(
-              message.content,
-              textColor: bubbleTextColor,
-              maxWidth: maxWidth,
-              shrinkToContent: imageReferences.isNotEmpty,
-              imageReferences: imageReferences,
-              imageAlignment: Alignment.centerRight,
-              imageWrapAlignment: WrapAlignment.end,
-              imageCardBuilder: (reference, index) => _buildUserImageCard(
-                reference,
-                messageId: message.id,
-                imageReferences: imageReferences,
-                imageIndex: index,
-                textColor: bubbleTextColor,
-              ),
-            ),
-            if (localState != null) ...[
-              const SizedBox(height: AppSpacing.compact),
-              Text(
-                localState.label(context),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: localState.state == _LocalMessageState.failed
-                      ? AppColors.errorTextFor(brightness)
-                      : bubbleTextColor.withValues(alpha: 0.78),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
     return Align(
       alignment: Alignment.centerRight,
       child: _UserMessageBubble(
-        bubble: bubble,
-        showActions: canRestoreQueued || canRetry,
-        hoverKey: ValueKey('user-message-hover-${message.id}'),
-        actionKeySuffix: message.id,
+        anchorKey: _messageAnchorKeyFor(turnId, message),
+        messageId: message.id,
+        maxWidth: maxWidth,
+        shrinkToContent: imageReferences.isNotEmpty,
+        stateLabel: stateLabel,
+        stateDescription: isQueued ? context.l10n.draftQueuedDescription : null,
+        isQueued: isQueued,
+        isFailed: canRetry,
         onTapBubble: canRestoreQueued || canRetry
             ? () => _retryLocalMessage(message.id)
             : null,
@@ -5191,6 +5224,22 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             canRestoreQueued ? () => _withdrawQueuedMessage(message.id) : null,
         onEdit: canRestoreQueued ? () => _editQueuedMessage(message.id) : null,
         onRetry: canRetry ? () => _retryLocalMessage(message.id) : null,
+        body: _buildMarkdownMessageBody(
+          message.content,
+          textColor: bubbleTextColor,
+          maxWidth: maxWidth,
+          shrinkToContent: imageReferences.isNotEmpty,
+          imageReferences: imageReferences,
+          imageAlignment: Alignment.centerRight,
+          imageWrapAlignment: WrapAlignment.end,
+          imageCardBuilder: (reference, index) => _buildUserImageCard(
+            reference,
+            messageId: message.id,
+            imageReferences: imageReferences,
+            imageIndex: index,
+            textColor: bubbleTextColor,
+          ),
+        ),
       ),
     );
   }
@@ -5447,6 +5496,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
   Widget _buildAssistantMessage(
     ChatMessage message, {
+    required String turnId,
     required double maxWidth,
     bool compactTopSpacing = false,
     bool compactBottomSpacing = false,
@@ -5463,7 +5513,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return Align(
       alignment: Alignment.centerLeft,
       child: KeyedSubtree(
-        key: _messageAnchorKeyFor(message),
+        key: _messageAnchorKeyFor(turnId, message),
         child: MouseRegion(
           onEnter: (_) => _setAssistantMessageHover(message.id, true),
           onExit: (_) => _setAssistantMessageHover(message.id, false),
@@ -5720,19 +5770,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
 
     Widget buildMarkdownSection(String sectionContent) {
-      return SelectionArea(
-        child: MarkdownBody(
-          data: sectionContent,
-          fitContent: true,
-          selectable: false,
-          shrinkWrap: true,
-          softLineBreak: true,
-          styleSheet: styleSheet,
-          syntaxHighlighter: _AssistantCodeSyntaxHighlighter(theme),
-          sizedImageBuilder: (_) => const SizedBox.shrink(),
-          onTapLink: (text, href, title) =>
-              _handleAssistantMarkdownLinkTap(href),
-        ),
+      return _SessionMarkdownSection(
+        data: sectionContent,
+        theme: theme,
+        textColor: textColor,
+        styleSheet: styleSheet,
+        onTapLink: _handleAssistantMarkdownLinkTap,
       );
     }
 
@@ -9343,11 +9386,39 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   Future<void> _retryLocalMessage(String messageId) async {
     final draft = _localMessageStates[messageId];
     final message = _firstMatchingMessage((item) => item.id == messageId);
+    if (draft == null &&
+        _domainInputStates[messageId] == DomainEntityState.failed) {
+      final input = _domainController?.state?.turns
+          .expand((turn) => turn.segments)
+          .map((segment) => segment.message)
+          .whereType<DomainMessage>()
+          .where((message) => message.id == messageId)
+          .firstOrNull;
+      if (input != null) {
+        await _enqueueOrSubmitLocalMessage(
+          input.content,
+          inputMode: 'text',
+          attachments: input.attachments,
+        );
+      }
+      return;
+    }
     if (draft == null || message == null) {
       return;
     }
     if (draft.state == _LocalMessageState.queued) {
       _editQueuedMessage(messageId);
+      return;
+    }
+    if (_session.status == SessionStatus.running ||
+        _session.status == SessionStatus.awaitingApproval ||
+        _hasPendingLocalMessage) {
+      setState(
+        () => _localMessageStates[messageId] = draft.withState(
+          _LocalMessageState.queued,
+        ),
+      );
+      unawaited(_dispatchQueuedLocalMessageIfPossible());
       return;
     }
     await _submitLocalMessage(
@@ -9374,6 +9445,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         inputMode: inputMode,
         attachments: attachments,
       );
+      unawaited(_dispatchQueuedLocalMessageIfPossible());
       return;
     }
     await _submitLocalMessage(
@@ -9422,11 +9494,20 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     if (!mounted ||
         _dispatchingQueuedLocalMessage ||
         _hasPendingLocalMessage ||
-        _session.status == SessionStatus.running ||
         _session.status == SessionStatus.awaitingApproval ||
         _pendingApproval != null) {
       return;
     }
+    final busy =
+        _session.status == SessionStatus.running ||
+        _session.status == SessionStatus.waiting;
+    final turnId = _domainController?.state?.session.activeTurnId;
+    final canSteer =
+        busy &&
+        _session.agentId == 'codex' &&
+        !_steeringUnavailable &&
+        turnId != null;
+    if (busy && !canSteer) return;
     final entry = _localMessageStates.entries
         .where((entry) => entry.value.state == _LocalMessageState.queued)
         .cast<MapEntry<String, _LocalMessageDraft>?>()
@@ -9442,15 +9523,57 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       return;
     }
     _dispatchingQueuedLocalMessage = true;
+    var accepted = false;
     try {
-      await _submitLocalMessage(
-        entry.value.content,
-        inputMode: entry.value.inputMode,
-        localMessageId: entry.key,
-        attachments: entry.value.attachments,
-      );
+      if (canSteer) {
+        setState(
+          () => _localMessageStates[entry.key] = entry.value.withState(
+            _LocalMessageState.steering,
+          ),
+        );
+        final result = await _domainController!.steer(
+          turnId,
+          entry.value.content,
+          commandId: entry.key,
+          userMessageId: entry.key,
+          attachments: entry.value.attachments,
+        );
+        if (!mounted) return;
+        accepted = result == SessionSteeringResult.accepted;
+        if (result == SessionSteeringResult.unavailable) {
+          _steeringUnavailable = true;
+        }
+        if (!accepted && _localMessageStates.containsKey(entry.key)) {
+          setState(
+            () => _localMessageStates[entry.key] = entry.value.withState(
+              _LocalMessageState.queued,
+            ),
+          );
+        }
+      } else {
+        accepted = await _submitLocalMessage(
+          entry.value.content,
+          inputMode: entry.value.inputMode,
+          localMessageId: entry.key,
+          attachments: entry.value.attachments,
+        );
+      }
+    } catch (error) {
+      if (mounted && _localMessageStates.containsKey(entry.key)) {
+        setState(() {
+          _localMessageStates[entry.key] = entry.value.withState(
+            _LocalMessageState.failed,
+          );
+          _speechError = context.l10n.sendFailed('$error');
+        });
+      }
     } finally {
       _dispatchingQueuedLocalMessage = false;
+      final idle = _session.status == SessionStatus.idle ||
+          _session.status == SessionStatus.interrupted;
+      if ((accepted || idle) && mounted) {
+        unawaited(_dispatchQueuedLocalMessageIfPossible());
+      }
     }
   }
 
@@ -10807,6 +10930,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     });
   }
 
+  bool _isQueuedInput(String messageId) {
+    final localState = _localMessageStates[messageId]?.state;
+    final domainState = _domainInputStates[messageId];
+    return localState == _LocalMessageState.queued ||
+        localState == _LocalMessageState.steering ||
+        domainState == DomainEntityState.pending ||
+        domainState == DomainEntityState.failed;
+  }
+
   List<_ConversationTurn> _buildConversationTurns(
     Iterable<ChatMessage> messages,
   ) {
@@ -10817,8 +10949,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       if (message.role == MessageRole.user) {
         currentTurn = _ConversationTurn(id: message.id, userMessage: message);
         turns.add(currentTurn);
-        final localState = _localMessageStates[message.id]?.state;
-        if (localState != _LocalMessageState.queued) {
+        if (!_isQueuedInput(message.id)) {
           activeReplyTurn = currentTurn;
         }
         continue;
@@ -10842,7 +10973,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   int _conversationTurnsFingerprint() {
     var fingerprint = Object.hashAll(_messages);
     for (final entry in _localMessageStates.entries) {
-      if (entry.value.state == _LocalMessageState.queued) {
+      if (_isQueuedInput(entry.key)) {
         fingerprint = Object.hash(fingerprint, entry.key);
       }
     }
@@ -10936,8 +11067,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     for (var index = _messages.length - 1; index >= 0; index -= 1) {
       final message = _messages[index];
       if (message.role == MessageRole.user) {
-        final localState = _localMessageStates[message.id]?.state;
-        if (localState != _LocalMessageState.queued) {
+        if (!_isQueuedInput(message.id)) {
           return message.id;
         }
       }
@@ -13008,6 +13138,65 @@ extension on _DiffLineKind {
       };
 }
 
+class _SessionMarkdownSection extends StatefulWidget {
+  const _SessionMarkdownSection({
+    required this.data,
+    required this.theme,
+    required this.textColor,
+    required this.styleSheet,
+    required this.onTapLink,
+  });
+
+  final String data;
+  final ThemeData theme;
+  final Color textColor;
+  final MarkdownStyleSheet styleSheet;
+  final ValueChanged<String?> onTapLink;
+
+  @override
+  State<_SessionMarkdownSection> createState() =>
+      _SessionMarkdownSectionState();
+}
+
+class _SessionMarkdownSectionState extends State<_SessionMarkdownSection> {
+  late Widget _content;
+
+  @override
+  void initState() {
+    super.initState();
+    _content = _buildContent();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SessionMarkdownSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The stylesheet derives from theme and textColor. Reusing the existing
+    // subtree keeps selection and parsed markdown stable during other updates.
+    if (oldWidget.data != widget.data ||
+        oldWidget.theme != widget.theme ||
+        oldWidget.textColor != widget.textColor) {
+      _content = _buildContent();
+    }
+  }
+
+  Widget _buildContent() => SelectionArea(
+        child: MarkdownBody(
+          data: widget.data,
+          fitContent: true,
+          selectable: false,
+          shrinkWrap: true,
+          softLineBreak: true,
+          styleSheet: widget.styleSheet,
+          syntaxHighlighter: _AssistantCodeSyntaxHighlighter(widget.theme),
+          sizedImageBuilder: (_) => const SizedBox.shrink(),
+          onTapLink: (text, href, title) => widget.onTapLink(href),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) => _content;
+}
+
 class _AssistantCodeSyntaxHighlighter extends SyntaxHighlighter {
   _AssistantCodeSyntaxHighlighter(this.theme);
 
@@ -13086,7 +13275,7 @@ class _AssistantCodeSyntaxHighlighter extends SyntaxHighlighter {
   }
 }
 
-enum _LocalMessageState { queued, pending, submitted, failed }
+enum _LocalMessageState { queued, steering, pending, submitted, failed }
 
 class _LocalMessageDraft {
   const _LocalMessageDraft({
@@ -13105,9 +13294,19 @@ class _LocalMessageDraft {
   final String content;
   final List<DomainAttachment> attachments;
 
+  _LocalMessageDraft withState(_LocalMessageState value) => _LocalMessageDraft(
+    state: value,
+    inputMode: inputMode,
+    createdAt: createdAt,
+    clientMessageId: clientMessageId,
+    content: content,
+    attachments: attachments,
+  );
+
   String label(BuildContext context) {
     return switch (state) {
-      _LocalMessageState.queued => context.l10n.draftPending,
+      _LocalMessageState.queued || _LocalMessageState.steering =>
+        context.l10n.draftQueued,
       _LocalMessageState.pending => context.l10n.draftPending,
       _LocalMessageState.submitted => context.l10n.draftPending,
       _LocalMessageState.failed => context.l10n.draftFailed,
@@ -13115,48 +13314,41 @@ class _LocalMessageDraft {
   }
 }
 
-class _UserMessageBubble extends StatefulWidget {
+class _UserMessageBubble extends StatelessWidget {
   const _UserMessageBubble({
-    required this.bubble,
-    required this.showActions,
-    required this.actionKeySuffix,
-    this.hoverKey,
+    required this.anchorKey,
+    required this.messageId,
+    required this.maxWidth,
+    required this.body,
+    required this.shrinkToContent,
+    this.stateLabel,
+    this.stateDescription,
+    this.isQueued = false,
+    this.isFailed = false,
     this.onTapBubble,
     this.onWithdraw,
     this.onEdit,
     this.onRetry,
   });
 
-  final Widget bubble;
-  final bool showActions;
-  final String actionKeySuffix;
-  final Key? hoverKey;
+  final Key anchorKey;
+  final String messageId;
+  final double maxWidth;
+  final Widget body;
+  final bool shrinkToContent;
+  final String? stateLabel;
+  final String? stateDescription;
+  final bool isQueued;
+  final bool isFailed;
   final VoidCallback? onTapBubble;
   final VoidCallback? onWithdraw;
   final VoidCallback? onEdit;
   final VoidCallback? onRetry;
 
-  @override
-  State<_UserMessageBubble> createState() => _UserMessageBubbleState();
-}
+  bool get _showActions =>
+      onWithdraw != null || onEdit != null || onRetry != null;
 
-class _UserMessageBubbleState extends State<_UserMessageBubble> {
-  Timer? _hoverHideTimer;
-
-  bool get _canShowInlineActions => widget.showActions;
-
-  void _showInlineActions() {
-    _hoverHideTimer?.cancel();
-  }
-
-  void _scheduleHideInlineActions() {
-    _hoverHideTimer?.cancel();
-  }
-
-  Future<void> _showActionsSheet() async {
-    if (!widget.showActions) {
-      return;
-    }
+  Future<void> _showActionsSheet(BuildContext context) async {
     final l10n = context.l10n;
     final brightness = Theme.of(context).brightness;
     await showModalBottomSheet<void>(
@@ -13165,25 +13357,25 @@ class _UserMessageBubbleState extends State<_UserMessageBubble> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (widget.onWithdraw != null)
+            if (onWithdraw != null)
               ListTile(
                 leading: const Icon(Icons.undo_rounded),
                 title: Text(l10n.withdrawMessage),
                 onTap: () {
                   Navigator.of(context).pop();
-                  widget.onWithdraw?.call();
+                  onWithdraw?.call();
                 },
               ),
-            if (widget.onEdit != null)
+            if (onEdit != null)
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
                 title: Text(l10n.editMessage),
                 onTap: () {
                   Navigator.of(context).pop();
-                  widget.onEdit?.call();
+                  onEdit?.call();
                 },
               ),
-            if (widget.onRetry != null)
+            if (onRetry != null)
               ListTile(
                 leading: Icon(
                   Icons.refresh_rounded,
@@ -13192,7 +13384,7 @@ class _UserMessageBubbleState extends State<_UserMessageBubble> {
                 title: Text(l10n.retry),
                 onTap: () {
                   Navigator.of(context).pop();
-                  widget.onRetry?.call();
+                  onRetry?.call();
                 },
               ),
           ],
@@ -13202,141 +13394,140 @@ class _UserMessageBubbleState extends State<_UserMessageBubble> {
   }
 
   @override
-  void dispose() {
-    _hoverHideTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    final actionBarVisible = _canShowInlineActions;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        MouseRegion(
-          key: widget.hoverKey,
-          onEnter: (_) => _showInlineActions(),
-          onExit: (_) => _scheduleHideInlineActions(),
-          child: GestureDetector(
-            onTap: widget.onTapBubble,
-            onLongPress: widget.showActions ? _showActionsSheet : null,
-            child: widget.bubble,
-          ),
-        ),
-        AnimatedSlide(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          offset: actionBarVisible ? Offset.zero : const Offset(0, -0.16),
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 140),
-            curve: Curves.easeOut,
-            opacity: actionBarVisible ? 1 : 0,
-            child: IgnorePointer(
-              ignoring: !actionBarVisible,
-              child: Padding(
-                padding: const EdgeInsets.only(
-                  top: 0,
-                  right: AppSpacing.compact,
-                  bottom: AppSpacing.stack,
-                ),
-                child: Transform.translate(
-                  offset: const Offset(0, -6),
-                  child: MouseRegion(
-                    onEnter: (_) => _showInlineActions(),
-                    onExit: (_) => _scheduleHideInlineActions(),
-                    child: ClipRRect(
-                      borderRadius:
-                          BorderRadius.circular(AppSpacing.radiusPill),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: AppColors.userMessageOnSurfaceFor(brightness)
-                                .withValues(
-                              alpha:
-                                  brightness == Brightness.dark ? 0.74 : 0.80,
-                            ),
-                            borderRadius: BorderRadius.circular(
-                              AppSpacing.radiusPill,
-                            ),
-                            border: Border.all(
-                              color: Colors.white.withValues(
-                                alpha:
-                                    brightness == Brightness.dark ? 0.16 : 0.58,
-                              ),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(
-                                  alpha: brightness == Brightness.dark
-                                      ? 0.12
-                                      : 0.05,
-                                ),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 4,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (widget.onWithdraw != null)
-                                  KeyedSubtree(
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final hasState = stateLabel != null;
+    final statusColor = isFailed
+        ? AppColors.errorTextFor(brightness)
+        : isQueued
+            ? AppColors.warningTextFor(brightness)
+            : AppColors.mutedSoftFor(brightness);
+    return KeyedSubtree(
+      key: anchorKey,
+      child: MouseRegion(
+        key: ValueKey('user-message-hover-$messageId'),
+        child: GestureDetector(
+          onTap: onTapBubble,
+          onLongPress: _showActions ? () => _showActionsSheet(context) : null,
+          child: Container(
+            key: ValueKey('user-message-bubble-$messageId'),
+            // Preserve transcript spacing for messages already received.
+            margin: EdgeInsets.only(bottom: hasState ? AppSpacing.stack : 34),
+            padding: AppSpacing.cardPadding,
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            decoration: BoxDecoration(
+              color: isFailed
+                  ? AppColors.errorBgFor(brightness)
+                  : hasState
+                      ? AppColors.tintSurfaceFor(
+                          brightness,
+                          AppColors.accentBlueFor(brightness),
+                          darkAlpha: 0.06,
+                          lightAlpha: 0.035,
+                        )
+                      : AppColors.userMessageSurfaceFor(brightness),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
+              border: hasState
+                  ? Border.all(
+                      color: isFailed
+                          ? AppColors.errorBorderFor(brightness)
+                          : AppColors.outlineFor(brightness),
+                    )
+                  : null,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                body,
+                if (hasState) ...[
+                  const SizedBox(height: AppSpacing.compact),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 34),
+                    child: Row(
+                      key: ValueKey('user-message-status-$messageId'),
+                      mainAxisSize: shrinkToContent
+                          ? MainAxisSize.min
+                          : MainAxisSize.max,
+                      children: [
+                        Flexible(
+                          fit: shrinkToContent ? FlexFit.loose : FlexFit.tight,
+                          child: Tooltip(
+                            message: stateDescription ?? stateLabel!,
+                            child: Semantics(
+                              liveRegion: true,
+                              label: stateDescription ?? stateLabel,
+                              excludeSemantics: true,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
                                     key: ValueKey(
-                                      'user-message-withdraw-action-${widget.actionKeySuffix}',
+                                      'user-message-status-dot-$messageId',
                                     ),
-                                    child: _buildMessageActionButton(
-                                      key: const Key(
-                                        'user-message-withdraw-action',
+                                    width: 6,
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      color: statusColor,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppSpacing.compact),
+                                  Flexible(
+                                    child: Text(
+                                      stateLabel!,
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        color: statusColor,
+                                        fontWeight: FontWeight.w500,
                                       ),
-                                      tooltip: context.l10n.withdrawMessage,
-                                      icon: Icons.undo_rounded,
-                                      color: AppColors.textSoftFor(brightness),
-                                      onPressed: widget.onWithdraw,
                                     ),
                                   ),
-                                if (widget.onWithdraw != null &&
-                                    (widget.onEdit != null ||
-                                        widget.onRetry != null))
-                                  _buildActionDivider(brightness),
-                                if (widget.onEdit != null)
-                                  _buildMessageActionButton(
-                                    key: const Key('user-message-edit-action'),
-                                    tooltip: context.l10n.editMessage,
-                                    icon: Icons.edit_outlined,
-                                    color: AppColors.textSoftFor(brightness),
-                                    onPressed: widget.onEdit,
-                                  ),
-                                if (widget.onEdit != null &&
-                                    widget.onRetry != null)
-                                  _buildActionDivider(brightness),
-                                if (widget.onRetry != null)
-                                  _buildMessageActionButton(
-                                    key: const Key('user-message-retry-action'),
-                                    tooltip: context.l10n.retry,
-                                    icon: Icons.refresh_rounded,
-                                    color: AppColors.errorTextFor(brightness),
-                                    onPressed: widget.onRetry,
-                                  ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                        if (_showActions)
+                          const SizedBox(width: AppSpacing.compact),
+                        if (onWithdraw != null)
+                          KeyedSubtree(
+                            key: ValueKey(
+                              'user-message-withdraw-action-$messageId',
+                            ),
+                            child: _buildMessageActionButton(
+                              key: const Key('user-message-withdraw-action'),
+                              tooltip: context.l10n.withdrawMessage,
+                              icon: Icons.undo_rounded,
+                              color: AppColors.mutedSoftFor(brightness),
+                              onPressed: onWithdraw!,
+                            ),
+                          ),
+                        if (onEdit != null)
+                          _buildMessageActionButton(
+                            key: const Key('user-message-edit-action'),
+                            tooltip: context.l10n.editMessage,
+                            icon: Icons.edit_outlined,
+                            color: AppColors.mutedSoftFor(brightness),
+                            onPressed: onEdit!,
+                          ),
+                        if (onRetry != null)
+                          _buildMessageActionButton(
+                            key: const Key('user-message-retry-action'),
+                            tooltip: context.l10n.retry,
+                            icon: Icons.refresh_rounded,
+                            color: AppColors.errorTextFor(brightness),
+                            onPressed: onRetry!,
+                          ),
+                      ],
                     ),
                   ),
-                ),
-              ),
+                ],
+              ],
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -13345,42 +13536,24 @@ class _UserMessageBubbleState extends State<_UserMessageBubble> {
     required String tooltip,
     required IconData icon,
     required Color color,
-    required VoidCallback? onPressed,
+    required VoidCallback onPressed,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-      child: IconButton(
-        key: key,
-        tooltip: tooltip,
-        visualDensity: VisualDensity.compact,
-        constraints: const BoxConstraints.tightFor(
-          width: 34,
-          height: 34,
-        ),
-        padding: EdgeInsets.zero,
-        style: IconButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          foregroundColor: color,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
-          ),
-        ),
-        onPressed: onPressed,
-        icon: Icon(icon, size: 15.5),
-      ),
-    );
-  }
-
-  Widget _buildActionDivider(Brightness brightness) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Container(
-        width: 1,
-        height: 16,
-        color: AppColors.outlineStrongFor(brightness).withValues(
-          alpha: brightness == Brightness.dark ? 0.28 : 0.18,
+    return IconButton(
+      key: key,
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+      padding: EdgeInsets.zero,
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.transparent,
+        foregroundColor: color,
+        side: BorderSide.none,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
         ),
       ),
+      onPressed: onPressed,
+      icon: Icon(icon, size: 16),
     );
   }
 }

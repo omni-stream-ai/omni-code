@@ -1025,6 +1025,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get draftPending => '待同步';
 
   @override
+  String get draftQueued => '排队中';
+
+  @override
+  String get draftQueuedDescription => '等待 agent 接收这条消息';
+
+  @override
   String get draftFailed => '发送失败，点击重发';
 
   @override
@@ -2700,6 +2706,108 @@ class AppLocalizationsZh extends AppLocalizations {
       '继续未完成的任务。先核对已有执行结果和当前进程，从尚未完成的步骤继续，避免重复执行已完成的操作。';
 
   @override
+  String get relayTitle => 'Relay 远程连接';
+
+  @override
+  String get relayUse => '使用 Relay 连接';
+
+  @override
+  String get relayUrl => 'Relay 地址';
+
+  @override
+  String get relayDeviceName => '客户端名称';
+
+  @override
+  String get relayLogin => '登录 Relay';
+
+  @override
+  String get relayRefresh => '刷新服务';
+
+  @override
+  String get relayLogout => '退出 Relay 登录';
+
+  @override
+  String get relayVerify => '打开 Relay 网页，用同一账号登录并批准下方设备码。';
+
+  @override
+  String get relayOpenLogin => '打开登录网页';
+
+  @override
+  String get relayNoServices => '暂无 Omni Code 服务，请先在电脑端开启远程访问。';
+
+  @override
+  String get relayOnline => '在线';
+
+  @override
+  String get relayOffline => '离线';
+
+  @override
+  String get relayConnect => '连接';
+
+  @override
+  String get relayRequestAccess => '申请访问';
+
+  @override
+  String get relayHost => '电脑端远程访问';
+
+  @override
+  String get relayHostHint =>
+      '通过直连管理 Bridge；启用后随 Bridge 自动连接 Relay，无需单独运行 Connector。';
+
+  @override
+  String get relayServiceName => '服务名称';
+
+  @override
+  String get relayConnecting => '正在连接';
+
+  @override
+  String get relayDisabled => '远程访问已关闭';
+
+  @override
+  String get relayLoginEnable => '登录并开启远程访问';
+
+  @override
+  String get relayEnable => '开启远程访问';
+
+  @override
+  String get relayDisable => '关闭远程访问';
+
+  @override
+  String get relayDevices => '管理远程设备';
+
+  @override
+  String get relayPolicy => '新设备访问策略';
+
+  @override
+  String get relayPolicyAuto => '同账号自动允许';
+
+  @override
+  String get relayPolicyApproval => '逐个批准';
+
+  @override
+  String get relayApprove => '批准';
+
+  @override
+  String get relayRevoke => '撤销';
+
+  @override
+  String get relayKick => '踢出并要求重新登录';
+
+  @override
+  String get relayBan => '封禁';
+
+  @override
+  String get relayUnban => '解除封禁';
+
+  @override
+  String get relayLoginRequired => 'Relay 登录已失效，请在设置中重新登录。';
+
+  @override
+  String relayFailure(String error) {
+    return 'Relay 操作失败：$error';
+  }
+
+  @override
   String get acceptanceBuildTitle => '打包与依赖';
 
   @override
@@ -2746,24 +2854,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get acceptanceBuildReview => '检查并保存配置后继续验收';
 
   @override
-  String get acceptanceVideoLoading => '正在加载验收录像…';
-
-  @override
-  String get acceptanceVideoBack => '后退 10 秒';
-
-  @override
-  String get acceptanceVideoForward => '前进 10 秒';
-
-  @override
-  String get acceptanceBuildNext => '下一步：检查配置';
-
-  @override
-  String get acceptanceBuildContinue => '保存并继续';
-
-  @override
-  String get acceptanceDesktopConnecting => '正在连接验收桌面…';
-
-  @override
   String get desktopShortcutsTitle => '键盘快捷键';
 
   @override
@@ -2777,6 +2867,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get shortcutNewSession => '新建会话';
+
+  @override
+  String get shortcutPreviousSession => '上一个最近会话';
+
+  @override
+  String get shortcutNextSession => '下一个最近会话';
 
   @override
   String get shortcutSettings => '打开设置';
@@ -2829,6 +2925,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shortcutSearchHint => '搜索项目和会话…';
 
   @override
+  String get acceptanceVideoLoading => '正在加载验收录像…';
+
+  @override
+  String get acceptanceVideoBack => '后退 10 秒';
+
+  @override
+  String get acceptanceVideoForward => '前进 10 秒';
+
+  @override
+  String get acceptanceBuildNext => '下一步：检查配置';
+
+  @override
+  String get acceptanceBuildContinue => '保存并继续';
+
+  @override
+  String get acceptanceDesktopConnecting => '正在连接验收桌面…';
+
+  @override
   String get shortcutsHeroTitle => '用熟悉的按键，专注手头的工作';
 
   @override
@@ -2860,4 +2974,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get shortcutSearchEntry => '搜索';
+
+  @override
+  String get relayAccessAllowed => '允许访问';
+
+  @override
+  String get relayAccessApprovalRequired => '需要批准';
+
+  @override
+  String get relayAccessPending => '等待批准';
+
+  @override
+  String get relayAccessRevoked => '访问已撤销';
+
+  @override
+  String get relayAccessBanned => '设备已封禁';
+
+  @override
+  String get relayAccessLoginRequired => '需要重新登录';
+
+  @override
+  String get relayCheckConnection => '请在设置中检查 Relay 登录、服务状态和访问权限。';
 }

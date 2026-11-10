@@ -8,11 +8,13 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../bridge_client.dart';
+import '../relay/relay_settings_card.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
 import '../responsive/app_responsive_layout.dart';
 import '../services/app_update_service.dart';
 import '../services/sentry_service.dart';
+import '../services/session_event_service.dart';
 import '../app_routes.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_colors.dart';
@@ -892,6 +894,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             hintText: 'http://127.0.0.1:8787',
           ),
         ),
+        RelaySettingsCard(
+            client: _client,
+            onConnectionChanged: () {
+              if (mounted) setState(() => _retryBridgeConnection = true);
+            }),
         TextField(
           controller: _clientIdController,
           readOnly: true,
@@ -1458,6 +1465,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           return;
         }
         feedback = context.l10n.settingsSavedBridgeConnected;
+        sessionEventService.refreshConnection();
       }
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(

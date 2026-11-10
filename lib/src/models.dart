@@ -199,7 +199,9 @@ enum DomainTurnStatus {
   failed,
 }
 
-enum DomainSegmentKind { assistantMessage, execution }
+enum DomainSegmentKind { userMessage, assistantMessage, execution }
+
+enum SessionSteeringResult { accepted, unavailable, stale }
 
 enum DomainMessagePurpose { user, commentary, finalReply }
 
@@ -232,10 +234,11 @@ DomainTurnStatus parseDomainTurnStatus(String value) => switch (value) {
       _ => DomainTurnStatus.accepted,
     };
 
-DomainSegmentKind parseDomainSegmentKind(String value) =>
-    value == 'assistant_message'
-        ? DomainSegmentKind.assistantMessage
-        : DomainSegmentKind.execution;
+DomainSegmentKind parseDomainSegmentKind(String value) => switch (value) {
+      'user_message' => DomainSegmentKind.userMessage,
+      'assistant_message' => DomainSegmentKind.assistantMessage,
+      _ => DomainSegmentKind.execution,
+    };
 
 DomainEntityState parseDomainEntityState(String value) => switch (value) {
       'running' => DomainEntityState.running,

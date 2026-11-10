@@ -92,6 +92,10 @@ nix profile install github:omni-stream-ai/omni-code#omni-code-bin
 nix profile install github:omni-stream-ai/omni-code#omni-code
 ```
 
+## Relay 远程连接
+
+设置中的 Relay 入口支持设备登录、服务选择，以及通过直连管理电脑端远程访问。使用方式和验证范围见[Relay 远程连接](relay.md)。
+
 ## 开发
 
 桌面端支持可自定义并自动保存的[键盘快捷键](keyboard-shortcuts.md)，包括搜索、新窗口、新会话和导航操作。

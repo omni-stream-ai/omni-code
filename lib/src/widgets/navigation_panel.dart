@@ -9,7 +9,9 @@ import '../settings/app_settings.dart';
 import '../screens/keyboard_shortcuts_screen.dart';
 import '../shortcuts/desktop_shortcut.dart';
 import '../shortcuts/desktop_shortcut_scope.dart';
+import '../shortcuts/recent_session_shortcuts.dart';
 import '../shortcuts/shortcut_keycaps.dart';
+import '../shortcuts/shortcut_labels.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 
@@ -86,10 +88,9 @@ class NavigationPanel extends StatelessWidget {
         shortcutScope != null;
     final currentProjectOnly =
         appSettingsController.settings.recentSessionsCurrentProjectOnly;
-    final visibleSessions = recentSessions.where((session) =>
-        !currentProjectOnly ||
-        activeProjectId == null ||
-        session.projectId == activeProjectId);
+    final visibleSessions = visibleRecentSessions(recentSessions,
+        activeProjectId: activeProjectId,
+        currentProjectOnly: currentProjectOnly);
     final hasRecentContent = showRecentContent &&
         (recentSessions.isNotEmpty || recentProjects.isNotEmpty);
 
@@ -163,11 +164,13 @@ class NavigationPanel extends StatelessWidget {
                       const Icon(Icons.search_rounded, size: 17),
                       const SizedBox(width: 8),
                       Expanded(child: Text(context.l10n.shortcutSearchEntry)),
-                      const Flexible(
-                          child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: ActionShortcutHint(
-                                  action: DesktopShortcutAction.search))),
+                      const Expanded(
+                          child: Align(
+                              alignment: Alignment.centerRight,
+                              child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: ActionShortcutHint(
+                                      action: DesktopShortcutAction.search)))),
                     ]),
             ),
           ),
@@ -188,11 +191,14 @@ class NavigationPanel extends StatelessWidget {
                       const Icon(Icons.open_in_new_rounded, size: 17),
                       const SizedBox(width: 8),
                       Expanded(child: Text(context.l10n.shortcutNewWindow)),
-                      const Flexible(
-                          child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: ActionShortcutHint(
-                                  action: DesktopShortcutAction.newWindow))),
+                      const Expanded(
+                          child: Align(
+                              alignment: Alignment.centerRight,
+                              child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: ActionShortcutHint(
+                                      action:
+                                          DesktopShortcutAction.newWindow)))),
                     ]),
             ),
           ),
@@ -306,32 +312,44 @@ class NavigationPanel extends StatelessWidget {
                           ),
                       ],
                     ),
-                    const SizedBox(height: AppSpacing.compact),
-                    ...visibleSessions.take(5).map(
-                          (session) => Padding(
-                            padding: const EdgeInsets.only(
-                              bottom: AppSpacing.compact,
-                            ),
-                            child: NavigationRecentItem(
-                              label: session.title,
-                              active: session.id == activeSessionId,
-                              collapsed: collapsed,
-                              unreadCount: session.unreadCount,
-                              awaitingApproval: session.status ==
-                                  SessionStatus.awaitingApproval,
-                              failed: session.status == SessionStatus.failed,
-                              alwaysShowMenu: alwaysShowRecentMenus,
-                              icon: Icons.chat_bubble_outline_rounded,
-                              menuChildren: _recentSessionMenuChildren(
-                                context,
-                                session,
-                              ),
-                              onTap: onOpenSession == null
-                                  ? null
-                                  : _wrapAction(() => onOpenSession!(session)),
-                            ),
+                    if (showShortcuts &&
+                        !collapsed &&
+                        activeRoute == AppRouteKind.session &&
+                        activeSessionId != null &&
+                        onOpenSession != null)
+                      Row(children: [
+                        for (final previous in [true, false])
+                          Expanded(
+                            child: _sessionShortcutButton(context,
+                                previous: previous,
+                                sessions: visibleSessions,
+                                scope: shortcutScope),
                           ),
+                      ]),
+                    const SizedBox(height: AppSpacing.compact),
+                    ...visibleSessions.map(
+                      (session) => Padding(
+                        padding: const EdgeInsets.only(
+                          bottom: AppSpacing.compact,
                         ),
+                        child: NavigationRecentItem(
+                          label: session.title,
+                          active: session.id == activeSessionId,
+                          collapsed: collapsed,
+                          unreadCount: session.unreadCount,
+                          status: session.status,
+                          alwaysShowMenu: alwaysShowRecentMenus,
+                          icon: Icons.chat_bubble_outline_rounded,
+                          menuChildren: _recentSessionMenuChildren(
+                            context,
+                            session,
+                          ),
+                          onTap: onOpenSession == null
+                              ? null
+                              : _wrapAction(() => onOpenSession!(session)),
+                        ),
+                      ),
+                    ),
                   ],
                   if (recentProjects.isNotEmpty) ...[
                     if (recentSessions.isNotEmpty)
@@ -518,6 +536,47 @@ class NavigationPanel extends StatelessWidget {
     };
   }
 
+  Widget _sessionShortcutButton(BuildContext context,
+      {required bool previous,
+      required List<SessionSummary> sessions,
+      required DesktopShortcutScope scope}) {
+    final action = previous
+        ? DesktopShortcutAction.previousSession
+        : DesktopShortcutAction.nextSession;
+    final enabled = adjacentRecentSession(sessions,
+            activeSessionId: activeSessionId!, previous: previous) !=
+        null;
+    final binding = resolveDesktopShortcut(
+        appSettingsController.settings.desktopShortcuts, action);
+    return Tooltip(
+      message: shortcutTooltip(action.label(context.l10n), action),
+      child: Semantics(
+        label: action.label(context.l10n),
+        child: TextButton(
+          key: Key('navigation-${action.name}'),
+          onPressed: enabled ? () => scope.onInvoke(action) : null,
+          style: TextButton.styleFrom(
+              minimumSize: const Size(0, 30),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+          child: Opacity(
+            opacity: enabled ? 1 : 0.4,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: binding == null
+                  ? Icon(
+                      previous
+                          ? Icons.arrow_upward_rounded
+                          : Icons.arrow_downward_rounded,
+                      size: 16)
+                  : ActionShortcutHint(action: action),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   List<Widget> _recentSessionMenuChildren(
     BuildContext context,
     SessionSummary session,
@@ -614,8 +673,7 @@ class NavigationRecentItem extends StatefulWidget {
     required this.active,
     this.collapsed = false,
     this.unreadCount = 0,
-    this.awaitingApproval = false,
-    this.failed = false,
+    this.status,
     this.alwaysShowMenu = false,
     this.icon,
     this.menuChildren = const [],
@@ -626,8 +684,7 @@ class NavigationRecentItem extends StatefulWidget {
   final bool active;
   final bool collapsed;
   final int unreadCount;
-  final bool awaitingApproval;
-  final bool failed;
+  final SessionStatus? status;
   final bool alwaysShowMenu;
   final IconData? icon;
   final List<Widget> menuChildren;
@@ -645,6 +702,33 @@ class _NavigationRecentItemState extends State<NavigationRecentItem> {
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
+    final statusLabel = switch (widget.status) {
+      SessionStatus.running => context.l10n.sessionStatusRunning,
+      SessionStatus.waiting => context.l10n.sessionStatusWaiting,
+      SessionStatus.awaitingApproval =>
+        context.l10n.sessionStatusAwaitingApproval,
+      SessionStatus.failed => context.l10n.sessionStatusFailed,
+      _ => null,
+    };
+    final statusColor = switch (widget.status) {
+      SessionStatus.failed => AppColors.errorFor(brightness),
+      SessionStatus.awaitingApproval || SessionStatus.waiting =>
+        AppColors.warningFor(brightness),
+      SessionStatus.running => brightness == Brightness.dark
+          ? Colors.green.shade400
+          : Colors.green.shade600,
+      _ => AppColors.accentBlueFor(brightness),
+    };
+    final showIndicator = statusLabel != null || widget.unreadCount > 0;
+    final statusDot = Container(
+      width: 7,
+      height: 7,
+      decoration: BoxDecoration(
+        color: statusColor,
+        shape: BoxShape.circle,
+      ),
+    );
+    final statusIndicator = Semantics(label: statusLabel, child: statusDot);
     final textColor = widget.active
         ? AppColors.textFor(brightness)
         : _hovered
@@ -659,7 +743,9 @@ class _NavigationRecentItemState extends State<NavigationRecentItem> {
       onTap: widget.onTap,
       borderRadius: BorderRadius.circular(AppSpacing.radiusCapsule),
       child: Tooltip(
-        message: widget.label,
+        message: statusLabel == null
+            ? widget.label
+            : '${widget.label} · $statusLabel',
         child: MouseRegion(
           onEnter: (_) => setState(() => _hovered = true),
           onExit: (_) => setState(() => _hovered = false),
@@ -697,24 +783,11 @@ class _NavigationRecentItemState extends State<NavigationRecentItem> {
                                     fontSize: 10,
                                   ),
                         ),
-                        if (widget.failed ||
-                            widget.awaitingApproval ||
-                            widget.unreadCount > 0)
+                        if (showIndicator)
                           Positioned(
                             top: -3,
                             right: -5,
-                            child: Container(
-                              width: 7,
-                              height: 7,
-                              decoration: BoxDecoration(
-                                color: widget.failed
-                                    ? AppColors.errorFor(brightness)
-                                    : widget.awaitingApproval
-                                        ? AppColors.warningFor(brightness)
-                                        : AppColors.accentBlueFor(brightness),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
+                            child: statusIndicator,
                           ),
                       ],
                     ),
@@ -735,22 +808,9 @@ class _NavigationRecentItemState extends State<NavigationRecentItem> {
                                   ),
                         ),
                       ),
-                      if (widget.failed ||
-                          widget.awaitingApproval ||
-                          widget.unreadCount > 0) ...[
+                      if (showIndicator) ...[
                         const SizedBox(width: AppSpacing.micro),
-                        Container(
-                          width: 7,
-                          height: 7,
-                          decoration: BoxDecoration(
-                            color: widget.failed
-                                ? AppColors.errorFor(brightness)
-                                : widget.awaitingApproval
-                                    ? AppColors.warningFor(brightness)
-                                    : AppColors.accentBlueFor(brightness),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
+                        statusIndicator,
                       ],
                       if (widget.menuChildren.isNotEmpty) ...[
                         const SizedBox(width: AppSpacing.micro),

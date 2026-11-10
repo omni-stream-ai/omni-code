@@ -111,12 +111,141 @@ void main() {
     service.refreshSessionForTest('session-1');
     service.refreshSessionForTest('session-1');
 
-    expect(client.sessionLoadCount, 1);
-    client.completeNextLoad();
+    expect(client.detailLoadCount, 1);
+    client.completeNextDetail();
     await Future<void>.delayed(Duration.zero);
 
-    expect(client.sessionLoadCount, 2);
-    client.completeNextLoad();
+    expect(client.detailLoadCount, 2);
+    client.completeNextDetail();
+  });
+
+  test('a session event refreshes only that session instead of the full list',
+      () async {
+    final client = _SessionClient([_waitingSession('approval-1')]);
+    final service = SessionEventService(
+        client: client, notifications: _RecordingNotifications());
+    addTearDown(() async {
+      service.dispose();
+      await client.close();
+      client.dispose();
+    });
+
+    final initialRevision = client.sessionCacheRevision.value;
+    service.refreshSessionForTest('session-1');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(client.sessionDetailIds, ['session-1']);
+    expect(client.sessionListLoads, 0);
+    expect(client.sessionCacheRevision.value, initialRevision + 1);
+  });
+
+  test('the initial reset synchronizes without reopening the event stream',
+      () async {
+    final client = _ResetOnSubscribeClient();
+    final service = SessionEventService(
+        client: client, notifications: _RecordingNotifications());
+    addTearDown(() async {
+      service.dispose();
+      await client.close();
+      client.dispose();
+    });
+
+    await service.synchronizeForTest();
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+
+    expect(client.subscriptions, 1);
+    expect(client.sessionListLoads, 2);
+  });
+
+  test('streaming text avoids metadata requests while final replies notify',
+      () async {
+    final running = _waitingSession('approval-1')
+        .copyWith(status: SessionStatus.running, clearPendingApproval: true);
+    final client = _SessionClient([running]);
+    final notifications = _RecordingNotifications();
+    final service =
+        SessionEventService(client: client, notifications: notifications);
+    addTearDown(() async {
+      service.dispose();
+      await client.close();
+      client.dispose();
+    });
+    await service.synchronizeForTest();
+    Map<String, dynamic> event(SessionSummary session, String status) => {
+          'event_type': 'message.updated',
+          'session_id': session.id,
+          'payload': {
+            'session': {
+              'id': session.id,
+              'title': session.title,
+              'status': status,
+              'unread_count': session.unreadCount,
+              'last_message_preview': session.lastMessagePreview,
+              'pending_approval_id': null,
+            },
+          },
+        };
+    for (var index = 0; index < 100; index++) {
+      client._events.add(event(running, 'running'));
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    expect(client.sessionDetailIds, isEmpty);
+    expect(client.sessionListLoads, 1);
+
+    final completed = running.copyWith(
+        status: SessionStatus.idle, unreadCount: 1, lastMessagePreview: 'Done');
+    client.sessions = [completed];
+    client._events.add(event(completed, 'idle'));
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    expect(client.sessionDetailIds, ['session-1']);
+    expect(client.sessionListLoads, 1);
+    expect(notifications.replies, ['Done']);
+  });
+
+  test('a reset received during synchronization is handled afterward',
+      () async {
+    final client = _ResetOnSubscribeClient();
+    final service = SessionEventService(
+        client: client, notifications: _RecordingNotifications());
+    addTearDown(() async {
+      service.dispose();
+      await client.close();
+      client.dispose();
+    });
+    await service.synchronizeForTest();
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(client.sessionListLoads, 2);
+    final pending = Completer<List<SessionSummary>>();
+    client.pendingLoad = pending;
+    final synchronization = service.synchronizeForTest();
+    client._events.add({'event_type': 'stream.reset_required'});
+    await Future<void>.delayed(Duration.zero);
+    expect(client.sessionListLoads, 3);
+    client.pendingLoad = null;
+    pending.complete([]);
+    await synchronization;
+    await Future<void>.delayed(Duration.zero);
+    expect(client.sessionListLoads, 4);
+    expect(client.subscriptions, 1);
+  });
+
+  test('a failed event stream reconnects without a reset loop', () async {
+    final client = _ResetOnSubscribeClient();
+    final service = SessionEventService(
+        client: client, notifications: _RecordingNotifications());
+    addTearDown(() async {
+      service.dispose();
+      await client.close();
+      client.dispose();
+    });
+    await service.synchronizeForTest();
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    client._events.addError(StateError('connection lost'));
+    await Future<void>.delayed(const Duration(milliseconds: 550));
+    expect(client.subscriptions, 2);
+    expect(client.sessionListLoads, 4);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(client.subscriptions, 2);
   });
 
   test('does not start overlapping global synchronizations', () async {
@@ -237,6 +366,8 @@ class _SessionClient extends BridgeClient {
   List<SessionSummary> sessions;
   final bool projectCached;
   int projectLoads = 0;
+  int sessionListLoads = 0;
+  final List<String> sessionDetailIds = [];
   final List<(String, String, String)> approvalSubmissions = [];
   final _events = StreamController<Map<String, dynamic>>.broadcast();
 
@@ -262,8 +393,11 @@ class _SessionClient extends BridgeClient {
   }
 
   @override
-  Future<SessionDetail> getSession(String sessionId) async => SessionDetail(
-      session: sessions.firstWhere((session) => session.id == sessionId));
+  Future<SessionDetail> getSession(String sessionId) async {
+    sessionDetailIds.add(sessionId);
+    return SessionDetail(
+        session: sessions.firstWhere((session) => session.id == sessionId));
+  }
 
   @override
   List<SessionSummary>? peekSessions() => sessions;
@@ -273,8 +407,10 @@ class _SessionClient extends BridgeClient {
     String? projectId,
     String? profileId,
     bool forceRefresh = false,
-  }) async =>
-      sessions;
+  }) async {
+    sessionListLoads += 1;
+    return sessions;
+  }
 
   @override
   Stream<Map<String, dynamic>> subscribeToAllDomainSessionEvents() =>
@@ -294,7 +430,23 @@ class _SessionClient extends BridgeClient {
 
 class _DelayedSessionClient extends BridgeClient {
   int sessionLoadCount = 0;
+  int detailLoadCount = 0;
   final List<Completer<List<SessionSummary>>> _pendingLoads = [];
+  final List<Completer<SessionDetail>> _pendingDetails = [];
+
+  @override
+  Future<SessionDetail> getSession(String sessionId) {
+    detailLoadCount += 1;
+    final completer = Completer<SessionDetail>();
+    _pendingDetails.add(completer);
+    return completer.future;
+  }
+
+  void completeNextDetail() {
+    _pendingDetails.removeAt(0).complete(SessionDetail(
+        session: _waitingSession('approval-1').copyWith(
+            status: SessionStatus.running, clearPendingApproval: true)));
+  }
 
   @override
   Future<List<SessionSummary>> listDomainSessions({
@@ -317,10 +469,58 @@ class _DelayedSessionClient extends BridgeClient {
       const Stream<Map<String, dynamic>>.empty();
 }
 
+class _ResetOnSubscribeClient extends _SessionClient {
+  _ResetOnSubscribeClient() : super([]);
+
+  int subscriptions = 0;
+  Completer<List<SessionSummary>>? pendingLoad;
+
+  @override
+  Future<List<SessionSummary>> listDomainSessions({
+    String? projectId,
+    String? profileId,
+    bool forceRefresh = false,
+  }) {
+    final pending = pendingLoad;
+    if (pending != null) {
+      sessionListLoads += 1;
+      return pending.future;
+    }
+    return super.listDomainSessions(
+        projectId: projectId, profileId: profileId, forceRefresh: forceRefresh);
+  }
+
+  @override
+  Stream<Map<String, dynamic>> subscribeToAllDomainSessionEvents() {
+    subscriptions += 1;
+    final sendReset = subscriptions <= 4;
+    return Stream<Map<String, dynamic>>.multi((controller) {
+      final resetTimer = Timer(Duration.zero, () {
+        if (sendReset) {
+          controller.add({'event_type': 'stream.reset_required'});
+        }
+      });
+      final subscription = _events.stream.listen(controller.add,
+          onError: controller.addError, onDone: controller.close);
+      controller.onCancel = () {
+        resetTimer.cancel();
+        return subscription.cancel();
+      };
+    });
+  }
+}
+
 class _RecordingNotifications extends NotificationService {
   final List<String> approvalRequestIds = [];
+  final List<String> replies = [];
   final List<(String, String?)> cancelledApprovals = [];
   final List<String> viewedSessions = [];
+
+  @override
+  Future<void> showAssistantReplyNotification(
+      SessionSummary session, String body) async {
+    replies.add(body);
+  }
 
   @override
   Future<void> cancelApprovalRequestNotification(String sessionId,

@@ -28,6 +28,7 @@ import 'package:omni_code/src/settings/app_settings_store.dart';
 import 'package:omni_code/src/theme/app_spacing.dart';
 import 'package:omni_code/src/theme/app_theme.dart';
 import 'package:omni_code/src/widgets/anchored_overlay_panel.dart';
+import 'package:omni_code/src/widgets/app_navigation_scaffold.dart';
 import 'package:omni_code/src/widgets/session_call_mode_view.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
@@ -3341,6 +3342,196 @@ void main() {
     await events.close();
   });
 
+  for (final width in [900.0, 1600.0]) {
+    testWidgets(
+        'SSE text keeps page chrome and existing markdown stable at $width',
+        (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = Size(width, 1000);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final events = StreamController<List<int>>.broadcast();
+      Map<String, dynamic> snapshot(int revision, {String status = 'running'}) {
+        final state = _domainStateJson([
+          _messageJson(
+              id: 'user-1',
+              sessionId: 'session-1',
+              role: 'user',
+              content: 'Keep this question visible',
+              createdAt: '2026-05-09T10:00:00.000Z'),
+          _messageJson(
+              id: 'stable-answer',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'Earlier reply stays visible',
+              createdAt: '2026-05-09T10:00:01.000Z'),
+          _messageJson(
+              id: 'live-answer',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'Stream $revision',
+              createdAt: '2026-05-09T10:00:02.000Z'),
+        ], cursor: revision, status: status, stableTurnIds: true);
+        (state['session'] as Map)
+          ..['version'] = revision + 1
+          ..['updated_at'] = '2026-05-09T10:00:0${revision + 2}.000Z';
+        ((state['turns'] as List).single as Map)['version'] = revision + 1;
+        return state;
+      }
+
+      final client = BridgeClient(
+          httpClient: _StreamingEventHttpClient(
+              events: events.stream,
+              handler: (request) async {
+                if (request.url.path == '/v2/sessions/session-1/state') {
+                  return http.Response(jsonEncode({'data': snapshot(0)}), 200,
+                      headers: {'content-type': 'application/json'});
+                }
+                return http.Response('not found', 404);
+              }));
+      await tester.pumpWidget(_TestApp(
+          home: _sessionScreen(
+              session: _session().copyWith(status: SessionStatus.running),
+              client: client,
+              enableSpeechServices: false)));
+      await tester.pump();
+      await tester.pump();
+      final input = find.byKey(const Key('session-message-input'));
+      await tester.enterText(input, 'Keep my draft');
+      await tester.pump(const Duration(milliseconds: 200));
+      final field = tester.widget<TextField>(input);
+      field.controller!.selection = const TextSelection.collapsed(offset: 4);
+      await tester.pump();
+      final chrome = tester
+          .widget<AppNavigationScaffold>(find.byType(AppNavigationScaffold));
+      final markdown = find.descendant(
+          of: find
+              .byKey(const ValueKey('assistant-message-bubble-stable-answer')),
+          matching: find.byType(MarkdownBody));
+      final existingMarkdown = tester.widget<MarkdownBody>(markdown);
+      final cacheRevision = client.sessionCacheRevision.value;
+      final scrollable = find.descendant(
+          of: find.byType(ListView).first, matching: find.byType(Scrollable));
+      final scrollPosition = tester.state<ScrollableState>(scrollable).position;
+      final scrollOffset = scrollPosition.pixels;
+      for (var revision = 1; revision <= 3; revision++) {
+        final state = snapshot(revision);
+        events.add(utf8.encode('id: $revision\ndata: ${jsonEncode({
+              'event_id': revision,
+              'event_type': 'message.updated',
+              'payload': {
+                'session': state['session'],
+                'turn': (state['turns'] as List).single,
+              },
+            })}\n\n'));
+        await tester.pump();
+        await tester.pump();
+        expect(find.text('Stream $revision'), findsOneWidget);
+        expect(
+            tester.widget<AppNavigationScaffold>(
+                find.byType(AppNavigationScaffold)),
+            same(chrome));
+        expect(tester.widget<TextField>(input), same(field));
+        expect(tester.widget<MarkdownBody>(markdown), same(existingMarkdown));
+        expect(field.controller!.text, 'Keep my draft');
+        expect(field.controller!.selection.baseOffset, 4);
+        expect(field.focusNode!.hasFocus, isTrue);
+        expect(scrollPosition.pixels, closeTo(scrollOffset, 0.5));
+        expect(client.sessionCacheRevision.value, cacheRevision);
+        expect(find.byKey(const Key('session-chat-skeleton')), findsNothing);
+      }
+      final completed = snapshot(4, status: 'idle');
+      events.add(utf8.encode('id: 4\ndata: ${jsonEncode({
+            'event_id': 4,
+            'event_type': 'turn.status_changed',
+            'payload': {
+              'session': completed['session'],
+              'turn': (completed['turns'] as List).single,
+            },
+          })}\n\n'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Stream 4'), findsOneWidget);
+      expect(find.byKey(const Key('session-stop-reply-button')), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await events.close();
+      client.dispose();
+    });
+  }
+
+  for (final width in [900.0, 1600.0]) {
+    testWidgets(
+        'reused provider message IDs stay visible across turns at $width',
+        (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = Size(width, 1000);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final events = StreamController<List<int>>.broadcast();
+      Map<String, dynamic> snapshot(int revision) {
+        final messages = _conversationMessages(3);
+        // Imported provider history can repeat a reply ID in adjacent turns.
+        messages[1]
+          ..['id'] = 'shared-provider-reply'
+          ..['content'] = 'Imported reply';
+        messages[3]
+          ..['id'] = 'shared-provider-reply'
+          ..['content'] = 'Imported reply';
+        messages.last['content'] = 'Live reply $revision';
+        final state = _domainStateJson(messages,
+            status: 'running', cursor: revision, stableTurnIds: true);
+        ((state['turns'] as List).last as Map)['version'] = revision + 1;
+        return state;
+      }
+
+      final client = BridgeClient(
+          httpClient: _StreamingEventHttpClient(
+              events: events.stream,
+              handler: (request) async {
+                if (request.url.path == '/v2/sessions/session-1/state') {
+                  return http.Response(jsonEncode({'data': snapshot(0)}), 200,
+                      headers: {'content-type': 'application/json'});
+                }
+                return http.Response('not found', 404);
+              }));
+      await tester.pumpWidget(_TestApp(
+          home: _sessionScreen(
+              session: _session().copyWith(status: SessionStatus.running),
+              client: client,
+              enableSpeechServices: false)));
+      await tester.pump();
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      final replies = find.byKey(
+          const ValueKey('assistant-message-bubble-shared-provider-reply'));
+      expect(replies.hitTestable(), findsNWidgets(2));
+      final markdown = find.descendant(
+          of: replies, matching: find.byType(MarkdownBody));
+      final originalMarkdown = tester.widgetList<MarkdownBody>(markdown).toList();
+      for (var revision = 1; revision <= 2; revision++) {
+        final state = snapshot(revision);
+        events.add(utf8.encode('id: $revision\ndata: ${jsonEncode({
+              'event_id': revision,
+              'event_type': 'message.updated',
+              'payload': {
+                'session': state['session'],
+                'turn': (state['turns'] as List).last,
+              },
+            })}\n\n'));
+        await tester.pump();
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        expect(find.text('Live reply $revision').hitTestable(), findsOneWidget);
+        expect(replies.hitTestable(), findsNWidgets(2));
+        expect(tester.widgetList<MarkdownBody>(markdown).toList(),
+            orderedEquals(originalMarkdown));
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      await events.close();
+      client.dispose();
+    });
+  }
+
   testWidgets('hovering assistant message shows raw markdown copy button',
       (tester) async {
     String? copiedText;
@@ -5837,7 +6028,8 @@ void main() {
     final l10n = AppLocalizations.of(tester.element(input))!;
     expect(sendBodies, hasLength(1));
     expect(find.text('Second message'), findsOneWidget);
-    expect(find.text(l10n.draftPending), findsNWidgets(2));
+    expect(find.text(l10n.draftPending), findsOneWidget);
+    expect(find.text(l10n.draftQueued), findsOneWidget);
   });
 
   testWidgets('submitting a message immediately shows pending state',
@@ -6154,6 +6346,255 @@ void main() {
 
     expect(cancelCalls, 1);
   });
+
+  testWidgets('Codex input stays queued until the runtime consumes it', (
+    tester,
+  ) async {
+    final events = StreamController<List<int>>.broadcast();
+    final state = _domainStateJson(
+      _conversationMessages(1),
+      status: 'running',
+      stableTurnIds: true,
+    );
+    final turn = (state['turns'] as List).single as Map<String, dynamic>;
+    final segments = turn['segments'] as List<Map<String, dynamic>>;
+    final steers = <Map<String, dynamic>>[];
+    var turnCreates = 0;
+    var cancellations = 0;
+    var cursor = 0;
+    void publish() {
+      cursor += 1;
+      state['cursor'] = cursor;
+      turn['version'] = cursor + 1;
+      events.add(
+        utf8.encode(
+          'id: $cursor\ndata: ${jsonEncode({
+            'event_id': cursor,
+            'event_type': 'message.updated',
+            'payload': {'session': state['session'], 'turn': turn},
+          })}\n\n',
+        ),
+      );
+    }
+
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.url.path == '/v2/sessions/session-1/state') {
+            return http.Response(
+              jsonEncode({'data': state}),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          if (request.method == 'POST' && request.url.path.endsWith('/steer')) {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            steers.add(body);
+            segments.add({
+              'id': 'queued-input',
+              'sequence': segments.length + 1,
+              'revision': 1,
+              'kind': 'user_message',
+              'state': 'pending',
+              'message': _domainMessageJson(
+                _messageJson(
+                  id: body['user_message_id'] as String,
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:10.000Z',
+                ),
+                purpose: 'user',
+              )..['state'] = 'pending',
+              'activities': <Map<String, dynamic>>[],
+            });
+            publish();
+            return http.Response('{"data":{}}', 202);
+          }
+          if (request.method == 'POST' && request.url.path.endsWith('/turns')) {
+            turnCreates += 1;
+          }
+          if (request.url.path.endsWith('/cancel')) cancellations += 1;
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+    await tester.pumpWidget(
+      _TestApp(
+        home: _sessionScreen(
+          session: _session().copyWith(status: SessionStatus.running),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'Additional instructions');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    final l10n = AppLocalizations.of(tester.element(input))!;
+    expect(steers, hasLength(1));
+    expect(turnCreates, 0);
+    expect(cancellations, 0);
+    expect(find.text('Additional instructions'), findsOneWidget);
+    expect(find.text(l10n.draftQueued), findsOneWidget);
+    expect(find.text('Answer 1'), findsOneWidget);
+    final queued = segments.last;
+    queued['state'] = 'completed';
+    (queued['message'] as Map)['state'] = 'completed';
+    segments.add({
+      'id': 'follow-up-answer',
+      'sequence': segments.length + 1,
+      'revision': 1,
+      'kind': 'assistant_message',
+      'state': 'running',
+      'message': _domainMessageJson(
+        _messageJson(
+          id: 'follow-up-answer',
+          sessionId: 'session-1',
+          role: 'assistant',
+          content: 'Follow-up answer',
+          createdAt: '2026-05-09T10:00:11.000Z',
+        ),
+        purpose: 'commentary',
+      ),
+      'activities': <Map<String, dynamic>>[],
+    });
+    publish();
+    await tester.pump();
+    await tester.pump();
+    expect(find.text(l10n.draftQueued), findsNothing);
+    expect(find.text('Follow-up answer'), findsOneWidget);
+    expect(find.text('Answer 1'), findsOneWidget);
+    expect(steers, hasLength(1));
+    expect(turnCreates, 0);
+    expect(cancellations, 0);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await events.close();
+    client.dispose();
+  });
+
+  testWidgets(
+    'domain completion automatically sends queued messages in order',
+    (tester) async {
+      final events = StreamController<List<int>>.broadcast();
+      final steeringRace = Completer<http.Response>();
+      var steerAttempts = 0;
+      final sent = <String>[];
+      final messages = _conversationMessages(1);
+      var cursor = 0;
+      var status = 'running';
+      Map<String, dynamic> snapshot() => _domainStateJson(
+        messages,
+        status: status,
+        cursor: cursor,
+        stableTurnIds: true,
+      );
+      final client = BridgeClient(
+        httpClient: _StreamingEventHttpClient(
+          events: events.stream,
+          handler: (request) async {
+            if (request.method == 'POST' && request.url.path.endsWith('/steer')) {
+              steerAttempts += 1;
+              return steerAttempts == 1
+                  ? steeringRace.future
+                  : http.Response('unsupported runtime', 501);
+            }
+            if (request.url.path == '/v2/sessions/session-1/state') {
+              return http.Response(
+                jsonEncode({'data': snapshot()}),
+                200,
+                headers: {'content-type': 'application/json'},
+              );
+            }
+            if (request.method == 'POST' &&
+                request.url.path == '/v2/sessions/session-1/turns') {
+              final body = jsonDecode(request.body) as Map<String, dynamic>;
+              sent.add(body['content'] as String);
+              messages.add(
+                _messageJson(
+                  id: body['user_message_id'] as String,
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:10.000Z',
+                ),
+              );
+              status = 'running';
+              return http.Response(
+                '{"data":{}}',
+                202,
+                headers: {'content-type': 'application/json'},
+              );
+            }
+            return http.Response('not found', 404);
+          },
+        ),
+      );
+      await tester.pumpWidget(
+        _TestApp(
+          home: _sessionScreen(
+            session: _session().copyWith(status: SessionStatus.running),
+            client: client,
+            enableSpeechServices: false,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      final input = find.byKey(const Key('session-message-input'));
+      for (final content in ['First follow-up', 'Second follow-up']) {
+        await tester.enterText(input, content);
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('session-send-button')));
+        await tester.pump();
+      }
+      expect(sent, isEmpty);
+      for (var index = 0; index < 2; index++) {
+        status = 'idle';
+        cursor += 1;
+        final state = snapshot();
+        final turn = (state['turns'] as List).last as Map;
+        turn['version'] = cursor + 1;
+        events.add(
+          utf8.encode(
+            'id: $cursor\ndata: ${jsonEncode({
+              'event_id': cursor,
+              'event_type': 'turn.status_changed',
+              'payload': {'session': state['session'], 'turn': turn},
+            })}\n\n',
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+        if (index == 0) {
+          // Completion arrived while native input submission was in flight.
+          expect(sent, isEmpty);
+          steeringRace.complete(http.Response('active turn changed', 409));
+          await tester.pump();
+          await tester.pump();
+          await tester.pump();
+        }
+        expect(
+          sent,
+          ['First follow-up', 'Second follow-up'].take(index + 1).toList(),
+        );
+        await tester.pump();
+        expect(sent, hasLength(index + 1));
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      await events.close();
+      client.dispose();
+    },
+  );
 
   testWidgets('queued message can be edited back into the composer',
       (tester) async {

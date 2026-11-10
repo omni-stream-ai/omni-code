@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../app_routes.dart';
 import '../bridge_client.dart';
+import '../settings/app_settings.dart';
+import '../relay/relay_http_client.dart';
+import '../relay/relay_settings.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../models.dart';
 import 'notification_service.dart';
@@ -21,6 +24,7 @@ class SessionEventService extends NavigatorObserver {
   StreamSubscription<Map<String, dynamic>>? _subscription;
   Timer? _reconnectTimer;
   Future<void>? _synchronizeInFlight;
+  bool _synchronizePending = false;
   final Map<String, Timer> _refreshTimers = {};
   final Set<String> _refreshesInFlight = {};
   final Set<String> _refreshesPending = {};
@@ -35,14 +39,72 @@ class SessionEventService extends NavigatorObserver {
   int _reconnectAttempt = 0;
   bool _started = false;
   bool _disposed = false;
+  int _generation = 0;
+  String _scope = bridgeConnectionScope();
+  bool _blocked = false;
+  BuildContext? _approvalContext;
 
   void start() {
     if (_started || _disposed) return;
     _started = true;
+    _scope = bridgeConnectionScope();
+    appSettingsController.addListener(_connectionChanged);
     unawaited(_synchronizeAndSubscribe());
   }
 
+  void refreshConnection() {
+    if (_started && !_disposed) _restartConnection();
+  }
+
+  void _connectionChanged() {
+    if (_scope != bridgeConnectionScope()) _restartConnection();
+  }
+
+  void _restartConnection() {
+    _scope = bridgeConnectionScope();
+    _generation++;
+    _blocked = false;
+    unawaited(_subscription?.cancel());
+    _subscription = null;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _reconnectAttempt = 0;
+    _approvalDialogRetryTimer?.cancel();
+    _approvalDialogRetryTimer = null;
+    for (final timer in _refreshTimers.values) {
+      timer.cancel();
+    }
+    _refreshTimers.clear();
+    _refreshesInFlight.clear();
+    _refreshesPending.clear();
+    _notifiedApprovalRequestIds.clear();
+    _observedSessions.clear();
+    _approvalDialogQueue.clear();
+    _shownApprovalDialogKeys.clear();
+    final context = _approvalContext;
+    _approvalContext = null;
+    _approvalDialogOpen = false;
+    if (context != null && context.mounted) {
+      final route = ModalRoute.of(context);
+      if (route != null && route.isActive) {
+        Navigator.of(context).removeRoute(route);
+      }
+    }
+    _synchronizeInFlight = null;
+    _synchronizePending = false;
+    unawaited(_synchronizeAndSubscribe());
+  }
+
+  void _streamFailure(Object error) {
+    if (error is RelayException && error.blocksReconnect) {
+      _blocked = true;
+      return;
+    }
+    _scheduleReconnect();
+  }
+
   Future<void> _synchronizeAndSubscribe() {
+    if (_disposed || _blocked) return Future<void>.value();
     final inFlight = _synchronizeInFlight;
     if (inFlight != null) return inFlight;
 
@@ -51,11 +113,16 @@ class SessionEventService extends NavigatorObserver {
     return future.whenComplete(() {
       if (identical(_synchronizeInFlight, future)) {
         _synchronizeInFlight = null;
+        if (_synchronizePending) {
+          _synchronizePending = false;
+          unawaited(_synchronizeAndSubscribe());
+        }
       }
     });
   }
 
   Future<void> _synchronizeAndSubscribeOnce() async {
+    final generation = _generation;
     try {
       final previousById = {
         for (final session
@@ -63,30 +130,81 @@ class SessionEventService extends NavigatorObserver {
           session.id: session,
       };
       final sessions = await _client.listDomainSessions(forceRefresh: true);
-      if (_disposed) return;
+      if (_disposed || generation != _generation) return;
       for (var session in sessions) {
         session = await _hydratePendingApproval(session);
+        if (generation != _generation) return;
         await _handleSessionTransition(previousById[session.id], session);
+        if (generation != _generation) return;
       }
       _reconnectAttempt = 0;
-      await _subscription?.cancel();
-      _subscription = _client.subscribeToAllDomainSessionEvents().listen(
-          _handleEvent,
-          onError: (_) => _scheduleReconnect(),
-          onDone: _scheduleReconnect,
-          cancelOnError: true);
-    } catch (_) {
-      _scheduleReconnect();
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
+      // Every connection starts with reset_required. Refresh the snapshot on
+      // that signal while retaining the stream, or it reconnects indefinitely.
+      if (_subscription != null || generation != _generation || _disposed) {
+        return;
+      }
+      late final StreamSubscription<Map<String, dynamic>> subscription;
+      subscription =
+          _client.subscribeToAllDomainSessionEvents().listen((event) {
+        if (generation == _generation &&
+            identical(_subscription, subscription)) {
+          _handleEvent(event);
+        }
+      }, onError: (Object error) {
+        if (generation == _generation &&
+            identical(_subscription, subscription)) {
+          _subscription = null;
+          _streamFailure(error);
+        }
+      }, onDone: () {
+        if (generation == _generation &&
+            identical(_subscription, subscription)) {
+          _subscription = null;
+          _scheduleReconnect();
+        }
+      }, cancelOnError: true);
+      _subscription = subscription;
+    } catch (error) {
+      if (generation == _generation) _streamFailure(error);
     }
   }
 
   void _handleEvent(Map<String, dynamic> event) {
     if (event['event_type'] == 'stream.reset_required') {
-      unawaited(_synchronizeAndSubscribe());
+      if (_synchronizeInFlight != null) {
+        _synchronizePending = true;
+      } else {
+        unawaited(_synchronizeAndSubscribe());
+      }
       return;
     }
     final sessionId = event['session_id'] as String?;
     if (sessionId == null) return;
+    final eventType = event['event_type'];
+    if (eventType == 'message.updated' ||
+        eventType == 'activity.updated' ||
+        eventType == 'artifact.updated' ||
+        eventType == 'turn.execution_changed') {
+      final payload = event['payload'];
+      final session = payload is Map ? payload['session'] : null;
+      final previous = _observedSessions[sessionId];
+      // Transcript updates already reach the open session's controller. Only
+      // refresh global metadata when a notification or sidebar field changes.
+      if (session is Map &&
+          previous != null &&
+          session['id'] == sessionId &&
+          session['title'] == previous.title &&
+          session['status'] is String &&
+          parseSessionStatus(session['status'] as String) == previous.status &&
+          session['unread_count'] == previous.unreadCount &&
+          session['last_message_preview'] == previous.lastMessagePreview &&
+          session['pending_approval_id'] ==
+              previous.pendingApproval?.requestId) {
+        return;
+      }
+    }
     _refreshTimers.remove(sessionId)?.cancel();
     _refreshTimers[sessionId] = Timer(const Duration(milliseconds: 100), () {
       _refreshTimers.remove(sessionId);
@@ -104,28 +222,32 @@ class SessionEventService extends NavigatorObserver {
   }
 
   Future<void> _refreshSessionSerially(String sessionId) async {
+    final generation = _generation;
     try {
       do {
         _refreshesPending.remove(sessionId);
         await _refreshSession(sessionId);
-      } while (!_disposed && _refreshesPending.contains(sessionId));
+      } while (!_disposed &&
+          generation == _generation &&
+          _refreshesPending.contains(sessionId));
     } finally {
-      _refreshesInFlight.remove(sessionId);
-      _refreshesPending.remove(sessionId);
+      if (generation == _generation) {
+        _refreshesInFlight.remove(sessionId);
+        _refreshesPending.remove(sessionId);
+      }
     }
   }
 
   Future<void> _refreshSession(String sessionId) async {
+    final generation = _generation;
     final previous = _client
         .peekSessions()
         ?.where((session) => session.id == sessionId)
         .firstOrNull;
     try {
-      var current = (await _client.listDomainSessions(forceRefresh: true))
-          .where((session) => session.id == sessionId)
-          .firstOrNull;
-      if (current == null) return;
-      current = await _hydratePendingApproval(current);
+      final current = (await _client.getSession(sessionId)).session;
+      if (_disposed || generation != _generation) return;
+      _client.syncSessionSummary(current, authoritative: true);
       await _handleSessionTransition(previous, current);
     } catch (_) {
       // The next global event or reconnect performs another authoritative sync.
@@ -151,6 +273,7 @@ class SessionEventService extends NavigatorObserver {
     SessionSummary? previous,
     SessionSummary current,
   ) async {
+    final generation = _generation;
     previous = _observedSessions[current.id] ?? previous;
     _observedSessions[current.id] = current;
     final locale = WidgetsBinding.instance.platformDispatcher.locale;
@@ -165,6 +288,7 @@ class SessionEventService extends NavigatorObserver {
       await _notifications.cancelSessionActivityNotifications(current.id);
     }
     final request = current.pendingApproval;
+    if (generation != _generation) return;
     if (current.status == SessionStatus.awaitingApproval && request != null) {
       final oldRequestId = _notifiedApprovalRequestIds[current.id] ??
           previous?.pendingApproval?.requestId;
@@ -271,6 +395,7 @@ class SessionEventService extends NavigatorObserver {
     SessionSummary session,
     ApprovalRequest request,
   ) async {
+    final generation = _generation;
     final l10n = AppLocalizations.of(context) ??
         lookupAppLocalizations(AppLocalizations.supportedLocales.first);
     var projectName = _client.peekProject(session.projectId)?.name;
@@ -281,6 +406,7 @@ class SessionEventService extends NavigatorObserver {
         projectName = session.projectId;
       }
     }
+    if (generation != _generation) return;
     if (!context.mounted) {
       _approvalDialogOpen = false;
       _shownApprovalDialogKeys.remove('${session.id}::${request.requestId}');
@@ -295,127 +421,130 @@ class SessionEventService extends NavigatorObserver {
     try {
       choice = await showDialog<String>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Row(
-            children: [
-              const Icon(Icons.approval_outlined),
-              const SizedBox(width: 10),
-              Expanded(child: Text(l10n.sessionStatusAwaitingApproval)),
-            ],
-          ),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${l10n.projectName}: $projectName',
-                    key: const Key('approval-dialog-project-name'),
-                    style: Theme.of(context).textTheme.labelLarge,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    session.title,
-                    key: const Key('approval-dialog-session-title'),
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    l10n.agentAwaitingPermission(agentLabel),
-                    style: Theme.of(context).textTheme.labelLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    summary,
-                    key: const Key('approval-dialog-request-reason'),
-                  ),
-                  if (autoApprovalReason?.isNotEmpty == true) ...[
-                    const SizedBox(height: 12),
+        builder: (dialogContext) {
+          _approvalContext = dialogContext;
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.approval_outlined),
+                const SizedBox(width: 10),
+                Expanded(child: Text(l10n.sessionStatusAwaitingApproval)),
+              ],
+            ),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      _autoApprovalReasonTitle(l10n, request),
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                      '${l10n.projectName}: $projectName',
+                      key: const Key('approval-dialog-project-name'),
+                      style: Theme.of(context).textTheme.labelLarge,
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _autoApprovalReasonBody(l10n, request),
-                      key: const Key('approval-dialog-auto-approval-reason'),
+                      session.title,
+                      key: const Key('approval-dialog-session-title'),
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
-                  ],
-                  if (request.command?.trim().isNotEmpty == true) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: Theme.of(context).colorScheme.outlineVariant,
+                    const SizedBox(height: 16),
+                    Text(
+                      l10n.agentAwaitingPermission(agentLabel),
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      summary,
+                      key: const Key('approval-dialog-request-reason'),
+                    ),
+                    if (autoApprovalReason?.isNotEmpty == true) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        _autoApprovalReasonTitle(l10n, request),
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _autoApprovalReasonBody(l10n, request),
+                        key: const Key('approval-dialog-auto-approval-reason'),
+                      ),
+                    ],
+                    if (request.command?.trim().isNotEmpty == true) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                        ),
+                        child: SelectableText(request.command!.trim()),
+                      ),
+                    ],
+                    if (!request.resolvable) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        l10n.desktopOnlyApproval,
+                        style: TextStyle(
+                          color: brightness == Brightness.dark
+                              ? Colors.amber.shade200
+                              : Colors.orange.shade900,
                         ),
                       ),
-                      child: SelectableText(request.command!.trim()),
-                    ),
+                    ],
                   ],
-                  if (!request.resolvable) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      l10n.desktopOnlyApproval,
-                      style: TextStyle(
-                        color: brightness == Brightness.dark
-                            ? Colors.amber.shade200
-                            : Colors.orange.shade900,
-                      ),
-                    ),
-                  ],
-                ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            if (request.allowCancel)
+            actions: [
+              if (request.allowCancel)
+                TextButton(
+                  onPressed: request.resolvable
+                      ? () => Navigator.of(dialogContext).pop('cancel')
+                      : null,
+                  child: Text(l10n.cancel),
+                ),
               TextButton(
                 onPressed: request.resolvable
-                    ? () => Navigator.of(dialogContext).pop('cancel')
+                    ? () => Navigator.of(dialogContext).pop('decline')
                     : null,
-                child: Text(l10n.cancel),
+                child: Text(l10n.reject),
               ),
-            TextButton(
-              onPressed: request.resolvable
-                  ? () => Navigator.of(dialogContext).pop('decline')
-                  : null,
-              child: Text(l10n.reject),
-            ),
-            if (request.command?.trim().isNotEmpty == true)
-              TextButton(
+              if (request.command?.trim().isNotEmpty == true)
+                TextButton(
+                  onPressed: request.resolvable
+                      ? () => Navigator.of(dialogContext).pop('always_allow')
+                      : null,
+                  child: Text(l10n.alwaysAllow),
+                ),
+              if (request.allowAcceptForSession)
+                TextButton(
+                  onPressed: request.resolvable
+                      ? () =>
+                          Navigator.of(dialogContext).pop('accept_for_session')
+                      : null,
+                  child: Text(l10n.approveForSession),
+                ),
+              FilledButton(
                 onPressed: request.resolvable
-                    ? () => Navigator.of(dialogContext).pop('always_allow')
+                    ? () => Navigator.of(dialogContext).pop('accept')
                     : null,
-                child: Text(l10n.alwaysAllow),
+                child: Text(l10n.approve),
               ),
-            if (request.allowAcceptForSession)
-              TextButton(
-                onPressed: request.resolvable
-                    ? () =>
-                        Navigator.of(dialogContext).pop('accept_for_session')
-                    : null,
-                child: Text(l10n.approveForSession),
-              ),
-            FilledButton(
-              onPressed: request.resolvable
-                  ? () => Navigator.of(dialogContext).pop('accept')
-                  : null,
-              child: Text(l10n.approve),
-            ),
-          ],
-        ),
+            ],
+          );
+        },
       );
-      if (choice != null) {
+      if (choice != null && generation == _generation) {
         await _client.submitApproval(session.id, request.requestId, choice);
         await _notifications.cancelApprovalRequestNotification(session.id,
             requestId: request.requestId);
@@ -427,8 +556,11 @@ class SessionEventService extends NavigatorObserver {
         );
       }
     } finally {
-      _approvalDialogOpen = false;
-      _drainApprovalDialogQueue();
+      if (generation == _generation) {
+        _approvalContext = null;
+        _approvalDialogOpen = false;
+        _drainApprovalDialogQueue();
+      }
     }
   }
 
@@ -456,7 +588,7 @@ class SessionEventService extends NavigatorObserver {
   }
 
   void _scheduleReconnect() {
-    if (_disposed || (_reconnectTimer?.isActive ?? false)) return;
+    if (_disposed || _blocked || (_reconnectTimer?.isActive ?? false)) return;
     final exponent = _reconnectAttempt.clamp(0, 5);
     _reconnectAttempt++;
     _reconnectTimer = Timer(
@@ -487,6 +619,8 @@ class SessionEventService extends NavigatorObserver {
 
   void dispose() {
     _disposed = true;
+    _generation++;
+    appSettingsController.removeListener(_connectionChanged);
     _subscription?.cancel();
     _reconnectTimer?.cancel();
     _approvalDialogRetryTimer?.cancel();

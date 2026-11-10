@@ -487,7 +487,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _openSettings() async {
-    final bridgeUrlBefore = appSettingsController.settings.bridgeUrl.trim();
+    final bridgeUrlBefore = appSettingsController.settings.connectionUrl.trim();
     final bridgeConnectionChecked = await Navigator.of(context).pushNamed(
       SettingsScreen.routeName,
     );
@@ -495,7 +495,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       return;
     }
     setState(() {});
-    final bridgeUrlAfter = appSettingsController.settings.bridgeUrl.trim();
+    final bridgeUrlAfter = appSettingsController.settings.connectionUrl.trim();
     if (bridgeConnectionChecked is bool) {
       if (bridgeConnectionChecked) {
         unawaited(_loadHomeData(forceRefresh: true));
@@ -510,6 +510,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _showBridgeConnectionState() {
+    if (appSettingsController.settings.relay.enabled) {
+      _authPollTimer?.cancel();
+      _authPollTimer = null;
+      setState(() {
+        _needsAuthorization = false;
+        _isWaitingAuth = false;
+        _authRequestId = null;
+        _isLoading = false;
+        _isRefreshing = false;
+        _projectsError = context.l10n.relayCheckConnection;
+        _recentSessionsError = context.l10n.relayCheckConnection;
+        _authError = null;
+      });
+      return;
+    }
     _authPollTimer?.cancel();
     _authPollTimer = null;
     setState(() {
@@ -1262,7 +1277,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 needsAuthorization: _needsAuthorization,
                 isWaitingAuth: _isWaitingAuth,
                 authError: _authError,
-                bridgeUrl: appSettingsController.settings.bridgeUrl,
+                bridgeUrl: appSettingsController.settings.connectionUrl,
                 runningCount: runningCount,
                 onOpenProjects: _openProjects,
                 onOpenSettings: _openSettings,

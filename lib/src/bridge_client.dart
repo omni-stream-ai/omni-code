@@ -11,6 +11,9 @@ import 'bridge_speech_models.dart';
 import 'acceptance_models.dart';
 import 'models.dart';
 import 'settings/app_settings.dart';
+import 'relay/relay_settings.dart';
+import 'relay/relay_http_client.dart';
+import 'relay/resource_gateway.dart';
 import 'services/sentry_service.dart';
 
 Map<String, dynamic> _decodeJsonObject(String source) =>
@@ -97,7 +100,85 @@ class BridgeClient {
 
   BridgeClient({
     http.Client? httpClient,
-  }) : _httpClient = httpClient ?? http.Client();
+  }) : _httpClient = RelayHttpClient(httpClient ?? http.Client()) {
+    _settingsChanged();
+    appSettingsController.addListener(_settingsChanged);
+  }
+
+  String? _connectionScope;
+  final LinkedHashMap<String, Future<RelayResourceGateway>> _resourceGateways =
+      LinkedHashMap();
+  void _closeResourceGateways() {
+    for (final value in _resourceGateways.values) {
+      unawaited(
+          value.then((gateway) => gateway.close()).catchError((Object _) {}));
+    }
+    _resourceGateways.clear();
+  }
+
+  Future<Uri> _relayResource(String path, String prefix) async {
+    final gateway = _resourceGateways.putIfAbsent(
+        prefix,
+        () => RelayResourceGateway.open(
+            appSettingsController.settings.relay, prefix));
+    if (_resourceGateways.length > 8) {
+      final old = _resourceGateways.remove(_resourceGateways.keys.first);
+      if (old != null) {
+        unawaited(old.then((value) => value.close()).catchError((Object _) {}));
+      }
+    }
+    try {
+      return (await gateway).urlFor(path);
+    } catch (_) {
+      _resourceGateways.remove(prefix);
+      rethrow;
+    }
+  }
+
+  void _settingsChanged() {
+    final settings = appSettingsController.settings;
+    final scope =
+        '${settings.connectionUrl}\n${settings.relay.enabled ? settings.relay.token : settings.bridgeToken}\n${settings.clientId}';
+    if (_connectionScope == scope) return;
+    _connectionScope = scope;
+    _closeResourceGateways();
+    _projectsCache = null;
+    _sessionsCache = null;
+    _agentsCache = null;
+    _projectSessionsCache.clear();
+    _sessionMessagesCache.clear();
+    _agentDescriptors.clear();
+    _recentSessionActivityAt.clear();
+    sessionCacheRevision.value++;
+  }
+
+  void dispose() {
+    _closeResourceGateways();
+    appSettingsController.removeListener(_settingsChanged);
+    _httpClient.close();
+    sessionCacheRevision.dispose();
+  }
+
+  Map<String, String> get transportHeaders => _defaultHeaders;
+  Future<Map<String, dynamic>> relayHostRequest(String path,
+      {Map<String, dynamic>? body}) async {
+    if (appSettingsController.settings.relay.enabled) {
+      throw const RelayException('host_management_denied');
+    }
+    if (!path.startsWith('/relay/')) throw const RelayException('invalid_path');
+    final request =
+        http.Request(body == null ? 'GET' : 'POST', Uri.parse('$baseUrl$path'))
+          ..followRedirects = false;
+    request.headers.addAll(_defaultHeaders);
+    if (body != null) {
+      request.headers['Content-Type'] = 'application/json';
+      request.body = jsonEncode(body);
+    }
+    final response = await http.Response.fromStream(
+        await _httpClient.send(request).timeout(const Duration(seconds: 35)));
+    _assertJsonResponse(response);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
 
   final http.Client _httpClient;
   final ValueNotifier<int> sessionCacheRevision = ValueNotifier<int>(0);
@@ -130,6 +211,7 @@ class BridgeClient {
   Map<String, AgentDescriptor> _agentDescriptors = {};
 
   void _assertJsonResponse(http.Response response) {
+    RelayHttpClient.ensureCurrent(response);
     final contentType = response.headers['content-type'] ?? '';
     if (!contentType.contains('application/json') &&
         response.statusCode >= 400) {
@@ -180,6 +262,9 @@ class BridgeClient {
   }
 
   String get baseUrl {
+    if (appSettingsController.settings.relay.enabled) {
+      return appSettingsController.settings.relay.serviceUrl;
+    }
     final configured = appSettingsController.settings.bridgeUrl.trim();
     if (configured.isNotEmpty) {
       return configured;
@@ -194,6 +279,12 @@ class BridgeClient {
 
   Map<String, String> get _defaultHeaders {
     final settings = appSettingsController.settings;
+    if (settings.relay.enabled) {
+      return {
+        ...settings.relay.headers,
+        'Accept-Language': _preferredLanguage(settings.appLanguage)
+      };
+    }
     final headers = <String, String>{
       'X-Omni-Code-Client-Id': settings.clientId,
       'Accept-Language': _preferredLanguage(settings.appLanguage),
@@ -244,6 +335,11 @@ class BridgeClient {
 
   Future<Uri> acceptanceEvidenceUrl(String id, String name,
       {bool download = false}) async {
+    if (appSettingsController.settings.relay.enabled) {
+      final path =
+          '/v2/acceptance/${Uri.encodeComponent(id)}/evidence/${Uri.encodeComponent(name)}';
+      return _relayResource('$path?download=$download', path);
+    }
     final data = await _acceptanceRequest(
         '/v2/acceptance/${Uri.encodeComponent(id)}/evidence-ticket/${Uri.encodeComponent(name)}',
         body: {});
@@ -348,6 +444,10 @@ class BridgeClient {
           body: {'acquire': acquire}) as Map<String, dynamic>);
 
   Future<Uri> acceptanceDesktopUrl(String id) async {
+    if (appSettingsController.settings.relay.enabled) {
+      final prefix = '/v2/acceptance/${Uri.encodeComponent(id)}/desktop/';
+      return _relayResource('${prefix}viewer.html', prefix);
+    }
     final data = await _acceptanceRequest(
         '/v2/acceptance/${Uri.encodeComponent(id)}/desktop-ticket',
         body: {});
@@ -517,6 +617,8 @@ class BridgeClient {
   }
 
   bool _isUnauthorized(http.Response response) {
+    RelayHttpClient.ensureCurrent(response);
+    if (appSettingsController.settings.relay.enabled) return false;
     return response.statusCode == 401 || response.statusCode == 403;
   }
 
@@ -539,6 +641,9 @@ class BridgeClient {
   }
 
   Future<ClientAuthRequest> registerClient() async {
+    if (appSettingsController.settings.relay.enabled) {
+      throw const RelayException('login_required');
+    }
     final settings = appSettingsController.settings;
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/client-auth/requests'),
@@ -548,15 +653,12 @@ class BridgeClient {
         'device_name': _deviceName(),
       }),
     );
-    debugPrint(
-        '[auth] registerClient response (${response.statusCode}): ${response.body}');
     if (response.statusCode >= 400) {
       throw Exception(_extractErrorMessage(response));
     }
     try {
       final payload = jsonDecode(response.body) as Map<String, dynamic>;
       final data = payload['data'] as Map<String, dynamic>? ?? payload;
-      debugPrint('[auth] registerClient payload keys: ${data.keys.toList()}');
       return ClientAuthRequest.fromJson(data);
     } catch (e) {
       throw Exception('Invalid response from server: ${response.body}');
@@ -564,11 +666,11 @@ class BridgeClient {
   }
 
   Future<ClientAuthRequest> checkClientAuthStatus(String requestId) async {
+    if (appSettingsController.settings.relay.enabled) {
+      throw const RelayException('login_required');
+    }
     final url = '$baseUrl/client-auth/requests/$requestId';
-    debugPrint('[auth] Polling URL: $url');
     final response = await _httpClient.get(Uri.parse(url));
-    debugPrint(
-        '[auth] Poll response (${response.statusCode}): ${response.body}');
     if (response.statusCode >= 400) {
       throw Exception(_extractErrorMessage(response));
     }
@@ -1041,7 +1143,11 @@ class BridgeClient {
       throw Exception(_extractErrorMessage(response));
     }
 
-    return BridgeUploadResponse.fromJson(_decodeApiData(response.body));
+    final data = _decodeApiData(response.body);
+    if (appSettingsController.settings.relay.enabled && data['url'] is String) {
+      data['absolute_url'] = _resolveUrl(data['url'] as String);
+    }
+    return BridgeUploadResponse.fromJson(data);
   }
 
   Future<List<SessionSummary>> listProjectSessions(
@@ -1615,6 +1721,34 @@ class BridgeClient {
     }
   }
 
+  Future<SessionSteeringResult> steerDomainTurn(
+    String sessionId,
+    String turnId,
+    String content, {
+    required String commandId,
+    required String userMessageId,
+    List<DomainAttachment> attachments = const [],
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/v2/sessions/$sessionId/turns/$turnId/steer'),
+      headers: {..._defaultHeaders, 'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'command_id': commandId,
+        'user_message_id': userMessageId,
+        'content': content,
+        'attachments': attachments.map((item) => item.toJson()).toList(),
+      }),
+    );
+    if ([404, 405, 501].contains(response.statusCode)) {
+      return SessionSteeringResult.unavailable;
+    }
+    if (response.statusCode == 409) return SessionSteeringResult.stale;
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractErrorMessage(response));
+    }
+    return SessionSteeringResult.accepted;
+  }
+
   Future<Map<String, dynamic>> createDomainTurn(
     String sessionId,
     String content, {
@@ -2067,6 +2201,7 @@ class BridgeClient {
           bytes: Uint8List(0),
           contentType: data['content_type'] as String? ?? 'audio/wav',
           streamUrl: _resolveUrl(streamUrl!),
+          headers: _resourceHeaders(_resolveUrl(streamUrl)),
         );
       }
     }
@@ -2079,10 +2214,43 @@ class BridgeClient {
 
   String _resolveUrl(String value) {
     final uri = Uri.parse(value);
+    final relay = appSettingsController.settings.relay;
+    if (relay.enabled) {
+      if (uri.userInfo.isNotEmpty ||
+          uri.hasFragment ||
+          (uri.hasAuthority && !uri.hasScheme)) {
+        throw const RelayException('invalid_resource_url');
+      }
+      if (uri.hasScheme) {
+        final own = Uri.parse(baseUrl);
+        if (uri.origin == own.origin && uri.path.startsWith('${own.path}/')) {
+          return uri.toString();
+        }
+        if (!['localhost', '127.0.0.1', '::1'].contains(uri.host)) {
+          return uri.toString();
+        }
+      }
+      final path = uri.path.startsWith('/') ? uri.path : '/${uri.path}';
+      final target =
+          Uri.parse(baseUrl + path + (uri.hasQuery ? '?${uri.query}' : ''));
+      if (!target.path.startsWith('${Uri.parse(baseUrl).path}/')) {
+        throw const RelayException('invalid_resource_url');
+      }
+      return target.toString();
+    }
     if (uri.hasScheme) {
       return uri.toString();
     }
     return Uri.parse(baseUrl).resolveUri(uri).toString();
+  }
+
+  Map<String, String> _resourceHeaders(String value) {
+    final target = Uri.parse(value), base = Uri.parse(baseUrl);
+    return target.origin == base.origin &&
+            target.path
+                .startsWith('${base.path.replaceFirst(RegExp(r'/$'), '')}/')
+        ? _defaultHeaders
+        : const {};
   }
 
   Stream<Map<String, dynamic>> subscribeToAllDomainSessionEvents() async* {
@@ -2424,11 +2592,13 @@ class SynthesizedSpeech {
     required this.bytes,
     required this.contentType,
     this.streamUrl,
+    this.headers = const {},
   });
 
   final Uint8List bytes;
   final String contentType;
   final String? streamUrl;
+  final Map<String, String> headers;
 
   bool get isStreaming => streamUrl?.isNotEmpty == true;
 }

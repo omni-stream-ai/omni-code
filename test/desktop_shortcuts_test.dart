@@ -75,6 +75,20 @@ void main() {
       expect(search.control, platform != TargetPlatform.macOS);
       expect(defaultDesktopShortcut(DesktopShortcutAction.newWindow).key,
           LogicalKeyboardKey.keyN);
+      for (final action in [
+        DesktopShortcutAction.previousSession,
+        DesktopShortcutAction.nextSession,
+      ]) {
+        final binding = defaultDesktopShortcut(action);
+        expect(
+            binding.key,
+            action == DesktopShortcutAction.previousSession
+                ? LogicalKeyboardKey.arrowUp
+                : LogicalKeyboardKey.arrowDown);
+        expect(binding.alt, isTrue);
+        expect(binding.meta, platform == TargetPlatform.macOS);
+        expect(binding.control, platform != TargetPlatform.macOS);
+      }
       final defaults =
           DesktopShortcutAction.values.map(defaultDesktopShortcut).toSet();
       expect(defaults.length, DesktopShortcutAction.values.length);

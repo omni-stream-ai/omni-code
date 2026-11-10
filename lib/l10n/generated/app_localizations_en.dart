@@ -1067,6 +1067,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get draftPending => 'Pending sync';
 
   @override
+  String get draftQueued => 'Queued';
+
+  @override
+  String get draftQueuedDescription =>
+      'Waiting for the agent to receive this message';
+
+  @override
   String get draftFailed => 'Send failed, tap to retry';
 
   @override
@@ -2831,6 +2838,111 @@ class AppLocalizationsEn extends AppLocalizations {
       'Continue the unfinished task. First check existing execution results and active processes, then resume the remaining steps without repeating completed operations.';
 
   @override
+  String get relayTitle => 'Relay remote access';
+
+  @override
+  String get relayUse => 'Connect through Relay';
+
+  @override
+  String get relayUrl => 'Relay URL';
+
+  @override
+  String get relayDeviceName => 'Device name';
+
+  @override
+  String get relayLogin => 'Sign in to Relay';
+
+  @override
+  String get relayRefresh => 'Refresh services';
+
+  @override
+  String get relayLogout => 'Sign out of Relay';
+
+  @override
+  String get relayVerify =>
+      'Open the Relay website, sign in with the same account and approve this device code.';
+
+  @override
+  String get relayOpenLogin => 'Open sign-in page';
+
+  @override
+  String get relayNoServices =>
+      'No Omni Code services. Enable remote access on the serving computer first.';
+
+  @override
+  String get relayOnline => 'Online';
+
+  @override
+  String get relayOffline => 'Offline';
+
+  @override
+  String get relayConnect => 'Connect';
+
+  @override
+  String get relayRequestAccess => 'Request access';
+
+  @override
+  String get relayHost => 'Remote access to the computer';
+
+  @override
+  String get relayHostHint =>
+      'Manage Bridge through a direct connection. Once enabled, Bridge connects to Relay automatically.';
+
+  @override
+  String get relayServiceName => 'Service name';
+
+  @override
+  String get relayConnecting => 'Connecting';
+
+  @override
+  String get relayDisabled => 'Remote access disabled';
+
+  @override
+  String get relayLoginEnable => 'Sign in and enable remote access';
+
+  @override
+  String get relayEnable => 'Enable remote access';
+
+  @override
+  String get relayDisable => 'Disable remote access';
+
+  @override
+  String get relayDevices => 'Manage remote devices';
+
+  @override
+  String get relayPolicy => 'New device policy';
+
+  @override
+  String get relayPolicyAuto => 'Allow the same account automatically';
+
+  @override
+  String get relayPolicyApproval => 'Approve each device';
+
+  @override
+  String get relayApprove => 'Approve';
+
+  @override
+  String get relayRevoke => 'Revoke';
+
+  @override
+  String get relayKick => 'Require new login';
+
+  @override
+  String get relayBan => 'Ban';
+
+  @override
+  String get relayUnban => 'Unban';
+
+  @override
+  String get relayLoginRequired =>
+      'Relay login expired. Sign in again in settings.';
+
+  @override
+  String relayFailure(String error) {
+    return 'Relay operation failed: $error';
+  }
+
+  @override
   String get acceptanceBuildTitle => 'Build & dependencies';
 
   @override
@@ -2879,25 +2991,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Review and save configuration to continue';
 
   @override
-  String get acceptanceVideoLoading => 'Loading acceptance recording…';
-
-  @override
-  String get acceptanceVideoBack => 'Back 10 seconds';
-
-  @override
-  String get acceptanceVideoForward => 'Forward 10 seconds';
-
-  @override
-  String get acceptanceBuildNext => 'Next: review configuration';
-
-  @override
-  String get acceptanceBuildContinue => 'Save and continue';
-
-  @override
-  String get acceptanceDesktopConnecting =>
-      'Connecting to the acceptance desktop…';
-
-  @override
   String get desktopShortcutsTitle => 'Keyboard shortcuts';
 
   @override
@@ -2912,6 +3005,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shortcutNewSession => 'New session';
+
+  @override
+  String get shortcutPreviousSession => 'Previous recent session';
+
+  @override
+  String get shortcutNextSession => 'Next recent session';
 
   @override
   String get shortcutSettings => 'Open settings';
@@ -2965,6 +3064,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shortcutSearchHint => 'Search projects and sessions…';
 
   @override
+  String get acceptanceVideoLoading => 'Loading acceptance recording…';
+
+  @override
+  String get acceptanceVideoBack => 'Back 10 seconds';
+
+  @override
+  String get acceptanceVideoForward => 'Forward 10 seconds';
+
+  @override
+  String get acceptanceBuildNext => 'Next: review configuration';
+
+  @override
+  String get acceptanceBuildContinue => 'Save and continue';
+
+  @override
+  String get acceptanceDesktopConnecting =>
+      'Connecting to the acceptance desktop…';
+
+  @override
   String get shortcutsHeroTitle => 'Make the workspace feel familiar';
 
   @override
@@ -2997,4 +3115,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shortcutSearchEntry => 'Search';
+
+  @override
+  String get relayAccessAllowed => 'Allowed';
+
+  @override
+  String get relayAccessApprovalRequired => 'Approval required';
+
+  @override
+  String get relayAccessPending => 'Waiting for approval';
+
+  @override
+  String get relayAccessRevoked => 'Access revoked';
+
+  @override
+  String get relayAccessBanned => 'Device banned';
+
+  @override
+  String get relayAccessLoginRequired => 'Sign in again';
+
+  @override
+  String get relayCheckConnection =>
+      'Check Relay sign-in, service status and access in Settings.';
 }

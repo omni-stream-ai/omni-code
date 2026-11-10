@@ -41,7 +41,7 @@ class NotificationService {
         kind == 'approval' ? session.pendingApproval?.requestId : null;
     final key = sha256
         .convert(utf8.encode(jsonEncode([
-          appSettingsController.settings.bridgeUrl,
+          appSettingsController.settings.connectionUrl,
           session.id,
           kind,
           requestId ?? body.trim(),
@@ -92,6 +92,16 @@ class NotificationService {
   Future<void> _cancel(int id, {String? tag}) async {
     _notificationEpochs[id] = (_notificationEpochs[id] ?? 0) + 1;
     try {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.linux) {
+        final linuxPlugin = _plugin.resolvePlatformSpecificImplementation<
+            LinuxFlutterLocalNotificationsPlugin>();
+        // Linux cancel rewrites its on-disk cache even for missing IDs. Startup
+        // reconciles every session, so check the plugin's cached IDs first.
+        if (linuxPlugin != null &&
+            !(await linuxPlugin.getSystemIdMap()).containsKey(id)) {
+          return;
+        }
+      }
       await _plugin.cancel(id: id, tag: tag);
     } catch (_) {
       // Notification cleanup must not interrupt reading or approval handling.

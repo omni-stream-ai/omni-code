@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import 'cloud_speech_service.dart';
+import 'authenticated_resource_client.dart';
 import '../plugins/speech_plugin_models.dart';
 import '../plugins/speech_plugin_registry.dart';
 import '../settings/app_settings.dart';
@@ -142,10 +143,11 @@ class TtsService {
       _onStart?.call();
       if (speech.isStreaming) {
         if (!kIsWeb && Platform.isLinux) {
-          await _playStreamingWavOnLinux(speech.streamUrl!);
+          await _playStreamingWavOnLinux(speech.streamUrl!,
+              headers: speech.headers);
           return;
         }
-        await _playUrl(speech.streamUrl!);
+        await _playUrl(speech.streamUrl!, headers: speech.headers);
         return;
       }
       final filePath = await _writeAudioFile(speech.bytes);
@@ -210,8 +212,17 @@ class TtsService {
     await _playSource(source);
   }
 
-  Future<void> _playUrl(String url) async {
-    final source = await SoLoud.instance.loadUrl(url);
+  Future<void> _playUrl(String url,
+      {Map<String, String> headers = const {}}) async {
+    final client = headers.isEmpty
+        ? null
+        : AuthenticatedResourceClient(Uri.parse(url), headers);
+    final AudioSource source;
+    try {
+      source = await SoLoud.instance.loadUrl(url, httpClient: client);
+    } finally {
+      client?.close();
+    }
     await _playSource(source);
   }
 
@@ -301,8 +312,9 @@ class TtsService {
     }
   }
 
-  Future<void> _playStreamingWavOnLinux(String streamUrl) async {
-    final client = http.Client();
+  Future<void> _playStreamingWavOnLinux(String streamUrl,
+      {Map<String, String> headers = const {}}) async {
+    final client = AuthenticatedResourceClient(Uri.parse(streamUrl), headers);
     _streamingPlaybackClient = client;
     Process? process;
     try {

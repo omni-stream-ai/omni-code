@@ -68,6 +68,7 @@ class AppDesktopShortcuts extends StatefulWidget {
 class _AppDesktopShortcutsState extends State<AppDesktopShortcuts> {
   bool _openingSearch = false;
   final _sessionOrigins = <Route<dynamic>?>{};
+  final _routeShortcuts = DesktopRouteShortcutRegistry();
 
   @override
   void initState() {
@@ -98,6 +99,11 @@ class _AppDesktopShortcutsState extends State<AppDesktopShortcuts> {
       if (resolveDesktopShortcut(bindings, action)?.matches(event) != true) {
         continue;
       }
+      if ((action == DesktopShortcutAction.previousSession ||
+              action == DesktopShortcutAction.nextSession) &&
+          !_routeShortcuts.canInvoke(widget.observer.topRoute, action)) {
+        return KeyEventResult.ignored;
+      }
       // Holding a shortcut should never create many windows or stack dialogs.
       if (event is KeyRepeatEvent) return KeyEventResult.handled;
       final navigator = widget.navigatorKey.currentState;
@@ -118,7 +124,11 @@ class _AppDesktopShortcutsState extends State<AppDesktopShortcuts> {
     final routeContext = navigator.overlay?.context;
     if (routeContext == null) return;
     try {
+      if (_routeShortcuts.invoke(widget.observer.topRoute, action)) return;
       switch (action) {
+        case DesktopShortcutAction.previousSession:
+        case DesktopShortcutAction.nextSession:
+          return;
         case DesktopShortcutAction.search:
           if (_openingSearch) return;
           _openingSearch = true;
@@ -191,6 +201,7 @@ class _AppDesktopShortcutsState extends State<AppDesktopShortcuts> {
 
   @override
   Widget build(BuildContext context) => DesktopShortcutScope(
+        routeShortcuts: _routeShortcuts,
         onInvoke: (action) {
           final navigator = widget.navigatorKey.currentState;
           if (navigator != null) unawaited(_invoke(action, navigator));

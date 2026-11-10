@@ -341,8 +341,12 @@
   "callModeSpeechPauseRangeError": "Enter a value from {min} to {max} ms.",
   "@callModeSpeechPauseRangeError": {
     "placeholders": {
-      "min": { "type": "int" },
-      "max": { "type": "int" }
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
     }
   },
   "callModeSpeechPauseBridgeOnlyHint": "This pause setting currently applies precisely to Omni Bridge Local realtime call mode. Other ASR providers may keep their own built-in pause behavior.",
@@ -521,6 +525,8 @@
   "phaseCompleted": "Completed",
   "phaseStarted": "Started",
   "draftPending": "Pending sync",
+  "draftQueued": "Queued",
+  "draftQueuedDescription": "Waiting for the agent to receive this message",
   "draftFailed": "Send failed, tap to retry",
   "whisperApiKeyRequired": "Fill in the Whisper/OpenAI API key in settings first",
   "whisperAsrRequestFailed": "Whisper ASR request failed ({statusCode}): {body}",
@@ -743,7 +749,11 @@
   "confirm": "Confirm",
   "fieldRequired": "This field is required",
   "unknownRoute": "Unknown route: {route}",
-  "@unknownRoute": { "placeholders": { "route": {} } },
+  "@unknownRoute": {
+    "placeholders": {
+      "route": {}
+    }
+  },
   "recentProjectsTitle": "Recent projects",
   "more": "More",
   "subtitles": "Subtitles",
@@ -795,27 +805,61 @@
   "inFocus": "In focus",
   "upNext": "Up next",
   "threadsCount": "{count} threads",
-  "@threadsCount": { "placeholders": { "count": { "type": "int" } } },
+  "@threadsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "nothingUrgentWaiting": "Nothing urgent is waiting right now.",
   "visibleProjectsCount": "{count} visible",
-  "@visibleProjectsCount": { "placeholders": { "count": { "type": "int" } } },
+  "@visibleProjectsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "authorizationNeeded": "Authorization needed",
   "connectedBridge": "Connected • {address}",
-  "@connectedBridge": { "placeholders": { "address": {} } },
+  "@connectedBridge": {
+    "placeholders": {
+      "address": {}
+    }
+  },
   "status": "Status",
   "collapseStatus": "Collapse status",
   "pendingApprovals": "Pending approvals",
   "waitingActionsNeedReview": "{count} waiting actions need review",
-  "@waitingActionsNeedReview": { "placeholders": { "count": { "type": "int" } } },
+  "@waitingActionsNeedReview": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "noApprovalsWaiting": "No approvals are waiting right now",
   "bridgeStatus": "Bridge status",
   "voiceDevice": "Voice / device",
   "activeSessionsMicrophoneReady": "{count} active sessions • microphone ready",
-  "@activeSessionsMicrophoneReady": { "placeholders": { "count": { "type": "int" } } },
+  "@activeSessionsMicrophoneReady": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "microphoneReadySystemSpeechAvailable": "Microphone ready • system speech available",
   "projectsOverview": "Projects overview",
   "activeProjectsCount": "{count} active projects",
-  "@activeProjectsCount": { "placeholders": { "count": { "type": "int" } } },
+  "@activeProjectsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "quickActions": "Quick actions",
   "quickActionsBody": "Open projects or adjust settings",
   "pluginManifest": "Plugin manifest",
@@ -826,7 +870,11 @@
   "savingPluginSettings": "Saving plugin settings...",
   "savedToSettings": "Saved to settings.",
   "pluginSettingsSaveFailed": "Failed to save plugin settings.\n\nRaw error:\n{error}",
-  "@pluginSettingsSaveFailed": { "placeholders": { "error": {} } },
+  "@pluginSettingsSaveFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "fillRequiredPluginSettings": "Fill in the required settings below before using this plugin.",
   "defaultTtsTestText": "Hello from Omni Code speech settings.",
   "systemTtsTestUnavailable": "System TTS test is not available on this platform. Choose a TTS plugin to test playback here.",
@@ -839,17 +887,33 @@
   "playing": "Playing...",
   "play": "Play",
   "batchAsrAuthOrParameterError": "Authentication or parameter error. Check that APPID and API Key (Access Token) are correct.\n\nRaw error:\n{error}",
-  "@batchAsrAuthOrParameterError": { "placeholders": { "error": {} } },
+  "@batchAsrAuthOrParameterError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "batchAsrAuthenticationFailed": "Authentication failed. Check that the API Key is correct and enabled for this service.\n\nRaw error:\n{error}",
-  "@batchAsrAuthenticationFailed": { "placeholders": { "error": {} } },
+  "@batchAsrAuthenticationFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "batchAsrAccessDenied": "Access denied. Check that the API Key has permission for the selected Resource ID.\n\nRaw error:\n{error}",
-  "@batchAsrAccessDenied": { "placeholders": { "error": {} } },
+  "@batchAsrAccessDenied": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "microphonePermissionRequired": "Microphone permission is required.",
   "recordingStartedSpeakThenStop": "Recording started. Speak a short sentence, then stop.",
   "transcribingRecordedAudio": "Transcribing recorded audio...",
   "transcriptionSucceeded": "Transcription succeeded.",
   "transcriptionSucceededWithText": "Transcription succeeded: {text}",
-  "@transcriptionSucceededWithText": { "placeholders": { "text": {} } },
+  "@transcriptionSucceededWithText": {
+    "placeholders": {
+      "text": {}
+    }
+  },
   "testBatchAsr": "Test Batch ASR",
   "batchAsrTestDescription": "Batch ASR test records a short clip, then transcribes it with your current saved speech configuration.",
   "record": "Record",
@@ -857,16 +921,32 @@
   "stopAndTranscribe": "Stop & Transcribe",
   "recordingSpeakThenStop": "Recording... speak a short sentence, then stop.",
   "realtimeAsrAuthenticationRejected": "The current service rejected realtime speech authentication. Check the selected plugin credentials, especially API Key and Resource ID.\n\nRaw error:\n{error}",
-  "@realtimeAsrAuthenticationRejected": { "placeholders": { "error": {} } },
+  "@realtimeAsrAuthenticationRejected": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "realtimeAsrAccessRefused": "The current service refused realtime speech access. Check that the API Key is enabled for the selected Volcengine speech resource, and that Resource ID exactly matches the purchased duration or concurrent edition.\n\nRaw error:\n{error}",
-  "@realtimeAsrAccessRefused": { "placeholders": { "error": {} } },
+  "@realtimeAsrAccessRefused": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "realtimeAsrStartFailed": "The current service could not start realtime speech. This usually means the selected plugin is not exposing a valid realtime websocket endpoint.\n\nRaw error:\n{error}",
-  "@realtimeAsrStartFailed": { "placeholders": { "error": {} } },
+  "@realtimeAsrStartFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "startingRealtimeSpeechTest": "Starting realtime speech test...",
   "realtimeTranscriptReceived": "Realtime transcript received.",
   "realtimeSpeechComingThrough": "Realtime speech is coming through.",
   "realtimeSpeechComingThroughWithText": "Realtime speech is coming through: {text}",
-  "@realtimeSpeechComingThroughWithText": { "placeholders": { "text": {} } },
+  "@realtimeSpeechComingThroughWithText": {
+    "placeholders": {
+      "text": {}
+    }
+  },
   "listeningSpeakShortSentence": "Listening now. Speak a short sentence.",
   "testRealtimeAsr": "Test Realtime ASR",
   "realtimeAsrSystemTestDescription": "Realtime ASR test uses the current saved system speech input.",
@@ -903,14 +983,26 @@
   "systemBatchAsrTestUnavailable": "System default does not provide batch ASR testing. Choose a batch ASR plugin to test transcription here.",
   "selectedPluginNotInstalled": "The selected plugin is not installed, so it cannot be tested.",
   "selectedPluginMissingCapabilityConfig": "The selected plugin does not expose {capability} configuration, so it cannot be tested.",
-  "@selectedPluginMissingCapabilityConfig": { "placeholders": { "capability": {} } },
+  "@selectedPluginMissingCapabilityConfig": {
+    "placeholders": {
+      "capability": {}
+    }
+  },
   "expectedTtsEndpoint": "an OpenAI-compatible TTS endpoint",
   "expectedTranscriptionEndpoint": "an OpenAI-compatible transcription endpoint",
   "expectedRealtimeWebsocketEndpoint": "a realtime websocket endpoint",
   "currentSelectionMissingExpectedEndpoint": "The current selection does not expose {expected}, so testing is unavailable.",
-  "@currentSelectionMissingExpectedEndpoint": { "placeholders": { "expected": {} } },
+  "@currentSelectionMissingExpectedEndpoint": {
+    "placeholders": {
+      "expected": {}
+    }
+  },
   "currentSelectionMissingRequiredSetting": "The current selection is missing {setting}, so testing is unavailable.",
-  "@currentSelectionMissingRequiredSetting": { "placeholders": { "setting": {} } },
+  "@currentSelectionMissingRequiredSetting": {
+    "placeholders": {
+      "setting": {}
+    }
+  },
   "currentSelectionMissingRealtimeWebsocketUrl": "The current selection is missing a realtime websocket URL, so testing is unavailable.",
   "currentSelectionInvalidRealtimeWebsocketUrl": "The current selection has an invalid realtime websocket URL, so testing is unavailable.",
   "currentSelectionNonStreamingEndpoint": "The current selection points to a non-streaming endpoint, so testing is unavailable. Configure a realtime websocket URL first.",
@@ -918,21 +1010,47 @@
   "installBeforeSelectingPlugin": "Install first before selecting this plugin.",
   "fillRequiredPluginSettingsBeforeTesting": "Fill in the required settings before testing.",
   "commandSucceeded": "Command succeeded: {command}",
-  "@commandSucceeded": { "placeholders": { "command": {} } },
+  "@commandSucceeded": {
+    "placeholders": {
+      "command": {}
+    }
+  },
   "commandFailed": "Command failed ({exitCode}): {stderr}",
-  "@commandFailed": { "placeholders": { "exitCode": { "type": "int" }, "stderr": {} } },
+  "@commandFailed": {
+    "placeholders": {
+      "exitCode": {
+        "type": "int"
+      },
+      "stderr": {}
+    }
+  },
   "missingKey": "Missing key",
   "keySaved": "Key saved",
   "pluginApiKeyTitle": "{pluginName} · API Key",
-  "@pluginApiKeyTitle": { "placeholders": { "pluginName": {} } },
+  "@pluginApiKeyTitle": {
+    "placeholders": {
+      "pluginName": {}
+    }
+  },
   "savePluginSettings": "Save plugin settings",
   "saveAndUse": "Save and use",
   "additionalPluginSettings": "Additional plugin settings",
   "bridgeErrorWithStatus": "Bridge error ({status}): {error}",
-  "@bridgeErrorWithStatus": { "placeholders": { "status": {}, "error": {} } },
+  "@bridgeErrorWithStatus": {
+    "placeholders": {
+      "status": {},
+      "error": {}
+    }
+  },
   "noEnrollmentAudioRecorded": "No enrollment audio was recorded.",
   "defaultSpeakerName": "Speaker {index}",
-  "@defaultSpeakerName": { "placeholders": { "index": { "type": "int" } } },
+  "@defaultSpeakerName": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
   "gitClean": "clean",
   "gitDirty": "dirty",
   "gitStaged": "staged",
@@ -941,31 +1059,41 @@
   "gitAhead": "ahead {count}",
   "@gitAhead": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "gitBehind": "behind {count}",
   "@gitBehind": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "gitChangedCount": "{count} changed",
   "@gitChangedCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "gitStagedCount": "{count} staged",
   "@gitStagedCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "gitUnstagedCount": "{count} modified",
   "@gitUnstagedCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "notificationSound": "Notification sound",
@@ -993,17 +1121,31 @@
   "piPluginValidate": "Validate",
   "piPluginValidationFailed": "Validation failed",
   "piPluginLoadFailed": "Could not load Pi plugins: {error}",
-  "@piPluginLoadFailed": { "placeholders": { "error": {} } },
+  "@piPluginLoadFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "piPluginOperationFailed": "Plugin operation failed: {error}",
-  "@piPluginOperationFailed": { "placeholders": { "error": {} } },
+  "@piPluginOperationFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "piPluginPermissionWarning": "Extensions run on the Bridge host with Pi's permissions. Only install code you trust.",
   "piPluginRemoveConfirm": "Uninstall {name}?",
-  "@piPluginRemoveConfirm": { "placeholders": { "name": {} } },
+  "@piPluginRemoveConfirm": {
+    "placeholders": {
+      "name": {}
+    }
+  },
   "piPluginNextTurnHint": "Changes apply to the next Pi turn.",
   "gitUntrackedCount": "{count} untracked",
   "@gitUntrackedCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "acceptanceTitle": "Application acceptance",
@@ -1038,7 +1180,11 @@
   "acceptanceRequirementsTitle": "Acceptance requirements",
   "acceptanceRequirementSources": "Based on {count} user messages",
   "@acceptanceRequirementSources": {
-    "placeholders": {"count": {"type": "int"}}
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "acceptanceRemoteDesktop": "Open remote desktop",
   "acceptanceEmpty": "No acceptance runs yet",
@@ -1150,9 +1296,21 @@
   "executionBackground": "Waiting for background work",
   "executionUnconfirmed": "Execution status unconfirmed",
   "executionNoProgressMinutes": "No new progress for {minutes} min",
-  "@executionNoProgressMinutes": {"placeholders": {"minutes": {"type": "int"}}},
+  "@executionNoProgressMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
   "executionNoProgressSeconds": "No new progress for {seconds}s",
-  "@executionNoProgressSeconds": {"placeholders": {"seconds": {"type": "int"}}},
+  "@executionNoProgressSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
   "executionRecentProgress": "Recent progress received",
   "executionLongWait": "No recent progress",
   "executionCheck": "Check again",
@@ -1169,6 +1327,46 @@
   "executionRecovering": "Continuing task",
   "executionRecoveryFailed": "Could not continue the task. Check its current status before trying again.",
   "executionContinueMessage": "Continue the unfinished task. First check existing execution results and active processes, then resume the remaining steps without repeating completed operations.",
+  "relayTitle": "Relay remote access",
+  "relayUse": "Connect through Relay",
+  "relayUrl": "Relay URL",
+  "relayDeviceName": "Device name",
+  "relayLogin": "Sign in to Relay",
+  "relayRefresh": "Refresh services",
+  "relayLogout": "Sign out of Relay",
+  "relayVerify": "Open the Relay website, sign in with the same account and approve this device code.",
+  "relayOpenLogin": "Open sign-in page",
+  "relayNoServices": "No Omni Code services. Enable remote access on the serving computer first.",
+  "relayOnline": "Online",
+  "relayOffline": "Offline",
+  "relayConnect": "Connect",
+  "relayRequestAccess": "Request access",
+  "relayHost": "Remote access to the computer",
+  "relayHostHint": "Manage Bridge through a direct connection. Once enabled, Bridge connects to Relay automatically.",
+  "relayServiceName": "Service name",
+  "relayConnecting": "Connecting",
+  "relayDisabled": "Remote access disabled",
+  "relayLoginEnable": "Sign in and enable remote access",
+  "relayEnable": "Enable remote access",
+  "relayDisable": "Disable remote access",
+  "relayDevices": "Manage remote devices",
+  "relayPolicy": "New device policy",
+  "relayPolicyAuto": "Allow the same account automatically",
+  "relayPolicyApproval": "Approve each device",
+  "relayApprove": "Approve",
+  "relayRevoke": "Revoke",
+  "relayKick": "Require new login",
+  "relayBan": "Ban",
+  "relayUnban": "Unban",
+  "relayLoginRequired": "Relay login expired. Sign in again in settings.",
+  "relayFailure": "Relay operation failed: {error}",
+  "@relayFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "acceptanceBuildTitle": "Build & dependencies",
   "acceptanceBuildHint": "Project files are checked first. Edit any field; unknown values stay empty. Commands and output paths are relative to the project root.",
   "acceptanceBuildLanguage": "Language / framework",
@@ -1184,17 +1382,13 @@
   "acceptanceBuildApply": "Apply to form",
   "acceptanceBuildEvidence": "Detected project files",
   "acceptanceBuildReview": "Review and save configuration to continue",
-  "acceptanceVideoLoading": "Loading acceptance recording…",
-  "acceptanceVideoBack": "Back 10 seconds",
-  "acceptanceVideoForward": "Forward 10 seconds",
-  "acceptanceBuildNext": "Next: review configuration",
-  "acceptanceBuildContinue": "Save and continue",
-  "acceptanceDesktopConnecting": "Connecting to the acceptance desktop…",
   "desktopShortcutsTitle": "Keyboard shortcuts",
   "desktopShortcutsHelp": "Customize desktop shortcuts. Changes take effect immediately and are saved automatically.",
   "shortcutSearch": "Open search",
   "shortcutNewWindow": "New window",
   "shortcutNewSession": "New session",
+  "shortcutPreviousSession": "Previous recent session",
+  "shortcutNextSession": "Next recent session",
   "shortcutSettings": "Open settings",
   "shortcutHome": "Go to home",
   "shortcutProjects": "Open projects",
@@ -1224,6 +1418,12 @@
     }
   },
   "shortcutSearchHint": "Search projects and sessions…",
+  "acceptanceVideoLoading": "Loading acceptance recording…",
+  "acceptanceVideoBack": "Back 10 seconds",
+  "acceptanceVideoForward": "Forward 10 seconds",
+  "acceptanceBuildNext": "Next: review configuration",
+  "acceptanceBuildContinue": "Save and continue",
+  "acceptanceDesktopConnecting": "Connecting to the acceptance desktop…",
   "shortcutsHeroTitle": "Make the workspace feel familiar",
   "shortcutsAutoSaved": "Saved automatically",
   "shortcutsEditHint": "Click a key combination to change it. Your choices are kept after restarting.",
@@ -1234,5 +1434,12 @@
   "shortcutGuide": "Shortcut guide",
   "shortcutSelect": "Select",
   "shortcutOpen": "Open",
-  "shortcutSearchEntry": "Search"
+  "shortcutSearchEntry": "Search",
+  "relayAccessAllowed": "Allowed",
+  "relayAccessApprovalRequired": "Approval required",
+  "relayAccessPending": "Waiting for approval",
+  "relayAccessRevoked": "Access revoked",
+  "relayAccessBanned": "Device banned",
+  "relayAccessLoginRequired": "Sign in again",
+  "relayCheckConnection": "Check Relay sign-in, service status and access in Settings."
 }

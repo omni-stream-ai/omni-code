@@ -235,6 +235,8 @@ bool _isSensitiveKey(String key) {
     'body',
     'content',
     'cookie',
+    'clientkey',
+    'devicecode',
     'message',
     'payload',
     'prompt',

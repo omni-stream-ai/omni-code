@@ -1946,6 +1946,18 @@ abstract class AppLocalizations {
   /// **'Pending sync'**
   String get draftPending;
 
+  /// No description provided for @draftQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued'**
+  String get draftQueued;
+
+  /// No description provided for @draftQueuedDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for the agent to receive this message'**
+  String get draftQueuedDescription;
+
   /// No description provided for @draftFailed.
   ///
   /// In en, this message translates to:
@@ -5036,6 +5048,204 @@ abstract class AppLocalizations {
   /// **'Continue the unfinished task. First check existing execution results and active processes, then resume the remaining steps without repeating completed operations.'**
   String get executionContinueMessage;
 
+  /// No description provided for @relayTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Relay remote access'**
+  String get relayTitle;
+
+  /// No description provided for @relayUse.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect through Relay'**
+  String get relayUse;
+
+  /// No description provided for @relayUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Relay URL'**
+  String get relayUrl;
+
+  /// No description provided for @relayDeviceName.
+  ///
+  /// In en, this message translates to:
+  /// **'Device name'**
+  String get relayDeviceName;
+
+  /// No description provided for @relayLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to Relay'**
+  String get relayLogin;
+
+  /// No description provided for @relayRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh services'**
+  String get relayRefresh;
+
+  /// No description provided for @relayLogout.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out of Relay'**
+  String get relayLogout;
+
+  /// No description provided for @relayVerify.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the Relay website, sign in with the same account and approve this device code.'**
+  String get relayVerify;
+
+  /// No description provided for @relayOpenLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Open sign-in page'**
+  String get relayOpenLogin;
+
+  /// No description provided for @relayNoServices.
+  ///
+  /// In en, this message translates to:
+  /// **'No Omni Code services. Enable remote access on the serving computer first.'**
+  String get relayNoServices;
+
+  /// No description provided for @relayOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'Online'**
+  String get relayOnline;
+
+  /// No description provided for @relayOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline'**
+  String get relayOffline;
+
+  /// No description provided for @relayConnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect'**
+  String get relayConnect;
+
+  /// No description provided for @relayRequestAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Request access'**
+  String get relayRequestAccess;
+
+  /// No description provided for @relayHost.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote access to the computer'**
+  String get relayHost;
+
+  /// No description provided for @relayHostHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage Bridge through a direct connection. Once enabled, Bridge connects to Relay automatically.'**
+  String get relayHostHint;
+
+  /// No description provided for @relayServiceName.
+  ///
+  /// In en, this message translates to:
+  /// **'Service name'**
+  String get relayServiceName;
+
+  /// No description provided for @relayConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting'**
+  String get relayConnecting;
+
+  /// No description provided for @relayDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote access disabled'**
+  String get relayDisabled;
+
+  /// No description provided for @relayLoginEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in and enable remote access'**
+  String get relayLoginEnable;
+
+  /// No description provided for @relayEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable remote access'**
+  String get relayEnable;
+
+  /// No description provided for @relayDisable.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable remote access'**
+  String get relayDisable;
+
+  /// No description provided for @relayDevices.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage remote devices'**
+  String get relayDevices;
+
+  /// No description provided for @relayPolicy.
+  ///
+  /// In en, this message translates to:
+  /// **'New device policy'**
+  String get relayPolicy;
+
+  /// No description provided for @relayPolicyAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow the same account automatically'**
+  String get relayPolicyAuto;
+
+  /// No description provided for @relayPolicyApproval.
+  ///
+  /// In en, this message translates to:
+  /// **'Approve each device'**
+  String get relayPolicyApproval;
+
+  /// No description provided for @relayApprove.
+  ///
+  /// In en, this message translates to:
+  /// **'Approve'**
+  String get relayApprove;
+
+  /// No description provided for @relayRevoke.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke'**
+  String get relayRevoke;
+
+  /// No description provided for @relayKick.
+  ///
+  /// In en, this message translates to:
+  /// **'Require new login'**
+  String get relayKick;
+
+  /// No description provided for @relayBan.
+  ///
+  /// In en, this message translates to:
+  /// **'Ban'**
+  String get relayBan;
+
+  /// No description provided for @relayUnban.
+  ///
+  /// In en, this message translates to:
+  /// **'Unban'**
+  String get relayUnban;
+
+  /// No description provided for @relayLoginRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Relay login expired. Sign in again in settings.'**
+  String get relayLoginRequired;
+
+  /// No description provided for @relayFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Relay operation failed: {error}'**
+  String relayFailure(String error);
+
   /// No description provided for @acceptanceBuildTitle.
   ///
   /// In en, this message translates to:
@@ -5126,42 +5336,6 @@ abstract class AppLocalizations {
   /// **'Review and save configuration to continue'**
   String get acceptanceBuildReview;
 
-  /// No description provided for @acceptanceVideoLoading.
-  ///
-  /// In en, this message translates to:
-  /// **'Loading acceptance recording…'**
-  String get acceptanceVideoLoading;
-
-  /// No description provided for @acceptanceVideoBack.
-  ///
-  /// In en, this message translates to:
-  /// **'Back 10 seconds'**
-  String get acceptanceVideoBack;
-
-  /// No description provided for @acceptanceVideoForward.
-  ///
-  /// In en, this message translates to:
-  /// **'Forward 10 seconds'**
-  String get acceptanceVideoForward;
-
-  /// No description provided for @acceptanceBuildNext.
-  ///
-  /// In en, this message translates to:
-  /// **'Next: review configuration'**
-  String get acceptanceBuildNext;
-
-  /// No description provided for @acceptanceBuildContinue.
-  ///
-  /// In en, this message translates to:
-  /// **'Save and continue'**
-  String get acceptanceBuildContinue;
-
-  /// No description provided for @acceptanceDesktopConnecting.
-  ///
-  /// In en, this message translates to:
-  /// **'Connecting to the acceptance desktop…'**
-  String get acceptanceDesktopConnecting;
-
   /// No description provided for @desktopShortcutsTitle.
   ///
   /// In en, this message translates to:
@@ -5191,6 +5365,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New session'**
   String get shortcutNewSession;
+
+  /// No description provided for @shortcutPreviousSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous recent session'**
+  String get shortcutPreviousSession;
+
+  /// No description provided for @shortcutNextSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Next recent session'**
+  String get shortcutNextSession;
 
   /// No description provided for @shortcutSettings.
   ///
@@ -5282,6 +5468,42 @@ abstract class AppLocalizations {
   /// **'Search projects and sessions…'**
   String get shortcutSearchHint;
 
+  /// No description provided for @acceptanceVideoLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading acceptance recording…'**
+  String get acceptanceVideoLoading;
+
+  /// No description provided for @acceptanceVideoBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back 10 seconds'**
+  String get acceptanceVideoBack;
+
+  /// No description provided for @acceptanceVideoForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Forward 10 seconds'**
+  String get acceptanceVideoForward;
+
+  /// No description provided for @acceptanceBuildNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next: review configuration'**
+  String get acceptanceBuildNext;
+
+  /// No description provided for @acceptanceBuildContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Save and continue'**
+  String get acceptanceBuildContinue;
+
+  /// No description provided for @acceptanceDesktopConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to the acceptance desktop…'**
+  String get acceptanceDesktopConnecting;
+
   /// No description provided for @shortcutsHeroTitle.
   ///
   /// In en, this message translates to:
@@ -5347,6 +5569,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Search'**
   String get shortcutSearchEntry;
+
+  /// No description provided for @relayAccessAllowed.
+  ///
+  /// In en, this message translates to:
+  /// **'Allowed'**
+  String get relayAccessAllowed;
+
+  /// No description provided for @relayAccessApprovalRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Approval required'**
+  String get relayAccessApprovalRequired;
+
+  /// No description provided for @relayAccessPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for approval'**
+  String get relayAccessPending;
+
+  /// No description provided for @relayAccessRevoked.
+  ///
+  /// In en, this message translates to:
+  /// **'Access revoked'**
+  String get relayAccessRevoked;
+
+  /// No description provided for @relayAccessBanned.
+  ///
+  /// In en, this message translates to:
+  /// **'Device banned'**
+  String get relayAccessBanned;
+
+  /// No description provided for @relayAccessLoginRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in again'**
+  String get relayAccessLoginRequired;
+
+  /// No description provided for @relayCheckConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Check Relay sign-in, service status and access in Settings.'**
+  String get relayCheckConnection;
 }
 
 class _AppLocalizationsDelegate
