@@ -144,6 +144,112 @@ void main() {
     expect(client.turnCreates, 0);
   });
 
+  test('retrying a command preserves its turn identity', () async {
+    final client = _DomainClient(_state(cursor: 1));
+    final controller =
+        SessionController(client: client, sessionId: 'session-1');
+    addTearDown(() async {
+      controller.dispose();
+      await client.close();
+    });
+    await controller.start();
+    client.createResponse = Future.error(StateError('connection lost'));
+    await expectLater(
+      controller.send('hello', commandId: 'command-1', userMessageId: 'user-1'),
+      throwsStateError,
+    );
+    client.createResponse = null;
+    client.acceptCreatedTurns = true;
+    await controller.send(
+      'hello',
+      commandId: 'command-1',
+      userMessageId: 'user-1',
+    );
+    expect(client.createdCommands, hasLength(2));
+    expect(client.createdCommands.first.turnId,
+        client.createdCommands.last.turnId);
+    expect(controller.queuedCommands, isEmpty);
+  });
+
+  test('stream acknowledgement wins over a failed send response', () async {
+    final client = _DomainClient(_state(cursor: 1));
+    final response = Completer<Map<String, dynamic>>();
+    client.createResponse = response.future;
+    final controller =
+        SessionController(client: client, sessionId: 'session-1');
+    addTearDown(() async {
+      controller.dispose();
+      await client.close();
+    });
+    await controller.start();
+    final send = controller.send(
+      'hello',
+      commandId: 'command-1',
+      turnId: 'turn-1',
+      userMessageId: 'user-1',
+    );
+    client.events.add({
+      'event_id': 2,
+      'payload': {
+        'session': _sessionJson(version: 2, activeTurnId: 'turn-1'),
+        'turn': _turnJson(),
+      },
+    });
+    await Future<void>.delayed(Duration.zero);
+    response.completeError(StateError('connection lost'));
+    await send;
+    expect(controller.error, isNull);
+    expect(controller.queuedCommands, isEmpty);
+    expect(client.turnCreates, 1);
+  });
+
+  test('stream acknowledgement wins over a failed steering response', () async {
+    final client = _DomainClient(_state(
+      cursor: 1,
+      activeTurnId: 'turn-1',
+      turns: [DomainTurn.fromJson(_turnJson())],
+    ));
+    final response = Completer<SessionSteeringResult>();
+    client.steeringResponse = response.future;
+    final controller =
+        SessionController(client: client, sessionId: 'session-1');
+    addTearDown(() async {
+      controller.dispose();
+      await client.close();
+    });
+    await controller.start();
+    final steer = controller.steer(
+      'turn-1',
+      'follow-up',
+      commandId: 'command-2',
+      userMessageId: 'user-2',
+    );
+    final turn = _turnJson();
+    (turn['segments'] as List).add({
+      'id': 'input-2',
+      'kind': 'user_message',
+      'state': 'pending',
+      'message': {
+        ...(turn['user_message'] as Map<String, dynamic>),
+        'id': 'user-2',
+        'content': 'follow-up',
+        'state': 'pending',
+      },
+    });
+    client.events.add({
+      'event_id': 2,
+      'payload': {
+        'session': _sessionJson(version: 2, activeTurnId: 'turn-1'),
+        'turn': turn,
+      },
+    });
+    await Future<void>.delayed(Duration.zero);
+    response.completeError(StateError('connection lost'));
+    expect(await steer, SessionSteeringResult.accepted);
+    expect(controller.error, isNull);
+    expect(client.turnCreates, 0);
+  });
+
   test(
       'recovery conditionally cancels the selected turn then sends one fresh continuation',
       () async {
@@ -221,6 +327,8 @@ class _DomainClient extends BridgeClient {
   final createdCommands = <PendingSessionCommand>[];
   DomainSessionState? stateAfterCancel;
   bool acceptCreatedTurns = false;
+  Future<Map<String, dynamic>>? createResponse;
+  Future<SessionSteeringResult>? steeringResponse;
   final events = StreamController<Map<String, dynamic>>.broadcast();
 
   @override
@@ -253,6 +361,8 @@ class _DomainClient extends BridgeClient {
         turnId: turnId,
         userMessageId: userMessageId,
         content: content));
+    final response = createResponse;
+    if (response != null) return response;
     if (acceptCreatedTurns) {
       nextState =
           _state(cursor: nextState.cursor + 1, activeTurnId: turnId, turns: [
@@ -274,6 +384,17 @@ class _DomainClient extends BridgeClient {
       'data': {'accepted': true, 'turn_id': turnId},
     };
   }
+
+  @override
+  Future<SessionSteeringResult> steerDomainTurn(
+    String sessionId,
+    String turnId,
+    String content, {
+    required String commandId,
+    required String userMessageId,
+    List<DomainAttachment> attachments = const [],
+  }) =>
+      steeringResponse ?? Future.value(SessionSteeringResult.unavailable);
 
   @override
   Stream<Map<String, dynamic>> subscribeToDomainSessionEvents(

@@ -14,6 +14,7 @@ import '../shortcuts/shortcut_keycaps.dart';
 import '../shortcuts/shortcut_labels.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import 'desktop_window_header.dart';
 
 typedef AgentLabelResolver = String Function(String agentId);
 
@@ -83,6 +84,7 @@ class NavigationPanel extends StatelessWidget {
     final muted = AppColors.mutedFor(brightness);
     final text = AppColors.textFor(brightness);
     final shortcutScope = DesktopShortcutScope.maybeOf(context);
+    final integratedHeader = DesktopWindowHeaderScope.isActive(context);
     final showShortcuts = showDesktopShortcuts &&
         supportsDesktopShortcuts &&
         shortcutScope != null;
@@ -97,84 +99,91 @@ class NavigationPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: collapsed
-              ? MainAxisAlignment.center
-              : MainAxisAlignment.spaceBetween,
-          children: [
-            if (!collapsed)
-              Expanded(
-                child: Text(
-                  'Omni Code',
-                  style: _headerTextStyle(context, text),
-                ),
-              ),
-            if (onToggleCollapsed != null)
-              IconButton(
-                tooltip: showShortcuts
-                    ? shortcutTooltip(context.l10n.shortcutToggleNavigation,
-                        DesktopShortcutAction.toggleNavigation)
-                    : (collapsed ? 'Expand navigation' : 'Collapse navigation'),
-                onPressed: onToggleCollapsed,
-                style: IconButton.styleFrom(
-                  backgroundColor: AppColors.panelDeepFor(brightness),
-                  foregroundColor: text,
-                  minimumSize: const Size.square(36),
-                  padding: EdgeInsets.zero,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(
-                      AppSpacing.radiusControl,
-                    ),
+        if (!integratedHeader) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: collapsed
+                ? MainAxisAlignment.center
+                : MainAxisAlignment.spaceBetween,
+            children: [
+              if (!collapsed)
+                Expanded(
+                  child: Text(
+                    'Omni Code',
+                    style: _headerTextStyle(context, text),
                   ),
                 ),
-                icon: Icon(
-                  collapsed ? Icons.menu_open_rounded : Icons.menu_rounded,
-                  size: 18,
+              if (onToggleCollapsed != null)
+                IconButton(
+                  tooltip: showShortcuts
+                      ? shortcutTooltip(context.l10n.shortcutToggleNavigation,
+                          DesktopShortcutAction.toggleNavigation)
+                      : (collapsed
+                          ? 'Expand navigation'
+                          : 'Collapse navigation'),
+                  onPressed: onToggleCollapsed,
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.panelDeepFor(brightness),
+                    foregroundColor: text,
+                    minimumSize: const Size.square(36),
+                    padding: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        AppSpacing.radiusControl,
+                      ),
+                    ),
+                  ),
+                  icon: Icon(
+                    collapsed ? Icons.menu_open_rounded : Icons.menu_rounded,
+                    size: 18,
+                  ),
                 ),
-              ),
-          ],
-        ),
-        if (!collapsed) ...[
-          const SizedBox(height: AppSpacing.compact),
-          Text(
-            'A quieter desk for active sessions.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: muted,
-                  height: 1.45,
-                ),
+            ],
           ),
-        ],
-        const SizedBox(height: AppSpacing.section),
-        if (showShortcuts) ...[
-          Tooltip(
-            message: shortcutTooltip(
-                context.l10n.shortcutSearch, DesktopShortcutAction.search),
-            child: OutlinedButton(
-              key: const Key('navigation-open-search'),
-              onPressed: _wrapAction(
-                  () => shortcutScope.onInvoke(DesktopShortcutAction.search)),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(38),
-                padding: EdgeInsets.symmetric(horizontal: collapsed ? 0 : 10),
-              ),
-              child: collapsed
-                  ? const Icon(Icons.search_rounded, size: 18)
-                  : Row(children: [
-                      const Icon(Icons.search_rounded, size: 17),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(context.l10n.shortcutSearchEntry)),
-                      const Expanded(
-                          child: Align(
-                              alignment: Alignment.centerRight,
-                              child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: ActionShortcutHint(
-                                      action: DesktopShortcutAction.search)))),
-                    ]),
+          if (!collapsed) ...[
+            const SizedBox(height: AppSpacing.compact),
+            Text(
+              'A quieter desk for active sessions.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: muted,
+                    height: 1.45,
+                  ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.compact),
+          ],
+          const SizedBox(height: AppSpacing.section),
+        ],
+        if (showShortcuts) ...[
+          if (!integratedHeader || MediaQuery.sizeOf(context).width < 320) ...[
+            Tooltip(
+              message: shortcutTooltip(
+                  context.l10n.shortcutSearch, DesktopShortcutAction.search),
+              child: OutlinedButton(
+                key: const Key('navigation-open-search'),
+                onPressed: _wrapAction(
+                    () => shortcutScope.onInvoke(DesktopShortcutAction.search)),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(38),
+                  padding: EdgeInsets.symmetric(horizontal: collapsed ? 0 : 10),
+                ),
+                child: collapsed
+                    ? const Icon(Icons.search_rounded, size: 18)
+                    : Row(children: [
+                        const Icon(Icons.search_rounded, size: 17),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(context.l10n.shortcutSearchEntry)),
+                        const Expanded(
+                            child: Align(
+                                alignment: Alignment.centerRight,
+                                child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: ActionShortcutHint(
+                                        action:
+                                            DesktopShortcutAction.search)))),
+                      ]),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.compact),
+          ],
           Tooltip(
             message: shortcutTooltip(context.l10n.shortcutNewWindow,
                 DesktopShortcutAction.newWindow),
@@ -712,7 +721,8 @@ class _NavigationRecentItemState extends State<NavigationRecentItem> {
     };
     final statusColor = switch (widget.status) {
       SessionStatus.failed => AppColors.errorFor(brightness),
-      SessionStatus.awaitingApproval || SessionStatus.waiting =>
+      SessionStatus.awaitingApproval ||
+      SessionStatus.waiting =>
         AppColors.warningFor(brightness),
       SessionStatus.running => brightness == Brightness.dark
           ? Colors.green.shade400

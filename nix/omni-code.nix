@@ -1,5 +1,6 @@
 {
   lib,
+  callPackage,
   stdenv,
   autoPatchelfHook,
   fetchurl,
@@ -29,6 +30,7 @@
 }:
 
 let
+  prepareLinuxBundle = callPackage ./prepare-linux-bundle.nix { };
   videoRuntimeLibraries = [
     alsa-lib libpulseaudio lz4 libGL libx11 libxcb wayland
     libgbm libdrm xz zlib freetype harfbuzz fontconfig fribidi
@@ -126,6 +128,7 @@ flutter.buildFlutterApplication {
 
   CMAKE_LIBRARY_PATH = "${zlib.out}/lib";
   CMAKE_INCLUDE_PATH = "${zlib.dev}/include";
+  OMNI_CODE_LINUX_BUNDLE_PREPARER = "${prepareLinuxBundle}/bin/omni-code-prepare-linux-bundle";
 
   postInstall = ''
     makeWrapper $out/app/$pname/omni_code $out/bin/omni-code \

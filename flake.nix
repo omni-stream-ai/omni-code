@@ -12,6 +12,7 @@
       packages = forAllSystems (pkgs: let system = pkgs.stdenv.hostPlatform.system; in {
         omni-code = pkgs.callPackage ./nix/omni-code.nix { };
         omni-code-bin = pkgs.callPackage ./nix/omni-code-bin.nix { };
+        linux-bundle-preparer = pkgs.callPackage ./nix/prepare-linux-bundle.nix { };
         default = self.packages.${system}.omni-code;
       });
 

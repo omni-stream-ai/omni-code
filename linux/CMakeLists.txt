@@ -188,18 +188,6 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
     COMPONENT Runtime)
 endif()
 
-# Nix development builds also need to run outside `nix develop`. Prebuilt
-# plugins do not inherit the runner's link paths, so fix the complete installed
-# bundle after all native libraries and assets have been copied.
-if(DEFINED ENV{OMNI_CODE_LINUX_BUNDLE_PREPARER})
-  install(CODE "
-    execute_process(
-      COMMAND \"$ENV{OMNI_CODE_LINUX_BUNDLE_PREPARER}\"
-              \"${CMAKE_INSTALL_PREFIX}\"
-      RESULT_VARIABLE _omni_prepare_result
-    )
-    if(NOT _omni_prepare_result EQUAL 0)
-      message(FATAL_ERROR \"omni_code: native runtime dependencies are incomplete\")
-    endif()
-  " COMPONENT Runtime)
-endif()
+# Resolve and cache the native dependency fixer for ordinary flutter run builds
+# too, then run it after every library and asset has been installed.
+include(cmake/native_bundle.cmake)

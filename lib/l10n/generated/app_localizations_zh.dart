@@ -356,6 +356,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get withdrawMessage => '撤回';
 
   @override
+  String get removeMessage => '移除消息';
+
+  @override
   String projectCount(int count) {
     return '$count 个会话';
   }
@@ -917,6 +920,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get close => '关闭';
+
+  @override
+  String get minimizeWindow => '最小化窗口';
+
+  @override
+  String get maximizeWindow => '最大化窗口';
+
+  @override
+  String get restoreWindow => '还原窗口';
 
   @override
   String get toolActivityDetail => '工具过程详情';

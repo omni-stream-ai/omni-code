@@ -371,6 +371,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get withdrawMessage => 'Withdraw';
 
   @override
+  String get removeMessage => 'Remove message';
+
+  @override
   String projectCount(int count) {
     return '$count sessions';
   }
@@ -959,6 +962,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get close => 'Close';
+
+  @override
+  String get minimizeWindow => 'Minimize window';
+
+  @override
+  String get maximizeWindow => 'Maximize window';
+
+  @override
+  String get restoreWindow => 'Restore window';
 
   @override
   String get toolActivityDetail => 'Tool activity detail';

@@ -157,6 +157,7 @@
   "changeBridge": "Change Bridge",
   "editMessage": "Edit",
   "withdrawMessage": "Withdraw",
+  "removeMessage": "Remove message",
   "projectCount": "{count} sessions",
   "@projectCount": {
     "placeholders": {
@@ -481,6 +482,9 @@
   "replyStopped": "Stopped this reply",
   "allToolActivity": "All tool activity",
   "close": "Close",
+  "minimizeWindow": "Minimize window",
+  "maximizeWindow": "Maximize window",
+  "restoreWindow": "Restore window",
   "toolActivityDetail": "Tool activity detail",
   "detailType": "Type",
   "detailPhase": "Phase",

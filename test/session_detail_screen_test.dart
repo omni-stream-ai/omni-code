@@ -3505,9 +3505,10 @@ void main() {
       final replies = find.byKey(
           const ValueKey('assistant-message-bubble-shared-provider-reply'));
       expect(replies.hitTestable(), findsNWidgets(2));
-      final markdown = find.descendant(
-          of: replies, matching: find.byType(MarkdownBody));
-      final originalMarkdown = tester.widgetList<MarkdownBody>(markdown).toList();
+      final markdown =
+          find.descendant(of: replies, matching: find.byType(MarkdownBody));
+      final originalMarkdown =
+          tester.widgetList<MarkdownBody>(markdown).toList();
       for (var revision = 1; revision <= 2; revision++) {
         final state = snapshot(revision);
         events.add(utf8.encode('id: $revision\ndata: ${jsonEncode({
@@ -6347,6 +6348,257 @@ void main() {
     expect(cancelCalls, 1);
   });
 
+  for (final failure in ['response', 'timeout', 'recovery timeout']) {
+    testWidgets('failed $failure send can retry without getting stuck',
+        (tester) async {
+      final events = StreamController<List<int>>.broadcast();
+      final requests = <Map<String, dynamic>>[];
+      var stalledRecovery = false;
+      var state = _domainStateJson([]);
+      final client = BridgeClient(
+        httpClient: _StreamingEventHttpClient(
+          events: events.stream,
+          handler: (request) async {
+            if (request.url.path == '/v2/sessions/session-1/state') {
+              if (failure == 'recovery timeout' &&
+                  requests.length == 1 &&
+                  !stalledRecovery) {
+                stalledRecovery = true;
+                return Completer<http.Response>().future;
+              }
+              return http.Response(jsonEncode({'data': state}), 200);
+            }
+            if (request.method == 'POST' &&
+                request.url.path == '/v2/sessions/session-1/turns') {
+              final body = jsonDecode(request.body) as Map<String, dynamic>;
+              requests.add(body);
+              if (requests.length == 1) {
+                return switch (failure) {
+                  'timeout' => Completer<http.Response>().future,
+                  'recovery timeout' => http.Response('{"data":{}}', 202),
+                  _ => http.Response('temporarily unavailable', 503),
+                };
+              }
+              state = _domainStateJson([
+                _messageJson(
+                  id: body['user_message_id'] as String,
+                  sessionId: 'session-1',
+                  role: 'user',
+                  content: body['content'] as String,
+                  createdAt: '2026-05-09T10:00:10.000Z',
+                ),
+              ], status: 'running');
+              (state['turns'] as List).single['id'] = body['turn_id'];
+              (state['session'] as Map)['active_turn_id'] = body['turn_id'];
+              return http.Response('{"data":{}}', 202);
+            }
+            return http.Response('not found', 404);
+          },
+        ),
+      );
+      await tester.pumpWidget(_TestApp(
+        home: _sessionScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ));
+      await tester.pump();
+      final input = find.byKey(const Key('session-message-input'));
+      await tester.enterText(input, 'Retry this request');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('session-send-button')));
+      await tester.pump();
+      if (failure != 'response') {
+        await tester.pump(const Duration(seconds: 36));
+      }
+      await tester.pump();
+      final l10n = AppLocalizations.of(tester.element(input))!;
+      expect(find.text(l10n.draftFailed), findsOneWidget);
+      final messageId = requests.single['user_message_id'] as String;
+      expect(
+        find.byKey(ValueKey('user-message-dismiss-action-$messageId')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('user-message-retry-action')));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      expect(requests, hasLength(2));
+      expect(requests.last, requests.first);
+      expect(find.text('Retry this request'), findsOneWidget);
+      expect(find.text(l10n.draftFailed), findsNothing);
+      expect(find.text(l10n.draftPending), findsNothing);
+      expect(find.text(l10n.draftQueued), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await events.close();
+      client.dispose();
+    });
+  }
+
+  testWidgets('failed follow-up stays after live output and can be removed',
+      (tester) async {
+    tester.view.physicalSize = const Size(1000, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final events = StreamController<List<int>>.broadcast();
+    final state = _domainStateJson(
+      _conversationMessages(1),
+      status: 'running',
+    );
+    final client = BridgeClient(
+      httpClient: _StreamingEventHttpClient(
+        events: events.stream,
+        handler: (request) async {
+          if (request.url.path == '/v2/sessions/session-1/state') {
+            return http.Response(jsonEncode({'data': state}), 200);
+          }
+          if (request.method == 'POST' && request.url.path.endsWith('/steer')) {
+            return http.Response('temporarily unavailable', 503);
+          }
+          return http.Response('not found', 404);
+        },
+      ),
+    );
+    await tester.pumpWidget(_TestApp(
+      home: _sessionScreen(
+        session: _session().copyWith(status: SessionStatus.running),
+        client: client,
+        enableSpeechServices: false,
+      ),
+    ));
+    await tester.pump();
+    final input = find.byKey(const Key('session-message-input'));
+    await tester.enterText(input, 'Failed follow-up');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-send-button')));
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('user-message-retry-action')));
+    await tester.pump();
+    await tester.pump();
+    final turn = (state['turns'] as List).single as Map<String, dynamic>;
+    ((turn['segments'] as List).single['message'] as Map)['content'] =
+        'The original reply continues';
+    turn['version'] = 2;
+    events.add(utf8.encode('id: 1\ndata: ${jsonEncode({
+          'event_id': 1,
+          'event_type': 'message.updated',
+          'payload': {'session': state['session'], 'turn': turn},
+        })}\n\n'));
+    await tester.pump();
+    await tester.pump();
+    expect(
+      tester.getTopLeft(find.text('Failed follow-up')).dy,
+      greaterThan(
+          tester.getTopLeft(find.text('The original reply continues')).dy),
+    );
+    final dismiss = find.byWidgetPredicate((widget) =>
+        widget is IconButton &&
+        widget.key is ValueKey<String> &&
+        (widget.key! as ValueKey<String>)
+            .value
+            .startsWith('user-message-dismiss-action-'));
+    expect(dismiss, findsOneWidget);
+    await tester.tap(dismiss);
+    await tester.pump();
+    expect(find.text('Failed follow-up'), findsNothing);
+    expect(find.text('The original reply continues'), findsOneWidget);
+    expect(find.text('Question 1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await events.close();
+    client.dispose();
+  });
+
+  for (final action in ['dismiss', 'retry']) {
+    testWidgets('failed domain input $action stays resolved on refresh',
+        (tester) async {
+      tester.view.physicalSize = const Size(1000, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final events = StreamController<List<int>>.broadcast();
+      final state = _domainStateJson(_conversationMessages(2));
+      final turn = (state['turns'] as List).first as Map<String, dynamic>;
+      (turn['segments'] as List).add({
+        'id': 'failed-input',
+        'sequence': 2,
+        'revision': 1,
+        'kind': 'user_message',
+        'state': 'failed',
+        'message': _domainMessageJson(
+          _messageJson(
+            id: 'failed-input',
+            sessionId: 'session-1',
+            role: 'user',
+            content: 'Failed earlier input',
+            createdAt: '2026-05-09T10:00:01.500Z',
+          )..['state'] = 'failed',
+          purpose: 'user',
+        ),
+        'activities': <Map<String, dynamic>>[],
+      });
+      final client = BridgeClient(
+        httpClient: _StreamingEventHttpClient(
+          events: events.stream,
+          handler: (request) async {
+            if (request.url.path == '/v2/sessions/session-1/state') {
+              return http.Response(jsonEncode({'data': state}), 200);
+            }
+            if (request.method == 'POST' &&
+                request.url.path.endsWith('/turns')) {
+              return http.Response('temporarily unavailable', 503);
+            }
+            return http.Response('not found', 404);
+          },
+        ),
+      );
+      await tester.pumpWidget(_TestApp(
+        home: _sessionScreen(
+          session: _session(),
+          client: client,
+          enableSpeechServices: false,
+        ),
+      ));
+      await tester.pump();
+      expect(
+        tester.getTopLeft(find.text('Failed earlier input')).dy,
+        lessThan(tester.getTopLeft(find.text('Question 2')).dy),
+      );
+      await tester.tap(
+        action == 'dismiss'
+            ? find.byKey(
+                const ValueKey('user-message-dismiss-action-failed-input'))
+            : find.byKey(const Key('user-message-retry-action')),
+      );
+      await tester.pump();
+      turn['version'] = 2;
+      events.add(utf8.encode('id: 1\ndata: ${jsonEncode({
+            'event_id': 1,
+            'event_type': 'message.updated',
+            'payload': {'session': state['session'], 'turn': turn},
+          })}\n\n'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Failed earlier input'),
+          action == 'dismiss' ? findsNothing : findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('user-message-dismiss-action-failed-input')),
+        findsNothing,
+      );
+      expect(find.text('Answer 1'), findsOneWidget);
+      expect(find.text('Question 2'), findsOneWidget);
+      expect(find.text('Answer 2'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await events.close();
+      client.dispose();
+    });
+  }
+
   testWidgets('Codex input stays queued until the runtime consumes it', (
     tester,
   ) async {
@@ -6445,6 +6697,10 @@ void main() {
     expect(find.text('Additional instructions'), findsOneWidget);
     expect(find.text(l10n.draftQueued), findsOneWidget);
     expect(find.text('Answer 1'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Additional instructions')).dy,
+      greaterThan(tester.getTopLeft(find.text('Answer 1')).dy),
+    );
     final queued = segments.last;
     queued['state'] = 'completed';
     (queued['message'] as Map)['state'] = 'completed';
@@ -6472,6 +6728,14 @@ void main() {
     expect(find.text(l10n.draftQueued), findsNothing);
     expect(find.text('Follow-up answer'), findsOneWidget);
     expect(find.text('Answer 1'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Additional instructions')).dy,
+      greaterThan(tester.getTopLeft(find.text('Answer 1')).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('Follow-up answer')).dy,
+      greaterThan(tester.getTopLeft(find.text('Additional instructions')).dy),
+    );
     expect(steers, hasLength(1));
     expect(turnCreates, 0);
     expect(cancellations, 0);
@@ -6694,73 +6958,74 @@ void main() {
     expect(find.text(l10n.draftPending), findsOneWidget);
   });
 
-  testWidgets(
-      'withdrawing a queued message removes it and all following messages',
-      (tester) async {
-    final sendBodies = <Map<String, dynamic>>[];
-    final firstSendCompleter = Completer<http.Response>();
-    final client = BridgeClient(
-      httpClient: _FakeHttpClient((request) async {
-        if (request.method == 'GET' &&
-            request.url.path == '/sessions/session-1/messages') {
-          return http.Response(
-            jsonEncode({'data': []}),
-            200,
-            headers: {'content-type': 'application/json'},
-          );
-        }
-        if (request.method == 'GET' &&
-            request.url.path == '/sessions/session-1/events') {
-          return http.Response(
-            '',
-            200,
-            headers: {'content-type': 'text/event-stream'},
-          );
-        }
-        if (request.method == 'POST' &&
-            request.url.path == '/sessions/session-1/messages') {
-          final body = jsonDecode(request.body) as Map<String, dynamic>;
-          sendBodies.add(body);
-          if (sendBodies.length == 1) {
-            return firstSendCompleter.future;
+  for (final action in ['withdraw', 'dismiss']) {
+    testWidgets(
+        '$action queued message preserves the expected following messages',
+        (tester) async {
+      final sendBodies = <Map<String, dynamic>>[];
+      final firstSendCompleter = Completer<http.Response>();
+      final client = BridgeClient(
+        httpClient: _FakeHttpClient((request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/messages') {
+            return http.Response(
+              jsonEncode({'data': []}),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
           }
-          return http.Response(
-            jsonEncode({
-              'data': {
-                'user_message': _messageJson(
-                  id: 'server-user-${sendBodies.length}',
-                  sessionId: 'session-1',
-                  role: 'user',
-                  content: body['content'] as String,
-                  createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
-                ),
-                'reply': _messageJson(
-                  id: 'server-reply-${sendBodies.length}',
-                  sessionId: 'session-1',
-                  role: 'assistant',
-                  content: '',
-                  createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
-                ),
-              },
-            }),
-            200,
-            headers: {'content-type': 'application/json'},
-          );
-        }
-        return http.Response('not found', 404);
-      }),
-    );
+          if (request.method == 'GET' &&
+              request.url.path == '/sessions/session-1/events') {
+            return http.Response(
+              '',
+              200,
+              headers: {'content-type': 'text/event-stream'},
+            );
+          }
+          if (request.method == 'POST' &&
+              request.url.path == '/sessions/session-1/messages') {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            sendBodies.add(body);
+            if (sendBodies.length == 1) {
+              return firstSendCompleter.future;
+            }
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'user_message': _messageJson(
+                    id: 'server-user-${sendBodies.length}',
+                    sessionId: 'session-1',
+                    role: 'user',
+                    content: body['content'] as String,
+                    createdAt: '2026-05-09T10:00:0${sendBodies.length}.000',
+                  ),
+                  'reply': _messageJson(
+                    id: 'server-reply-${sendBodies.length}',
+                    sessionId: 'session-1',
+                    role: 'assistant',
+                    content: '',
+                    createdAt: '2026-05-09T10:00:1${sendBodies.length}.000',
+                  ),
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('not found', 404);
+        }),
+      );
 
-    await tester.pumpWidget(
-      _TestApp(
-        home: _sessionScreen(
-          session: _session(),
-          client: client,
-          enableSpeechServices: false,
+      await tester.pumpWidget(
+        _TestApp(
+          home: _sessionScreen(
+            session: _session(),
+            client: client,
+            enableSpeechServices: false,
+          ),
         ),
-      ),
-    );
-    await tester.pump();
+      );
+      await tester.pump();
 
     final input = find.byKey(const Key('session-message-input'));
     await tester.enterText(input, 'First message');
@@ -6794,39 +7059,41 @@ void main() {
     await mouse.moveTo(tester.getCenter(queuedHoverRegion));
     await tester.pump();
 
-    final queuedMessageBubble = tester.widget<Container>(
-      find
-          .ancestor(
-            of: find.text('Queued one'),
-            matching: find.byWidgetPredicate(
-              (widget) =>
-                  widget is Container &&
-                  widget.key is ValueKey<String> &&
-                  (widget.key! as ValueKey<String>).value.startsWith(
-                        'user-message-bubble-local-',
-                      ),
-            ),
-          )
-          .first,
-    );
-    final queuedMessageId =
-        (queuedMessageBubble.key! as ValueKey<String>).value.substring(
-              'user-message-bubble-'.length,
-            );
-    final withdrawAction = find.byKey(
-      ValueKey('user-message-withdraw-action-$queuedMessageId'),
-    );
-    expect(withdrawAction, findsOneWidget);
-    await tester.tap(withdrawAction);
-    await tester.pump();
+      final queuedMessageBubble = tester.widget<Container>(
+        find
+            .ancestor(
+              of: find.text('Queued one'),
+              matching: find.byWidgetPredicate(
+                (widget) =>
+                    widget is Container &&
+                    widget.key is ValueKey<String> &&
+                    (widget.key! as ValueKey<String>).value.startsWith(
+                          'user-message-bubble-local-',
+                        ),
+              ),
+            )
+            .first,
+      );
+      final queuedMessageId =
+          (queuedMessageBubble.key! as ValueKey<String>).value.substring(
+                'user-message-bubble-'.length,
+              );
+      final withdrawAction = find.byKey(
+        ValueKey('user-message-$action-action-$queuedMessageId'),
+      );
+      expect(withdrawAction, findsOneWidget);
+      await tester.tap(withdrawAction);
+      await tester.pump();
 
-    expect(find.text('First message'), findsOneWidget);
-    expect(find.text('Queued one'), findsNothing);
-    expect(find.text('Queued two'), findsNothing);
-    expect(tester.widget<TextField>(input).controller?.text, isEmpty);
-  },
-      variant:
-          const TargetPlatformVariant(<TargetPlatform>{TargetPlatform.linux}));
+      expect(find.text('First message'), findsOneWidget);
+      expect(find.text('Queued one'), findsNothing);
+      expect(find.text('Queued two'),
+          action == 'withdraw' ? findsNothing : findsOneWidget);
+      expect(tester.widget<TextField>(input).controller?.text, isEmpty);
+    },
+        variant: const TargetPlatformVariant(
+            <TargetPlatform>{TargetPlatform.linux}));
+  }
 
   testWidgets('composer action icons are reachable by tab', (tester) async {
     await tester.pumpWidget(

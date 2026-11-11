@@ -26,6 +26,7 @@ import 'theme/app_spacing.dart';
 import 'theme/app_theme.dart';
 import 'settings/app_settings.dart';
 import 'widgets/app_skeleton.dart';
+import 'widgets/desktop_window_appearance.dart';
 import 'widgets/session_cache_scope.dart';
 
 class OmniCodeApp extends StatefulWidget {
@@ -87,7 +88,9 @@ class _OmniCodeAppState extends State<OmniCodeApp> {
             child: AppDesktopShortcuts(
               navigatorKey: notificationService.navigatorKey,
               observer: _desktopShortcutObserver,
-              child: child ?? const SizedBox.shrink(),
+              child: DesktopWindowAppearance(
+                child: child ?? const SizedBox.shrink(),
+              ),
             ),
           ),
           onGenerateInitialRoutes: _generateInitialRoutes,

@@ -734,6 +734,12 @@ abstract class AppLocalizations {
   /// **'Withdraw'**
   String get withdrawMessage;
 
+  /// No description provided for @removeMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove message'**
+  String get removeMessage;
+
   /// No description provided for @projectCount.
   ///
   /// In en, this message translates to:
@@ -1741,6 +1747,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Close'**
   String get close;
+
+  /// No description provided for @minimizeWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimize window'**
+  String get minimizeWindow;
+
+  /// No description provided for @maximizeWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximize window'**
+  String get maximizeWindow;
+
+  /// No description provided for @restoreWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore window'**
+  String get restoreWindow;
 
   /// No description provided for @toolActivityDetail.
   ///

@@ -30,6 +30,7 @@ class SessionController extends ChangeNotifier {
   final List<PendingSessionCommand> queuedCommands = [];
   StreamSubscription<Map<String, dynamic>>? _subscription;
   Timer? _reconnectTimer;
+  final Set<Timer> _requestTimers = {};
   int _reconnectAttempt = 0;
   int _generation = 0;
   bool _disposed = false;
@@ -44,7 +45,9 @@ class SessionController extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      final snapshot = await _client.getDomainSessionState(sessionId);
+      final request = _client.getDomainSessionState(sessionId);
+      final snapshot =
+          await (_recoveryInFlight ? _request(request) : request);
       if (_disposed || generation != _generation) return;
       _state = snapshot;
       final acceptedTurnIds = snapshot.turns.map((turn) => turn.id).toSet();
@@ -83,6 +86,26 @@ class SessionController extends ChangeNotifier {
     if (!_disposed && connectionState == SessionConnectionState.disconnected) {
       _scheduleRecovery(_generation);
     }
+  }
+
+  Future<T> _request<T>(Future<T> request) {
+    final completer = Completer<T>();
+    late final Timer timer;
+    timer = Timer(const Duration(seconds: 35), () {
+      _requestTimers.remove(timer);
+      completer.completeError(TimeoutException('Session request timed out'));
+    });
+    _requestTimers.add(timer);
+    unawaited(request.then<void>((value) {
+      timer.cancel();
+      _requestTimers.remove(timer);
+      if (!completer.isCompleted) completer.complete(value);
+    }, onError: (Object error, StackTrace stack) {
+      timer.cancel();
+      _requestTimers.remove(timer);
+      if (!completer.isCompleted) completer.completeError(error, stack);
+    }));
+    return completer.future;
   }
 
   void _subscribe(int generation, int cursor) {
@@ -186,26 +209,43 @@ class SessionController extends ChangeNotifier {
     if (_disposed || _state?.session.activeTurnId != turnId) {
       return SessionSteeringResult.stale;
     }
-    final result = await _client.steerDomainTurn(
-      sessionId,
-      turnId,
-      content,
-      commandId: commandId,
-      userMessageId: userMessageId,
-      attachments: attachments,
-    );
+    final SessionSteeringResult result;
+    try {
+      result = await _request(_client.steerDomainTurn(
+        sessionId,
+        turnId,
+        content,
+        commandId: commandId,
+        userMessageId: userMessageId,
+        attachments: attachments,
+      ));
+    } catch (_) {
+      // The event stream may acknowledge input before its HTTP response fails.
+      if (_hasUserMessage(userMessageId)) {
+        return SessionSteeringResult.accepted;
+      }
+      rethrow;
+    }
     if (result == SessionSteeringResult.accepted && !_disposed) {
-      final visible =
-          _state?.turns.any(
+      final visible = _state?.turns.any(
             (turn) => turn.segments.any(
               (segment) => segment.message?.id == userMessageId,
             ),
           ) ??
           false;
       if (!visible) await recover();
+      if (!_hasUserMessage(userMessageId) && error != null) throw error!;
     }
     return result;
   }
+
+  bool _hasUserMessage(String messageId) =>
+      _state?.turns.any((turn) =>
+          turn.userMessage.id == messageId ||
+          turn.segments.any((segment) =>
+              segment.message?.purpose == DomainMessagePurpose.user &&
+              segment.message?.id == messageId)) ??
+      false;
 
   Future<PendingSessionCommand> send(
     String content, {
@@ -222,14 +262,14 @@ class SessionController extends ChangeNotifier {
     final uuid = const Uuid();
     final command = PendingSessionCommand(
       commandId: commandId ?? uuid.v4(),
-      turnId: turnId ?? uuid.v4(),
+      turnId: turnId ?? commandId ?? uuid.v4(),
       userMessageId: userMessageId ?? uuid.v4(),
       content: content,
     );
     queuedCommands.add(command);
     notifyListeners();
     try {
-      await _client.createDomainTurn(
+      await _request(_client.createDomainTurn(
         sessionId,
         content,
         commandId: command.commandId,
@@ -241,7 +281,7 @@ class SessionController extends ChangeNotifier {
         providerId: providerId,
         reasoningEffort: reasoningEffort,
         model: model,
-      );
+      ));
       final acceptedByStream = _state?.turns.any(
             (turn) =>
                 turn.id == command.turnId ||
@@ -250,11 +290,17 @@ class SessionController extends ChangeNotifier {
           false;
       if (!acceptedByStream) {
         await recover();
+        if (!_hasUserMessage(command.userMessageId) && error != null) {
+          throw error!;
+        }
       }
     } catch (value) {
       queuedCommands.remove(command);
-      error = value;
-      notifyListeners();
+      if (_hasUserMessage(command.userMessageId)) return command;
+      if (!_disposed) {
+        error = value;
+        notifyListeners();
+      }
       rethrow;
     }
     return command;
@@ -340,6 +386,10 @@ class SessionController extends ChangeNotifier {
     _disposed = true;
     _generation += 1;
     _reconnectTimer?.cancel();
+    for (final timer in _requestTimers) {
+      timer.cancel();
+    }
+    _requestTimers.clear();
     _subscription?.cancel();
     super.dispose();
   }

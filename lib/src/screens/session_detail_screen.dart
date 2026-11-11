@@ -264,6 +264,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       <String, String>{};
   final Map<String, _LocalMessageDraft> _localMessageStates = {};
   final Map<String, DomainEntityState> _domainInputStates = {};
+  final Set<String> _dismissedFailedInputIds = {};
   bool _steeringUnavailable = false;
   final Map<String, Future<File>> _videoFileFutures = {};
   final Map<String, _MessageImageReferencesCacheEntry> _imageReferencesCache =
@@ -811,6 +812,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _disposeDomainController();
     _steeringUnavailable = false;
     _domainInputStates.clear();
+    _dismissedFailedInputIds.clear();
     final controller =
         SessionController(client: _client, sessionId: _session.id)
           ..addListener(_handleDomainStateChanged);
@@ -932,10 +934,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _domainActivityStates.clear();
     _domainInputStates.clear();
     final messages = <ChatMessage>[];
-    final queuedInputs = <ChatMessage>[];
     final diffsByKey = <String, _SessionDiffEntry>{};
     ApprovalRequest? pendingApproval;
     for (final turn in state.turns) {
+      final queuedInputs = <ChatMessage>[];
       messages.add(_domainMessageToChat(turn.userMessage, MessageRole.user));
       final projectedAssistantSegments = <String, DomainSegment>{};
       for (final segment in turn.segments) {
@@ -963,7 +965,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           final projected = _domainMessageToChat(message, MessageRole.user);
           if (message.state == DomainEntityState.pending ||
               message.state == DomainEntityState.failed) {
-            queuedInputs.add(projected);
+            if (message.state != DomainEntityState.failed ||
+                !_dismissedFailedInputIds.contains(message.id)) {
+              queuedInputs.add(projected);
+            }
           } else {
             messages.add(projected);
           }
@@ -1004,6 +1009,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           ));
         }
       }
+      messages.addAll(queuedInputs);
       for (final artifact in turn.artifacts) {
         if (artifact.kind == DomainArtifactKind.turnCumulativeDiff) {
           final cumulativeDiff = _SessionDiffEntry.fromJson(
@@ -1022,7 +1028,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         }
       }
     }
-    messages.addAll(queuedInputs);
     final domainStatus = switch (state.session.status) {
       DomainSessionStatus.running => SessionStatus.running,
       DomainSessionStatus.awaitingApproval => SessionStatus.awaitingApproval,
@@ -5200,6 +5205,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             ? context.l10n.draftFailed
             : localState?.label(context);
     final canRestoreQueued = localState?.state == _LocalMessageState.queued;
+    final canDismiss = canRetry || canRestoreQueued;
     final isQueued = !canRetry && _isQueuedInput(message.id);
     final brightness = Theme.of(context).brightness;
     final bubbleTextColor = stateLabel == null
@@ -5224,6 +5230,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             canRestoreQueued ? () => _withdrawQueuedMessage(message.id) : null,
         onEdit: canRestoreQueued ? () => _editQueuedMessage(message.id) : null,
         onRetry: canRetry ? () => _retryLocalMessage(message.id) : null,
+        onDismiss: canDismiss ? () => _dismissUnsentMessage(message.id) : null,
         body: _buildMarkdownMessageBody(
           message.content,
           textColor: bubbleTextColor,
@@ -9395,6 +9402,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           .where((message) => message.id == messageId)
           .firstOrNull;
       if (input != null) {
+        _dismissUnsentMessage(messageId);
         await _enqueueOrSubmitLocalMessage(
           input.content,
           inputMode: 'text',
@@ -9410,6 +9418,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _editQueuedMessage(messageId);
       return;
     }
+    if (draft.state != _LocalMessageState.failed) return;
     if (_session.status == SessionStatus.running ||
         _session.status == SessionStatus.awaitingApproval ||
         _hasPendingLocalMessage) {
@@ -9620,13 +9629,35 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _requestComposerFocusAfterFrame(consumeReturnRequest: false);
   }
 
+  void _dismissUnsentMessage(String messageId) {
+    final localState = _localMessageStates[messageId]?.state;
+    final failedInput =
+        _domainInputStates[messageId] == DomainEntityState.failed;
+    if (!failedInput &&
+        localState != _LocalMessageState.failed &&
+        localState != _LocalMessageState.queued) {
+      return;
+    }
+    setState(() {
+      if (failedInput) _dismissedFailedInputIds.add(messageId);
+      _messages.removeWhere((message) => message.id == messageId);
+      _localMessageStates.remove(messageId);
+      _speechError = null;
+    });
+    _cacheCurrentSessionMessages();
+    _requestComposerFocusAfterFrame(consumeReturnRequest: false);
+  }
+
   Future<bool> _submitLocalMessage(
     String content, {
     required String inputMode,
     String? localMessageId,
     List<DomainAttachment> attachments = const [],
   }) async {
-    final createdAt = DateTime.now();
+    final previousStatus = _session.status;
+    final createdAt = localMessageId == null
+        ? DateTime.now()
+        : _localMessageStates[localMessageId]?.createdAt ?? DateTime.now();
     final messageId =
         localMessageId ?? 'local-${createdAt.microsecondsSinceEpoch}';
     final localMessage = ChatMessage(
@@ -9746,7 +9777,24 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           attachments: attachments,
         );
         _speechError = context.l10n.sendFailed('$error');
+        if (_session.status == SessionStatus.waiting &&
+            !_hasPendingLocalMessage) {
+          _session = _session.copyWith(
+            status: switch (_domainController?.state?.session.status) {
+              DomainSessionStatus.running => SessionStatus.running,
+              DomainSessionStatus.awaitingApproval =>
+                SessionStatus.awaitingApproval,
+              DomainSessionStatus.failed => SessionStatus.failed,
+              DomainSessionStatus.idle => SessionStatus.idle,
+              null => previousStatus == SessionStatus.waiting
+                  ? SessionStatus.idle
+                  : previousStatus,
+            },
+          );
+        }
       });
+      _syncSessionSummaryCache();
+      _syncComposerFocusForSessionStatus(_session.status);
       return false;
     }
   }
@@ -10935,6 +10983,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final domainState = _domainInputStates[messageId];
     return localState == _LocalMessageState.queued ||
         localState == _LocalMessageState.steering ||
+        localState == _LocalMessageState.failed ||
         domainState == DomainEntityState.pending ||
         domainState == DomainEntityState.failed;
   }
@@ -13329,6 +13378,7 @@ class _UserMessageBubble extends StatelessWidget {
     this.onWithdraw,
     this.onEdit,
     this.onRetry,
+    this.onDismiss,
   });
 
   final Key anchorKey;
@@ -13344,9 +13394,13 @@ class _UserMessageBubble extends StatelessWidget {
   final VoidCallback? onWithdraw;
   final VoidCallback? onEdit;
   final VoidCallback? onRetry;
+  final VoidCallback? onDismiss;
 
   bool get _showActions =>
-      onWithdraw != null || onEdit != null || onRetry != null;
+      onWithdraw != null ||
+      onEdit != null ||
+      onRetry != null ||
+      onDismiss != null;
 
   Future<void> _showActionsSheet(BuildContext context) async {
     final l10n = context.l10n;
@@ -13385,6 +13439,15 @@ class _UserMessageBubble extends StatelessWidget {
                 onTap: () {
                   Navigator.of(context).pop();
                   onRetry?.call();
+                },
+              ),
+            if (onDismiss != null)
+              ListTile(
+                leading: const Icon(Icons.close_rounded),
+                title: Text(l10n.removeMessage),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  onDismiss?.call();
                 },
               ),
           ],
@@ -13518,6 +13581,16 @@ class _UserMessageBubble extends StatelessWidget {
                             icon: Icons.refresh_rounded,
                             color: AppColors.errorTextFor(brightness),
                             onPressed: onRetry!,
+                          ),
+                        if (onDismiss != null)
+                          _buildMessageActionButton(
+                            key: ValueKey(
+                              'user-message-dismiss-action-$messageId',
+                            ),
+                            tooltip: context.l10n.removeMessage,
+                            icon: Icons.close_rounded,
+                            color: AppColors.mutedSoftFor(brightness),
+                            onPressed: onDismiss!,
                           ),
                       ],
                     ),
