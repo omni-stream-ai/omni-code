@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -13,6 +14,7 @@ import 'package:omni_code/src/settings/app_settings.dart';
 import 'package:omni_code/src/settings/app_settings_store.dart';
 import 'package:omni_code/src/theme/app_theme.dart';
 import 'package:omni_code/src/widgets/create_session_dialog.dart';
+import 'package:omni_code/src/widgets/app_card.dart';
 
 Map<String, dynamic> _agentJson({
   required String id,
@@ -119,6 +121,39 @@ void main() {
       tester.element(find.byType(ProjectDetailScreen)),
     )!;
     final loadMore = find.text(l10n.loadMoreSessionsLabel);
+
+    final firstFocus = FocusManager.instance.primaryFocus;
+    expect(firstFocus?.hasPrimaryFocus, isTrue);
+    expect(
+      find.descendant(
+        of: find.byWidget(
+            firstFocus!.context!.findAncestorWidgetOfExactType<AppCard>()!),
+        matching: find.text('Session 8'),
+      ),
+      findsOneWidget,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, isNot(same(firstFocus)));
+    expect(
+      find.descendant(
+        of: find.byWidget(FocusManager.instance.primaryFocus!.context!
+            .findAncestorWidgetOfExactType<AppCard>()!),
+        matching: find.text('Session 7'),
+      ),
+      findsOneWidget,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, same(firstFocus));
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, isNot(same(firstFocus)));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, same(firstFocus));
 
     expect(find.text('Session 8'), findsWidgets);
     expect(find.text('Session 2'), findsWidgets);

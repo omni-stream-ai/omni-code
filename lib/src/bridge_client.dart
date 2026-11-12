@@ -367,13 +367,23 @@ class BridgeClient {
 
   Future<AcceptanceBuildDetection> detectAcceptanceBuild(String projectId,
           {bool agent = false,
+          String? targetDirectory,
+          String? sessionId,
+          String requirements = '',
+          List<AcceptanceBuildTarget> currentTargets = const [],
           AcceptanceBuildConfiguration current =
               const AcceptanceBuildConfiguration()}) async =>
       AcceptanceBuildDetection.fromJson(await _acceptanceRequest(
           '/v2/projects/${Uri.encodeComponent(projectId)}/acceptance-environment/detect',
           body: {
             'agent': agent,
-            'current': current.toJson()
+            'current': current.toJson(),
+            if (targetDirectory != null) 'target_directory': targetDirectory,
+            if (sessionId != null) 'session_id': sessionId,
+            if (requirements.isNotEmpty) 'requirements': requirements,
+            if (currentTargets.isNotEmpty)
+              'current_targets':
+                  currentTargets.map((target) => target.toJson()).toList(),
           }) as Map<String, dynamic>);
 
   Future<AcceptanceEnvironmentSettings> saveAcceptanceEnvironment(

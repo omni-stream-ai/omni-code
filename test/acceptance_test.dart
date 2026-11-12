@@ -334,6 +334,10 @@ void main() {
     await tester.scrollUntilVisible(
         find.byKey(const Key('acceptance-environment-mode')), 300,
         scrollable: find.byType(Scrollable).first);
+    await Scrollable.ensureVisible(
+        tester.element(find.byKey(const Key('acceptance-environment-mode'))),
+        alignment: 0.5);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('acceptance-environment-mode')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Custom Dockerfile').last);
@@ -359,9 +363,12 @@ void main() {
 
   testWidgets('failed environment shows build diagnostics in the run details',
       (tester) async {
+    const failure = '磁盘空间不足，请释放空间后重试。\nNo space left on device (os error 28)';
     final data = {
       ...runJson(),
       'phase': 'failed',
+      'automation': 'failed',
+      'error': failure,
       'environment': {
         'id': 'environment-a',
         'name': 'Flutter Linux',
@@ -383,6 +390,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Flutter Linux'), findsOneWidget);
     expect(find.text('SDK verification failed'), findsOneWidget);
+    expect(find.text(failure), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
     final logs = find.byKey(const Key('acceptance-environment-logs'));
     await tester.ensureVisible(logs);
     await tester.tap(logs);
@@ -878,11 +888,18 @@ void main() {
     await tester.tap(find.byKey(const Key('acceptance-start-next')));
     await tester.pumpAndSettle();
     expect(submitted, isNull);
+    final review = tester.widget<AcceptanceEnvironmentScreen>(
+        find.byType(AcceptanceEnvironmentScreen));
+    expect(review.sessionId, 'session-a');
+    expect(review.requirements, 'Only verify PDF export and permissions');
+    await tester.enterText(
+        find.byKey(const Key('acceptance-build-requirements')),
+        'Focus on PDF permissions in the client and API');
     await saveBuildReview(tester);
     await tester.pumpAndSettle();
     expect(submitted!['session_id'], 'session-a');
-    expect(
-        submitted!['requirements'], 'Only verify PDF export and permissions');
+    expect(submitted!['requirements'],
+        'Focus on PDF permissions in the client and API');
     expect(submitted!['automatic'], isTrue);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());

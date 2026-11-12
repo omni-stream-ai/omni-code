@@ -219,13 +219,18 @@ class _AcceptanceScreenState extends State<AcceptanceScreen>
               projects: projects,
               automatic: widget.automatic,
               sessionScoped: widget.sessionId != null,
+              sessionId: widget.sessionId,
             ));
     if (input == null || !mounted || busy || creating) return;
+    var runRequirements = input.requirements;
     if (widget.automatic) {
       final reviewed = await Navigator.of(context).push<bool>(MaterialPageRoute(
           builder: (_) => AcceptanceEnvironmentScreen(
               client: client,
               projectId: input.projectId,
+              requirements: input.requirements,
+              onRequirementsSaved: (value) => runRequirements = value,
+              sessionId: widget.sessionId,
               reviewBeforeStart: true)));
       if (reviewed != true || !mounted || busy || creating) return;
     }
@@ -241,7 +246,7 @@ class _AcceptanceScreenState extends State<AcceptanceScreen>
           command: input.command,
           size: input.size,
           sessionId: widget.sessionId,
-          requirements: input.requirements,
+          requirements: runRequirements,
           automatic: widget.automatic);
     } catch (e) {
       if (mounted) setState(() => error = e);
@@ -271,7 +276,9 @@ class _AcceptanceScreenState extends State<AcceptanceScreen>
                   onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                           builder: (_) => AcceptanceEnvironmentScreen(
-                              client: client, projectId: widget.projectId!))),
+                              client: client,
+                              projectId: widget.projectId!,
+                              sessionId: widget.sessionId))),
                 ),
               IconButton(
                   onPressed: refreshing ? null : refresh,
@@ -578,10 +585,12 @@ class _StartDialog extends StatefulWidget {
       {required this.client,
       required this.projects,
       required this.automatic,
+      this.sessionId,
       required this.sessionScoped});
   final List<ProjectSummary> projects;
   final BridgeClient client;
   final bool automatic, sessionScoped;
+  final String? sessionId;
   @override
   State<_StartDialog> createState() => _StartDialogState();
 }
@@ -629,7 +638,12 @@ class _StartDialogState extends State<_StartDialog> {
                     onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                             builder: (_) => AcceptanceEnvironmentScreen(
-                                client: widget.client, projectId: projectId))),
+                                client: widget.client,
+                                projectId: projectId,
+                                sessionId: widget.sessionId,
+                                onRequirementsSaved: (value) =>
+                                    requirements.text = value,
+                                requirements: requirements.text))),
                     icon: const Icon(Icons.layers_outlined, size: 18),
                     label: Text(context.l10n.acceptanceEnvironmentTitle),
                   )),

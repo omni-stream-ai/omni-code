@@ -3,6 +3,10 @@ import 'acceptance_screen.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../shortcuts/desktop_shortcut.dart';
+import '../shortcuts/desktop_shortcut_scope.dart';
 
 import '../app_routes.dart';
 import '../bridge_client.dart';
@@ -274,89 +278,92 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
         _client.peekRecentSessions() ?? const <SessionSummary>[];
     final desktopSidebarCollapsed =
         appSettingsController.settings.desktopNavigationCollapsed;
-    return AppNavigationScaffold(
-      backgroundColor: AppColors.boardFor(brightness),
-      activeRoute: AppRouteKind.project,
-      recentProjects: recentProjects,
-      recentSessions: recentSessions,
-      activeProjectId: _project.id,
-      desktopBreakpoint: AppResponsiveLayout.desktopBreakpoint,
-      desktopSidebarWidth: AppResponsiveLayout.desktopSidebarWidth,
-      desktopSidebarCollapsedWidth:
-          AppResponsiveLayout.desktopSidebarCollapsedWidth,
-      desktopSidebarCollapsed: desktopSidebarCollapsed,
-      onToggleDesktopSidebar: _toggleDesktopSidebarCollapsed,
-      onNavigateHome: () => Navigator.of(context).popUntil(
-        (route) => route.settings.name == AppRoutes.home || route.isFirst,
-      ),
-      onNavigateProjects: () =>
-          Navigator.of(context).pushNamed(AppRoutes.projects),
-      onNavigateSettings: () =>
-          Navigator.of(context).pushNamed(AppRoutes.settings),
-      onOpenProject: (project) {
-        Navigator.of(context).pushNamed(
-          AppRoutes.project(project.id),
-          arguments: project,
-        );
-      },
-      onOpenSession: (session) {
-        debugPrint(
-          '[nav] project rail open session id=${session.id} '
-          'project=${session.projectId} title=${session.title}',
-        );
-        Navigator.of(context).pushNamed(
-          AppRoutes.session(session.projectId, session.id),
-          arguments: session,
-        );
-      },
-      onNewSession: _createSession,
-      onNewSessionForProject: _createSessionForRecentProject,
-      onNewSessionForSession: _createSessionForRecentSession,
-      agentLabelFor: _client.agentLabelFor,
-      bodyBuilder: (context, useDesktop, constraints) {
-        return Stack(
-          children: [
-            RefreshIndicator(
-              onRefresh: _reloadSessions,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.screenX,
-                  AppSpacing.card,
-                  AppSpacing.screenX,
-                  AppSpacing.block,
+    return DesktopRouteShortcuts(
+      actions: {DesktopShortcutAction.newSession: _createSession},
+      child: AppNavigationScaffold(
+        backgroundColor: AppColors.boardFor(brightness),
+        activeRoute: AppRouteKind.project,
+        recentProjects: recentProjects,
+        recentSessions: recentSessions,
+        activeProjectId: _project.id,
+        desktopBreakpoint: AppResponsiveLayout.desktopBreakpoint,
+        desktopSidebarWidth: AppResponsiveLayout.desktopSidebarWidth,
+        desktopSidebarCollapsedWidth:
+            AppResponsiveLayout.desktopSidebarCollapsedWidth,
+        desktopSidebarCollapsed: desktopSidebarCollapsed,
+        onToggleDesktopSidebar: _toggleDesktopSidebarCollapsed,
+        onNavigateHome: () => Navigator.of(context).popUntil(
+          (route) => route.settings.name == AppRoutes.home || route.isFirst,
+        ),
+        onNavigateProjects: () =>
+            Navigator.of(context).pushNamed(AppRoutes.projects),
+        onNavigateSettings: () =>
+            Navigator.of(context).pushNamed(AppRoutes.settings),
+        onOpenProject: (project) {
+          Navigator.of(context).pushNamed(
+            AppRoutes.project(project.id),
+            arguments: project,
+          );
+        },
+        onOpenSession: (session) {
+          debugPrint(
+            '[nav] project rail open session id=${session.id} '
+            'project=${session.projectId} title=${session.title}',
+          );
+          Navigator.of(context).pushNamed(
+            AppRoutes.session(session.projectId, session.id),
+            arguments: session,
+          );
+        },
+        onNewSession: _createSession,
+        onNewSessionForProject: _createSessionForRecentProject,
+        onNewSessionForSession: _createSessionForRecentSession,
+        agentLabelFor: _client.agentLabelFor,
+        bodyBuilder: (context, useDesktop, constraints) {
+          return Stack(
+            children: [
+              RefreshIndicator(
+                onRefresh: _reloadSessions,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.screenX,
+                    AppSpacing.card,
+                    AppSpacing.screenX,
+                    AppSpacing.block,
+                  ),
+                  child: useDesktop
+                      ? _buildDesktopContent(
+                          context,
+                          constraints: constraints,
+                          sessions: sessions,
+                          filteredSessions: filteredSessions,
+                          visibleSessions: visibleSessions,
+                        )
+                      : _buildMobileContent(
+                          context,
+                          constraints: constraints,
+                          sessions: sessions,
+                          filteredSessions: filteredSessions,
+                          visibleSessions: visibleSessions,
+                        ),
                 ),
-                child: useDesktop
-                    ? _buildDesktopContent(
-                        context,
-                        constraints: constraints,
-                        sessions: sessions,
-                        filteredSessions: filteredSessions,
-                        visibleSessions: visibleSessions,
-                      )
-                    : _buildMobileContent(
-                        context,
-                        constraints: constraints,
-                        sessions: sessions,
-                        filteredSessions: filteredSessions,
-                        visibleSessions: visibleSessions,
-                      ),
               ),
-            ),
-            if (_isRefreshing)
-              const Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: IgnorePointer(
-                  child: LinearProgressIndicator(
-                    minHeight: _progressMinHeight,
+              if (_isRefreshing)
+                const Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: IgnorePointer(
+                    child: LinearProgressIndicator(
+                      minHeight: _progressMinHeight,
+                    ),
                   ),
                 ),
-              ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -775,6 +782,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
           (session) => Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.compact),
             child: _SessionSummaryCard(
+              key: ValueKey(session.id),
+              autofocus: session.id == visibleSessions.first.id,
               session: session,
               statusLabel: _statusLabel(session.status),
               statusColor: _statusColor(session.status, brightness),
@@ -1311,6 +1320,8 @@ class _DesktopProjectRailRow extends StatelessWidget {
 
 class _SessionSummaryCard extends StatelessWidget {
   const _SessionSummaryCard({
+    super.key,
+    required this.autofocus,
     required this.session,
     required this.statusLabel,
     required this.statusColor,
@@ -1319,6 +1330,7 @@ class _SessionSummaryCard extends StatelessWidget {
     required this.onTap,
   });
 
+  final bool autofocus;
   final SessionSummary session;
   final String statusLabel;
   final Color statusColor;
@@ -1331,89 +1343,127 @@ class _SessionSummaryCard extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final theme = Theme.of(context);
 
-    return AppCard(
-      padding: AppSpacing.tilePadding,
-      borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
-      onTap: onTap,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: AppSpacing.stackTight,
-            height: AppSpacing.section,
-            margin: const EdgeInsets.only(top: AppSpacing.textStack),
-            decoration: BoxDecoration(
-              color: statusColor,
-              borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+    return Focus(
+      canRequestFocus: false,
+      onKeyEvent: (node, event) {
+        if (HardwareKeyboard.instance.isControlPressed ||
+            HardwareKeyboard.instance.isMetaPressed ||
+            HardwareKeyboard.instance.isAltPressed) {
+          return KeyEventResult.ignored;
+        }
+        final key = event.logicalKey;
+        if (key != LogicalKeyboardKey.arrowUp &&
+            key != LogicalKeyboardKey.arrowDown) {
+          return KeyEventResult.ignored;
+        }
+        if (event is KeyDownEvent || event is KeyRepeatEvent) {
+          final siblings = node.parent?.traversalDescendants
+                  .where((candidate) =>
+                      candidate.canRequestFocus &&
+                      candidate.context?.findAncestorWidgetOfExactType<
+                              _SessionSummaryCard>() !=
+                          null)
+                  .toList() ??
+              [];
+          final current =
+              siblings.indexWhere((candidate) => candidate.hasPrimaryFocus);
+          final next = current + (key == LogicalKeyboardKey.arrowDown ? 1 : -1);
+          if (current >= 0 && next >= 0 && next < siblings.length) {
+            siblings[next].requestFocus();
+            final targetContext = siblings[next].context;
+            if (targetContext != null) {
+              Scrollable.ensureVisible(targetContext);
+            }
+          }
+        }
+        return KeyEventResult.handled;
+      },
+      child: AppCard(
+        autofocus: autofocus,
+        padding: AppSpacing.tilePadding,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
+        onTap: onTap,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: AppSpacing.stackTight,
+              height: AppSpacing.section,
+              margin: const EdgeInsets.only(top: AppSpacing.textStack),
+              decoration: BoxDecoration(
+                color: statusColor,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+              ),
             ),
-          ),
-          const SizedBox(width: AppSpacing.tileY),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        session.title,
-                        style: textTheme.labelMedium?.copyWith(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
+            const SizedBox(width: AppSpacing.tileY),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          session.title,
+                          style: textTheme.labelMedium?.copyWith(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
-                    ),
-                    Text(
-                      statusLabel,
-                      style: textTheme.labelSmall?.copyWith(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                        color: statusColor,
-                      ),
-                    ),
-                    if (session.status == SessionStatus.awaitingApproval ||
-                        session.unreadCount > 0) ...[
-                      const SizedBox(width: AppSpacing.textTight),
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                          color:
-                              session.status == SessionStatus.awaitingApproval
-                                  ? AppColors.warningFor(theme.brightness)
-                                  : AppColors.accentBlueFor(theme.brightness),
-                          shape: BoxShape.circle,
+                      Text(
+                        statusLabel,
+                        style: textTheme.labelSmall?.copyWith(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          color: statusColor,
                         ),
                       ),
+                      if (session.status == SessionStatus.awaitingApproval ||
+                          session.unreadCount > 0) ...[
+                        const SizedBox(width: AppSpacing.textTight),
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color:
+                                session.status == SessionStatus.awaitingApproval
+                                    ? AppColors.warningFor(theme.brightness)
+                                    : AppColors.accentBlueFor(theme.brightness),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.textTight),
-                Text(
-                  '${bridgeClient.agentLabelFor(session.agentId)} · $updatedAtLabel',
-                  style: textTheme.labelSmall?.copyWith(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.mutedFor(theme.brightness),
                   ),
-                ),
-                if (session.lastMessagePreview?.trim().isNotEmpty == true) ...[
                   const SizedBox(height: AppSpacing.textTight),
                   Text(
-                    session.lastMessagePreview!,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.bodySmall?.copyWith(fontSize: 10),
+                    '${bridgeClient.agentLabelFor(session.agentId)} · $updatedAtLabel',
+                    style: textTheme.labelSmall?.copyWith(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.mutedFor(theme.brightness),
+                    ),
                   ),
+                  if (session.lastMessagePreview?.trim().isNotEmpty ==
+                      true) ...[
+                    const SizedBox(height: AppSpacing.textTight),
+                    Text(
+                      session.lastMessagePreview!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.bodySmall?.copyWith(fontSize: 10),
+                    ),
+                  ],
+                  if (forkSourceLabel != null) ...[
+                    const SizedBox(height: AppSpacing.textTight),
+                    _ForkSourceLabel(label: forkSourceLabel!),
+                  ],
                 ],
-                if (forkSourceLabel != null) ...[
-                  const SizedBox(height: AppSpacing.textTight),
-                  _ForkSourceLabel(label: forkSourceLabel!),
-                ],
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

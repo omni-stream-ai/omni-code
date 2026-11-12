@@ -2824,7 +2824,26 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get acceptanceBuildHint =>
-      '已先通过项目文件识别。所有字段均可修改，未识别到的留空。命令和产物路径相对项目根目录。';
+      '按本次需求识别相关项目，可同时包含多个项目。各项目配置可分别修改，未确定的留空。命令和产物路径相对项目根目录。';
+
+  @override
+  String get acceptanceBuildRequirements => '当前验收需求';
+
+  @override
+  String get acceptanceBuildContextHint =>
+      'Agent 会结合本次会话和验收需求判断相关项目；也可手动勾选多个项目。';
+
+  @override
+  String get acceptanceBuildRelatedProjects => '相关项目（可多选）';
+
+  @override
+  String get acceptanceBuildTargetDetails => '当前编辑的项目配置';
+
+  @override
+  String get acceptanceBuildTarget => '验收目标';
+
+  @override
+  String get acceptanceBuildTargetHint => '选择项目以填入对应配置';
 
   @override
   String get acceptanceBuildLanguage => '技术栈';
@@ -2851,7 +2870,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get acceptanceBuildAgent => '让 Agent 再次识别';
 
   @override
-  String get acceptanceBuildDetecting => 'Agent 正在分析项目配置…';
+  String get acceptanceBuildDetecting => 'Agent 正在结合需求分析相关项目和打包配置…';
 
   @override
   String get acceptanceBuildProposal => '检查识别结果';

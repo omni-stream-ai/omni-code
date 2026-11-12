@@ -6,6 +6,7 @@ class AppCard extends StatelessWidget {
     super.key,
     required this.child,
     this.onTap,
+    this.autofocus = false,
     this.padding = AppSpacing.cardPadding,
     this.margin,
     this.color,
@@ -15,6 +16,7 @@ class AppCard extends StatelessWidget {
 
   final Widget child;
   final VoidCallback? onTap;
+  final bool autofocus;
   final EdgeInsetsGeometry padding;
   final EdgeInsetsGeometry? margin;
   final Color? color;
@@ -59,6 +61,7 @@ class AppCard extends StatelessWidget {
 
     if (onTap != null) {
       result = InkWell(
+        autofocus: autofocus,
         onTap: onTap,
         borderRadius: effectiveRadius,
         child: result,

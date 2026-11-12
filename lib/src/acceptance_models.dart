@@ -205,7 +205,10 @@ class AcceptanceBuildDetection {
   const AcceptanceBuildDetection(
       {this.configuration = const AcceptanceBuildConfiguration(),
       this.evidence = const [],
-      this.warnings = const []});
+      this.warnings = const [],
+      this.candidates = const [],
+      this.targets = const [],
+      this.reasoning = ''});
   factory AcceptanceBuildDetection.fromJson(Map<String, dynamic> json) =>
       AcceptanceBuildDetection(
         configuration: AcceptanceBuildConfiguration.fromJson(
@@ -214,31 +217,100 @@ class AcceptanceBuildDetection {
             (json['evidence'] as List<dynamic>? ?? const []).cast<String>(),
         warnings:
             (json['warnings'] as List<dynamic>? ?? const []).cast<String>(),
+        candidates: (json['candidates'] as List<dynamic>? ?? const [])
+            .map((value) => AcceptanceBuildCandidate.fromJson(
+                value as Map<String, dynamic>))
+            .toList(),
+        targets: (json['targets'] as List<dynamic>? ?? const [])
+            .map((value) =>
+                AcceptanceBuildTarget.fromJson(value as Map<String, dynamic>))
+            .toList(),
+        reasoning: json['reasoning'] as String? ?? '',
       );
   final AcceptanceBuildConfiguration configuration;
   final List<String> evidence, warnings;
+  final List<AcceptanceBuildCandidate> candidates;
+  final List<AcceptanceBuildTarget> targets;
+  final String reasoning;
+}
+
+class AcceptanceBuildTarget {
+  const AcceptanceBuildTarget(
+      {required this.directory,
+      this.role = '',
+      this.reason = '',
+      this.configuration = const AcceptanceBuildConfiguration()});
+  factory AcceptanceBuildTarget.fromJson(Map<String, dynamic> json) =>
+      AcceptanceBuildTarget(
+        directory: json['directory'] as String,
+        role: json['role'] as String? ?? '',
+        reason: json['reason'] as String? ?? '',
+        configuration: AcceptanceBuildConfiguration.fromJson(
+            json['configuration'] as Map<String, dynamic>? ?? const {}),
+      );
+  final String directory, role, reason;
+  final AcceptanceBuildConfiguration configuration;
+  AcceptanceBuildTarget withConfiguration(AcceptanceBuildConfiguration value) =>
+      AcceptanceBuildTarget(
+          directory: directory,
+          role: role,
+          reason: reason,
+          configuration: value);
+  Map<String, dynamic> toJson() => {
+        'directory': directory,
+        'role': role,
+        'reason': reason,
+        'configuration': configuration.toJson(),
+      };
+}
+
+class AcceptanceBuildCandidate {
+  const AcceptanceBuildCandidate(
+      {required this.directory, required this.detection});
+  factory AcceptanceBuildCandidate.fromJson(Map<String, dynamic> json) =>
+      AcceptanceBuildCandidate(
+          directory: json['directory'] as String,
+          detection: AcceptanceBuildDetection.fromJson(json));
+  final String directory;
+  final AcceptanceBuildDetection detection;
 }
 
 class AcceptanceEnvironmentConfig {
   const AcceptanceEnvironmentConfig(
-      {this.mode = 'auto', this.dockerfile = '', this.image = '', this.build});
+      {this.mode = 'auto',
+      this.dockerfile = '',
+      this.image = '',
+      this.build,
+      this.buildTargets = const [],
+      this.buildReasoning = ''});
   factory AcceptanceEnvironmentConfig.fromJson(Map<String, dynamic> json) =>
       AcceptanceEnvironmentConfig(
         build: json['build'] == null
             ? null
             : AcceptanceBuildConfiguration.fromJson(
                 json['build'] as Map<String, dynamic>),
+        buildTargets: (json['build_targets'] as List<dynamic>? ?? const [])
+            .map((value) =>
+                AcceptanceBuildTarget.fromJson(value as Map<String, dynamic>))
+            .toList(),
+        buildReasoning: json['build_reasoning'] as String? ?? '',
         mode: json['mode'] as String? ?? 'auto',
         dockerfile: json['dockerfile'] as String? ?? '',
         image: json['image'] as String? ?? '',
       );
   final String mode, dockerfile, image;
   final AcceptanceBuildConfiguration? build;
+  final List<AcceptanceBuildTarget> buildTargets;
+  final String buildReasoning;
   Map<String, dynamic> toJson() => {
         'mode': mode,
         'dockerfile': dockerfile,
         'image': image,
-        'build': build?.toJson()
+        'build': build?.toJson(),
+        if (buildTargets.isNotEmpty)
+          'build_targets':
+              buildTargets.map((target) => target.toJson()).toList(),
+        if (buildReasoning.isNotEmpty) 'build_reasoning': buildReasoning,
       };
 }
 

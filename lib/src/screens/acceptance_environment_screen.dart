@@ -17,9 +17,14 @@ class AcceptanceEnvironmentScreen extends StatefulWidget {
       {super.key,
       required this.client,
       required this.projectId,
+      this.sessionId,
+      this.requirements,
+      this.onRequirementsSaved,
       this.reviewBeforeStart = false});
   final BridgeClient client;
   final String projectId;
+  final String? sessionId, requirements;
+  final ValueChanged<String>? onRequirementsSaved;
   final bool reviewBeforeStart;
   @override
   State<AcceptanceEnvironmentScreen> createState() =>
@@ -30,20 +35,85 @@ class _AcceptanceEnvironmentScreenState
     extends State<AcceptanceEnvironmentScreen> {
   AcceptanceEnvironmentSettings? settings;
   AcceptanceBuildDetection? detection;
+  String? selectedDirectory;
+  List<AcceptanceBuildTarget> targets = [];
+  String buildReasoning = '';
+  late final requirements =
+      TextEditingController(text: widget.requirements ?? '');
   final buildFields = {
     for (final key in AcceptanceBuildConfiguration.fields)
       key: TextEditingController()
   };
   bool detecting = false;
-  AcceptanceBuildConfiguration get buildConfiguration =>
+  AcceptanceBuildConfiguration get editedConfiguration =>
       AcceptanceBuildConfiguration(values: {
         for (final entry in buildFields.entries)
           entry.key: entry.value.text.trim()
       });
+  List<AcceptanceBuildTarget> get buildTargets => [
+        for (final target in targets)
+          target.directory == selectedDirectory
+              ? target.withConfiguration(editedConfiguration)
+              : target
+      ];
+  AcceptanceBuildConfiguration get buildConfiguration =>
+      buildTargets.firstOrNull?.configuration ?? editedConfiguration;
   void applyBuild(AcceptanceBuildConfiguration value) {
     for (final entry in buildFields.entries) {
       entry.value.text = value.values[entry.key] ?? '';
     }
+  }
+
+  void selectTarget(String? directory) {
+    final edited = buildTargets;
+    final target =
+        edited.where((target) => target.directory == directory).firstOrNull;
+    if (target != null) {
+      setState(() {
+        targets = edited;
+        selectedDirectory = directory;
+        applyBuild(target.configuration);
+      });
+      return;
+    }
+    toggleTarget(directory, true);
+  }
+
+  void toggleTarget(String? directory, bool included) {
+    final candidate = detection?.candidates
+        .where((candidate) => candidate.directory == directory)
+        .firstOrNull;
+    if (candidate == null) return;
+    setState(() {
+      targets = buildTargets;
+      if (included) {
+        if (!targets.any((target) => target.directory == directory)) {
+          targets.add(AcceptanceBuildTarget(
+              directory: candidate.directory,
+              configuration: candidate.detection.configuration));
+        }
+        selectedDirectory = directory;
+      } else {
+        targets.removeWhere((target) => target.directory == directory);
+        if (selectedDirectory == directory) {
+          selectedDirectory = targets.firstOrNull?.directory;
+        }
+      }
+      buildReasoning = '';
+      applyBuild(targets
+              .where((target) => target.directory == selectedDirectory)
+              .firstOrNull
+              ?.configuration ??
+          const AcceptanceBuildConfiguration());
+    });
+  }
+
+  void applyTargets(List<AcceptanceBuildTarget> values, String reasoning,
+      AcceptanceBuildConfiguration fallback) {
+    targets = List.of(values);
+    buildReasoning = reasoning;
+    selectedDirectory = targets.firstOrNull?.directory;
+    applyBuild(targets.firstOrNull?.configuration ?? fallback);
   }
 
   final dockerfile = TextEditingController();
@@ -65,10 +135,12 @@ class _AcceptanceEnvironmentScreenState
     }
     dockerfile.dispose();
     image.dispose();
+    requirements.dispose();
     super.dispose();
   }
 
   Future<void> load() async {
+    var identifyAutomatically = false;
     try {
       final value =
           await widget.client.getAcceptanceEnvironment(widget.projectId);
@@ -76,21 +148,46 @@ class _AcceptanceEnvironmentScreenState
       setState(() {
         settings = value;
         detection = value.detection;
-        applyBuild(value.config.build ??
-            value.detection?.configuration ??
-            const AcceptanceBuildConfiguration());
+        applyTargets(
+            value.config.buildTargets,
+            value.config.buildReasoning,
+            value.config.build ??
+                value.detection?.configuration ??
+                const AcceptanceBuildConfiguration());
+        if (targets.isEmpty &&
+            value.config.build == null &&
+            detection?.candidates.length == 1 &&
+            detection!.configuration.values.values.any((v) => v.isNotEmpty)) {
+          final candidate = detection!.candidates.single;
+          targets = [
+            AcceptanceBuildTarget(
+                directory: candidate.directory,
+                configuration: detection!.configuration)
+          ];
+          selectedDirectory = candidate.directory;
+        }
         mode = value.config.mode;
         dockerfile.text = value.config.dockerfile.isEmpty
             ? _dockerfileTemplate
             : value.config.dockerfile;
         image.text = value.config.image;
         error = null;
+        identifyAutomatically = mode == 'auto' &&
+            (requirements.text.trim().isNotEmpty || widget.sessionId != null) &&
+            ((detection?.candidates.length ?? 0) > 1 ||
+                detection?.configuration.values.values
+                        .every((v) => v.isEmpty) ==
+                    true) &&
+            (widget.reviewBeforeStart ||
+                (value.config.build == null &&
+                    value.config.buildTargets.isEmpty));
       });
     } catch (e) {
       if (mounted) setState(() => error = e);
     } finally {
       if (mounted) setState(() => loading = false);
     }
+    if (identifyAutomatically && mounted) await identify(automatic: true);
   }
 
   Future<void> save() async {
@@ -109,10 +206,13 @@ class _AcceptanceEnvironmentScreenState
           AcceptanceEnvironmentConfig(
               mode: mode,
               build: buildConfiguration,
+              buildTargets: buildTargets,
+              buildReasoning: buildReasoning,
               dockerfile: mode == 'dockerfile' ? dockerfile.text : '',
               image: mode == 'image' ? image.text.trim() : ''),
           rebuild: rebuild);
       if (!mounted) return;
+      widget.onRequirementsSaved?.call(requirements.text.trim());
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(context.l10n.acceptanceEnvironmentSaved)));
       Navigator.of(context).pop(true);
@@ -123,7 +223,7 @@ class _AcceptanceEnvironmentScreenState
     }
   }
 
-  Future<void> identify() async {
+  Future<void> identify({bool automatic = false}) async {
     if (saving || detecting) return;
     setState(() {
       detecting = true;
@@ -131,8 +231,19 @@ class _AcceptanceEnvironmentScreenState
     });
     try {
       final result = await widget.client.detectAcceptanceBuild(widget.projectId,
-          agent: true, current: buildConfiguration);
+          agent: true,
+          sessionId: widget.sessionId,
+          requirements: requirements.text.trim(),
+          currentTargets: buildTargets,
+          current: buildConfiguration);
       if (!mounted) return;
+      if (automatic) {
+        setState(() {
+          detection = result;
+          applyTargets(result.targets, result.reasoning, result.configuration);
+        });
+        return;
+      }
       setState(() => detecting = false);
       final labels = acceptanceBuildLabels(context);
       final accepted = await showDialog<bool>(
@@ -146,23 +257,43 @@ class _AcceptanceEnvironmentScreenState
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        for (final key in AcceptanceBuildConfiguration.fields)
-                          Padding(
-                              padding: const EdgeInsets.only(bottom: 16),
-                              child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(labels[key]!,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelLarge),
-                                    const SizedBox(height: 4),
-                                    SelectableText(result.configuration
-                                                .values[key]?.isNotEmpty ==
-                                            true
-                                        ? result.configuration.values[key]!
-                                        : context.l10n.acceptanceBuildEmpty),
-                                  ]))
+                        if (result.reasoning.isNotEmpty) ...[
+                          Text(result.reasoning),
+                          const SizedBox(height: 16),
+                        ],
+                        for (final target in result.targets) ...[
+                          Text(target.directory,
+                              style: Theme.of(context).textTheme.titleSmall),
+                          Text([target.role, target.reason]
+                              .where((v) => v.isNotEmpty)
+                              .join(' · ')),
+                          for (final key in AcceptanceBuildConfiguration.fields)
+                            Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 4),
+                                child: SelectableText(
+                                    '${labels[key]}: ${target.configuration.values[key]?.isNotEmpty == true ? target.configuration.values[key] : context.l10n.acceptanceBuildEmpty}')),
+                          const SizedBox(height: 16),
+                        ],
+                        if (result.targets.isEmpty)
+                          for (final key in AcceptanceBuildConfiguration.fields)
+                            Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(labels[key]!,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelLarge),
+                                      const SizedBox(height: 4),
+                                      SelectableText(result.configuration
+                                                  .values[key]?.isNotEmpty ==
+                                              true
+                                          ? result.configuration.values[key]!
+                                          : context.l10n.acceptanceBuildEmpty),
+                                    ]))
                       ],
                     ))),
                 actions: [
@@ -178,7 +309,7 @@ class _AcceptanceEnvironmentScreenState
       if (accepted == true && mounted) {
         setState(() {
           detection = result;
-          applyBuild(result.configuration);
+          applyTargets(result.targets, result.reasoning, result.configuration);
         });
       }
     } catch (e) {
@@ -258,9 +389,15 @@ class _AcceptanceEnvironmentScreenState
                             if (mode == 'auto') ...[
                               AcceptanceBuildForm(
                                   controllers: buildFields,
-                                  onIdentify: identify,
+                                  requirements: requirements,
+                                  onIdentify: () => identify(),
                                   busy: saving || detecting,
                                   detecting: detecting,
+                                  selectedDirectory: selectedDirectory,
+                                  onSelectTarget: selectTarget,
+                                  onToggleTarget: toggleTarget,
+                                  targets: buildTargets,
+                                  reasoning: buildReasoning,
                                   detection: detection),
                               const SizedBox(height: 16),
                             ],

@@ -5279,8 +5279,44 @@ abstract class AppLocalizations {
   /// No description provided for @acceptanceBuildHint.
   ///
   /// In en, this message translates to:
-  /// **'Project files are checked first. Edit any field; unknown values stay empty. Commands and output paths are relative to the project root.'**
+  /// **'Identify the projects involved in this request, including multiple projects when needed. Edit each project\'s configuration; unknown values stay empty. Commands and output paths are relative to the project root.'**
   String get acceptanceBuildHint;
+
+  /// No description provided for @acceptanceBuildRequirements.
+  ///
+  /// In en, this message translates to:
+  /// **'Current acceptance requirements'**
+  String get acceptanceBuildRequirements;
+
+  /// No description provided for @acceptanceBuildContextHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent uses this conversation and these requirements to identify related projects. You can also select multiple projects manually.'**
+  String get acceptanceBuildContextHint;
+
+  /// No description provided for @acceptanceBuildRelatedProjects.
+  ///
+  /// In en, this message translates to:
+  /// **'Related projects (select multiple)'**
+  String get acceptanceBuildRelatedProjects;
+
+  /// No description provided for @acceptanceBuildTargetDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Project configuration to edit'**
+  String get acceptanceBuildTargetDetails;
+
+  /// No description provided for @acceptanceBuildTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'Acceptance target'**
+  String get acceptanceBuildTarget;
+
+  /// No description provided for @acceptanceBuildTargetHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a project to fill its configuration'**
+  String get acceptanceBuildTargetHint;
 
   /// No description provided for @acceptanceBuildLanguage.
   ///
@@ -5333,7 +5369,7 @@ abstract class AppLocalizations {
   /// No description provided for @acceptanceBuildDetecting.
   ///
   /// In en, this message translates to:
-  /// **'Agent is analyzing project configuration…'**
+  /// **'Agent is analyzing the requirements, related projects and build configuration…'**
   String get acceptanceBuildDetecting;
 
   /// No description provided for @acceptanceBuildProposal.

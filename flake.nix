@@ -42,6 +42,8 @@
             flutter
             gtk3
             libepoxy
+            libx11
+            wayland
             webkitgtk_4_1
             pkg-config
             jdk

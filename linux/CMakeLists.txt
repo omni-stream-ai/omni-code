@@ -81,11 +81,11 @@ set_target_properties(${BINARY_NAME}
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
-# fvp renders video into Flutter textures with libepoxy. Declare the dependency
-# explicitly so isolated toolchains can discover its headers and library.
+# fvp includes libepoxy, X11 and Wayland headers directly. GTK's public
+# pkg-config flags do not include its private display-backend dependencies.
 if(TARGET fvp_plugin)
-  pkg_check_modules(OMNI_EPOXY REQUIRED IMPORTED_TARGET epoxy)
-  target_link_libraries(fvp_plugin PRIVATE PkgConfig::OMNI_EPOXY)
+  pkg_check_modules(OMNI_FVP_DEPS REQUIRED IMPORTED_TARGET epoxy x11 wayland-client)
+  target_link_libraries(fvp_plugin PRIVATE PkgConfig::OMNI_FVP_DEPS)
 endif()
 
 # Workaround for flutter_soloud bug: its linux/CMakeLists.txt never links the

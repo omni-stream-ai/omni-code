@@ -2959,7 +2959,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get acceptanceBuildHint =>
-      'Project files are checked first. Edit any field; unknown values stay empty. Commands and output paths are relative to the project root.';
+      'Identify the projects involved in this request, including multiple projects when needed. Edit each project\'s configuration; unknown values stay empty. Commands and output paths are relative to the project root.';
+
+  @override
+  String get acceptanceBuildRequirements => 'Current acceptance requirements';
+
+  @override
+  String get acceptanceBuildContextHint =>
+      'Agent uses this conversation and these requirements to identify related projects. You can also select multiple projects manually.';
+
+  @override
+  String get acceptanceBuildRelatedProjects =>
+      'Related projects (select multiple)';
+
+  @override
+  String get acceptanceBuildTargetDetails => 'Project configuration to edit';
+
+  @override
+  String get acceptanceBuildTarget => 'Acceptance target';
+
+  @override
+  String get acceptanceBuildTargetHint =>
+      'Choose a project to fill its configuration';
 
   @override
   String get acceptanceBuildLanguage => 'Language / framework';
@@ -2987,7 +3008,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get acceptanceBuildDetecting =>
-      'Agent is analyzing project configuration…';
+      'Agent is analyzing the requirements, related projects and build configuration…';
 
   @override
   String get acceptanceBuildProposal => 'Review detected configuration';
