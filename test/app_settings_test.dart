@@ -3,6 +3,39 @@ import 'package:omni_code/src/models.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 
 void main() {
+  test('automatic task analysis defaults on and persists both choices', () {
+    expect(AppSettings.defaults().autoTaskAnalysisEnabled, isTrue);
+    expect(AppSettings.fromJson({}).autoTaskAnalysisEnabled, isTrue);
+    for (final enabled in [false, true]) {
+      final restored = AppSettings.fromJson(AppSettings.defaults()
+              .copyWith(autoTaskAnalysisEnabled: enabled)
+              .toJson())
+          .copyWith(autoSpeakReplies: true);
+      expect(restored.autoTaskAnalysisEnabled, enabled);
+      expect(restored.homeShowRecentTasks, isTrue);
+    }
+  });
+
+  test('home sections default to visible and preserve every saved combination',
+      () {
+    for (final settings in [AppSettings.defaults(), AppSettings.fromJson({})]) {
+      expect(settings.homeShowMainAgent, isTrue);
+      expect(settings.homeShowRecentSessions, isTrue);
+      expect(settings.homeShowRecentTasks, isTrue);
+    }
+    for (var mask = 0; mask < 8; mask++) {
+      final saved = AppSettings.defaults().copyWith(
+          homeShowMainAgent: mask & 1 != 0,
+          homeShowRecentSessions: mask & 2 != 0,
+          homeShowRecentTasks: mask & 4 != 0);
+      final restored =
+          AppSettings.fromJson(saved.toJson()).copyWith(autoSpeakReplies: true);
+      expect(restored.homeShowMainAgent, mask & 1 != 0);
+      expect(restored.homeShowRecentSessions, mask & 2 != 0);
+      expect(restored.homeShowRecentTasks, mask & 4 != 0);
+    }
+  });
+
   test('project model selections persist and preserve explicit defaults', () {
     expect(AppSettings.fromJson({}).lastSelectedModelByProject, isEmpty);
     final restored = AppSettings.fromJson(AppSettings.defaults().copyWith(

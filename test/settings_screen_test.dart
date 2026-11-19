@@ -20,6 +20,35 @@ void main() {
     appSettingsController.debugReplaceSettings(AppSettings.defaults());
   });
 
+  for (final width in [390.0, 1280.0]) {
+    testWidgets('automatic analysis saves immediately and reloads at $width',
+        (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = Size(width, 1000);
+      addTearDown(tester.view.reset);
+      final store = _MemoryAppSettingsStore();
+      appSettingsController.debugReplaceStore(store);
+      for (final enabled in [false, true]) {
+        await tester.pumpWidget(const _TestApp(home: SettingsScreen()));
+        await tester.pumpAndSettle();
+        final toggle = find.byKey(const Key('automatic-task-analysis-toggle'));
+        await tester.ensureVisible(toggle);
+        expect(tester.widget<SwitchListTile>(toggle).value, !enabled);
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+        expect(appSettingsController.settings.autoTaskAnalysisEnabled, enabled);
+        expect(tester.widget<SwitchListTile>(toggle).value, enabled);
+        expect(
+            AppSettings.fromJson(jsonDecode((await store.read())!))
+                .autoTaskAnalysisEnabled,
+            enabled);
+        await tester.pumpWidget(const SizedBox());
+        await appSettingsController.load();
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
     'uses the same value text style for settings dropdowns and text fields',
     (tester) async {

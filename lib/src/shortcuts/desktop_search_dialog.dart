@@ -3,9 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../widgets/project_avatar.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
+import '../settings/app_settings.dart';
+import '../workspace_agent_models.dart';
+import '../utils/task_search.dart';
 import '../theme/app_colors.dart';
 import '../screens/keyboard_shortcuts_screen.dart';
 import 'shortcut_keycaps.dart';
@@ -24,6 +28,10 @@ class _DesktopSearchDialogState extends State<DesktopSearchDialog> {
   late final _searchFocusNode = FocusNode(onKeyEvent: _handleSearchKey);
   List<ProjectSummary> _projects = const [];
   List<SessionSummary> _sessions = const [];
+  List<WorkspaceTask> _tasks = const [];
+  Map<String, WorkspaceProject> _taskProjects = const {};
+  bool _tasksFailed = false;
+  int _generation = 0;
   String _query = '';
   String? _error;
   bool _loading = true;
@@ -45,30 +53,63 @@ class _DesktopSearchDialogState extends State<DesktopSearchDialog> {
   }
 
   Future<void> _load() async {
+    final generation = ++_generation;
     setState(() {
       _loading = true;
       _error = null;
+      _tasksFailed = false;
     });
-    try {
-      final results = await Future.wait<Object>([
-        widget.client.listProjects(),
-        widget.client.listSessions(),
-      ]);
-      if (!mounted) return;
-      setState(() {
-        _projects = results[0] as List<ProjectSummary>;
-        _sessions = results[1] as List<SessionSummary>;
-        _loading = false;
-        _selected = 0;
-      });
-    } catch (error) {
-      if (mounted) {
-        setState(() {
-          _error = '$error';
-          _loading = false;
-        });
-      }
-    }
+    Object? listError;
+    bool tasksFailed = false;
+    final results = await Future.wait<Object?>([
+      widget.client.listProjects().then<Object?>((value) {
+        if (mounted && generation == _generation) {
+          setState(() {
+            _projects = value;
+            _selected = 0;
+          });
+        }
+        return value;
+      }).catchError((Object error) {
+        listError = error;
+        return null;
+      }),
+      widget.client.listSessions().then<Object?>((value) {
+        if (mounted && generation == _generation) {
+          setState(() {
+            _sessions = value;
+            _selected = 0;
+          });
+        }
+        return value;
+      }).catchError((Object error) {
+        listError = error;
+        return null;
+      }),
+      if (appSettingsController.settings.autoTaskAnalysisEnabled)
+        widget.client
+            .workspaceAgentRequest()
+            .then<Object?>((value) => WorkspaceAgentSnapshot.fromJson(
+                Map<String, dynamic>.from(value as Map)))
+            .catchError((Object error) {
+          tasksFailed = true;
+          return null;
+        })
+      else
+        Future<Object?>.value(null),
+    ]);
+    if (!mounted || generation != _generation) return;
+    setState(() {
+      _projects = results[0] as List<ProjectSummary>? ?? _projects;
+      _sessions = results[1] as List<SessionSummary>? ?? _sessions;
+      final snapshot = results[2] as WorkspaceAgentSnapshot?;
+      _tasks = sortWorkspaceTasks(snapshot?.tasks ?? []);
+      _taskProjects = snapshot?.projects ?? {};
+      _tasksFailed = tasksFailed;
+      _error = listError?.toString();
+      _loading = false;
+      _selected = 0;
+    });
   }
 
   List<Object> get _results {
@@ -76,9 +117,19 @@ class _DesktopSearchDialogState extends State<DesktopSearchDialog> {
     final projectNames = {
       for (final project in _projects) project.id: project.name
     };
+    final matchingProjects = _projects.where((project) =>
+        '${project.name} ${project.rootPath}'.toLowerCase().contains(query));
     return [
-      ..._projects.where((project) =>
-          '${project.name} ${project.rootPath}'.toLowerCase().contains(query)),
+      ...matchingProjects
+          .where((project) => project.name.toLowerCase().contains(query)),
+      if (query.isNotEmpty &&
+          appSettingsController.settings.autoTaskAnalysisEnabled)
+        ..._tasks.where((task) => task.matchesQuery(query,
+            projectName: _taskProjects[task.projectId]?.name ??
+                projectNames[task.projectId] ??
+                '')),
+      ...matchingProjects
+          .where((project) => !project.name.toLowerCase().contains(query)),
       ..._sessions.where((session) =>
           '${session.title} ${projectNames[session.projectId] ?? ''}'
               .toLowerCase()
@@ -124,6 +175,9 @@ class _DesktopSearchDialogState extends State<DesktopSearchDialog> {
   Widget build(BuildContext context) {
     final results = _results;
     final l10n = context.l10n;
+    final searchHint = appSettingsController.settings.autoTaskAnalysisEnabled
+        ? l10n.shortcutSearchHint
+        : l10n.shortcutConversationSearchHint;
     return Dialog(
       child: SizedBox(
         width: 640,
@@ -139,7 +193,7 @@ class _DesktopSearchDialogState extends State<DesktopSearchDialog> {
                   key: const Key('desktop-search-field'),
                   autofocus: true,
                   decoration: InputDecoration(
-                    hintText: l10n.shortcutSearchHint,
+                    hintText: searchHint,
                     prefixIcon: const Icon(Icons.search_rounded),
                   ),
                   onChanged: (value) => setState(() {
@@ -166,12 +220,21 @@ class _DesktopSearchDialogState extends State<DesktopSearchDialog> {
                           maxLines: 2, overflow: TextOverflow.ellipsis)),
                   TextButton(onPressed: _load, child: Text(l10n.retry)),
                 ]),
+              if (_tasksFailed)
+                Row(children: [
+                  Expanded(
+                      child: Text(taskSearchText(
+                          context, '任务搜索加载失败', 'Could not load task search'))),
+                  TextButton(
+                      onPressed: _loading ? null : _load,
+                      child: Text(l10n.retry)),
+                ]),
               const SizedBox(height: 8),
               Expanded(
                   child: results.isEmpty
                       ? Center(
                           child: Text(_loading
-                              ? l10n.shortcutSearchHint
+                              ? searchHint
                               : l10n.noSearchResultsTitle))
                       : ListView.builder(
                           controller: _scrollController,
@@ -183,6 +246,7 @@ class _DesktopSearchDialogState extends State<DesktopSearchDialog> {
                                 item is ProjectSummary ? item : null;
                             final session =
                                 item is SessionSummary ? item : null;
+                            final task = item is WorkspaceTask ? item : null;
                             return ListTile(
                               selected: index == _selected,
                               selectedColor: AppColors.textFor(
@@ -192,19 +256,30 @@ class _DesktopSearchDialogState extends State<DesktopSearchDialog> {
                                   .withValues(alpha: 0.08),
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8)),
-                              leading: Icon(project != null
-                                  ? Icons.folder_outlined
-                                  : Icons.chat_bubble_outline_rounded),
-                              title: Text(project?.name ?? session!.title,
-                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                              leading: task != null
+                                  ? const Icon(Icons.task_alt_rounded)
+                                  : project != null
+                                      ? ProjectAvatar(
+                                          name: project.name,
+                                          iconDataUri: project.iconDataUri)
+                                      : const Icon(
+                                          Icons.chat_bubble_outline_rounded),
+                              title: Text(
+                                  task?.title ??
+                                      project?.name ??
+                                      session!.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis),
                               subtitle: Text(
-                                project?.rootPath ??
-                                    _projects
-                                        .where(
-                                            (p) => p.id == session!.projectId)
-                                        .firstOrNull
-                                        ?.name ??
-                                    session!.projectId,
+                                task != null
+                                    ? '${taskSearchStatus(context, task)} · ${_taskProjects[task.projectId]?.name ?? _projects.where((p) => p.id == task.projectId).firstOrNull?.name ?? task.projectId} · ${task.summary}'
+                                    : project?.rootPath ??
+                                        _projects
+                                            .where((p) =>
+                                                p.id == session!.projectId)
+                                            .firstOrNull
+                                            ?.name ??
+                                        session!.projectId,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),

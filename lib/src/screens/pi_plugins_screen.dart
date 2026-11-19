@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
+import '../widgets/app_snack_bar.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
@@ -70,7 +71,8 @@ class _PiPluginsScreenState extends State<PiPluginsScreen> {
       await operation();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(AppSnackBar(
+            isError: true,
             content: Text(context.l10n.piPluginOperationFailed('$error'))));
       }
     } finally {
@@ -100,7 +102,8 @@ class _PiPluginsScreenState extends State<PiPluginsScreen> {
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(AppSnackBar(
+            isError: true,
             content: Text(context.l10n.piPluginOperationFailed('$error'))));
       }
     } finally {

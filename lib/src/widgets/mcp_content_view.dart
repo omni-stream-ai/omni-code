@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'app_snack_bar.dart';
 import 'mcp_elicitation_dialog.dart';
 
 class McpContentView extends StatelessWidget {
@@ -94,8 +95,8 @@ class McpContentView extends StatelessWidget {
                       }
                     } catch (error) {
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context)
-                            .showSnackBar(SnackBar(content: Text('$error')));
+                        ScaffoldMessenger.of(context).showSnackBar(AppSnackBar(
+                            isError: true, content: Text('$error')));
                       }
                     }
                   }),

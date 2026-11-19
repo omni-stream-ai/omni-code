@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_all_linux/webview_all_linux.dart';
 import 'package:webview_windows/webview_windows.dart' as windows;
+import 'app_snack_bar.dart';
 import '../services/session_file_access.dart';
 import 'session_markdown_table.dart';
 
@@ -72,7 +73,7 @@ class _SessionFilePreviewState extends State<SessionFilePreview> {
       }
       if (mounted && target != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${t('Saved to', '已保存到')} $target')));
+            AppSnackBar(content: Text('${t('Saved to', '已保存到')} $target')));
       }
     } catch (error) {
       if (mounted) setState(() => _saveError = '$error');

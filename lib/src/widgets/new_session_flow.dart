@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'app_snack_bar.dart';
+import 'project_avatar.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
@@ -33,7 +35,8 @@ Future<void> startNewSessionFlow(
           return;
         }
         messenger.showSnackBar(
-          SnackBar(content: Text(l10n.loadProjectsFailed('$error'))),
+          AppSnackBar(
+              isError: true, content: Text(l10n.loadProjectsFailed('$error'))),
         );
         return;
       }
@@ -188,7 +191,8 @@ class SelectProjectDialog extends StatelessWidget {
             }
             final project = projects[index];
             return ListTile(
-              leading: const Icon(Icons.folder_outlined),
+              leading: ProjectAvatar(
+                  name: project.name, iconDataUri: project.iconDataUri),
               title: Text(
                 project.name,
                 maxLines: 1,

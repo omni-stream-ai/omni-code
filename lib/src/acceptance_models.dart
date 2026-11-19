@@ -47,6 +47,9 @@ class AcceptanceRun {
       this.automationError,
       this.requirements,
       this.sessionId,
+      this.agentSessionId,
+      this.startup,
+      this.recovery,
       this.requirementBrief,
       this.testPlan,
       this.planMessages = const [],
@@ -85,6 +88,12 @@ class AcceptanceRun {
       automationError: json['automation_error'] as String?,
       requirements: json['requirements'] as String?,
       sessionId: json['session_id'] as String?,
+      agentSessionId: json['agent_session_id'] as String?,
+      startup: json['startup'] as Map<String, dynamic>?,
+      recovery: json['recovery'] == null
+          ? null
+          : AcceptanceRecovery.fromJson(
+              json['recovery'] as Map<String, dynamic>),
       pendingApprovals:
           (json['pending_approvals'] as List<dynamic>? ?? const [])
               .map((item) =>
@@ -121,6 +130,19 @@ class AcceptanceRun {
   final AcceptanceVerdict? autoVerdict;
   final String? automationError, requirements;
   final String? sessionId;
+  final String? agentSessionId;
+  final Map<String, dynamic>? startup;
+  final AcceptanceRecovery? recovery;
+  AcceptanceRecovery? get repair =>
+      (phase == 'starting' || phase == 'failed') &&
+              environment?.recovery != null
+          ? environment!.recovery
+          : recovery ?? environment?.recovery;
+  String? get repairSessionId =>
+      repair?.sessionId ??
+      ((phase == 'starting' || phase == 'failed')
+          ? environment?.agentSessionId ?? agentSessionId
+          : agentSessionId);
   final AcceptanceRequirementBrief? requirementBrief;
   final AcceptanceTestPlan? testPlan;
   final List<AcceptancePlanMessage> planMessages;
@@ -129,6 +151,18 @@ class AcceptanceRun {
   final bool environmentReused;
   bool get running => phase == 'running';
   bool get terminal => phase == 'completed' || phase == 'failed';
+  bool get canAnalyze =>
+      terminal ||
+      const ['awaiting_confirmation', 'failed', 'completed']
+          .contains(automation);
+  bool get canRetry =>
+      phase == 'failed' ||
+      (phase == 'planning' && automation == 'failed' && testPlan == null) ||
+      (running &&
+          automatic &&
+          (automation == 'failed' ||
+              (automation == 'awaiting_confirmation' &&
+                  autoVerdict?.passed == false)));
 }
 
 class AcceptanceTestPlan {
@@ -324,6 +358,8 @@ class AcceptanceEnvironment {
       this.dockerfile = '',
       this.log = '',
       this.imageId,
+      this.agentSessionId,
+      this.recovery,
       this.error});
   factory AcceptanceEnvironment.fromJson(Map<String, dynamic> json) =>
       AcceptanceEnvironment(
@@ -335,11 +371,54 @@ class AcceptanceEnvironment {
         dockerfile: json['dockerfile'] as String? ?? '',
         log: json['log'] as String? ?? '',
         imageId: json['image_id'] as String?,
+        agentSessionId: json['agent_session_id'] as String?,
+        recovery: json['recovery'] == null
+            ? null
+            : AcceptanceRecovery.fromJson(
+                json['recovery'] as Map<String, dynamic>),
         error: json['error'] as String?,
       );
   final String id, name, phase, description, progress, dockerfile, log;
   final String? imageId, error;
+  final String? agentSessionId;
+  final AcceptanceRecovery? recovery;
   bool get busy => !const ['ready', 'failed'].contains(phase);
+}
+
+class AcceptanceRecovery {
+  const AcceptanceRecovery(
+      {required this.stage,
+      required this.attempt,
+      required this.maxAttempts,
+      required this.waitingForUser,
+      this.sessionId,
+      this.failures = const []});
+  factory AcceptanceRecovery.fromJson(Map<String, dynamic> json) =>
+      AcceptanceRecovery(
+        stage: json['stage'] as String,
+        attempt: json['attempt'] as int? ?? 0,
+        maxAttempts: json['max_attempts'] as int? ?? 3,
+        waitingForUser: json['waiting_for_user'] as bool? ?? false,
+        sessionId: json['session_id'] as String?,
+        failures: (json['failures'] as List<dynamic>? ?? const [])
+            .map((value) =>
+                AcceptanceRepairFailure.fromJson(value as Map<String, dynamic>))
+            .toList(),
+      );
+  final String stage;
+  final int attempt, maxAttempts;
+  final bool waitingForUser;
+  final String? sessionId;
+  final List<AcceptanceRepairFailure> failures;
+}
+
+class AcceptanceRepairFailure {
+  const AcceptanceRepairFailure({required this.attempt, required this.error});
+  factory AcceptanceRepairFailure.fromJson(Map<String, dynamic> json) =>
+      AcceptanceRepairFailure(
+          attempt: json['attempt'] as int, error: json['error'] as String);
+  final int attempt;
+  final String error;
 }
 
 class AcceptanceEnvironmentImage {

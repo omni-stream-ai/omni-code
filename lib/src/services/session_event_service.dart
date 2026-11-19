@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../widgets/app_snack_bar.dart';
 import '../app_routes.dart';
 import '../bridge_client.dart';
 import '../settings/app_settings.dart';
@@ -552,7 +553,9 @@ class SessionEventService extends NavigatorObserver {
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(content: Text(l10n.approvalSubmitFailed('$error'))),
+          AppSnackBar(
+              isError: true,
+              content: Text(l10n.approvalSubmitFailed('$error'))),
         );
       }
     } finally {

@@ -31,6 +31,49 @@ void main() {
     appSettingsController.debugReplaceStore(store);
     appSettingsController.debugReplaceSettings(AppSettings.defaults());
     client = BridgeClient(httpClient: MockClient((request) async {
+      if (request.url.path == '/workspace-agent') {
+        return http.Response(
+            jsonEncode({
+              'data': {
+                'scope': {},
+                'selected_sessions': 1,
+                'cached_sessions': 1,
+                'projects': [
+                  {'id': 'p1', 'name': 'Project Alpha'}
+                ],
+                'tasks': [
+                  {
+                    'session_id': 's1',
+                    'project_id': 'p1',
+                    'task': {
+                      'id': 'task1',
+                      'title': 'Repair task search',
+                      'summary': 'Keyboard matching verified',
+                      'status': 'completed',
+                    }
+                  }
+                ],
+              }
+            }),
+            200,
+            headers: {'content-type': 'application/json'});
+      }
+      if (request.url.path == '/v2/sessions/s1') {
+        return http.Response(
+            jsonEncode({
+              'session': {
+                'id': 's1',
+                'project_id': 'p1',
+                'title': 'Fix keyboard navigation',
+                'agent': 'codex',
+                'status': 'idle',
+                'updated_at': '2026-11-07T10:00:00Z',
+                'unread_count': 0,
+              }
+            }),
+            200,
+            headers: {'content-type': 'application/json'});
+      }
       final data = request.url.path == '/projects'
           ? [
               {
@@ -164,6 +207,43 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.byType(DesktopSearchDialog), findsNothing);
+  });
+
+  _desktopTestWidgets(
+      'Ctrl P prioritizes project name matches ahead of tasks and sessions',
+      (tester) async {
+    await tester.pumpWidget(_TestApp(client: client));
+    await _chord(tester, LogicalKeyboardKey.keyP);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byKey(const Key('desktop-search-field')), '  ALPHA  ');
+    await tester.pumpAndSettle();
+    final tiles = tester.widgetList<ListTile>(find.byType(ListTile)).toList();
+    expect(tiles.map((tile) => (tile.title! as Text).data), [
+      'Project Alpha',
+      'Repair task search',
+      'Fix keyboard navigation',
+    ]);
+    expect(tiles.first.selected, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('route:/projects/p1'), findsOneWidget);
+  });
+
+  _desktopTestWidgets(
+      'Ctrl P searches task progress and opens its conversation',
+      (tester) async {
+    await tester.pumpWidget(_TestApp(client: client));
+    await _chord(tester, LogicalKeyboardKey.keyP);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byKey(const Key('desktop-search-field')), 'matching verified');
+    await tester.pumpAndSettle();
+    expect(find.text('Repair task search'), findsOneWidget);
+    expect(find.textContaining('History · Completed'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('route:/projects/p1/s1'), findsOneWidget);
   });
 
   _desktopTestWidgets(
@@ -316,7 +396,7 @@ void main() {
         appSettingsController
             .settings.desktopShortcuts[DesktopShortcutAction.newWindow],
         isNull);
-    await tester.pump(const Duration(seconds: 5));
+    await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Restore all defaults'), 300);
     await tester.tap(find.text('Restore all defaults'));

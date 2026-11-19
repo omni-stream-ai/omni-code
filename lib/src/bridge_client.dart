@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 
 import 'bridge_speech_models.dart';
 import 'acceptance_models.dart';
+import 'project_runtime_models.dart';
 import 'models.dart';
 import 'settings/app_settings.dart';
 import 'relay/relay_settings.dart';
@@ -18,6 +19,19 @@ import 'services/sentry_service.dart';
 
 Map<String, dynamic> _decodeJsonObject(String source) =>
     jsonDecode(source) as Map<String, dynamic>;
+
+class WorkspaceAgentUnavailableException implements Exception {
+  const WorkspaceAgentUnavailableException();
+  @override
+  String toString() => 'Bridge is temporarily unavailable. Please try again.';
+}
+
+class WorkspaceAgentIncompatibleException implements Exception {
+  const WorkspaceAgentIncompatibleException();
+  @override
+  String toString() =>
+      'This Bridge does not support the workspace agent. Update Bridge to a compatible release.';
+}
 
 class MessageListPage {
   const MessageListPage({
@@ -106,6 +120,22 @@ class BridgeClient {
   }
 
   String? _connectionScope;
+  int _connectionRevision = 0;
+  int get connectionRevision => _connectionRevision;
+  String _workspaceConversationId = const Uuid().v4();
+  String get workspaceConversationId => _workspaceConversationId;
+  final workspaceConversationRevision = ValueNotifier<int>(0);
+
+  void startWorkspaceConversation() {
+    openWorkspaceConversation(const Uuid().v4());
+  }
+
+  void openWorkspaceConversation(String id) {
+    if (_workspaceConversationId == id) return;
+    _workspaceConversationId = id;
+    workspaceConversationRevision.value++;
+  }
+
   final LinkedHashMap<String, Future<RelayResourceGateway>> _resourceGateways =
       LinkedHashMap();
   void _closeResourceGateways() {
@@ -141,6 +171,8 @@ class BridgeClient {
         '${settings.connectionUrl}\n${settings.relay.enabled ? settings.relay.token : settings.bridgeToken}\n${settings.clientId}';
     if (_connectionScope == scope) return;
     _connectionScope = scope;
+    _connectionRevision++;
+    startWorkspaceConversation();
     _closeResourceGateways();
     _projectsCache = null;
     _sessionsCache = null;
@@ -157,6 +189,7 @@ class BridgeClient {
     appSettingsController.removeListener(_settingsChanged);
     _httpClient.close();
     sessionCacheRevision.dispose();
+    workspaceConversationRevision.dispose();
   }
 
   Map<String, String> get transportHeaders => _defaultHeaders;
@@ -360,13 +393,69 @@ class BridgeClient {
           .toList();
 
   Future<AcceptanceEnvironmentSettings> getAcceptanceEnvironment(
-          String projectId) async =>
+          String projectId,
+          {bool generalPurpose = false}) async =>
       AcceptanceEnvironmentSettings.fromJson(await _acceptanceRequest(
-              '/v2/projects/${Uri.encodeComponent(projectId)}/acceptance-environment')
+              '/v2/projects/${Uri.encodeComponent(projectId)}/${generalPurpose ? 'environment' : 'acceptance-environment'}')
           as Map<String, dynamic>);
+
+  Future<ProjectRuntimeOverview> getProjectRuntime(String projectId) async =>
+      ProjectRuntimeOverview.fromJson(await _acceptanceRequest(
+              '/v2/projects/${Uri.encodeComponent(projectId)}/runtime')
+          as Map<String, dynamic>);
+
+  Future<void> saveProjectRuntimeTarget(
+      String projectId, AcceptanceBuildTarget target, String name,
+      {bool create = false}) async {
+    await _acceptanceRequest(
+        '/v2/projects/${Uri.encodeComponent(projectId)}/runtime/targets',
+        body: {'target': target.toJson(), 'name': name, 'create': create});
+  }
+
+  Future<void> renameProjectRuntimeTarget(
+      String projectId, String directory, String name) async {
+    await _acceptanceRequest(
+        '/v2/projects/${Uri.encodeComponent(projectId)}/runtime/targets/rename',
+        body: {'directory': directory, 'name': name});
+  }
+
+  Future<void> deleteProjectRuntimeTarget(
+      String projectId, String directory) async {
+    await _acceptanceRequest(
+        '/v2/projects/${Uri.encodeComponent(projectId)}/runtime/targets/delete',
+        body: {'directory': directory});
+  }
+
+  Future<void> saveProjectRuntimeLocation(
+      String projectId, String directory, String location) async {
+    await _acceptanceRequest(
+        '/v2/projects/${Uri.encodeComponent(projectId)}/runtime',
+        body: {'directory': directory, 'location': location});
+  }
+
+  Future<void> startProjectRuntime(String projectId, String directory) async {
+    await _acceptanceRequest(
+        '/v2/projects/${Uri.encodeComponent(projectId)}/runtime/start',
+        body: {'directory': directory});
+  }
+
+  Future<void> stopProjectRuntime(String projectId, String directory) async {
+    await _acceptanceRequest(
+        '/v2/projects/${Uri.encodeComponent(projectId)}/runtime/stop',
+        body: {'directory': directory});
+  }
+
+  Future<String> getProjectRuntimeLogs(
+          String projectId, String directory) async =>
+      (await _acceptanceRequest(
+              '/v2/projects/${Uri.encodeComponent(projectId)}/runtime/logs',
+              body: {'directory': directory}) as Map<String, dynamic>)['log']
+          as String;
 
   Future<AcceptanceBuildDetection> detectAcceptanceBuild(String projectId,
           {bool agent = false,
+          bool generalPurpose = false,
+          bool allTargets = false,
           String? targetDirectory,
           String? sessionId,
           String requirements = '',
@@ -374,9 +463,10 @@ class BridgeClient {
           AcceptanceBuildConfiguration current =
               const AcceptanceBuildConfiguration()}) async =>
       AcceptanceBuildDetection.fromJson(await _acceptanceRequest(
-          '/v2/projects/${Uri.encodeComponent(projectId)}/acceptance-environment/detect',
+          '/v2/projects/${Uri.encodeComponent(projectId)}/${generalPurpose ? 'environment' : 'acceptance-environment'}/detect',
           body: {
             'agent': agent,
+            if (allTargets) 'all_targets': true,
             'current': current.toJson(),
             if (targetDirectory != null) 'target_directory': targetDirectory,
             if (sessionId != null) 'session_id': sessionId,
@@ -388,9 +478,9 @@ class BridgeClient {
 
   Future<AcceptanceEnvironmentSettings> saveAcceptanceEnvironment(
           String projectId, AcceptanceEnvironmentConfig config,
-          {bool rebuild = false}) async =>
+          {bool rebuild = false, bool generalPurpose = false}) async =>
       AcceptanceEnvironmentSettings.fromJson(await _acceptanceRequest(
-          '/v2/projects/${Uri.encodeComponent(projectId)}/acceptance-environment',
+          '/v2/projects/${Uri.encodeComponent(projectId)}/${generalPurpose ? 'environment' : 'acceptance-environment'}',
           body: {
             ...config.toJson(),
             'rebuild': rebuild
@@ -507,6 +597,16 @@ class BridgeClient {
         body: {}) as Map<String, dynamic>);
   }
 
+  Future<AcceptanceRun> retryAcceptanceRun(String id,
+          {Map<String, dynamic>? startup,
+          bool useCurrentEnvironment = false}) async =>
+      AcceptanceRun.fromJson(await _acceptanceRequest(
+          '/v2/acceptance/${Uri.encodeComponent(id)}/retry',
+          body: {
+            if (startup != null) 'startup': startup,
+            if (useCurrentEnvironment) 'use_current_environment': true,
+          }) as Map<String, dynamic>);
+
   Future<AcceptanceRun> stopAcceptanceRun(String id,
           {bool? passed, String notes = ''}) async =>
       AcceptanceRun.fromJson(await _acceptanceRequest(
@@ -515,6 +615,26 @@ class BridgeClient {
             if (passed != null) 'passed': passed,
             'notes': notes,
           }) as Map<String, dynamic>);
+
+  Future<SessionSummary> analyzeAcceptanceRun(String id,
+      {required bool newSession,
+      required String requestId,
+      required String projectId}) async {
+    final settings = appSettingsController.settings;
+    final session = SessionSummary.fromJson(await _acceptanceRequest(
+        '/v2/acceptance/${Uri.encodeComponent(id)}/analyze',
+        body: {
+          'request_id': requestId,
+          'new_session': newSession,
+          if (newSession) ...{
+            'agent': settings.lastSelectedAgent,
+            'provider_id': settings.lastSelectedProviderByProject[projectId],
+            'model': settings.lastSelectedModelByProject[projectId],
+          }
+        }) as Map<String, dynamic>);
+    _upsertSession(session);
+    return session;
+  }
 
   Future<Uint8List> acceptancePreview(String id) async {
     final response = await _httpClient
@@ -929,6 +1049,80 @@ class BridgeClient {
     };
   }
 
+  Future<dynamic> workspaceAgentRequest({
+    String action = '',
+    String method = 'GET',
+    String? projectId,
+    String? sessionId,
+    bool force = false,
+    String? requestId,
+    Map<String, dynamic>? body,
+  }) async {
+    final revision = _connectionRevision;
+    final conversationId = workspaceConversationId;
+    final uri = Uri.parse('$baseUrl/workspace-agent$action').replace(
+      queryParameters: {
+        if (projectId != null) 'project_id': projectId,
+        if (sessionId != null) 'session_id': sessionId,
+        if (force) 'force': 'true',
+        if (requestId != null) 'request_id': requestId,
+      },
+    );
+    final headers = {
+      ..._defaultHeaders,
+      'Content-Type': 'application/json',
+      'X-Omni-Code-Workspace-Scope': 'conversation',
+      'X-Omni-Code-Conversation-Id': conversationId,
+    };
+    final response = await (switch (method) {
+      'POST' =>
+        _httpClient.post(uri, headers: headers, body: jsonEncode(body ?? {})),
+      'PUT' =>
+        _httpClient.put(uri, headers: headers, body: jsonEncode(body ?? {})),
+      'DELETE' => _httpClient.delete(uri, headers: headers),
+      _ => _httpClient.get(uri, headers: headers),
+    })
+        .timeout(const Duration(seconds: 100));
+    if (revision != _connectionRevision) {
+      throw StateError(
+          'Connection changed while the workspace agent was responding');
+    }
+    if (conversationId != workspaceConversationId) {
+      throw StateError(
+          'Main conversation changed while the request was running');
+    }
+    if (_isUnauthorized(response)) {
+      throw ClientUnauthorizedException(response.body);
+    }
+    if ([502, 503, 504].contains(response.statusCode)) {
+      throw const WorkspaceAgentUnavailableException();
+    }
+    if ((action.isEmpty || action == '/analyze') &&
+        ((response.statusCode == 404 && response.body.trim().isEmpty) ||
+            response.statusCode == 405)) {
+      throw const WorkspaceAgentIncompatibleException();
+    }
+    if (response.statusCode >= 400) {
+      var message = response.body;
+      try {
+        final error = jsonDecode(response.body);
+        if (error is Map<String, dynamic>) {
+          message = error['error']?.toString() ?? message;
+        }
+      } on FormatException {/* The bridge can return a plain HTTP error. */}
+      throw Exception(
+          'Workspace agent: ${message.trim().isEmpty ? 'HTTP ${response.statusCode}' : message}');
+    }
+    _assertJsonResponse(response);
+    return (jsonDecode(response.body) as Map<String, dynamic>)['data'];
+  }
+
+  static bool isWorkspaceAgentConnectionError(Object error) =>
+      error is http.ClientException ||
+      error is SocketException ||
+      error is TimeoutException ||
+      error is WorkspaceAgentUnavailableException;
+
   Future<List<ProjectSummary>> listProjects({bool forceRefresh = false}) async {
     if (!forceRefresh) {
       final cache = _projectsCache;
@@ -1060,10 +1254,13 @@ class BridgeClient {
   }
 
   Future<Map<String, dynamic>> fileInfo(String path,
-      {required String sessionId}) async {
+      {String? sessionId, String? projectId}) async {
     final response = await _httpClient.get(
-        Uri.parse('$baseUrl/files/info')
-            .replace(queryParameters: {'path': path, 'session_id': sessionId}),
+        Uri.parse('$baseUrl/files/info').replace(queryParameters: {
+          'path': path,
+          if (sessionId != null) 'session_id': sessionId,
+          if (projectId != null) 'project_id': projectId,
+        }),
         headers: _defaultHeaders);
     if (response.statusCode != 200) {
       throw Exception(_extractErrorMessage(response));
@@ -1072,11 +1269,14 @@ class BridgeClient {
   }
 
   Future<http.StreamedResponse> openFileStream(String path,
-      {required String sessionId}) async {
+      {String? sessionId, String? projectId}) async {
     final request = http.Request(
         'GET',
-        Uri.parse('$baseUrl/files')
-            .replace(queryParameters: {'path': path, 'session_id': sessionId}))
+        Uri.parse('$baseUrl/files').replace(queryParameters: {
+          'path': path,
+          if (sessionId != null) 'session_id': sessionId,
+          if (projectId != null) 'project_id': projectId,
+        }))
       ..headers.addAll(_defaultHeaders);
     final response = await _httpClient.send(request);
     if (response.statusCode != 200) {
@@ -1221,6 +1421,28 @@ class BridgeClient {
       providerId: providerId,
       clearProviderId: providerId == null,
     );
+  }
+
+  Future<SessionSummary> updateSessionApprovalMode(
+    String sessionId,
+    ApprovalMode mode,
+  ) async {
+    final revision = _connectionRevision;
+    final response = await _httpClient.patch(
+      Uri.parse('$baseUrl/v2/sessions/$sessionId'),
+      headers: {..._defaultHeaders, 'Content-Type': 'application/json'},
+      body: jsonEncode({'approval_mode': mode.name}),
+    );
+    _assertJsonResponse(response);
+    if (revision != _connectionRevision) {
+      throw StateError('Connection changed while saving approval mode');
+    }
+    final session = SessionSummary.fromJson(_decodeApiData(response.body));
+    if (session.approvalMode != mode) {
+      throw StateError('Bridge did not save the selected approval mode');
+    }
+    _upsertSession(session);
+    return session;
   }
 
   Future<void> updateSessionDefaults(
@@ -1535,11 +1757,15 @@ class BridgeClient {
     return agents;
   }
 
-  Future<List<AgentCommand>> listAgentCommands({String? sessionId}) async {
+  Future<List<AgentCommand>> listAgentCommands(
+      {String? sessionId, String? projectId}) async {
     final uri = Uri.parse('$baseUrl/agents/commands').replace(
-      queryParameters: sessionId == null || sessionId.trim().isEmpty
-          ? null
-          : {'session_id': sessionId.trim()},
+      queryParameters: {
+        if (sessionId?.trim().isNotEmpty == true)
+          'session_id': sessionId!.trim(),
+        if (projectId?.trim().isNotEmpty == true)
+          'project_id': projectId!.trim(),
+      },
     );
     final response = await _httpClient.get(
       uri,
@@ -1633,6 +1859,7 @@ class BridgeClient {
     required String agent,
     String? clientSessionId,
     bool? briefReplyMode,
+    ApprovalMode? approvalMode,
     String? providerId,
     ReasoningEffort? reasoningEffort,
     String? model,
@@ -1642,6 +1869,7 @@ class BridgeClient {
       'title': title,
       'agent': agent,
       'client_session_id': clientSessionId ?? newClientSessionId(),
+      if (approvalMode != null) 'approval_mode': approvalMode.name,
       'brief_reply_mode': briefReplyMode ??
           appSettingsController.settings.compressAssistantReplies,
     };

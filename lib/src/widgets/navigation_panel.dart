@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import 'app_snack_bar.dart';
+import 'project_avatar.dart';
 import '../app_routes.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
@@ -313,8 +315,9 @@ class NavigationPanel extends StatelessWidget {
                               } catch (error) {
                                 if (context.mounted) {
                                   ScaffoldMessenger.maybeOf(context)
-                                      ?.showSnackBar(
-                                          SnackBar(content: Text('$error')));
+                                      ?.showSnackBar(AppSnackBar(
+                                          isError: true,
+                                          content: Text('$error')));
                                 }
                               }
                             },
@@ -390,7 +393,10 @@ class NavigationPanel extends StatelessWidget {
                               active: project.id == activeProjectId,
                               collapsed: collapsed,
                               alwaysShowMenu: alwaysShowRecentMenus,
-                              icon: Icons.folder_outlined,
+                              leading: ProjectAvatar(
+                                  name: project.name,
+                                  iconDataUri: project.iconDataUri,
+                                  size: 24),
                               menuChildren: _recentProjectMenuChildren(
                                 context,
                                 project,
@@ -685,6 +691,7 @@ class NavigationRecentItem extends StatefulWidget {
     this.status,
     this.alwaysShowMenu = false,
     this.icon,
+    this.leading,
     this.menuChildren = const [],
     required this.onTap,
   });
@@ -696,6 +703,7 @@ class NavigationRecentItem extends StatefulWidget {
   final SessionStatus? status;
   final bool alwaysShowMenu;
   final IconData? icon;
+  final Widget? leading;
   final List<Widget> menuChildren;
   final VoidCallback? onTap;
 
@@ -778,13 +786,16 @@ class _NavigationRecentItemState extends State<NavigationRecentItem> {
                     child: Stack(
                       clipBehavior: Clip.none,
                       children: [
-                        Text(
-                          _compactNavigationLabel(widget.label),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style:
-                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                        widget.leading ??
+                            Text(
+                              _compactNavigationLabel(widget.label),
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(
                                     color: textColor,
                                     fontWeight: widget.active
                                         ? FontWeight.w800
@@ -792,7 +803,7 @@ class _NavigationRecentItemState extends State<NavigationRecentItem> {
                                     height: 1.05,
                                     fontSize: 10,
                                   ),
-                        ),
+                            ),
                         if (showIndicator)
                           Positioned(
                             top: -3,
@@ -804,6 +815,10 @@ class _NavigationRecentItemState extends State<NavigationRecentItem> {
                   )
                 : Row(
                     children: [
+                      if (widget.leading != null) ...[
+                        widget.leading!,
+                        const SizedBox(width: 8)
+                      ],
                       Expanded(
                         child: Text(
                           widget.label,

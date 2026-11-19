@@ -21,6 +21,147 @@ http.Response response(Object? data, {int status = 200}) => http.Response(
     );
 
 void main() {
+  testWidgets(
+      'failed acceptance primary action retries once and ignores stale refresh',
+      (tester) async {
+    final failed = {
+      ...runJson(),
+      'phase': 'failed',
+      'automatic': true,
+      'automation': 'failed',
+      'error': 'No space left on device',
+    };
+    Map<String, dynamic> current = failed;
+    final firstRefresh = Completer<http.Response>();
+    final retryResponse = Completer<http.Response>();
+    var reads = 0;
+    var retries = 0;
+    final client = BridgeClient(httpClient: MockClient((request) async {
+      if (request.method == 'POST') {
+        expect(request.url.path, '/v2/acceptance/run-a/retry');
+        expect(jsonDecode(request.body), isEmpty);
+        retries++;
+        return retryResponse.future;
+      }
+      if (reads++ == 0) return firstRefresh.future;
+      return response(current);
+    }));
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: AcceptanceDetailScreen(
+          run: AcceptanceRun.fromJson(failed), client: client),
+    ));
+    await tester.pumpAndSettle();
+    final primary = find.byKey(const Key('acceptance-detail-primary-action'));
+    expect(tester.widget<IconButton>(primary).tooltip, 'Retry acceptance');
+    await tester.tap(primary);
+    await tester.pump();
+    expect(retries, 1);
+    expect(tester.widget<IconButton>(primary).onPressed, isNull);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    await tester.tap(primary);
+    await tester.pump();
+    expect(retries, 1);
+    current = {
+      ...failed,
+      'phase': 'starting',
+      'automation': 'pending',
+      'error': null,
+      'automation_progress': 'Retrying the original frozen environment',
+    };
+    retryResponse.complete(response(current, status: 202));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    firstRefresh.complete(response(failed));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Retrying the original frozen environment'), findsWidgets);
+    expect(find.text('No space left on device'), findsNothing);
+    expect(tester.widget<IconButton>(primary).tooltip, 'Refresh status');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  for (final phase in ['failed', 'running']) {
+    testWidgets('retry rejection is visible and survives $phase status refresh',
+        (tester) async {
+      var retries = 0;
+      final failed = {
+        ...runJson(),
+        'phase': phase,
+        'automatic': true,
+        'automation': 'failed',
+        'automation_error': 'Previous automation error',
+      };
+      final client = BridgeClient(httpClient: MockClient((request) async {
+        if (request.method == 'POST') {
+          retries++;
+          return http.Response(
+              jsonEncode({
+                'message': 'Frozen source is unavailable; create a new run'
+              }),
+              409);
+        }
+        if (request.url.path.endsWith('/preview')) {
+          return http.Response(
+              jsonEncode({'message': 'Preview unavailable'}), 404);
+        }
+        return response(failed);
+      }));
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AcceptanceDetailScreen(
+            run: AcceptanceRun.fromJson(failed), client: client),
+      ));
+      await tester.pumpAndSettle();
+      final primary = find.byKey(const Key('acceptance-detail-primary-action'));
+      await tester.tap(primary);
+      await tester.pumpAndSettle();
+      expect(retries, 1);
+      expect(
+          find.textContaining('Frozen source is unavailable'), findsOneWidget);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(
+          find.textContaining('Frozen source is unavailable'), findsOneWidget);
+      expect(tester.widget<IconButton>(primary).onPressed, isNotNull);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('completed run primary action refreshes without retrying',
+      (tester) async {
+    var reads = 0;
+    final completed = {...runJson(), 'phase': 'completed'};
+    final client = BridgeClient(httpClient: MockClient((request) async {
+      expect(request.method, 'GET');
+      reads++;
+      return response(completed);
+    }));
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: AcceptanceDetailScreen(
+          run: AcceptanceRun.fromJson(completed), client: client),
+    ));
+    await tester.pumpAndSettle();
+    final primary = find.byKey(const Key('acceptance-detail-primary-action'));
+    expect(tester.widget<IconButton>(primary).tooltip, 'Refresh status');
+    final before = reads;
+    await tester.tap(primary);
+    await tester.pumpAndSettle();
+    expect(reads, before + 1);
+    expect(find.byKey(const Key('acceptance-retry-run')), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final background in ['window', 'app']) {
     testWidgets('new approval appears without restoring $background focus',
         (tester) async {
@@ -428,7 +569,7 @@ void main() {
         'progress': 'Installing Flutter dependencies',
       }
     };
-    await tester.tap(find.byTooltip('Retry'));
+    await tester.tap(find.byTooltip('Refresh status'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.byKey(const Key('acceptance-journey-loading')), findsOneWidget);
@@ -444,7 +585,7 @@ void main() {
         'error': 'Dependency installation failed',
       }
     };
-    await tester.tap(find.byTooltip('Retry'));
+    await tester.tap(find.byTooltip('Refresh status'));
     await tester.pumpAndSettle();
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.byType(LinearProgressIndicator), findsNothing);

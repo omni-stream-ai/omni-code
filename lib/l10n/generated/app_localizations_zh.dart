@@ -9,6 +9,30 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get approvalMode => '审批模式';
+
+  @override
+  String get approvalModeManual => '手动审批';
+
+  @override
+  String get approvalModeSmart => '智能审批';
+
+  @override
+  String get approvalModeAuto => '自动批准';
+
+  @override
+  String get approvalModeManualDescription => '工具请求授权时由你确认。';
+
+  @override
+  String get approvalModeSmartDescription => '规则和已配置的 AI 辅助审批，拿不准时交给你。';
+
+  @override
+  String get approvalModeAutoDescription => '自动放行所有可处理的工具审批，包括高风险操作。';
+
+  @override
+  String get approvalModeSaveFailed => '审批模式保存失败，请重试。';
+
+  @override
   String get recentSessionsScope => '最近会话范围';
 
   @override
@@ -35,6 +59,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get acceptanceRefreshStatus => '刷新状态';
 
   @override
+  String get acceptanceRetryRun => '重试验收';
+
+  @override
   String get acceptanceErrorDetails => '查看错误详情';
 
   @override
@@ -42,6 +69,31 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsTitle => '设置';
+
+  @override
+  String get assistantSection => '助手';
+
+  @override
+  String get automaticTaskAnalysis => '自动分析任务';
+
+  @override
+  String get automaticTaskAnalysisHelp => '自动从会话中识别任务并更新进度。关闭后展示关联会话，并隐藏任务列表。';
+
+  @override
+  String get taskAnalysisPrompt => '任务分析提示词';
+
+  @override
+  String get taskAnalysisPromptHelp => '默认只识别开发任务，可自定义识别范围和规则。';
+
+  @override
+  String get taskAnalysisPromptEditorHelp =>
+      '提示词保存在当前 Bridge，所有客户端共用。下次分析会按新规则重新检查已有任务。清空并保存可恢复默认规则。';
+
+  @override
+  String get taskAnalysisPromptReset => '恢复默认';
+
+  @override
+  String get taskAnalysisPromptLoading => '正在读取任务分析提示词…';
 
   @override
   String get save => '保存';
@@ -534,6 +586,141 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get connectWelcomeBody => '先在电脑上运行 Bridge 服务，然后授权此设备，以便打开项目并继续会话。';
+
+  @override
+  String get connectDesktopWelcomeBody => '选择在这台电脑上安装 Bridge，或连接已经运行的 Bridge。';
+
+  @override
+  String get connectExistingBridgeTitle => '连接已有 Bridge';
+
+  @override
+  String get connectExistingBridgeBody =>
+      '输入这台电脑或其他电脑上已运行的 Bridge 地址，然后授权当前设备。';
+
+  @override
+  String get localBridgeTitle => '在这台电脑上运行 Bridge';
+
+  @override
+  String get localBridgeBody =>
+      '一键下载安装、启动并连接 Bridge，同时设置登录电脑后自动启动。关闭客户端后，Bridge 仍会在后台运行。';
+
+  @override
+  String get localBridgeInstallAction => '一键安装并启用自启动';
+
+  @override
+  String get localBridgeChecking => '正在检查本机环境…';
+
+  @override
+  String get localBridgeDownloading => '正在下载 Bridge…';
+
+  @override
+  String get localBridgeInstalling => '正在校验并安装…';
+
+  @override
+  String get localBridgeConfiguring => '正在配置自动启动…';
+
+  @override
+  String get localBridgeStarting => '正在启动 Bridge…';
+
+  @override
+  String get localBridgeAuthorizing => '正在授权并连接…';
+
+  @override
+  String get localBridgeExistingError =>
+      '本机 8787 端口已有服务运行。请使用下方“连接已有 Bridge”，避免重复安装和启动。';
+
+  @override
+  String get localBridgeIncompatibleError =>
+      '当前 Bridge 版本与客户端不兼容。请升级到兼容版本，或通过 Agent 继续处理。';
+
+  @override
+  String get localBridgeDownloadError =>
+      '未能下载适合此电脑的 Bridge 安装包。请检查 GitHub 网络连接后重试。';
+
+  @override
+  String get localBridgeVerifyError => '安装包校验未通过或缺少校验信息，尚未运行。请重试下载。';
+
+  @override
+  String get localBridgeInstallError =>
+      '安装未完成。请检查用户目录的写入权限，以及安装包是否兼容当前系统，然后重试。';
+
+  @override
+  String get localBridgeStartupError =>
+      'Bridge 尚未成功启动。请检查用户目录下 .omni-code-bridge 中的日志及系统启动项权限，然后重试。';
+
+  @override
+  String get localBridgeAuthError =>
+      'Bridge 已安装，但本机授权未完成。请重试，或使用“连接已有 Bridge”完成授权。';
+
+  @override
+  String get localBridgeUnsupportedError =>
+      '暂不支持在此系统或处理器上自动安装 Bridge。请连接已有 Bridge。';
+
+  @override
+  String get localBridgeBusyError => '另一个窗口正在安装 Bridge，请等待安装完成后重试。';
+
+  @override
+  String get bridgeAgentContinue => '通过 Agent 继续';
+
+  @override
+  String get bridgeAgentTitle => 'Agent 辅助安装 Bridge';
+
+  @override
+  String get bridgeAgentIntro =>
+      '使用你配置的模型分析失败信息和本机诊断，并继续协助安装。修复命令会先展示给你，点击执行后才会运行。';
+
+  @override
+  String get bridgeAgentConfigureModel => '配置辅助模型';
+
+  @override
+  String get bridgeAgentSaveAndContinue => '保存并继续';
+
+  @override
+  String get bridgeAgentInvalidUrl => '请输入有效的 HTTP 或 HTTPS 接口地址，不含账号、查询参数或片段。';
+
+  @override
+  String get bridgeAgentChooseModel => '选择辅助模型';
+
+  @override
+  String get bridgeAgentInitialRequest =>
+      '请分析刚才的安装失败，帮助我安装并启动本机 Bridge、设置登录后自启动，然后连接当前客户端。';
+
+  @override
+  String get bridgeAgentModelRequired =>
+      '还没有可用的模型配置。请先填写接口地址、凭证和具体模型，保存后会自动继续。';
+
+  @override
+  String get bridgeAgentSaveError => '模型配置未能保存，请检查本地设置存储权限后重试。';
+
+  @override
+  String get bridgeAgentAuthError => '模型接口拒绝了请求。请检查 API Key、账号权限和接口格式。';
+
+  @override
+  String get bridgeAgentRateLimit => '模型接口暂时限流，请稍后重试或选择其他模型。';
+
+  @override
+  String get bridgeAgentTurnLimit => '本轮已达到自动分析步数上限。你可以补充信息，让 Agent 继续。';
+
+  @override
+  String get bridgeAgentRequestError => '未能完成模型请求。请检查网络、接口地址、模型名称和接口格式后重试。';
+
+  @override
+  String get bridgeAgentRunCommand => '执行此命令';
+
+  @override
+  String get bridgeAgentDeclineCommand => '不执行';
+
+  @override
+  String get bridgeAgentMessageHint => '补充环境信息，或告诉 Agent 下一步…';
+
+  @override
+  String get bridgeAgentActionDone => '本机操作已完成。';
+
+  @override
+  String get bridgeAgentCommandSkipped => '已跳过此命令，Agent 将继续分析其他办法。';
+
+  @override
+  String get bridgeAgentActionFailed => '本机操作未完成，Agent 将根据失败信息继续分析。';
 
   @override
   String get connectBridgeHint => '如果手机和电脑在同一个局域网，请使用电脑 IP。';
@@ -2953,7 +3140,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get shortcutSearchHint => '搜索项目和会话…';
+  String get shortcutSearchHint => '搜索任务、项目和会话…';
+
+  @override
+  String get shortcutConversationSearchHint => '搜索项目和会话…';
 
   @override
   String get acceptanceVideoLoading => '正在加载验收录像…';
@@ -3026,4 +3216,191 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get relayCheckConnection => '请在设置中检查 Relay 登录、服务状态和访问权限。';
+
+  @override
+  String get projectRuntimeTitle => '项目运行环境';
+
+  @override
+  String get projectRuntimeEntryHint => '手动启动子项目，选择服务端或 Docker，并查看运行和占用状态';
+
+  @override
+  String get projectRuntimeHint =>
+      '每个子项目会记住运行位置，默认在 Bridge 服务端启动。Docker 使用冻结源码和已配置的验收镜像。运行中表示进程或容器存活，应用是否就绪需另行检查。Agent 可查询状态并申请独占使用，完成后释放。';
+
+  @override
+  String get projectRuntimeConfigure => '配置项目环境';
+
+  @override
+  String get projectRuntimeAddTarget => '添加子项目';
+
+  @override
+  String get projectRuntimeEditTarget => '编辑配置';
+
+  @override
+  String get projectRuntimeRenameTarget => '重命名';
+
+  @override
+  String get projectRuntimeDeleteTarget => '删除子项目';
+
+  @override
+  String get projectRuntimeDeleteAfterStop => '停止后可删除';
+
+  @override
+  String get projectRuntimeTargetActions => '子项目操作';
+
+  @override
+  String get projectRuntimeTargetName => '显示名称';
+
+  @override
+  String get projectRuntimeTargetDirectory => '子项目目录';
+
+  @override
+  String get projectRuntimeTargetDirectoryHint =>
+      '相对项目根目录的已有目录，例如 backend；根目录填写 .。';
+
+  @override
+  String get projectRuntimeTargetCommandsHint =>
+      '命令相对项目根目录执行。运行中服务将在下次启动时使用新配置。';
+
+  @override
+  String get projectRuntimeTargetRequired => '请填写此项。';
+
+  @override
+  String projectRuntimeDeleteTargetConfirm(String name) {
+    return '删除“$name”？';
+  }
+
+  @override
+  String get projectRuntimeDeleteTargetHint =>
+      '将移除运行配置并从自动识别中排除，源码文件会保留。可通过手动添加重新加入。';
+
+  @override
+  String get projectRuntimeAutoConfigure => '一键自动配置所有环境';
+
+  @override
+  String get projectRuntimeAutoConfiguring =>
+      '正在从项目文件识别各子项目的环境配置，必要时由 Agent 补全…';
+
+  @override
+  String projectRuntimeAutoConfigured(int total, int ready) {
+    return '已保存 $total 个子项目的配置，其中 $ready 个已配置启动命令。';
+  }
+
+  @override
+  String get projectRuntimeStartRequired => '尚未配置启动命令，请编辑配置或使用一键自动配置。';
+
+  @override
+  String get projectRuntimeConfigHint =>
+      '子项目配置供手动运行与验收共用。命令相对项目根目录执行。本机启动只执行启动命令；下方镜像设置用于 Docker 运行。';
+
+  @override
+  String get projectRuntimeBuildTitle => '子项目构建与启动配置';
+
+  @override
+  String get projectRuntimeBuildHint => '分别选择子项目并编辑安装、构建和启动命令。保存后可手动运行，也可用于验收。';
+
+  @override
+  String get projectRuntimeLocation => '下次启动位置（自动保存）';
+
+  @override
+  String get projectRuntimeHost => 'Bridge 服务端';
+
+  @override
+  String get projectRuntimeDocker => '验收 Docker 环境';
+
+  @override
+  String get projectRuntimeStarting => '启动中';
+
+  @override
+  String get projectRuntimeRunning => '运行中';
+
+  @override
+  String get projectRuntimeStopping => '停止中';
+
+  @override
+  String get projectRuntimeStopped => '未运行';
+
+  @override
+  String get projectRuntimeFailed => '启动失败';
+
+  @override
+  String get projectRuntimeUnknown => '状态未知';
+
+  @override
+  String get projectRuntimeStart => '启动';
+
+  @override
+  String get projectRuntimeStop => '停止';
+
+  @override
+  String get projectRuntimeLogs => '运行日志';
+
+  @override
+  String get projectRuntimeNoLogs => '暂无日志';
+
+  @override
+  String get projectRuntimeDesktop => '查看 Docker 桌面';
+
+  @override
+  String get projectRuntimeEmpty => '尚无子项目，可手动添加或使用一键自动配置。';
+
+  @override
+  String get projectRuntimeAvailable => '空闲，Agent 可申请使用';
+
+  @override
+  String projectRuntimeOccupied(String session) {
+    return 'Agent 占用中：$session';
+  }
+
+  @override
+  String projectRuntimeCurrentLocation(String location) {
+    return '当前运行位置：$location';
+  }
+
+  @override
+  String projectRuntimeSnapshot(String revision) {
+    return '冻结源码版本：$revision';
+  }
+
+  @override
+  String get acceptanceRepairTitle => '修复过程';
+
+  @override
+  String get acceptanceRepairHint => '自动修复已暂停。你可以继续与 Agent 沟通或手动调整，再使用原测试用例重试。';
+
+  @override
+  String get acceptanceRepairActive => 'Agent 正在根据以下错误修复环境；自动修复停止后，可以继续对话。';
+
+  @override
+  String get acceptanceRepairChat => '继续与 Agent 修复';
+
+  @override
+  String get acceptanceRepairStartup => '调整启动方案';
+
+  @override
+  String get acceptanceRepairEnvironment => '调整环境后重试';
+
+  @override
+  String get acceptanceRepairRetry => '修复后重试';
+
+  @override
+  String get acceptanceRepairStartupJson => '启动配置（JSON）';
+
+  @override
+  String get acceptanceRepairInvalidStartup => '请填写有效的启动配置 JSON 对象。';
+
+  @override
+  String get acceptanceAnalysisTitle => '分析验收结果';
+
+  @override
+  String get acceptanceAnalysisHint => '将验收结论、检查项、错误和证据引用交给 Agent 分析。';
+
+  @override
+  String get acceptanceAnalyzeCurrent => '交给当前会话分析';
+
+  @override
+  String get acceptanceAnalyzeNew => '新建会话分析';
+
+  @override
+  String get acceptanceAnalysisNoSession => '此验收未关联来源会话，可以新建会话分析。';
 }

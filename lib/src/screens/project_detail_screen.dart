@@ -27,6 +27,7 @@ import '../widgets/new_session_flow.dart';
 import '../widgets/session_cache_scope.dart';
 import 'session_detail_screen.dart';
 import 'project_ai_approval_prompt_screen.dart';
+import 'project_runtime_screen.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
   const ProjectDetailScreen({super.key, required this.project, this.client});
@@ -194,6 +195,16 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
   Future<void> _reloadSessions() {
     return _loadSessions(forceRefresh: true);
   }
+
+  Widget _buildRuntimeEntry(BuildContext context) => Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: AcceptanceIntro(
+          title: context.l10n.projectRuntimeTitle,
+          subtitle: context.l10n.projectRuntimeEntryHint,
+          icon: Icons.terminal,
+          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => ProjectRuntimeScreen(
+                  client: _client, projectId: _project.id)))));
 
   Widget _buildGitInfoRow(
     String branch,
@@ -396,6 +407,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
               _buildHeader(context),
               const SizedBox(height: AppSpacing.card),
               _buildProjectSummaryCard(context),
+              _buildRuntimeEntry(context),
               Padding(
                   padding: const EdgeInsets.only(top: 16),
                   child: AcceptanceIntro(
@@ -441,6 +453,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _buildDesktopHero(context, sessions),
+                    _buildRuntimeEntry(context),
                     Padding(
                         padding: const EdgeInsets.only(top: 16),
                         child: AcceptanceIntro(

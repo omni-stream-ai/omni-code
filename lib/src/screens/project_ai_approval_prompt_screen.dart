@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/app_snack_bar.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
@@ -84,7 +85,7 @@ class _ProjectAiApprovalPromptDialogState
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$error')),
+        AppSnackBar(isError: true, content: Text('$error')),
       );
     }
   }

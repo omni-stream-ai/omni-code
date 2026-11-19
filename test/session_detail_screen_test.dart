@@ -16,6 +16,8 @@ import 'package:omni_code/l10n/generated/app_localizations.dart';
 import 'package:omni_code/src/app_routes.dart';
 import 'package:omni_code/src/bridge_client.dart';
 import 'package:omni_code/src/models.dart';
+import 'package:omni_code/src/widgets/model_selection_panel.dart';
+import 'package:omni_code/src/widgets/workspace_agent_panel.dart';
 import 'package:omni_code/src/plugins/speech_plugin_models.dart';
 import 'package:omni_code/src/screens/session_detail_screen.dart';
 import 'package:omni_code/src/services/audio_recording_service.dart';
@@ -87,6 +89,139 @@ Future<void> _enterCallModeFromHeader(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+      'a delayed approval save cannot overwrite a different open session',
+      (tester) async {
+    final pending = Completer<http.Response>();
+    final client = BridgeClient(httpClient: _FakeHttpClient((request) async {
+      if (request.method == 'PATCH') return pending.future;
+      if (request.url.path == '/v2/sessions/session-2/state') {
+        final data = _domainStateJson([], sessionId: 'session-2');
+        (data['session'] as Map)['config'] = {'approval_mode': 'manual'};
+        return http.Response(jsonEncode({'data': data}), 200,
+            headers: {'content-type': 'application/json'});
+      }
+      if (request.url.path.endsWith('/messages')) {
+        return http.Response(jsonEncode({'data': []}), 200,
+            headers: {'content-type': 'application/json'});
+      }
+      if (request.url.path.endsWith('/events')) {
+        return http.Response('', 200,
+            headers: {'content-type': 'text/event-stream'});
+      }
+      return http.Response('Not found', 404);
+    }));
+    Future<void> showSession(SessionSummary session) async {
+      await tester.pumpWidget(_TestApp(
+          home: _sessionScreen(
+        session: session,
+        client: client,
+        enableSpeechServices: false,
+      )));
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(find.byKey(const Key('session-message-input')));
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+
+    Future<void> openModes() async {
+      await tester.tap(find.byKey(const Key('session-approval-mode-button')));
+      await tester.pumpAndSettle();
+    }
+
+    await showSession(_session());
+    await openModes();
+    await tester
+        .tap(find.byKey(const Key('session-approval-mode-option-auto')));
+    await tester.pump();
+    await showSession(
+        _session(id: 'session-2').copyWith(approvalMode: ApprovalMode.manual));
+    pending.complete(http.Response(
+        jsonEncode({
+          'data': {..._sessionJson(), 'approval_mode': 'auto'}
+        }),
+        200,
+        headers: {'content-type': 'application/json'}));
+    await tester.pump(const Duration(milliseconds: 200));
+    await openModes();
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('session-approval-mode-option-manual')),
+            matching: find.byIcon(Icons.check_rounded)),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final failSave in [false, true]) {
+    testWidgets(
+        'session approval mode selector persists its choice, failure=$failSave',
+        (tester) async {
+      final patches = <Map<String, dynamic>>[];
+      final client = BridgeClient(httpClient: _FakeHttpClient((request) async {
+        if (request.method == 'PATCH' &&
+            request.url.path == '/sessions/session-1') {
+          patches.add(jsonDecode(request.body) as Map<String, dynamic>);
+          return failSave
+              ? http.Response('Cannot save', 500)
+              : http.Response(
+                  jsonEncode({
+                    'data': {..._sessionJson(), 'approval_mode': 'auto'}
+                  }),
+                  200,
+                  headers: {'content-type': 'application/json'});
+        }
+        if (request.url.path == '/sessions/session-1/messages') {
+          return http.Response(jsonEncode({'data': []}), 200,
+              headers: {'content-type': 'application/json'});
+        }
+        if (request.url.path == '/sessions/session-1/events') {
+          return http.Response('', 200,
+              headers: {'content-type': 'text/event-stream'});
+        }
+        return http.Response('Not found', 404);
+      }));
+      await tester.pumpWidget(_TestApp(
+          home: _sessionScreen(
+        session: _session(),
+        client: client,
+        enableSpeechServices: false,
+      )));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('session-message-input')));
+      await tester.pump(const Duration(milliseconds: 200));
+      Future<void> openMode() async {
+        await tester.tap(find.byKey(const Key('session-approval-mode-button')));
+        await tester.pumpAndSettle();
+      }
+
+      await openMode();
+      await tester
+          .tap(find.byKey(const Key('session-approval-mode-option-auto')));
+      await tester.pumpAndSettle();
+      expect(patches, [
+        {'approval_mode': 'auto'}
+      ]);
+      if (failSave) {
+        expect(find.text('Could not save approval mode. Please try again.'),
+            findsOneWidget);
+        ScaffoldMessenger.of(
+                tester.element(find.byKey(const Key('session-message-input'))))
+            .removeCurrentSnackBar();
+        await tester.pumpAndSettle();
+      }
+      await openMode();
+      final selected = find.descendant(
+        of: find.byKey(Key(failSave
+            ? 'session-approval-mode-option-smart'
+            : 'session-approval-mode-option-auto')),
+        matching: find.byIcon(Icons.check_rounded),
+      );
+      expect(selected, findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+        variant: const TargetPlatformVariant(
+            <TargetPlatform>{TargetPlatform.android, TargetPlatform.linux}));
+  }
+
   for (final agentId in ['pi', 'codex']) {
     testWidgets(
         'remote UI approval resolution closes only its dialog for $agentId',
@@ -289,6 +424,53 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_localNotificationsChannel, null);
   });
+
+  for (final width in [390.0, 1600.0]) {
+    testWidgets('task analysis setting controls session task entry at $width',
+        (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = Size(width, 1000);
+      addTearDown(tester.view.reset);
+      appSettingsController.debugReplaceSettings(AppSettings.defaults()
+          .copyWith(
+              autoTaskAnalysisEnabled: false,
+              desktopSessionRailCollapsed: false));
+      final client = _clientForMessages(const []);
+      await tester.pumpWidget(_TestApp(
+          home: _sessionScreen(
+              session: _session(),
+              client: client,
+              enableSpeechServices: false)));
+      await tester.pumpAndSettle();
+      expect(find.byType(WorkspaceAgentPanel), findsNothing);
+      await _openSessionHeaderMenu(tester);
+      expect(
+          find.byKey(const Key('session-header-tasks-button')), findsNothing);
+      expect(find.byKey(const Key('session-header-new-session-button')),
+          findsOneWidget);
+      await tester.tap(find.byKey(const Key('session-header-more-button')));
+      await tester.pump();
+
+      appSettingsController.debugReplaceSettings(appSettingsController.settings
+          .copyWith(autoTaskAnalysisEnabled: true));
+      await tester.pumpAndSettle();
+      if (width == 1600) {
+        expect(find.byType(WorkspaceAgentPanel), findsOneWidget);
+      }
+      await _openSessionHeaderMenu(tester);
+      expect(
+          find.byKey(const Key('session-header-tasks-button')), findsOneWidget);
+      appSettingsController.debugReplaceSettings(appSettingsController.settings
+          .copyWith(autoTaskAnalysisEnabled: false));
+      await tester.pumpAndSettle();
+      expect(
+          find.byKey(const Key('session-header-tasks-button')), findsNothing);
+      expect(find.byType(WorkspaceAgentPanel), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      client.dispose();
+    });
+  }
 
   testWidgets('shows session title in the session detail header',
       (tester) async {
@@ -6621,10 +6803,10 @@ void main() {
       events.add(
         utf8.encode(
           'id: $cursor\ndata: ${jsonEncode({
-            'event_id': cursor,
-            'event_type': 'message.updated',
-            'payload': {'session': state['session'], 'turn': turn},
-          })}\n\n',
+                'event_id': cursor,
+                'event_type': 'message.updated',
+                'payload': {'session': state['session'], 'turn': turn},
+              })}\n\n',
         ),
       );
     }
@@ -6756,16 +6938,17 @@ void main() {
       var cursor = 0;
       var status = 'running';
       Map<String, dynamic> snapshot() => _domainStateJson(
-        messages,
-        status: status,
-        cursor: cursor,
-        stableTurnIds: true,
-      );
+            messages,
+            status: status,
+            cursor: cursor,
+            stableTurnIds: true,
+          );
       final client = BridgeClient(
         httpClient: _StreamingEventHttpClient(
           events: events.stream,
           handler: (request) async {
-            if (request.method == 'POST' && request.url.path.endsWith('/steer')) {
+            if (request.method == 'POST' &&
+                request.url.path.endsWith('/steer')) {
               steerAttempts += 1;
               return steerAttempts == 1
                   ? steeringRace.future
@@ -6830,10 +7013,10 @@ void main() {
         events.add(
           utf8.encode(
             'id: $cursor\ndata: ${jsonEncode({
-              'event_id': cursor,
-              'event_type': 'turn.status_changed',
-              'payload': {'session': state['session'], 'turn': turn},
-            })}\n\n',
+                  'event_id': cursor,
+                  'event_type': 'turn.status_changed',
+                  'payload': {'session': state['session'], 'turn': turn},
+                })}\n\n',
           ),
         );
         await tester.pump();
@@ -7027,37 +7210,37 @@ void main() {
       );
       await tester.pump();
 
-    final input = find.byKey(const Key('session-message-input'));
-    await tester.enterText(input, 'First message');
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('session-send-button')));
-    await tester.pump();
+      final input = find.byKey(const Key('session-message-input'));
+      await tester.enterText(input, 'First message');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('session-send-button')));
+      await tester.pump();
 
-    await tester.enterText(input, 'Queued one');
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('session-send-button')));
-    await tester.pump();
+      await tester.enterText(input, 'Queued one');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('session-send-button')));
+      await tester.pump();
 
-    await tester.enterText(input, 'Queued two');
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('session-send-button')));
-    await tester.pump();
+      await tester.enterText(input, 'Queued two');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('session-send-button')));
+      await tester.pump();
 
-    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    addTearDown(mouse.removePointer);
-    await mouse.addPointer();
-    final queuedHoverRegion = find.ancestor(
-      of: find.text('Queued one'),
-      matching: find.byWidgetPredicate(
-        (widget) =>
-            widget.key is ValueKey<String> &&
-            (widget.key! as ValueKey<String>)
-                .value
-                .startsWith('user-message-hover-'),
-      ),
-    );
-    await mouse.moveTo(tester.getCenter(queuedHoverRegion));
-    await tester.pump();
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer();
+      final queuedHoverRegion = find.ancestor(
+        of: find.text('Queued one'),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget.key is ValueKey<String> &&
+              (widget.key! as ValueKey<String>)
+                  .value
+                  .startsWith('user-message-hover-'),
+        ),
+      );
+      await mouse.moveTo(tester.getCenter(queuedHoverRegion));
+      await tester.pump();
 
       final queuedMessageBubble = tester.widget<Container>(
         find
@@ -14575,6 +14758,119 @@ void main() {
     ]);
     expect(client.peekSessions()?.single.profileId, 'default');
   });
+
+  testWidgets(
+      'session uses the shared picker for catalog, custom and default models',
+      (tester) async {
+    final patches = <Map<String, dynamic>>[];
+    final requests = <String>[];
+    final client = BridgeClient(httpClient: _FakeHttpClient((request) async {
+      requests.add(request.url.toString());
+      if (request.url.path == '/v2/sessions/session-1/state') {
+        final state = _domainStateJson([]);
+        (state['session'] as Map<String, dynamic>)['provider_id'] = 'service';
+        return http.Response(jsonEncode({'data': state}), 200,
+            headers: {'content-type': 'application/json'});
+      }
+      if (request.url.path == '/settings') {
+        return http.Response(
+            jsonEncode({
+              'data': {
+                'model_providers': [
+                  {
+                    'id': 'service',
+                    'name': 'Service',
+                    'base_url': 'https://models.test/v1',
+                    'format': 'codex',
+                    'model': 'configured-model',
+                    'enabled': true
+                  }
+                ]
+              }
+            }),
+            200);
+      }
+      if (request.url.path == '/v1/models') {
+        return http.Response(
+            jsonEncode({
+              'data': [
+                {'id': 'catalog-model'}
+              ]
+            }),
+            200);
+      }
+      if (request.url.path == '/sessions/session-1/messages') {
+        return http.Response(jsonEncode({'data': []}), 200,
+            headers: {'content-type': 'application/json'});
+      }
+      if (request.url.path == '/sessions/session-1/events') {
+        return http.Response('', 200,
+            headers: {'content-type': 'text/event-stream'});
+      }
+      if (request.method == 'PATCH' &&
+          request.url.path == '/sessions/session-1') {
+        patches.add(jsonDecode(request.body) as Map<String, dynamic>);
+        return http.Response('', 204);
+      }
+      return http.Response('not found', 404);
+    }));
+    await tester.pumpWidget(_TestApp(
+        home: _sessionScreen(
+            session: _session().copyWith(providerId: 'service'),
+            client: client,
+            enableSpeechServices: false)));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('session-message-input')));
+    await tester.pump(const Duration(milliseconds: 200));
+    Future<void> openModels() async {
+      await tester
+          .tap(find.byKey(const Key('session-composer-settings-button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(find.byKey(const Key('session-model-button')));
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+    }
+
+    await openModels();
+    expect(find.byType(ModelSelectionPanel), findsOneWidget);
+    expect(
+        tester
+            .widget<ModelSelectionPanel>(find.byType(ModelSelectionPanel))
+            .provider
+            ?.id,
+        'service',
+        reason: requests.join('\n'));
+    await tester
+        .tap(find.byKey(const Key('session-model-option-catalog-model')));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(patches.last['model'], 'catalog-model');
+    await openModels();
+    await tester.tap(find.byKey(const Key('session-model-option-default')));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(patches.last.containsKey('model'), isTrue);
+    expect(patches.last['model'], isNull);
+    await openModels();
+    await tester.enterText(
+        find.byKey(const Key('session-model-custom-input')), 'manual-model');
+    await tester.pump();
+    expect(
+        tester
+            .widget<TextField>(
+                find.byKey(const Key('session-model-custom-input')))
+            .controller!
+            .text,
+        'manual-model');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(patches.last['model'], 'manual-model');
+    expect(patches, hasLength(3));
+    expect(tester.takeException(), isNull);
+  },
+      variant: const TargetPlatformVariant(<TargetPlatform>{
+        TargetPlatform.android,
+        TargetPlatform.linux,
+      }));
 
   testWidgets('session reasoning effort selector patches session default',
       (tester) async {

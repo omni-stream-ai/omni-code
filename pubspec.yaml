@@ -21,6 +21,7 @@ dependencies:
   flutter_tts: ^4.2.2
   path_provider: ^2.1.5
   package_info_plus: ^8.1.1
+  pub_semver: ^2.2.0
   record: ^6.1.1
   speech_to_text: ^7.0.0
   flutter_local_notifications: ^21.0.0
@@ -55,6 +56,7 @@ flutter:
   generate: true
   uses-material-design: true
   assets:
+    - assets/app-icon-small.svg
     - assets/call_mode/glowing_orb_water_loop_inner_small.gif
     - assets/speech/silero_vad.onnx
   shaders:

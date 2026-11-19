@@ -79,6 +79,28 @@ set_target_properties(${BINARY_NAME}
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
+# Nix profiles may expose the package root as JAVA_HOME; FindJNI needs the
+# actual JDK home containing lib/server/libjvm.so. Respect an explicit CMake home.
+if(NOT JAVA_HOME AND EXISTS "$ENV{JAVA_HOME}/lib/openjdk/lib/server/libjvm.so")
+  set(JAVA_HOME "$ENV{JAVA_HOME}/lib/openjdk")
+endif()
+
+# FindJNI keeps absolute JDK paths across reconfigurations, even after a Nix
+# upgrade or garbage collection removes that JDK. Refresh the headers and JVM
+# together before the jni plugin calls find_package(JNI).
+set(_omni_jni_paths JAVA_INCLUDE_PATH JAVA_INCLUDE_PATH2 JAVA_JVM_LIBRARY)
+foreach(_omni_jni_path IN LISTS _omni_jni_paths)
+  if(${_omni_jni_path} AND NOT EXISTS "${${_omni_jni_path}}")
+    message(STATUS "omni_code: refreshing stale JNI paths (${_omni_jni_path})")
+    foreach(_omni_jni_entry IN LISTS _omni_jni_paths)
+      unset(${_omni_jni_entry} CACHE)
+      unset(${_omni_jni_entry})
+    endforeach()
+    unset(JNI_INCLUDE_PATH2_OPTIONAL CACHE)
+    unset(JNI_INCLUDE_PATH2_OPTIONAL)
+    break()
+  endif()
+endforeach()
 include(flutter/generated_plugins.cmake)
 
 # fvp includes libepoxy, X11 and Wayland headers directly. GTK's public

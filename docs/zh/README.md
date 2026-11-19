@@ -41,6 +41,16 @@ Omni Code 是一个跨平台 Flutter 客户端，支持桌面端和移动端，�
 
 ## 安装
 
+桌面客户端欢迎页提供 **一键安装并启用自启动** 和 **连接已有 Bridge** 两个入口。
+点击一键安装后，会自动下载安装并校验官方 Bridge、配置当前用户登录后自启动、
+启动服务、授权本机并连接，无需另外下载 Bridge 或执行终端命令。
+关闭客户端后，Bridge 继续在后台运行。手机和网页端连接电脑上的 Bridge。
+
+安装失败或环境不支持时，可点击 **通过 Agent 继续**。未检测到可用模型配置时，
+会先引导配置辅助模型，保存后自动继续；此流程无需 Bridge 已经启动。
+
+服务位置、日志和关闭自启动的方法见[桌面 Bridge 安装说明](../desktop-bridge-setup.md)。
+
 | 平台 | 下载 |
 | --- | --- |
 | Android | [APK (arm64)](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-android-arm64-v8a.apk) · [APK (arm)](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-android-armeabi-v7a.apk) · [APK (x86_64)](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-android-x86_64.apk) |

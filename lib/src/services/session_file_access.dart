@@ -78,7 +78,8 @@ class SessionFileAccess {
   SessionFileAccess(
       {required this.file,
       required this.client,
-      required this.sessionId,
+      this.sessionId,
+      this.projectId,
       String? rootPath})
       : root = rootPath != null && file.absolute.path.startsWith('$rootPath/')
             ? Directory(rootPath)
@@ -86,7 +87,7 @@ class SessionFileAccess {
   final File file;
   final Directory root;
   final BridgeClient client;
-  final String sessionId;
+  final String? sessionId, projectId;
   HttpServer? _server;
   Future<Uri>? _htmlUri;
   bool _closed = false;
@@ -105,13 +106,15 @@ class SessionFileAccess {
         'content_type': sessionFileMime(file.path)
       };
     }
-    return client.fileInfo(file.path, sessionId: sessionId);
+    return client.fileInfo(file.path,
+        sessionId: sessionId, projectId: projectId);
   }
 
   Future<Stream<List<int>>> open([File? target]) async {
     final source = target ?? file;
     if (await source.exists()) return source.openRead();
-    return (await client.openFileStream(source.path, sessionId: sessionId))
+    return (await client.openFileStream(source.path,
+            sessionId: sessionId, projectId: projectId))
         .stream;
   }
 

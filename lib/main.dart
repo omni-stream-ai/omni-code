@@ -25,7 +25,12 @@ Future<void> main() async {
 
 void _bootstrapApplication() {
   runApp(ProviderScope(child: SentryWidget(child: const OmniCodeApp())));
-  unawaited(_initializeServices());
+  // Optional platform services must start after this window has rendered.
+  // A desktop process opening another window can initialize native plugins
+  // while its first frame is still being scheduled.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_initializeServices());
+  });
 }
 
 Future<void> _initializeServices() async {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'app_snack_bar.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 
@@ -63,7 +64,7 @@ class CopyableMessage extends StatelessWidget {
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: message));
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(copiedLabel)),
+                  AppSnackBar(content: Text(copiedLabel)),
                 );
               },
               icon: Icon(Icons.copy, size: 18, color: resolvedIconColor),

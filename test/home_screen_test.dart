@@ -9,11 +9,13 @@ import 'package:omni_code/l10n/generated/app_localizations.dart';
 import 'package:omni_code/src/app_routes.dart';
 import 'package:omni_code/src/bridge_client.dart';
 import 'package:omni_code/src/models.dart';
+import 'package:omni_code/src/widgets/project_avatar.dart';
 import 'package:omni_code/src/screens/home_screen.dart';
 import 'package:omni_code/src/screens/settings_screen.dart';
 import 'package:omni_code/src/settings/app_settings.dart';
 import 'package:omni_code/src/settings/app_settings_store.dart';
 import 'package:omni_code/src/theme/app_theme.dart';
+import 'package:omni_code/src/widgets/desktop_navigation_sidebar.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -23,8 +25,66 @@ void main() {
     appSettingsController.debugReplaceSettings(AppSettings.defaults());
   });
 
-  testWidgets('home opens projects screen from the projects card',
+  testWidgets(
+      'disabled automatic analysis hides task sections and display entry',
       (tester) async {
+    appSettingsController.debugReplaceSettings(
+        AppSettings.defaults().copyWith(autoTaskAnalysisEnabled: false));
+    var analyses = 0;
+    final client = BridgeClient(httpClient: _FakeHttpClient((request) async {
+      final dynamic data;
+      if (request.url.path == '/workspace-agent') {
+        data = {
+          'scope': {},
+          'tasks': [],
+          'running': false,
+          'chat': [],
+          'dispatch_tasks': [],
+        };
+      } else if (request.url.path.endsWith('/analyze')) {
+        analyses++;
+        data = {'running': false};
+      } else {
+        data = [];
+      }
+      return http.Response(jsonEncode({'data': data}), 200,
+          headers: {'content-type': 'application/json'});
+    }));
+    await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const Key('home-main-agent-conversation')), findsOneWidget);
+    expect(find.byKey(const Key('home-recent-sessions')), findsOneWidget);
+    expect(find.byKey(const Key('home-agent-tasks')), findsNothing);
+    expect(find.byKey(const Key('home-tasks-skeleton')), findsNothing);
+    await tester.enterText(find.byKey(const Key('home-assistant-input')),
+        'Keep the conversation draft');
+    await tester.tap(find.byKey(const Key('home-display-settings')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('home-show-recent-tasks')), findsNothing);
+    await tester.tap(find.byKey(const Key('home-display-save')));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 65));
+    await tester.pumpAndSettle();
+    expect(analyses, 0);
+    expect(appSettingsController.settings.homeShowRecentTasks, isTrue);
+
+    appSettingsController.debugReplaceSettings(
+        appSettingsController.settings.copyWith(autoTaskAnalysisEnabled: true));
+    await tester.pumpAndSettle();
+    expect(analyses, 1);
+    expect(find.byKey(const Key('home-agent-tasks')), findsOneWidget);
+    expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('home-assistant-input')))
+            .controller!
+            .text,
+        'Keep the conversation draft');
+    await tester.pumpWidget(const SizedBox());
+    client.dispose();
+  });
+
+  testWidgets('home opens projects from navigation', (tester) async {
     String? pushedRouteName;
     final client = BridgeClient(
       httpClient: _FakeHttpClient((request) async {
@@ -80,11 +140,258 @@ void main() {
       tester.element(find.byType(HomeScreen)),
     )!;
 
+    expect(find.byKey(const Key('home-app-logo')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('home-navigation-button')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text(l10n.projectsTitle));
     await tester.pumpAndSettle();
 
     expect(pushedRouteName, AppRoutes.projects);
     expect(find.byType(ProjectsScreen), findsOneWidget);
+    expect(
+        tester
+            .widgetList<ProjectAvatar>(find.byType(ProjectAvatar))
+            .map((avatar) => avatar.name),
+        containsAll(['Alpha', 'Beta']));
+  });
+
+  testWidgets(
+      'home display supports every combination and persists after reload',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final store = _MemoryAppSettingsStore();
+    appSettingsController.debugReplaceStore(store);
+    final client = BridgeClient(httpClient: _FakeHttpClient((request) async {
+      final dynamic data = request.url.path == '/workspace-agent'
+          ? {
+              'scope': {},
+              'tasks': [],
+              'selected_sessions': 0,
+              'cached_sessions': 0,
+              'running': false,
+              'errors': {}
+            }
+          : request.url.path.endsWith('/analyze')
+              ? {'running': false}
+              : [];
+      return http.Response(jsonEncode({'data': data}), 200,
+          headers: {'content-type': 'application/json'});
+    }));
+    await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byKey(const Key('home-assistant-input')), 'Keep my home draft');
+    for (final width in [390.0, 1000.0, 1600.0]) {
+      tester.view.physicalSize = Size(width, 1100);
+      await tester.pumpAndSettle();
+      for (final mask in [7, 6, 5, 4, 3, 2, 1, 0, 7]) {
+        final settingsButton = find.byKey(const Key('home-display-settings'));
+        await tester.ensureVisible(settingsButton);
+        await tester.tap(settingsButton);
+        await tester.pumpAndSettle();
+        final switches = [
+          'home-show-main-agent',
+          'home-show-recent-sessions',
+          'home-show-recent-tasks'
+        ];
+        for (var index = 0; index < switches.length; index++) {
+          final toggle = find.byKey(Key(switches[index]));
+          if (tester.widget<SwitchListTile>(toggle).value !=
+              (mask & (1 << index) != 0)) {
+            await tester.tap(toggle);
+            await tester.pumpAndSettle();
+          }
+        }
+        await tester.tap(find.byKey(const Key('home-display-save')));
+        await tester.pumpAndSettle();
+        final main = find.byKey(const Key('home-main-agent-conversation'));
+        final sessions = find.byKey(const Key('home-recent-sessions'));
+        final tasks = find.byKey(const Key('home-agent-tasks'));
+        expect(main, mask & 1 != 0 ? findsOneWidget : findsNothing);
+        expect(sessions, mask & 2 != 0 ? findsOneWidget : findsNothing);
+        expect(tasks, mask & 4 != 0 ? findsOneWidget : findsNothing);
+        expect(find.byKey(const Key('home-restore-sections')),
+            mask == 0 ? findsOneWidget : findsNothing);
+        final persisted =
+            AppSettings.fromJson(jsonDecode((await store.read())!));
+        expect(persisted.homeShowMainAgent, mask & 1 != 0);
+        expect(persisted.homeShowRecentSessions, mask & 2 != 0);
+        expect(persisted.homeShowRecentTasks, mask & 4 != 0);
+        if (mask & 1 != 0) {
+          expect(
+              tester
+                  .widget<TextField>(
+                      find.byKey(const Key('home-assistant-input')))
+                  .controller!
+                  .text,
+              'Keep my home draft');
+        }
+        if (width == 1600 && mask == 7) {
+          expect(tester.getBottomLeft(main).dy,
+              lessThan(tester.getTopLeft(sessions).dy));
+          expect(tester.getTopLeft(sessions).dy, tester.getTopLeft(tasks).dy);
+          expect(tester.getTopLeft(sessions).dx,
+              lessThan(tester.getTopLeft(tasks).dx));
+          expect(tester.getSize(main).width,
+              greaterThan(tester.getSize(sessions).width));
+        }
+        if (width == 390 && mask == 7) {
+          expect(tester.getBottomLeft(main).dy,
+              lessThan(tester.getTopLeft(sessions).dy));
+          expect(tester.getBottomLeft(sessions).dy,
+              lessThan(tester.getTopLeft(tasks).dy));
+        }
+        expect(tester.takeException(), isNull);
+      }
+    }
+    await appSettingsController.save(appSettingsController.settings.copyWith(
+        homeShowMainAgent: false,
+        homeShowRecentSessions: true,
+        homeShowRecentTasks: false));
+    await tester.pumpWidget(const SizedBox());
+    appSettingsController.debugReplaceSettings(AppSettings.defaults());
+    await appSettingsController.load();
+    await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('home-main-agent-conversation')), findsNothing);
+    expect(find.byKey(const Key('home-recent-sessions')), findsOneWidget);
+    expect(find.byKey(const Key('home-agent-tasks')), findsNothing);
+    await tester.tap(find.byKey(const Key('home-display-settings')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('home-show-main-agent')));
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(appSettingsController.settings.homeShowMainAgent, isFalse);
+    await tester.pumpWidget(const SizedBox());
+    client.dispose();
+  });
+
+  testWidgets(
+      'home leads with main agent chat and links recent tasks to their source',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    String? openedRoute;
+    final session = _sessionJson(
+        id: 'session-1',
+        projectId: 'alpha',
+        title: 'Release conversation',
+        updatedAt: '2026-11-16T10:00:00Z');
+    final otherSession = _sessionJson(
+        id: 'session-2',
+        projectId: 'alpha',
+        title: 'Search conversation',
+        updatedAt: '2026-11-16T09:00:00Z');
+    Map<String, dynamic> task(String id, String sessionId, String title,
+            String status, String updatedAt) =>
+        {
+          'session_id': sessionId,
+          'project_id': 'alpha',
+          'session_title': sessionId == 'session-1'
+              ? 'Release conversation'
+              : 'Search conversation',
+          'updated_at': updatedAt,
+          'task': {
+            'id': id,
+            'title': title,
+            'summary': '',
+            'status': status,
+            'updated_at': updatedAt
+          },
+        };
+    final client = BridgeClient(httpClient: _FakeHttpClient((request) async {
+      dynamic data;
+      switch (request.url.path) {
+        case '/projects':
+          data = [
+            _projectJson(
+                id: 'alpha', name: 'Alpha', updatedAt: '2026-11-16T10:00:00Z')
+          ];
+        case '/v2/sessions':
+          data = [session, otherSession];
+        case '/v2/sessions/session-2':
+          return http.Response(jsonEncode({'session': otherSession}), 200,
+              headers: {'content-type': 'application/json'});
+        case '/workspace-agent/analyze':
+          data = {'running': false};
+        case '/workspace-agent':
+          data = {
+            'scope': {},
+            'selected_sessions': 2,
+            'cached_sessions': 2,
+            'running': false,
+            'errors': {},
+            'tasks': [
+              task('release', 'session-1', 'Review release', 'blocked',
+                  '2026-11-15T10:00:00Z'),
+              task('search', 'session-2', 'Search shipped', 'completed',
+                  '2026-11-16T11:00:00Z'),
+              {
+                ...task('archived', 'session-1', 'Archived work', 'pending',
+                    '2026-11-16T12:00:00Z'),
+                'archived': true
+              },
+            ]
+          };
+        default:
+          data = [];
+      }
+      return http.Response(jsonEncode({'data': data}), 200,
+          headers: {'content-type': 'application/json'});
+    }));
+    for (final width in [390.0, 1400.0]) {
+      tester.view.physicalSize = Size(width, 1000);
+      await tester.pumpWidget(_TestApp(
+          home: HomeScreen(client: client),
+          onGenerateRoute: (settings) {
+            openedRoute = settings.name;
+            return MaterialPageRoute<void>(
+                builder: (_) =>
+                    const Scaffold(body: Text('Source conversation')));
+          }));
+      await tester.pumpAndSettle();
+      final conversation =
+          find.byKey(const Key('home-main-agent-conversation'));
+      final tracking = find.byKey(const Key('home-agent-tasks'));
+      expect(conversation, findsOneWidget);
+      expect(find.byKey(const Key('home-assistant-input')), findsOneWidget);
+      expect(find.byKey(const Key('home-primary-sessions')), findsNothing);
+      expect(find.text('Assistant'), findsOneWidget);
+      expect(find.descendant(of: tracking, matching: find.text('Tasks')),
+          findsOneWidget);
+      expect(find.text('Review release'), findsOneWidget);
+      expect(find.text('Search shipped'), findsNothing);
+      expect(find.textContaining('Archived work'), findsNothing);
+      expect(find.text('Work progress'), findsNothing);
+      expect(find.text('Recently tracked'), findsNothing);
+      final statusFilter = find.byKey(const Key('home-task-status-filter'));
+      await tester.ensureVisible(statusFilter);
+      await tester.tap(statusFilter);
+      await tester.pumpAndSettle();
+      await tester.tap(find
+          .byKey(const ValueKey(('task-status-filter-option', 'completed'))));
+      await tester.pumpAndSettle();
+      expect(find.text('Search shipped'), findsOneWidget);
+      expect(find.text('Review release'), findsNothing);
+      expect(tester.getBottomLeft(conversation).dy,
+          lessThan(tester.getTopLeft(tracking).dy));
+      if (width >= 760) {
+        expect(tester.getSize(conversation).width,
+            greaterThan(tester.getSize(tracking).width));
+      }
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('Search shipped'));
+      await tester.tap(find.text('Search shipped'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Open conversation'));
+      await tester.tap(find.text('Open conversation'));
+      await tester.pumpAndSettle();
+      expect(openedRoute, AppRoutes.session('alpha', 'session-2'));
+      expect(find.text('Source conversation'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    }
+    client.dispose();
   });
 
   testWidgets('home mobile shows recent sessions before recent projects',
@@ -149,6 +456,7 @@ void main() {
     await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await _openHistory(tester);
 
     final l10n = AppLocalizations.of(
       tester.element(find.byType(HomeScreen)),
@@ -223,6 +531,7 @@ void main() {
     await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await _openHistory(tester);
 
     final searchField = find.byType(TextField).first;
     await tester.enterText(searchField, 'beta');
@@ -307,6 +616,7 @@ void main() {
     await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await _openHistory(tester);
 
     final searchField = find.byType(TextField).first;
     await tester.enterText(searchField, 'match');
@@ -338,8 +648,7 @@ void main() {
     expect(find.text('Match Session 1'), findsOneWidget);
   });
 
-  testWidgets('home desktop search aligns with dashboard content width',
-      (tester) async {
+  testWidgets('history search aligns with content width', (tester) async {
     tester.view.physicalSize = const Size(1600, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -384,9 +693,10 @@ void main() {
     await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await _openHistory(tester);
 
     final searchField = find.byKey(const Key('home-dashboard-search-field'));
-    final featuredCard = find.byKey(const Key('home-featured-session-card'));
+    final featuredCard = find.byKey(const Key('home-history-projects'));
 
     expect(searchField, findsOneWidget);
     expect(featuredCard, findsOneWidget);
@@ -474,7 +784,10 @@ void main() {
     await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await _openHistory(tester);
 
+    await tester
+        .ensureVisible(find.byKey(const Key('home-project-new-session-alpha')));
     await tester.tap(find.byKey(const Key('home-project-new-session-alpha')));
     await tester.pumpAndSettle();
 
@@ -483,53 +796,224 @@ void main() {
     expect(find.byType(TextField), findsAtLeastNWidgets(2));
   });
 
-  testWidgets('home shows dashboard skeleton while loading initial data',
-      (tester) async {
-    final gate = Completer<void>();
-    final client = BridgeClient(
-      httpClient: _FakeHttpClient((request) async {
-        if (request.method == 'GET' && request.url.path == '/projects') {
-          await gate.future;
-          return http.Response(
-            jsonEncode({
-              'data': [
+  for (final width in [390.0, 1400.0]) {
+    for (final order in [
+      ['main', 'sessions', 'tasks'],
+      ['sessions', 'tasks', 'main'],
+      ['tasks', 'main', 'sessions'],
+    ]) {
+      testWidgets(
+          'home sections reveal independently in order $order at width $width',
+          (tester) async {
+        tester.view.physicalSize = Size(width, 1100);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        var gates = {
+          for (final section in [
+            'projects',
+            'profiles',
+            'main',
+            'sessions',
+            'tasks'
+          ])
+            section: Completer<void>()
+        };
+        final requested = <String>{};
+        Future<http.Response> respond(String section, dynamic data) async {
+          requested.add(section);
+          await gates[section]!.future;
+          return http.Response(jsonEncode({'data': data}), 200,
+              headers: {'content-type': 'application/json'});
+        }
+
+        final client =
+            BridgeClient(httpClient: _FakeHttpClient((request) async {
+          switch (request.url.path) {
+            case '/projects':
+              return respond('projects', [
                 _projectJson(
-                  id: 'project-1',
-                  name: 'Project One',
-                  updatedAt: '2026-05-05T11:00:00.000',
-                ),
-              ],
-            }),
-            200,
-            headers: {'content-type': 'application/json'},
-          );
+                    id: 'project-1',
+                    name: 'Project One',
+                    updatedAt: '2026-11-16T10:00:00Z')
+              ]);
+            case '/v2/codex/profiles':
+              return respond('profiles', []);
+            case '/v2/sessions':
+              return respond('sessions', [
+                _sessionJson(
+                    id: 'session-1',
+                    projectId: 'project-1',
+                    title: 'Ready conversation',
+                    updatedAt: '2026-11-16T10:00:00Z')
+              ]);
+            case '/settings':
+              return respond('main', {'model_providers': []});
+            case '/workspace-agent/model':
+              return respond('main', {'selection': null});
+            case '/workspace-agent/dispatch/settings':
+              return respond('main', {'agent': 'pi'});
+            case '/workspace-agent':
+              return respond('tasks', {
+                'scope': {},
+                'selected_sessions': 1,
+                'cached_sessions': 1,
+                'running': false,
+                'errors': {},
+                'chat': [],
+                'tasks': [
+                  {
+                    'session_id': 'session-1',
+                    'project_id': 'project-1',
+                    'session_title': 'Ready conversation',
+                    'task': {
+                      'id': 'task-1',
+                      'title': 'Ready task',
+                      'summary': 'Continue the work',
+                      'status': 'pending'
+                    }
+                  }
+                ]
+              });
+            default:
+              return http.Response(
+                  jsonEncode({
+                    'data': {'running': false}
+                  }),
+                  200);
+          }
+        }));
+        await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(requested,
+            containsAll(['projects', 'profiles', 'main', 'sessions', 'tasks']));
+        const skeletonKeys = {
+          'main': 'home-main-agent-skeleton',
+          'sessions': 'home-recent-skeleton',
+          'tasks': 'home-tasks-skeleton',
+        };
+        for (final key in skeletonKeys.values) {
+          expect(find.byKey(Key(key)), findsOneWidget);
         }
-        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        final main = find.byKey(const Key('home-main-agent-conversation'));
+        final sessions = find.byKey(const Key('home-recent-sessions'));
+        final tasks = find.byKey(const Key('home-agent-tasks'));
+        expect(tester.getBottomLeft(main).dy,
+            lessThan(tester.getTopLeft(sessions).dy));
+        if (width > 760) {
+          expect(find.byType(DesktopNavigationSidebar), findsOneWidget);
+          expect(tester.getTopLeft(sessions).dy, tester.getTopLeft(tasks).dy);
+        } else {
+          expect(tester.getTopLeft(sessions).dy,
+              lessThan(tester.getTopLeft(tasks).dy));
+        }
+        final ready = <String>{};
+        for (final section in order) {
+          gates[section]!.complete();
+          ready.add(section);
+          await tester.pumpAndSettle();
+          for (final entry in skeletonKeys.entries) {
+            expect(find.byKey(Key(entry.value)),
+                ready.contains(entry.key) ? findsNothing : findsOneWidget);
+          }
+          expect(find.byKey(const Key('home-assistant-input')),
+              ready.contains('main') ? findsOneWidget : findsNothing);
+          expect(find.text('Ready conversation'),
+              ready.contains('sessions') ? findsOneWidget : findsNothing);
+          expect(find.text('Ready task'),
+              ready.contains('tasks') ? findsOneWidget : findsNothing);
+          expect(tester.takeException(), isNull);
+        }
+        // Project and profile metadata are still pending after all three panes are usable.
+        expect(gates['projects']!.isCompleted, isFalse);
+        expect(gates['profiles']!.isCompleted, isFalse);
+        await tester.enterText(
+            find.byKey(const Key('home-assistant-input')), 'Keep this draft');
+        gates['projects']!.complete();
+        gates['profiles']!.complete();
+        await tester.pumpAndSettle();
+        // Refreshes retain ready content while each request completes again.
+        gates = {for (final section in gates.keys) section: Completer<void>()};
+        final refresh = find.descendant(
+            of: sessions, matching: find.byIcon(Icons.refresh_rounded));
+        await tester.ensureVisible(refresh);
+        await tester.tap(refresh);
+        await tester.pump(const Duration(milliseconds: 50));
+        for (final key in skeletonKeys.values) {
+          expect(find.byKey(Key(key)), findsNothing);
+        }
+        expect(find.text('Ready conversation'), findsOneWidget);
+        expect(find.text('Ready task'), findsOneWidget);
+        expect(
+            tester
+                .widget<TextField>(
+                    find.byKey(const Key('home-assistant-input')))
+                .controller!
+                .text,
+            'Keep this draft');
+        for (final gate in gates.values) {
+          gate.complete();
+        }
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+        client.dispose();
+      });
+    }
+  }
+
+  testWidgets(
+      'empty sections finish while project metadata fails and profiles wait',
+      (tester) async {
+    final profiles = Completer<http.Response>();
+    final client = BridgeClient(httpClient: _FakeHttpClient((request) async {
+      dynamic data;
+      switch (request.url.path) {
+        case '/projects':
           return http.Response(
-            jsonEncode({'data': []}),
-            200,
-            headers: {'content-type': 'application/json'},
-          );
-        }
-        return http.Response('not found', 404);
-      }),
-    );
-
+              jsonEncode({'error': 'project catalog unavailable'}), 500);
+        case '/v2/codex/profiles':
+          return profiles.future;
+        case '/v2/sessions':
+          data = [];
+        case '/settings':
+          data = {'model_providers': []};
+        case '/workspace-agent':
+          data = {
+            'scope': {},
+            'tasks': [],
+            'selected_sessions': 0,
+            'cached_sessions': 0,
+            'running': false,
+            'errors': {}
+          };
+        default:
+          data = {'selection': null, 'agent': 'pi', 'running': false};
+      }
+      return http.Response(jsonEncode({'data': data}), 200,
+          headers: {'content-type': 'application/json'});
+    }));
     await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
-    await tester.pump();
-
-    expect(find.byKey(const Key('home-dashboard-skeleton')), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-
-    gate.complete();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
-    expect(find.text('Project One'), findsOneWidget);
-    final l10n = AppLocalizations.of(
-      tester.element(find.byType(HomeScreen)),
-    )!;
+    await tester.pumpAndSettle();
+    for (final key in [
+      'home-main-agent-skeleton',
+      'home-recent-skeleton',
+      'home-tasks-skeleton'
+    ]) {
+      expect(find.byKey(Key(key)), findsNothing);
+    }
+    final l10n = AppLocalizations.of(tester.element(find.byType(HomeScreen)))!;
+    expect(find.byKey(const Key('home-assistant-input')), findsOneWidget);
     expect(find.text(l10n.noSessionsYet), findsOneWidget);
+    expect(find.text('Nothing pending. A little space for your next idea.'),
+        findsOneWidget);
+    expect(find.textContaining('project catalog unavailable'), findsOneWidget);
+    profiles.complete(http.Response(jsonEncode({'data': []}), 200));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    client.dispose();
   });
 
   testWidgets('home exposes bridge settings when the configured bridge fails',
@@ -631,51 +1115,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('home shows desktop dashboard skeleton while loading wide layout',
-      (tester) async {
-    tester.view.physicalSize = const Size(1600, 1200);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-
-    final gate = Completer<void>();
-    final client = BridgeClient(
-      httpClient: _FakeHttpClient((request) async {
-        if (request.method == 'GET' && request.url.path == '/projects') {
-          await gate.future;
-          return http.Response(
-            jsonEncode({'data': []}),
-            200,
-            headers: {'content-type': 'application/json'},
-          );
-        }
-        if (request.method == 'GET' && request.url.path == '/v2/sessions') {
-          return http.Response(
-            jsonEncode({'data': []}),
-            200,
-            headers: {'content-type': 'application/json'},
-          );
-        }
-        return http.Response('not found', 404);
-      }),
-    );
-
-    await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
-    await tester.pump();
-
-    expect(
-      find.byKey(const Key('home-desktop-loading-skeleton')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const Key('home-dashboard-skeleton')), findsOneWidget);
-    expect(find.byKey(const Key('home-desktop-rail-skeleton')), findsNothing);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-
-    gate.complete();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-  });
-
-  testWidgets('home desktop status rail is collapsed by default and toggles',
+  testWidgets(
+      'home focuses on main agent chat and preserves drafts through history',
       (tester) async {
     tester.view.physicalSize = const Size(1600, 1200);
     tester.view.devicePixelRatio = 1;
@@ -722,22 +1163,30 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(appSettingsController.settings.desktopHomeRailCollapsed, isTrue);
-    expect(find.byKey(const Key('home-rail-collapse-button')), findsNothing);
-
-    await tester.tap(find.byKey(const Key('home-header-more-button')));
+    expect(find.byType(DesktopNavigationSidebar), findsOneWidget);
+    expect(find.byKey(const Key('home-navigation-button')), findsNothing);
+    expect(
+        find.byKey(const Key('home-main-agent-conversation')), findsOneWidget);
+    expect(find.byKey(const Key('home-agent-tasks')), findsOneWidget);
+    expect(find.byKey(const Key('home-assistant-input')), findsOneWidget);
+    expect(find.text('Recent projects'), findsNothing);
+    expect(find.text('Session One'), findsOneWidget);
+    await tester.enterText(
+        find.byKey(const Key('home-assistant-input')), 'Keep this draft');
+    await _openHistory(tester);
+    expect(find.byType(DesktopNavigationSidebar), findsOneWidget);
+    expect(find.text('Session One'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('home-history-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('home-header-toggle-rail-button')));
-    await tester.pumpAndSettle();
-
-    expect(appSettingsController.settings.desktopHomeRailCollapsed, isFalse);
-    expect(find.byKey(const Key('home-rail-collapse-button')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('home-rail-collapse-button')));
-    await tester.pumpAndSettle();
-
-    expect(appSettingsController.settings.desktopHomeRailCollapsed, isTrue);
-    expect(find.byKey(const Key('home-rail-collapse-button')), findsNothing);
+    expect(
+        find.byKey(const Key('home-main-agent-conversation')), findsOneWidget);
+    expect(find.text('Session One'), findsOneWidget);
+    expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('home-assistant-input')))
+            .controller!
+            .text,
+        'Keep this draft');
   });
 
   testWidgets('projects screen keeps the active project at the top',
@@ -940,6 +1389,7 @@ void main() {
     await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await _openHistory(tester);
 
     expect(find.text('Session 7'), findsOneWidget);
     expect(find.text('Session 6'), findsOneWidget);
@@ -1012,6 +1462,7 @@ void main() {
     await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await _openHistory(tester);
 
     final l10n = AppLocalizations.of(
       tester.element(find.byType(HomeScreen)),
@@ -1068,6 +1519,7 @@ void main() {
     await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await _openHistory(tester);
 
     final l10n = AppLocalizations.of(
       tester.element(find.byType(HomeScreen)),
@@ -1082,7 +1534,7 @@ void main() {
     expect(find.text('Session 2'), findsOneWidget);
     expect(find.text('Session 1'), findsOneWidget);
 
-    final refreshButton = find.byIcon(Icons.refresh_rounded);
+    final refreshButton = find.byIcon(Icons.refresh_rounded).last;
     await tester.ensureVisible(refreshButton);
     await tester.tap(refreshButton);
     await tester.pump();
@@ -1143,6 +1595,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await _openHistory(tester);
 
     expect(sessionsRequestCount, 1);
     expect(find.text('Session 1'), findsOneWidget);
@@ -1206,6 +1659,7 @@ void main() {
     await tester.pumpWidget(_TestApp(home: HomeScreen(client: client)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await _openHistory(tester);
 
     final l10n = AppLocalizations.of(
       tester.element(find.byType(HomeScreen)),
@@ -1220,7 +1674,7 @@ void main() {
     expect(find.text('Session 1'), findsOneWidget);
     expect(find.text(l10n.loadMoreSessionsLabel), findsNothing);
 
-    final refreshButton = find.byIcon(Icons.refresh_rounded);
+    final refreshButton = find.byIcon(Icons.refresh_rounded).last;
     await tester.ensureVisible(refreshButton);
     await tester.tap(refreshButton);
     await tester.pump();
@@ -1281,6 +1735,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await _openHistory(tester);
 
     expect(sessionsRequestCount, 1);
     expect(find.text('Session 1'), findsOneWidget);
@@ -1360,7 +1815,9 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await _openHistory(tester);
 
+    await tester.ensureVisible(find.text('Session A'));
     await tester.tap(find.text('Session A'));
     await tester.pumpAndSettle();
 
@@ -1669,6 +2126,12 @@ void main() {
     expect(find.text(l10n.connectWelcomeTitle), findsOneWidget);
     expect(find.text(l10n.authorizeThisDevice), findsOneWidget);
   });
+}
+
+Future<void> _openHistory(WidgetTester tester) async {
+  await tester.ensureVisible(find.byKey(const Key('home-history-button')));
+  await tester.tap(find.byKey(const Key('home-history-button')));
+  await tester.pumpAndSettle();
 }
 
 class _TestApp extends StatelessWidget {

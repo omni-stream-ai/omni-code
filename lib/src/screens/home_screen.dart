@@ -3,13 +3,17 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../widgets/app_snack_bar.dart';
 import '../app_routes.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
+
 import '../responsive/app_responsive_layout.dart';
+import '../services/local_bridge_setup.dart';
 import '../settings/app_settings.dart';
 import '../shortcuts/desktop_shortcut.dart';
 import '../shortcuts/desktop_shortcut_scope.dart';
@@ -17,28 +21,31 @@ import '../shortcuts/shortcut_keycaps.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
+import '../widgets/project_avatar.dart';
 import '../widgets/app_back_header.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_navigation_scaffold.dart';
 import '../widgets/app_skeleton.dart';
 import '../widgets/copyable_message.dart';
 import '../widgets/new_session_flow.dart';
+import '../widgets/local_bridge_setup_card.dart';
 import '../widgets/session_cache_scope.dart';
+import '../widgets/workspace_agent_panel.dart';
 import 'project_detail_screen.dart';
 import 'settings_screen.dart';
+import 'bridge_setup_agent_screen.dart';
 
 const _bridgeRepositoryUrl =
     'https://github.com/omni-stream-ai/omni-code-bridge';
 
-enum _HomeSurfaceState { loading, connect, waitingApproval, dashboard }
-
-const double _homeDesktopRailWidth = 312;
+enum _HomeSurfaceState { connect, waitingApproval, dashboard }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.client, this.now});
+  const HomeScreen({super.key, this.client, this.now, this.localBridgeSetup});
 
   final BridgeClient? client;
   final DateTime Function()? now;
+  final LocalBridgeSetupService? localBridgeSetup;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -60,6 +67,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Object? _recentSessionsError;
   Object? _authError;
   bool _isLoading = true;
+  bool _loadingSessions = true;
+  int _homeLoadGeneration = 0;
   bool _isRefreshing = false;
   bool _needsAuthorization = false;
   bool _isWaitingAuth = false;
@@ -67,10 +76,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isSavingBridgeConfig = false;
   String? _authRequestId;
   String _searchQuery = '';
+  bool _showHistory = false;
+  bool _savingHomeDisplay = false;
   int _visibleRecentCount = _recentPageSize;
   Timer? _authPollTimer;
   Timer? _searchDebounceTimer;
   DateTime? _lastHomeDataLoadAt;
+  late final LocalBridgeSetupService _localBridgeSetup =
+      widget.localBridgeSetup ?? createLocalBridgeSetupService();
+  LocalBridgeSetupProgress? _localBridgeProgress;
+  LocalBridgeSetupFailure? _localBridgeFailure;
+  String? _localBridgeDiagnostic;
 
   BridgeClient get _client => widget.client ?? bridgeClient;
   DateTime Function() get _now => widget.now ?? DateTime.now;
@@ -111,6 +127,76 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final bridgeUrl = appSettingsController.settings.bridgeUrl.trim();
     if (_bridgeUrlController.text != bridgeUrl) {
       _bridgeUrlController.text = bridgeUrl;
+    }
+    setState(() {});
+  }
+
+  Future<void> _configureHomeDisplay() async {
+    if (_savingHomeDisplay) return;
+    final current = appSettingsController.settings;
+    var mainAgent = current.homeShowMainAgent;
+    var recentSessions = current.homeShowRecentSessions;
+    var recentTasks = current.homeShowRecentTasks;
+    final save = await showDialog<bool>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+            builder: (context, update) => AlertDialog(
+                  title: Text(agentText(context, '首页显示设置', 'Home display')),
+                  content: SizedBox(
+                      width: 380,
+                      child: SingleChildScrollView(
+                          child:
+                              Column(mainAxisSize: MainAxisSize.min, children: [
+                        SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            key: const Key('home-show-main-agent'),
+                            title: Text(agentText(
+                                context, '助手对话', 'Assistant conversation')),
+                            value: mainAgent,
+                            onChanged: (value) =>
+                                update(() => mainAgent = value)),
+                        SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            key: const Key('home-show-recent-sessions'),
+                            title: Text(context.l10n.recentSessionsTitle),
+                            value: recentSessions,
+                            onChanged: (value) =>
+                                update(() => recentSessions = value)),
+                        if (current.autoTaskAnalysisEnabled)
+                          SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              key: const Key('home-show-recent-tasks'),
+                              title: Text(agentText(context, '任务', 'Tasks')),
+                              value: recentTasks,
+                              onChanged: (value) =>
+                                  update(() => recentTasks = value)),
+                      ]))),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: Text(agentText(context, '取消', 'Cancel'))),
+                    FilledButton(
+                        key: const Key('home-display-save'),
+                        onPressed: () => Navigator.pop(context, true),
+                        child: Text(agentText(context, '保存', 'Save'))),
+                  ],
+                )));
+    if (save != true || !mounted) return;
+    setState(() => _savingHomeDisplay = true);
+    try {
+      await appSettingsController.save(appSettingsController.settings.copyWith(
+          homeShowMainAgent: mainAgent,
+          homeShowRecentSessions: recentSessions,
+          homeShowRecentTasks: recentTasks));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(AppSnackBar(
+            isError: true,
+            content: Text(agentText(context, '显示设置保存失败，请重试。',
+                'Could not save display settings. Please retry.'))));
+      }
+    } finally {
+      if (mounted) setState(() => _savingHomeDisplay = false);
     }
   }
 
@@ -156,82 +242,107 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _loadHomeData({bool forceRefresh = false}) async {
+    final generation = ++_homeLoadGeneration;
+    final client = _client;
+    final connectionRevision = client.connectionRevision;
+    final profileId = _selectedProfileId;
+    bool current() =>
+        mounted &&
+        generation == _homeLoadGeneration &&
+        connectionRevision == client.connectionRevision;
     _lastHomeDataLoadAt = _now();
     setState(() {
       _projectsError = null;
       _recentSessionsError = null;
       _authError = null;
+      _loadingSessions = true;
       _visibleRecentCount =
           _resolvedVisibleRecentCount(_recentSessions?.length ?? 0);
-      if (_projects == null && _recentSessions == null) {
-        _isLoading = true;
-      } else {
-        _isRefreshing = true;
-      }
+      _isLoading = _projects == null && _recentSessions == null;
+      _isRefreshing = !_isLoading;
     });
 
-    try {
-      final projects = await _client.listProjects(forceRefresh: true);
-      try {
-        _profiles = await _client.listCodexProfiles(forceRefresh: forceRefresh);
-      } catch (_) {
-        _profiles = const <CodexProfileSummary>[];
-      }
-      List<SessionSummary>? sessions;
-      Object? sessionsError;
-      try {
-        sessions = await _client.listDomainSessions(
-          profileId: _selectedProfileId,
-          forceRefresh: true,
-        );
-      } on ClientUnauthorizedException {
-        rethrow;
-      } catch (error) {
-        sessionsError = error;
-      }
+    Future<void>? authorization;
+    Future<void> unauthorized() => authorization ??= _handleUnauthorized();
+    void connected() {
+      if (authorization != null) return;
+      _needsAuthorization = false;
+      _isWaitingAuth = false;
+      _authRequestId = null;
+    }
 
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _projects = projects;
-        // Do not silently keep showing an old list after an explicit refresh
-        // failed. The previous behavior made a failed request look like a
-        // successful refresh with stale sessions.
-        _recentSessions = sessions ??
-            (forceRefresh ? const <SessionSummary>[] : _recentSessions);
-        _visibleRecentCount =
-            _resolvedVisibleRecentCount(_recentSessions?.length ?? 0);
-        _recentSessionsError = sessionsError;
-        _needsAuthorization = false;
-        _isWaitingAuth = false;
-        _authRequestId = null;
-      });
-    } on ClientUnauthorizedException {
-      if (!mounted) {
-        return;
-      }
-      await _handleUnauthorized();
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _projectsError = error;
-        if (forceRefresh) {
-          _recentSessions = const <SessionSummary>[];
-          _recentSessionsError = error;
-          _visibleRecentCount = _recentPageSize;
-        }
-      });
-    } finally {
-      if (mounted) {
+    Future<void> loadProjects() async {
+      try {
+        final projects = await client.listProjects(forceRefresh: true);
+        if (!current()) return;
         setState(() {
-          _isLoading = false;
-          _isRefreshing = false;
+          _projects = projects;
+          connected();
         });
+      } on ClientUnauthorizedException {
+        if (current()) await unauthorized();
+      } catch (error) {
+        if (current()) setState(() => _projectsError = error);
       }
     }
+
+    Future<void> loadSessions() async {
+      try {
+        final sessions = await client.listDomainSessions(
+            profileId: profileId, forceRefresh: true);
+        if (!current()) return;
+        setState(() {
+          _recentSessions = sessions;
+          _visibleRecentCount = _resolvedVisibleRecentCount(sessions.length);
+          connected();
+        });
+      } on ClientUnauthorizedException {
+        if (current()) await unauthorized();
+      } catch (error) {
+        if (!current()) return;
+        setState(() {
+          // An explicit refresh failure must not look like a fresh session list.
+          if (forceRefresh || _recentSessions == null) {
+            _recentSessions = const <SessionSummary>[];
+          }
+          _visibleRecentCount =
+              _resolvedVisibleRecentCount(_recentSessions?.length ?? 0);
+          _recentSessionsError = error;
+        });
+      } finally {
+        if (current()) setState(() => _loadingSessions = false);
+      }
+    }
+
+    Future<void> loadProfiles() async {
+      try {
+        final profiles =
+            await client.listCodexProfiles(forceRefresh: forceRefresh);
+        if (current()) setState(() => _profiles = profiles);
+      } catch (_) {
+        if (current()) {
+          setState(() => _profiles = const <CodexProfileSummary>[]);
+        }
+      }
+    }
+
+    // Profile metadata is optional; it must not delay any home section.
+    unawaited(loadProfiles());
+    await Future.wait([loadProjects(), loadSessions()]);
+    if (!current()) return;
+    setState(() {
+      _isLoading = false;
+      _isRefreshing = false;
+      if (authorization == null &&
+          _projects == null &&
+          _projectsError != null &&
+          _recentSessionsError != null &&
+          _localBridgeSetup.isSupported &&
+          !appSettingsController.settings.relay.enabled &&
+          appSettingsController.settings.bridgeToken.isEmpty) {
+        _needsAuthorization = true;
+      }
+    });
   }
 
   Future<void> _reloadHomeData() {
@@ -464,14 +575,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
       if (showFeedback) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.settingsSaved)),
+          AppSnackBar(content: Text(context.l10n.settingsSaved)),
         );
       }
       return true;
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          AppSnackBar(
+            isError: true,
             content: Text(context.l10n.settingsSaveFailed('$error')),
           ),
         );
@@ -555,6 +667,79 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _installLocalBridge() async {
+    if (_localBridgeProgress != null ||
+        _isAuthorizing ||
+        _isSavingBridgeConfig) {
+      return;
+    }
+    setState(() {
+      _localBridgeFailure = null;
+      _localBridgeDiagnostic = null;
+      _localBridgeProgress = const LocalBridgeSetupProgress(
+        LocalBridgeSetupStage.checking,
+      );
+    });
+    try {
+      final result = await _localBridgeSetup.installAndStart(
+        clientId: appSettingsController.settings.clientId,
+        onProgress: (progress) {
+          if (mounted) setState(() => _localBridgeProgress = progress);
+        },
+      );
+      await _applyLocalBridgeConnection(result);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _localBridgeFailure = error is LocalBridgeSetupException
+              ? error.failure
+              : LocalBridgeSetupFailure.installFailed;
+          _localBridgeDiagnostic =
+              error is LocalBridgeSetupException ? error.diagnostic : null;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _localBridgeProgress = null);
+    }
+  }
+
+  Future<void> _applyLocalBridgeConnection(
+      LocalBridgeSetupResult result) async {
+    final settings = appSettingsController.settings;
+    await appSettingsController.save(settings.copyWith(
+      bridgeUrl: result.url,
+      bridgeToken: result.token,
+      pendingClientAuthRequestId: '',
+      relay: settings.relay.copyWith(enabled: false),
+    ));
+    if (!mounted) return;
+    _syncBridgeUrlController();
+    await _loadHomeData(forceRefresh: true);
+  }
+
+  Future<void> _continueBridgeWithAgent() async {
+    final failure = _localBridgeFailure;
+    if (_localBridgeProgress != null || failure == null) return;
+    final result = await Navigator.of(context).push<LocalBridgeSetupResult>(
+      MaterialPageRoute(
+          builder: (_) => BridgeSetupAgentScreen(
+                failure: failure,
+                diagnostic: _localBridgeDiagnostic,
+                client: _client,
+                setup: _localBridgeSetup,
+              )),
+    );
+    if (!mounted || result == null) return;
+    try {
+      await _applyLocalBridgeConnection(result);
+    } catch (_) {
+      if (mounted) {
+        setState(() =>
+            _localBridgeFailure = LocalBridgeSetupFailure.authorizationFailed);
+      }
+    }
+  }
+
   Future<void> _openProjects() async {
     await Navigator.of(context).pushNamed(AppRoutes.projects);
     if (!mounted) {
@@ -627,22 +812,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     setState(() {});
   }
 
-  Future<void> _toggleDesktopHomeRailCollapsed() async {
-    await toggleDesktopHomeRailCollapsed();
-    if (!mounted) {
-      return;
-    }
-    setState(() {});
-  }
-
   _HomeSurfaceState get _surfaceState {
-    if (_isLoading &&
-        !_needsAuthorization &&
-        !_isWaitingAuth &&
-        _projects == null &&
-        _recentSessions == null) {
-      return _HomeSurfaceState.loading;
-    }
     if (_isWaitingAuth) {
       return _HomeSurfaceState.waitingApproval;
     }
@@ -660,7 +830,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         appSettingsController.settings.desktopNavigationCollapsed;
     return AppNavigationScaffold(
       activeRoute: AppRouteKind.home,
-      backgroundColor: AppColors.boardFor(brightness),
+      backgroundColor: _HomeStyle.canvas(brightness),
       recentProjects: _client.peekProjects() ?? const <ProjectSummary>[],
       recentSessions: _client.peekRecentSessions() ?? const <SessionSummary>[],
       onNavigateHome: () {},
@@ -679,71 +849,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       showDesktopSidebar: _surfaceState == _HomeSurfaceState.dashboard,
       bodyBuilder: (context, useDesktopSidebar, constraints) => DecoratedBox(
         decoration: BoxDecoration(
-          gradient: AppColors.boardGradientFor(brightness),
+          color: _HomeStyle.canvas(brightness),
         ),
         child: switch (_surfaceState) {
-          _HomeSurfaceState.loading => _buildLoadingState(
-              useDesktopLayout: AppResponsiveLayout.isDesktopWidth(
-                constraints.maxWidth,
-              ),
-            ),
           _HomeSurfaceState.connect => _buildConnectState(),
           _HomeSurfaceState.waitingApproval => _buildWaitingApprovalState(),
-          _HomeSurfaceState.dashboard => _buildDashboardState(
-              useDesktopSidebar: useDesktopSidebar,
+          _HomeSurfaceState.dashboard => Theme(
+              data: Theme.of(context).copyWith(
+                  iconButtonTheme: IconButtonThemeData(
+                      style: IconButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          side: BorderSide.none,
+                          minimumSize: const Size(44, 44)))),
+              child: _buildDashboardState(useDesktopSidebar: useDesktopSidebar),
             ),
         },
       ),
-    );
-  }
-
-  Widget _buildLoadingState({required bool useDesktopLayout}) {
-    final l10n = context.l10n;
-    final brightness = Theme.of(context).brightness;
-    final useWideDesktopLayout = AppResponsiveLayout.isWideDesktopWidth(
-      MediaQuery.sizeOf(context).width,
-    );
-    final desktopHomeRailCollapsed =
-        appSettingsController.settings.desktopHomeRailCollapsed;
-    if (useDesktopLayout) {
-      return _DesktopHomeLoadingSkeleton(
-        key: const Key('home-desktop-loading-skeleton'),
-        useWideRail: useWideDesktopLayout && !desktopHomeRailCollapsed,
-        brightness: brightness,
-      );
-    }
-    return _ShellScrollView(
-      children: [
-        _ShellHeader(
-          title: l10n.appTitle.toUpperCase(),
-          subtitle: l10n.homePrompt,
-          trailing: _CircleActionButton(
-            icon: Icons.settings_outlined,
-            onPressed: _openSettings,
-          ),
-        ),
-        Row(
-          children: [
-            Expanded(
-              child: _ActionCardSkeleton(
-                accentColor: AppColors.accentBlueFor(brightness),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.tileY),
-            Expanded(
-              child: _ActionCardSkeleton(
-                accentColor: AppColors.projectsAccentFor(brightness),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.section),
-        const _SearchBarSkeleton(),
-        const SizedBox(height: AppSpacing.section),
-        _SectionHeader(title: l10n.recentSessionsTitle),
-        const SizedBox(height: AppSpacing.compact),
-        const _RecentSessionsSkeleton(key: Key('home-dashboard-skeleton')),
-      ],
     );
   }
 
@@ -810,7 +931,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     Brightness brightness,
   ) {
     final l10n = context.l10n;
-    if (_isLoading && sessions.isEmpty) {
+    if (_loadingSessions && _recentSessions == null) {
       return const _RecentSessionsSkeleton(key: Key('home-recent-skeleton'));
     }
     if (_recentSessionsError != null && sessions.isEmpty) {
@@ -892,6 +1013,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           title: l10n.connectHeader.toUpperCase(),
           subtitle: l10n.connectPrompt,
         ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: _localBridgeProgress == null ? _openSettings : null,
+            icon: const Icon(Icons.settings_outlined),
+            label: Text(l10n.changeBridge),
+          ),
+        ),
         _HeroInfoCard(
           accentColor: AppColors.accentBlueFor(brightness),
           accentBackground: AppColors.tintSurfaceFor(
@@ -903,58 +1032,85 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           icon: Icons.shield_outlined,
           title: l10n.connectWelcomeTitle,
-          body: l10n.connectWelcomeBody,
+          body: _localBridgeSetup.isSupported
+              ? l10n.connectDesktopWelcomeBody
+              : l10n.connectWelcomeBody,
         ),
-        _BridgeConfigCard(
-          controller: _bridgeUrlController,
-          saving: _isSavingBridgeConfig,
-          hasPendingChanges: _hasPendingBridgeConfigChanges,
-          onChanged: () {
-            setState(() {
-              _authError = null;
-            });
-          },
-          onSave: () => _saveBridgeConfig(showFeedback: true),
-        ),
-        _DownloadCard(
-          title: l10n.connectDownloadTitle,
-          body: l10n.connectDownloadBody,
-          repository: l10n.connectDownloadRepo,
-          buttonLabel: l10n.waitingApprovalDownloadBridge,
-          onPressed: _openBridgeDownloads,
-        ),
-        if (_authError != null)
-          _ErrorPanel(
-            message: '$_authError',
-            onRetry: _loadHomeData,
+        if (_localBridgeSetup.isSupported) ...[
+          LocalBridgeSetupCard(
+            progress: _localBridgeProgress,
+            failure: _localBridgeFailure,
+            onContinueWithAgent: _continueBridgeWithAgent,
+            onInstall: (_isAuthorizing || _isSavingBridgeConfig)
+                ? null
+                : _installLocalBridge,
           ),
-        FilledButton(
-          onPressed: (_isAuthorizing || _isSavingBridgeConfig)
-              ? null
-              : _startAuthorization,
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(48),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-            ),
-          ),
-          child: _isAuthorizing
-              ? SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.onPrimaryFor(brightness),
-                  ),
-                )
-              : Text(l10n.authorizeThisDevice),
-        ),
-        Text(
-          l10n.connectNextStep,
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.mutedFor(brightness),
+          Text(l10n.connectExistingBridgeTitle,
+              style: Theme.of(context).textTheme.titleMedium),
+          Text(l10n.connectExistingBridgeBody),
+        ],
+        IgnorePointer(
+          ignoring: _localBridgeProgress != null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _BridgeConfigCard(
+                controller: _bridgeUrlController,
+                saving: _isSavingBridgeConfig,
+                hasPendingChanges: _hasPendingBridgeConfigChanges,
+                onChanged: () {
+                  setState(() {
+                    _authError = null;
+                  });
+                },
+                onSave: () => _saveBridgeConfig(showFeedback: true),
               ),
+              if (!_localBridgeSetup.isSupported)
+                _DownloadCard(
+                  title: l10n.connectDownloadTitle,
+                  body: l10n.connectDownloadBody,
+                  repository: l10n.connectDownloadRepo,
+                  buttonLabel: l10n.waitingApprovalDownloadBridge,
+                  onPressed: _openBridgeDownloads,
+                ),
+              if (_authError != null)
+                _ErrorPanel(
+                  message: '$_authError',
+                  onRetry: _loadHomeData,
+                ),
+              FilledButton(
+                onPressed: (_isAuthorizing ||
+                        _isSavingBridgeConfig ||
+                        _localBridgeProgress != null)
+                    ? null
+                    : _startAuthorization,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(AppSpacing.radiusControl),
+                  ),
+                ),
+                child: _isAuthorizing
+                    ? SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.onPrimaryFor(brightness),
+                        ),
+                      )
+                    : Text(l10n.authorizeThisDevice),
+              ),
+              Text(
+                l10n.connectNextStep,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.mutedFor(brightness),
+                    ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -1020,7 +1176,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           onCopy: () {
             Clipboard.setData(ClipboardData(text: approvalCommand));
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l10n.copied)),
+              AppSnackBar(content: Text(l10n.copied)),
             );
           },
         ),
@@ -1072,248 +1228,171 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildDashboardState({required bool useDesktopSidebar}) {
     final l10n = context.l10n;
+    final display = appSettingsController.settings;
     final brightness = Theme.of(context).brightness;
     final projects =
         (_projects ?? const <ProjectSummary>[]).where(_matchesProject).toList();
     final sessions = (_recentSessions ?? const <SessionSummary>[])
+        .map((session) => session.copyWith(
+            title: _client.peekSessionById(session.id)?.title ?? session.title))
         .where(_matchesSession)
         .toList()
-      ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
-    final visibleProjects = projects.take(4).toList();
-    final visibleSessions = sessions.take(_visibleRecentCount).toList();
-
-    final useWideDesktopLayout = AppResponsiveLayout.isWideDesktopWidth(
-        MediaQuery.sizeOf(context).width);
-    return Stack(
-      children: [
-        if (useDesktopSidebar)
-          _buildDesktopDashboardState(
-            useWideRail: useWideDesktopLayout,
-            brightness: brightness,
-            projects: projects,
-            sessions: sessions,
-          )
-        else
-          _ShellScrollView(
-            onRefresh: _reloadHomeData,
-            children: [
-              _ShellHeader(
-                title: l10n.appTitle.toUpperCase(),
-                subtitle: l10n.homePrompt,
-                trailing: Builder(
-                  builder: (context) => _CircleActionButton(
-                    icon: Icons.menu_rounded,
-                    onPressed: () => Scaffold.of(context).openDrawer(),
-                  ),
-                ),
-              ),
-              Row(
-                children: [
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return Stack(children: [
+      _ShellScrollView(
+          maxWidth: !_showHistory &&
+                  display.homeShowMainAgent &&
+                  display.homeShowRecentSessions &&
+                  display.autoTaskAnalysisEnabled &&
+                  display.homeShowRecentTasks
+              ? 1440
+              : 960,
+          onRefresh: _reloadHomeData,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 28),
+              child: Row(children: [
+                if (!useDesktopSidebar)
                   Expanded(
-                    child: _ActionCard(
-                      icon: Icons.add_comment_outlined,
-                      accentColor: AppColors.accentBlueFor(brightness),
-                      title: l10n.newSession,
-                      subtitle: l10n.homeCreateProjectHint,
-                      onTap: _newSession,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.tileY),
-                  Expanded(
-                    child: _ActionCard(
-                      icon: Icons.folder_open_outlined,
-                      accentColor: AppColors.projectsAccentFor(brightness),
-                      title: l10n.projectsTitle,
-                      subtitle: projects.isNotEmpty
-                          ? l10n.projectsCount(projects.length)
-                          : l10n.homeBrowseProjects,
-                      onTap: _openProjects,
-                    ),
-                  ),
+                    child: Row(children: [
+                      SvgPicture.asset(
+                        'assets/app-icon-small.svg',
+                        key: const Key('home-app-logo'),
+                        width: 34,
+                        height: 34,
+                        excludeFromSemantics: true,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(l10n.appTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.4)),
+                      ),
+                    ]),
+                  )
+                else
+                  const Spacer(),
+                IconButton(
+                    key: const Key('home-display-settings'),
+                    tooltip: agentText(context, '首页显示设置', 'Home display'),
+                    onPressed:
+                        _savingHomeDisplay ? null : _configureHomeDisplay,
+                    icon: const Icon(Icons.dashboard_customize_outlined,
+                        size: 21)),
+                IconButton(
+                    key: const Key('home-history-button'),
+                    tooltip: agentText(context, '历史会话', 'History'),
+                    onPressed: () =>
+                        setState(() => _showHistory = !_showHistory),
+                    icon: Icon(
+                        _showHistory
+                            ? Icons.close_rounded
+                            : Icons.history_rounded,
+                        size: 21)),
+                if (!useDesktopSidebar) ...[
+                  IconButton(
+                      tooltip: l10n.newSession,
+                      onPressed: _newSession,
+                      icon: const Icon(Icons.add_rounded, size: 23)),
+                  Builder(
+                      builder: (context) => IconButton(
+                          key: const Key('home-navigation-button'),
+                          tooltip: agentText(context, '导航', 'Navigation'),
+                          onPressed: () => Scaffold.of(context).openDrawer(),
+                          icon: const Icon(Icons.menu_rounded, size: 21))),
                 ],
-              ),
-              const SizedBox(height: AppSpacing.section),
-              _buildDashboardSearchBar(),
-              if (_projectsError != null && projects.isEmpty) ...[
-                const SizedBox(height: AppSpacing.stack),
-                _ErrorPanel(
+              ]),
+            ),
+            if (_projectsError != null)
+              _ErrorPanel(
                   message: l10n.loadProjectsFailed('$_projectsError'),
                   onRetry: _reloadHomeData,
-                  onOpenSettings: _openSettings,
-                ),
-              ],
-              if (projects.isNotEmpty || sessions.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.section),
+                  onOpenSettings: _openSettings),
+            Visibility(
+              visible: !_showHistory,
+              maintainState: true,
+              child: WorkspaceAgentPanel(
+                  client: _client,
+                  homeSurface: true,
+                  projects: _projects ?? const [],
+                  homeDashboard: true,
+                  showMainAgent: display.homeShowMainAgent,
+                  showRecentTracking: display.autoTaskAnalysisEnabled &&
+                      display.homeShowRecentTasks,
+                  recentSessions: display.homeShowRecentSessions
+                      ? Column(
+                          key: const Key('home-recent-sessions'),
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                              _buildRecentSessionsHeader(),
+                              _buildRecentSessionsContent(
+                                  context,
+                                  sessions,
+                                  sessions.take(_visibleRecentCount).toList(),
+                                  brightness),
+                            ])
+                      : null,
+                  emptyHome: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 64),
+                      child: Column(children: [
+                        Text(
+                            agentText(context, '首页区域已全部隐藏',
+                                'All home sections are hidden'),
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 12),
+                        TextButton.icon(
+                            key: const Key('home-restore-sections'),
+                            onPressed: _configureHomeDisplay,
+                            icon:
+                                const Icon(Icons.dashboard_customize_outlined),
+                            label: Text(agentText(context, '选择要展示的区域',
+                                'Choose sections to show'))),
+                      ])),
+                  revision: _lastHomeDataLoadAt),
+            ),
+            if (_showHistory) ...[
+              Text(agentText(context, '历史会话', 'History'),
+                  style: Theme.of(context).textTheme.headlineMedium),
+              const SizedBox(height: 20),
+              _buildDashboardSearchBar(),
+              const SizedBox(height: 24),
+              if (_hasSearchQuery && projects.isEmpty && sessions.isEmpty)
+                _buildHomeSearchEmptyState()
+              else ...[
                 _buildRecentSessionsHeader(),
-                _buildRecentSessionsContent(
-                  context,
-                  sessions,
-                  visibleSessions,
-                  brightness,
-                ),
-              ] else if (_hasSearchQuery) ...[
-                const SizedBox(height: AppSpacing.section),
-                _buildHomeSearchEmptyState(),
-              ] else ...[
-                const SizedBox(height: AppSpacing.section),
-                _buildRecentSessionsHeader(),
-                _buildRecentSessionsContent(
-                  context,
-                  sessions,
-                  visibleSessions,
-                  brightness,
-                ),
-              ],
-              if (projects.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.section),
-                _HomeProjectsPanel(
-                  projects: [...visibleProjects]
-                    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)),
-                  brightness: brightness,
-                  onOpenProject: (project) =>
-                      _openProjectFromHome(context, project),
-                  onCreateSessionForProject: _newSessionForProject,
-                  onOpenProjects: projects.length > 4 ? _openProjects : null,
-                ),
+                _buildRecentSessionsContent(context, sessions,
+                    sessions.take(_visibleRecentCount).toList(), brightness),
+                if (projects.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  _HomeProjectsPanel(
+                      key: const Key('home-history-projects'),
+                      projects: (projects.take(4).toList()
+                        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt))),
+                      brightness: brightness,
+                      onOpenProject: (project) =>
+                          _openProjectFromHome(context, project),
+                      onCreateSessionForProject: _newSessionForProject,
+                      onOpenProjects:
+                          projects.length > 4 ? _openProjects : null),
+                ],
               ],
             ],
-          ),
-        if (_isRefreshing)
-          const Positioned(
+          ]),
+      if (_isRefreshing)
+        const Positioned(
             top: 0,
             left: 0,
             right: 0,
             child: IgnorePointer(
-              child: LinearProgressIndicator(
-                minHeight: _progressMinHeight,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildDesktopDashboardState({
-    required bool useWideRail,
-    required Brightness brightness,
-    required List<ProjectSummary> projects,
-    required List<SessionSummary> sessions,
-  }) {
-    final pinnedSession = _pinnedSession(sessions);
-    final inboxSessions =
-        sessions.where((session) => session.id != pinnedSession?.id).toList();
-    final approvalCount = sessions
-        .where((session) => session.status == SessionStatus.awaitingApproval)
-        .length;
-    final runningCount = sessions
-        .where((session) => session.status == SessionStatus.running)
-        .length;
-    final desktopHomeRailCollapsed =
-        appSettingsController.settings.desktopHomeRailCollapsed;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.screenX,
-        AppSpacing.screenTop,
-        AppSpacing.screenX,
-        AppSpacing.screenBottom,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: AppSpacing.section),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _HomeDesktopInboxHeader(
-                    onReload: _reloadHomeData,
-                    statusRailCollapsed: desktopHomeRailCollapsed,
-                    canToggleStatusRail: useWideRail,
-                    onToggleStatusRail: _toggleDesktopHomeRailCollapsed,
-                    approvalCount: approvalCount,
-                    runningCount: runningCount,
-                    searchBar: _buildDashboardSearchBar(),
-                  ),
-                  const SizedBox(height: AppSpacing.compact),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(
-                        0,
-                        AppSpacing.micro,
-                        0,
-                        AppSpacing.block,
-                      ),
-                      child: _HomeDesktopInbox(
-                        pinnedSession: pinnedSession,
-                        projects: projects,
-                        sessions: sessions,
-                        visibleSessions: inboxSessions,
-                        hasSearchQuery: _hasSearchQuery,
-                        projectsError: _projectsError,
-                        recentSessionsError: _recentSessionsError,
-                        brightness: brightness,
-                        onOpenSession: _openSession,
-                        onCreateSessionForProject: _newSessionForProject,
-                        onRetry: _reloadHomeData,
-                        onOpenSettings: _openSettings,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (useWideRail && !desktopHomeRailCollapsed) ...[
-            const SizedBox(width: AppSpacing.card),
-            SizedBox(
-              width: _homeDesktopRailWidth,
-              child: _HomeDesktopRail(
-                brightness: brightness,
-                approvalCount: approvalCount,
-                projectsCount: projects.length,
-                needsAuthorization: _needsAuthorization,
-                isWaitingAuth: _isWaitingAuth,
-                authError: _authError,
-                bridgeUrl: appSettingsController.settings.connectionUrl,
-                runningCount: runningCount,
-                onOpenProjects: _openProjects,
-                onOpenSettings: _openSettings,
-                onCollapse: _toggleDesktopHomeRailCollapsed,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  SessionSummary? _pinnedSession(List<SessionSummary> sessions) {
-    if (sessions.isEmpty) {
-      return null;
-    }
-    int rank(SessionStatus status) {
-      return switch (status) {
-        SessionStatus.awaitingApproval => 0,
-        SessionStatus.running => 1,
-        SessionStatus.waiting => 2,
-        SessionStatus.idle => 3,
-        SessionStatus.interrupted => 4,
-        SessionStatus.failed => 5,
-      };
-    }
-
-    final sorted = [...sessions];
-    sorted.sort((a, b) {
-      final rankCompare = rank(a.status).compareTo(rank(b.status));
-      if (rankCompare != 0) {
-        return rankCompare;
-      }
-      return b.updatedAt.compareTo(a.updatedAt);
-    });
-    return sorted.first;
+                child: LinearProgressIndicator(minHeight: _progressMinHeight))),
+    ]);
   }
 
   String _sessionMetadataLabel(SessionSummary session) {
@@ -1869,6 +1948,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                 borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
                 child: Row(
                   children: [
+                    ProjectAvatar(
+                        name: project.name, iconDataUri: project.iconDataUri),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1977,12 +2059,10 @@ class _ShellHeader extends StatelessWidget {
   const _ShellHeader({
     required this.title,
     required this.subtitle,
-    this.trailing,
   });
 
   final String title;
   final String subtitle;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -2013,10 +2093,6 @@ class _ShellHeader extends StatelessWidget {
               ],
             ),
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: AppSpacing.tileY),
-            trailing!,
-          ],
         ],
       ),
     );
@@ -2025,7 +2101,6 @@ class _ShellHeader extends StatelessWidget {
 
 class _CircleActionButton extends StatelessWidget {
   const _CircleActionButton({
-    super.key,
     required this.icon,
     required this.onPressed,
     this.filled = false,
@@ -2357,383 +2432,6 @@ class _CommandCard extends StatelessWidget {
   }
 }
 
-class _ActionCardSkeleton extends StatelessWidget {
-  const _ActionCardSkeleton({required this.accentColor});
-
-  final Color accentColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 100,
-      child: AppSkeletonCard(
-        padding: const EdgeInsets.all(AppSpacing.tileX),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                color: accentColor.withValues(alpha: 0.28),
-                borderRadius: BorderRadius.circular(AppSpacing.micro),
-              ),
-            ),
-            const Spacer(),
-            const AppSkeletonBlock(width: 88, height: 12),
-            const SizedBox(height: AppSpacing.micro),
-            const AppSkeletonBlock(height: 10),
-            const SizedBox(height: AppSpacing.textStack),
-            const AppSkeletonBlock(width: 112, height: 10),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeDesktopInboxHeader extends StatelessWidget {
-  const _HomeDesktopInboxHeader({
-    required this.onReload,
-    required this.statusRailCollapsed,
-    required this.canToggleStatusRail,
-    required this.onToggleStatusRail,
-    required this.approvalCount,
-    required this.runningCount,
-    required this.searchBar,
-  });
-
-  final VoidCallback onReload;
-  final bool statusRailCollapsed;
-  final bool canToggleStatusRail;
-  final VoidCallback onToggleStatusRail;
-  final int approvalCount;
-  final int runningCount;
-  final Widget searchBar;
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        0,
-        AppSpacing.block,
-        0,
-        AppSpacing.micro,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Return to the sessions that still need judgment.',
-                      style:
-                          Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                height: 1.05,
-                                letterSpacing: -0.6,
-                              ),
-                    ),
-                    const SizedBox(height: AppSpacing.compact),
-                    Text(
-                      approvalCount > 0
-                          ? '$approvalCount approvals are waiting. $runningCount sessions are still moving.'
-                          : '$runningCount sessions are still moving. Resume one and keep the thread intact.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.mutedFor(brightness),
-                            height: 1.45,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-              _CircleActionButton(
-                icon: Icons.refresh_rounded,
-                onPressed: onReload,
-              ),
-              const SizedBox(width: AppSpacing.compact),
-              _HomeDesktopHeaderMoreButton(
-                statusRailCollapsed: statusRailCollapsed,
-                canToggleStatusRail: canToggleStatusRail,
-                onToggleStatusRail: onToggleStatusRail,
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.card),
-          searchBar,
-        ],
-      ),
-    );
-  }
-}
-
-class _HomeDesktopHeaderMoreButton extends StatelessWidget {
-  const _HomeDesktopHeaderMoreButton({
-    required this.statusRailCollapsed,
-    required this.canToggleStatusRail,
-    required this.onToggleStatusRail,
-  });
-
-  final bool statusRailCollapsed;
-  final bool canToggleStatusRail;
-  final VoidCallback onToggleStatusRail;
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    final controller = MenuController();
-    return MenuAnchor(
-      controller: controller,
-      crossAxisUnconstrained: false,
-      alignmentOffset: const Offset(-8, 10),
-      style: MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(
-          AppColors.surfaceFor(brightness),
-        ),
-        side: const WidgetStatePropertyAll(BorderSide.none),
-        elevation: const WidgetStatePropertyAll(0),
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-          ),
-        ),
-        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-      ),
-      menuChildren: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.compact,
-            vertical: AppSpacing.compact,
-          ),
-          child: SizedBox(
-            width: 172,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (canToggleStatusRail)
-                  _HomeHeaderActionTile(
-                    key: const Key('home-header-toggle-rail-button'),
-                    label: statusRailCollapsed ? 'Show status' : 'Hide status',
-                    icon: statusRailCollapsed
-                        ? Icons.info_outline_rounded
-                        : Icons.remove_circle_outline_rounded,
-                    onTap: () {
-                      controller.close();
-                      onToggleStatusRail();
-                    },
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ],
-      builder: (context, controller, child) => _CircleActionButton(
-        key: const Key('home-header-more-button'),
-        icon: Icons.more_horiz_rounded,
-        onPressed: () {
-          if (controller.isOpen) {
-            controller.close();
-          } else {
-            controller.open();
-          }
-        },
-      ),
-    );
-  }
-}
-
-class _HomeHeaderActionTile extends StatelessWidget {
-  const _HomeHeaderActionTile({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.compact,
-            vertical: AppSpacing.compact,
-          ),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: AppColors.mutedFor(brightness),
-              ),
-              const SizedBox(width: AppSpacing.compact),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeDesktopInbox extends StatelessWidget {
-  const _HomeDesktopInbox({
-    required this.pinnedSession,
-    required this.projects,
-    required this.sessions,
-    required this.visibleSessions,
-    required this.hasSearchQuery,
-    required this.projectsError,
-    required this.recentSessionsError,
-    required this.brightness,
-    required this.onOpenSession,
-    required this.onCreateSessionForProject,
-    required this.onRetry,
-    required this.onOpenSettings,
-  });
-
-  final SessionSummary? pinnedSession;
-  final List<ProjectSummary> projects;
-  final List<SessionSummary> sessions;
-  final List<SessionSummary> visibleSessions;
-  final bool hasSearchQuery;
-  final Object? projectsError;
-  final Object? recentSessionsError;
-  final Brightness brightness;
-  final ValueChanged<SessionSummary> onOpenSession;
-  final ValueChanged<ProjectSummary> onCreateSessionForProject;
-  final Future<void> Function() onRetry;
-  final Future<void> Function() onOpenSettings;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final approvalCount = sessions
-        .where((session) => session.status == SessionStatus.awaitingApproval)
-        .length;
-    final runningCount = sessions
-        .where((session) => session.status == SessionStatus.running)
-        .length;
-    final idleCount = sessions
-        .where((session) => session.status == SessionStatus.idle)
-        .length;
-    final spotlightSession = pinnedSession ??
-        (visibleSessions.isNotEmpty ? visibleSessions.first : null);
-    final queueSessions = visibleSessions
-        .where((session) => session.id != spotlightSession?.id)
-        .take(5)
-        .toList();
-    final recentProjects = [...projects]
-      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-
-    if (projectsError != null && sessions.isEmpty) {
-      return _ErrorPanel(
-        message: l10n.loadProjectsFailed('$projectsError'),
-        onRetry: onRetry,
-        onOpenSettings: onOpenSettings,
-      );
-    }
-    if (recentSessionsError != null && sessions.isEmpty) {
-      return _ErrorPanel(
-        message: l10n.loadSessionsFailed('$recentSessionsError'),
-        onRetry: onRetry,
-        onOpenSettings: onOpenSettings,
-      );
-    }
-    if (sessions.isEmpty && projects.isEmpty) {
-      return _EmptyPanel(
-        title: hasSearchQuery ? l10n.noSearchResultsTitle : l10n.noSessionsYet,
-        body: hasSearchQuery ? l10n.noSearchResultsBody : l10n.noSessionsHelp,
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _HomeDesktopHero(
-          projectCount: projects.length,
-          sessionCount: sessions.length,
-          runningCount: runningCount,
-          approvalCount: approvalCount,
-          idleCount: idleCount,
-        ),
-        const SizedBox(height: AppSpacing.section),
-        if (spotlightSession != null)
-          _HomeFeaturedSessionCard(
-            session: spotlightSession,
-            brightness: brightness,
-            onOpenSession: onOpenSession,
-          ),
-        const SizedBox(height: AppSpacing.section),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final stacked = constraints.maxWidth < 1080;
-            final queuePanel = _HomeQueuePanel(
-              sessions: queueSessions,
-              brightness: brightness,
-              onOpenSession: onOpenSession,
-            );
-            final projectsPanel = _HomeProjectsPanel(
-              projects: recentProjects.take(4).toList(),
-              brightness: brightness,
-              onOpenProject: (project) =>
-                  _openProjectFromHome(context, project),
-              onCreateSessionForProject: onCreateSessionForProject,
-              onOpenProjects: recentProjects.length > 4
-                  ? () => _openProjectsFromHome(context)
-                  : null,
-            );
-
-            if (stacked) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  queuePanel,
-                  const SizedBox(height: AppSpacing.card),
-                  projectsPanel,
-                ],
-              );
-            }
-
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: queuePanel),
-                const SizedBox(width: AppSpacing.card),
-                Expanded(child: projectsPanel),
-              ],
-            );
-          },
-        ),
-      ],
-    );
-  }
-}
-
 void _openProjectFromHome(BuildContext context, ProjectSummary project) {
   Navigator.of(context).pushNamed(
     AppRoutes.project(project.id),
@@ -2741,97 +2439,40 @@ void _openProjectFromHome(BuildContext context, ProjectSummary project) {
   );
 }
 
-void _openProjectsFromHome(BuildContext context) {
-  Navigator.of(context).pushNamed(AppRoutes.projects);
+// Dashboard surfaces stay local to this screen.
+abstract final class _HomeStyle {
+  static Color canvas(Brightness brightness) => brightness == Brightness.dark
+      ? const Color(0xFF111418)
+      : const Color(0xFFFAFAF8);
+  static Color surface(Brightness brightness) =>
+      brightness == Brightness.dark ? const Color(0xFF1A212B) : Colors.white;
+  static Color border(Brightness brightness) =>
+      AppColors.outlineFor(brightness).withValues(alpha: 0.55);
 }
 
-class _HomeDesktopHero extends StatelessWidget {
-  const _HomeDesktopHero({
-    required this.projectCount,
-    required this.sessionCount,
-    required this.runningCount,
-    required this.approvalCount,
-    required this.idleCount,
-  });
-
-  final int projectCount;
-  final int sessionCount;
-  final int runningCount;
-  final int approvalCount;
-  final int idleCount;
+class _HomeSurface extends StatelessWidget {
+  const _HomeSurface(
+      {required this.child,
+      this.onTap,
+      this.padding = const EdgeInsets.all(20)});
+  final Widget child;
+  final VoidCallback? onTap;
+  final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.block,
-        vertical: AppSpacing.tileX,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.panelFor(brightness).withValues(
-          alpha: brightness == Brightness.dark ? 0.58 : 0.74,
-        ),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-        border: Border.all(color: AppColors.outlineFor(brightness)),
-      ),
-      child: Wrap(
-        spacing: AppSpacing.stack,
-        runSpacing: AppSpacing.compact,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          _HomeInlineStat(
-            label: context.l10n.projectsTitle,
-            value: '$projectCount',
-          ),
-          _HomeInlineStat(
-            label: context.l10n.threads,
-            value: '$sessionCount',
-          ),
-          _HomeInlineStat(
-            label: context.l10n.active,
-            value: '$runningCount',
-          ),
-          _HomeInlineStat(
-            label: context.l10n.review,
-            value: '$approvalCount',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HomeInlineStat extends StatelessWidget {
-  const _HomeInlineStat({
-    required this.label,
-    required this.value,
-  });
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          value,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-        ),
-        const SizedBox(width: AppSpacing.textStack),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.mutedFor(brightness),
-                fontWeight: FontWeight.w600,
-              ),
-        ),
-      ],
+    final radius = BorderRadius.circular(18);
+    return Material(
+      color: _HomeStyle.surface(brightness),
+      shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(color: _HomeStyle.border(brightness))),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+          onTap: onTap,
+          borderRadius: radius,
+          child: Padding(padding: padding, child: child)),
     );
   }
 }
@@ -2861,6 +2502,8 @@ class _HomeProjectRow extends StatelessWidget {
         ),
         child: Row(
           children: [
+            ProjectAvatar(name: project.name, iconDataUri: project.iconDataUri),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2895,7 +2538,8 @@ class _HomeProjectRow extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.compact,
                 ),
-                backgroundColor: AppColors.panelDeepFor(brightness),
+                backgroundColor:
+                    AppColors.accentBlueFor(brightness).withValues(alpha: 0.07),
                 foregroundColor: AppColors.accentBlueFor(brightness),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(
@@ -2943,197 +2587,7 @@ class _HomeProjectDivider extends StatelessWidget {
       child: Divider(
         height: 1,
         thickness: AppSpacing.hairline,
-        color: AppColors.outlineFor(brightness),
-      ),
-    );
-  }
-}
-
-class _HomeFeaturedSessionCard extends StatelessWidget {
-  const _HomeFeaturedSessionCard({
-    required this.session,
-    required this.brightness,
-    required this.onOpenSession,
-  });
-
-  final SessionSummary? session;
-  final Brightness brightness;
-  final ValueChanged<SessionSummary> onOpenSession;
-
-  @override
-  Widget build(BuildContext context) {
-    if (session == null) {
-      return const SizedBox.shrink();
-    }
-
-    return InkWell(
-      key: const Key('home-featured-session-card'),
-      onTap: () => onOpenSession(session!),
-      borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.section,
-          AppSpacing.block,
-          AppSpacing.section,
-          AppSpacing.block,
-        ),
-        decoration: BoxDecoration(
-          color: AppColors.panelFor(brightness),
-          borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-          border: Border.all(color: AppColors.outlineFor(brightness)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              context.l10n.inFocus,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: AppColors.mutedFor(brightness),
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-            const SizedBox(height: AppSpacing.compact),
-            Text(
-              session!.title,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    height: 1.08,
-                    letterSpacing: -0.5,
-                  ),
-            ),
-            const SizedBox(height: AppSpacing.compact),
-            Text(
-              _homeSessionMetadataLabel(context, session!),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.mutedSoftFor(brightness),
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-            if (session!.lastMessagePreview?.trim().isNotEmpty == true) ...[
-              const SizedBox(height: AppSpacing.compact),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 640),
-                child: Text(
-                  session!.lastMessagePreview!,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.mutedFor(brightness),
-                        height: 1.5,
-                      ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeQueuePanel extends StatelessWidget {
-  const _HomeQueuePanel({
-    required this.sessions,
-    required this.brightness,
-    required this.onOpenSession,
-  });
-
-  final List<SessionSummary> sessions;
-  final Brightness brightness;
-  final ValueChanged<SessionSummary> onOpenSession;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.block),
-      decoration: BoxDecoration(
-        color: AppColors.panelFor(brightness),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-        border: Border.all(color: AppColors.outlineFor(brightness)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SectionHeader(
-            title: context.l10n.upNext,
-            trailing: _DesktopSectionMeta(
-              label: context.l10n.threadsCount(sessions.length),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.compact),
-          if (sessions.isEmpty)
-            Text(
-              context.l10n.nothingUrgentWaiting,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.mutedFor(brightness),
-                  ),
-            )
-          else
-            ...sessions.map(
-              (session) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.compact),
-                child: _HomeQueueItem(
-                  session: session,
-                  brightness: brightness,
-                  onTap: () => onOpenSession(session),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HomeQueueItem extends StatelessWidget {
-  const _HomeQueueItem({
-    required this.session,
-    required this.brightness,
-    required this.onTap,
-  });
-
-  final SessionSummary session;
-  final Brightness brightness;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppSpacing.radiusCapsule),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(AppSpacing.tileX),
-        decoration: BoxDecoration(
-          color: AppColors.boardFor(brightness).withValues(
-            alpha: brightness == Brightness.dark ? 0.44 : 0.74,
-          ),
-          borderRadius: BorderRadius.circular(AppSpacing.radiusCapsule),
-          border: Border.all(color: AppColors.outlineFor(brightness)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              session.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    height: 1.25,
-                  ),
-            ),
-            const SizedBox(height: AppSpacing.textStack + 2),
-            Text(
-              _homeSessionMetadataLabel(context, session),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.mutedFor(brightness),
-                  ),
-            ),
-          ],
-        ),
+        color: _HomeStyle.border(brightness),
       ),
     );
   }
@@ -3141,6 +2595,7 @@ class _HomeQueueItem extends StatelessWidget {
 
 class _HomeProjectsPanel extends StatelessWidget {
   const _HomeProjectsPanel({
+    super.key,
     required this.projects,
     required this.brightness,
     required this.onOpenProject,
@@ -3156,13 +2611,7 @@ class _HomeProjectsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.block),
-      decoration: BoxDecoration(
-        color: AppColors.panelFor(brightness),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-        border: Border.all(color: AppColors.outlineFor(brightness)),
-      ),
+    return _HomeSurface(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -3172,7 +2621,7 @@ class _HomeProjectsPanel extends StatelessWidget {
               label: context.l10n.visibleProjectsCount(projects.length),
             ),
           ),
-          const SizedBox(height: AppSpacing.compact),
+          const SizedBox(height: AppSpacing.block),
           for (final indexedProject in projects.indexed) ...[
             _HomeProjectRow(
               project: indexedProject.$2,
@@ -3206,14 +2655,6 @@ class _HomeProjectsPanel extends StatelessWidget {
   }
 }
 
-String _homeSessionMetadataLabel(BuildContext context, SessionSummary session) {
-  final state = context.findAncestorStateOfType<_HomeScreenState>();
-  if (state == null) {
-    return '';
-  }
-  return state._sessionMetadataLabel(session);
-}
-
 class _DesktopSectionMeta extends StatelessWidget {
   const _DesktopSectionMeta({required this.label});
 
@@ -3228,246 +2669,6 @@ class _DesktopSectionMeta extends StatelessWidget {
             color: AppColors.mutedFor(brightness),
             fontWeight: FontWeight.w600,
           ),
-    );
-  }
-}
-
-class _HomeDesktopRail extends StatelessWidget {
-  const _HomeDesktopRail({
-    required this.brightness,
-    required this.approvalCount,
-    required this.projectsCount,
-    required this.needsAuthorization,
-    required this.isWaitingAuth,
-    required this.authError,
-    required this.bridgeUrl,
-    required this.runningCount,
-    required this.onOpenProjects,
-    required this.onOpenSettings,
-    required this.onCollapse,
-  });
-
-  final Brightness brightness;
-  final int approvalCount;
-  final int projectsCount;
-  final bool needsAuthorization;
-  final bool isWaitingAuth;
-  final Object? authError;
-  final String bridgeUrl;
-  final int runningCount;
-  final VoidCallback onOpenProjects;
-  final VoidCallback onOpenSettings;
-  final VoidCallback onCollapse;
-
-  @override
-  Widget build(BuildContext context) {
-    final bridgeSummary =
-        switch ((needsAuthorization, isWaitingAuth, authError)) {
-      (true, _, _) => context.l10n.authorizationNeeded,
-      (_, true, _) => context.l10n.waitingApprovalTitle,
-      (_, _, final Object error) => '$error',
-      _ => context.l10n.connectedBridge(bridgeUrl),
-    };
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.compact,
-        AppSpacing.block,
-        0,
-        AppSpacing.block,
-      ),
-      decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(color: AppColors.outlineFor(brightness)),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  context.l10n.status,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-              ),
-              IconButton(
-                key: const Key('home-rail-collapse-button'),
-                tooltip: context.l10n.collapseStatus,
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  foregroundColor: AppColors.textSoftFor(brightness),
-                  hoverColor:
-                      AppColors.textFor(brightness).withValues(alpha: 0.06),
-                  focusColor:
-                      AppColors.textFor(brightness).withValues(alpha: 0.08),
-                ),
-                onPressed: onCollapse,
-                icon: const Icon(Icons.chevron_right_rounded),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.stack),
-          _HomeRailCard(
-            title: context.l10n.pendingApprovals,
-            body: approvalCount > 0
-                ? context.l10n.waitingActionsNeedReview(approvalCount)
-                : context.l10n.noApprovalsWaiting,
-            warning: true,
-          ),
-          const SizedBox(height: AppSpacing.compact),
-          _HomeRailCard(
-            title: context.l10n.bridgeStatus,
-            body: bridgeSummary,
-          ),
-          const SizedBox(height: AppSpacing.compact),
-          _HomeRailCard(
-            title: context.l10n.voiceDevice,
-            body: runningCount > 0
-                ? context.l10n.activeSessionsMicrophoneReady(runningCount)
-                : context.l10n.microphoneReadySystemSpeechAvailable,
-          ),
-          const SizedBox(height: AppSpacing.compact),
-          _HomeRailCard(
-            title: context.l10n.projectsOverview,
-            body: context.l10n.activeProjectsCount(projectsCount),
-          ),
-          const SizedBox(height: AppSpacing.compact),
-          _HomeRailCard(
-            title: context.l10n.quickActions,
-            body: context.l10n.quickActionsBody,
-            actions: [
-              TextButton(
-                onPressed: onOpenProjects,
-                child: Text(context.l10n.projectsTitle),
-              ),
-              TextButton(
-                onPressed: onOpenSettings,
-                child: Text(context.l10n.settingsTitle),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HomeRailCard extends StatelessWidget {
-  const _HomeRailCard({
-    required this.title,
-    required this.body,
-    this.warning = false,
-    this.actions,
-  });
-
-  final String title;
-  final String body;
-  final bool warning;
-  final List<Widget>? actions;
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.tileX),
-      decoration: BoxDecoration(
-        color: warning
-            ? AppColors.warningSurfaceFor(brightness)
-            : AppColors.panelFor(brightness).withValues(
-                alpha: brightness == Brightness.dark ? 0.66 : 0.88,
-              ),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
-        border: Border.all(
-          color: warning
-              ? AppColors.warningBorderFor(brightness)
-              : AppColors.outlineFor(brightness),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-          ),
-          const SizedBox(height: AppSpacing.textStack),
-          Text(
-            body,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.mutedSoftFor(brightness),
-                  height: 1.4,
-                ),
-          ),
-          if (actions != null && actions!.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.compact),
-            Wrap(
-              spacing: AppSpacing.compact,
-              runSpacing: AppSpacing.compact,
-              children: actions!,
-            ),
-          ],
-          const SizedBox(height: AppSpacing.micro),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionCard extends StatelessWidget {
-  const _ActionCard({
-    required this.icon,
-    required this.accentColor,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final Color accentColor;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 100,
-      child: AppCard(
-        onTap: onTap,
-        padding: const EdgeInsets.all(AppSpacing.tileX),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 18, color: accentColor),
-            const Spacer(),
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            const SizedBox(height: AppSpacing.micro),
-            Text(
-              subtitle,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.mutedFor(Theme.of(context).brightness),
-                    height: 1.35,
-                  ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -3489,184 +2690,13 @@ class _SectionHeader extends StatelessWidget {
           child: Text(
             title,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontSize: 12,
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
                 ),
           ),
         ),
         if (trailing != null) trailing!,
       ],
-    );
-  }
-}
-
-class _DesktopHomeLoadingSkeleton extends StatelessWidget {
-  const _DesktopHomeLoadingSkeleton({
-    super.key,
-    required this.useWideRail,
-    required this.brightness,
-  });
-
-  final bool useWideRail;
-  final Brightness brightness;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.screenX,
-        AppSpacing.screenTop,
-        AppSpacing.screenX,
-        AppSpacing.screenBottom,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: AppSpacing.section),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: const [
-                  _HomeDesktopInboxHeaderSkeleton(),
-                  SizedBox(height: AppSpacing.compact),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.fromLTRB(
-                        0,
-                        AppSpacing.micro,
-                        0,
-                        AppSpacing.block,
-                      ),
-                      child: _RecentSessionsSkeleton(
-                        key: Key('home-dashboard-skeleton'),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (useWideRail) ...[
-            const SizedBox(width: AppSpacing.card),
-            SizedBox(
-              width: _homeDesktopRailWidth,
-              child: _HomeDesktopRailSkeleton(
-                key: const Key('home-desktop-rail-skeleton'),
-                brightness: brightness,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _HomeDesktopInboxHeaderSkeleton extends StatelessWidget {
-  const _HomeDesktopInboxHeaderSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return AppSkeletonCard(
-      padding: AppSpacing.tilePadding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Row(
-            children: [
-              AppSkeletonBlock(width: 168, height: 18),
-              Spacer(),
-              AppSkeletonBlock(width: 44, height: 44),
-            ],
-          ),
-          SizedBox(height: AppSpacing.stack),
-          Row(
-            children: [
-              Expanded(child: AppSkeletonBlock(height: 34)),
-              SizedBox(width: AppSpacing.tileY),
-              AppSkeletonBlock(width: 104, height: 34),
-              SizedBox(width: AppSpacing.tileY),
-              AppSkeletonBlock(width: 104, height: 34),
-            ],
-          ),
-          SizedBox(height: AppSpacing.stack),
-          _SearchBarSkeleton(),
-        ],
-      ),
-    );
-  }
-}
-
-class _HomeDesktopRailSkeleton extends StatelessWidget {
-  const _HomeDesktopRailSkeleton({super.key, required this.brightness});
-
-  final Brightness brightness;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _DesktopRailCardSkeleton(
-          accentColor: AppColors.accentBlueFor(brightness),
-        ),
-        const SizedBox(height: AppSpacing.compact),
-        _DesktopRailCardSkeleton(
-          accentColor: AppColors.projectsAccentFor(brightness),
-        ),
-        const SizedBox(height: AppSpacing.compact),
-        const Expanded(
-          child: AppSkeletonCard(
-            padding: AppSpacing.tilePadding,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AppSkeletonBlock(width: 132, height: 14),
-                SizedBox(height: AppSpacing.stack),
-                AppSkeletonBlock(height: 10),
-                SizedBox(height: AppSpacing.textStack),
-                AppSkeletonBlock(width: 188, height: 10),
-                SizedBox(height: AppSpacing.stack),
-                AppSkeletonBlock(height: 34),
-                Spacer(),
-                AppSkeletonBlock(height: 34),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _DesktopRailCardSkeleton extends StatelessWidget {
-  const _DesktopRailCardSkeleton({required this.accentColor});
-
-  final Color accentColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppSkeletonCard(
-      padding: AppSpacing.tilePadding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 28,
-            height: 4,
-            decoration: BoxDecoration(
-              color: accentColor,
-              borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.stack),
-          const AppSkeletonBlock(width: 132, height: 14),
-          const SizedBox(height: AppSpacing.textStack),
-          const AppSkeletonBlock(height: 10),
-        ],
-      ),
     );
   }
 }
@@ -3756,19 +2786,18 @@ class _RecentSessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    return AppCard(
+    return _HomeSurface(
       onTap: onTap,
       padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.tileX,
-        vertical: AppSpacing.tileY,
+        horizontal: 16,
+        vertical: 16,
       ),
-      borderRadius: BorderRadius.circular(AppSpacing.radiusTile),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
-            width: 6,
-            height: 24,
+            width: 4,
+            height: 32,
             decoration: BoxDecoration(
               color: accentColor,
               borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
@@ -3784,7 +2813,7 @@ class _RecentSessionCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontSize: 11,
+                        fontSize: 14,
                         fontWeight: FontWeight.w700,
                       ),
                 ),
@@ -3795,7 +2824,7 @@ class _RecentSessionCard extends StatelessWidget {
                   ),
                 ],
                 if (preview?.trim().isNotEmpty == true) ...[
-                  const SizedBox(height: AppSpacing.textStack),
+                  const SizedBox(height: 6),
                   Text(
                     preview!,
                     maxLines: 2,
@@ -3806,14 +2835,14 @@ class _RecentSessionCard extends StatelessWidget {
                         ),
                   ),
                 ],
-                const SizedBox(height: AppSpacing.textStack),
+                const SizedBox(height: 6),
                 Text(
                   metadata,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: AppColors.mutedSoftFor(brightness),
-                        fontSize: 9,
+                        fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),
                 ),

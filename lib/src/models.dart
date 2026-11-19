@@ -607,6 +607,7 @@ class DomainSession {
       required this.agentId,
       required this.status,
       required this.version,
+      this.approvalMode = ApprovalMode.smart,
       this.activeTurnId,
       this.pendingApprovalId,
       required this.unreadCount,
@@ -615,6 +616,7 @@ class DomainSession {
       required this.updatedAt});
   final String id, projectId, title, agentId;
   final DomainSessionStatus status;
+  final ApprovalMode approvalMode;
   final int version, unreadCount;
   final String? activeTurnId, pendingApprovalId, lastMessagePreview;
   final DateTime createdAt, updatedAt;
@@ -625,6 +627,8 @@ class DomainSession {
         agentId: json['agent'] as String,
         status: parseDomainSessionStatus(json['status'] as String? ?? 'idle'),
         version: (json['version'] as num?)?.toInt() ?? 0,
+        approvalMode: ApprovalMode.fromJson(
+            (json['config'] as Map<String, dynamic>?)?['approval_mode']),
         activeTurnId: json['active_turn_id'] as String?,
         pendingApprovalId: json['pending_approval_id'] as String?,
         unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
@@ -677,6 +681,15 @@ const selectableReasoningEfforts = [
   ReasoningEffort.medium,
   ReasoningEffort.high,
 ];
+
+enum ApprovalMode {
+  manual,
+  smart,
+  auto;
+
+  static ApprovalMode fromJson(Object? value) =>
+      values.where((mode) => mode.name == value).firstOrNull ?? smart;
+}
 
 enum ApprovalChoice {
   accept,
@@ -984,8 +997,10 @@ class ProjectSummary {
     this.lastSessionPreview,
     this.gitBranch,
     this.gitStatus,
+    this.iconDataUri,
   });
 
+  final String? iconDataUri;
   final String id;
   final String name;
   final String rootPath;
@@ -1006,8 +1021,11 @@ class ProjectSummary {
     bool clearGitBranch = false,
     ProjectGitStatus? gitStatus,
     bool clearGitStatus = false,
+    String? iconDataUri,
+    bool clearIcon = false,
   }) {
     return ProjectSummary(
+      iconDataUri: clearIcon ? null : iconDataUri ?? this.iconDataUri,
       id: id ?? this.id,
       name: name ?? this.name,
       rootPath: rootPath ?? this.rootPath,
@@ -1021,6 +1039,7 @@ class ProjectSummary {
 
   factory ProjectSummary.fromJson(Map<String, dynamic> json) {
     return ProjectSummary(
+      iconDataUri: json['icon_data_uri'] as String?,
       id: json['id'] as String,
       name: json['name'] as String,
       rootPath: json['root_path'] as String,
@@ -1130,6 +1149,7 @@ class SessionSummary {
     required this.title,
     required this.agentId,
     required this.briefReplyMode,
+    this.approvalMode = ApprovalMode.smart,
     required this.status,
     required this.updatedAt,
     required this.unreadCount,
@@ -1150,6 +1170,7 @@ class SessionSummary {
   final String title;
   final String agentId;
   final bool briefReplyMode;
+  final ApprovalMode approvalMode;
   final SessionStatus status;
   final DateTime updatedAt;
   final int unreadCount;
@@ -1170,6 +1191,7 @@ class SessionSummary {
     String? title,
     String? agentId,
     bool? briefReplyMode,
+    ApprovalMode? approvalMode,
     SessionStatus? status,
     DateTime? updatedAt,
     int? unreadCount,
@@ -1197,6 +1219,7 @@ class SessionSummary {
       title: title ?? this.title,
       agentId: agentId ?? this.agentId,
       briefReplyMode: briefReplyMode ?? this.briefReplyMode,
+      approvalMode: approvalMode ?? this.approvalMode,
       status: status ?? this.status,
       updatedAt: updatedAt ?? this.updatedAt,
       unreadCount: unreadCount ?? this.unreadCount,
@@ -1227,6 +1250,7 @@ class SessionSummary {
       title: json['title'] as String,
       agentId: json['agent'] as String,
       briefReplyMode: json['brief_reply_mode'] as bool? ?? false,
+      approvalMode: ApprovalMode.fromJson(json['approval_mode']),
       status: parseSessionStatus(json['status'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
       unreadCount: json['unread_count'] as int,

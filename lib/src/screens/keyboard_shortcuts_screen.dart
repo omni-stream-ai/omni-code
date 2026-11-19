@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/app_snack_bar.dart';
 import '../l10n/app_locale.dart';
 import '../settings/app_settings.dart';
 import '../shortcuts/desktop_shortcut.dart';
@@ -33,7 +34,9 @@ class _KeyboardShortcutsScreenState extends State<KeyboardShortcutsScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.settingsSaveFailed('$error'))),
+          AppSnackBar(
+              isError: true,
+              content: Text(context.l10n.settingsSaveFailed('$error'))),
         );
       }
     } finally {
@@ -61,7 +64,8 @@ class _KeyboardShortcutsScreenState extends State<KeyboardShortcutsScreen> {
     for (final other in DesktopShortcutAction.values) {
       if (other != action &&
           resolveDesktopShortcut(bindings, other) == binding) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(AppSnackBar(
+          isError: true,
           content:
               Text(context.l10n.shortcutConflict(other.label(context.l10n))),
         ));

@@ -98,6 +98,54 @@ abstract class AppLocalizations {
     Locale('zh')
   ];
 
+  /// No description provided for @approvalMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Approval mode'**
+  String get approvalMode;
+
+  /// No description provided for @approvalModeManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual approval'**
+  String get approvalModeManual;
+
+  /// No description provided for @approvalModeSmart.
+  ///
+  /// In en, this message translates to:
+  /// **'Smart approval'**
+  String get approvalModeSmart;
+
+  /// No description provided for @approvalModeAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto approve'**
+  String get approvalModeAuto;
+
+  /// No description provided for @approvalModeManualDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask you to approve tool requests.'**
+  String get approvalModeManualDescription;
+
+  /// No description provided for @approvalModeSmartDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Use rules and configured AI review; ask when uncertain.'**
+  String get approvalModeSmartDescription;
+
+  /// No description provided for @approvalModeAutoDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Approve all supported tool requests, including high-risk actions.'**
+  String get approvalModeAutoDescription;
+
+  /// No description provided for @approvalModeSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save approval mode. Please try again.'**
+  String get approvalModeSaveFailed;
+
   /// No description provided for @recentSessionsScope.
   ///
   /// In en, this message translates to:
@@ -146,6 +194,12 @@ abstract class AppLocalizations {
   /// **'Refresh status'**
   String get acceptanceRefreshStatus;
 
+  /// No description provided for @acceptanceRetryRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry acceptance'**
+  String get acceptanceRetryRun;
+
   /// No description provided for @acceptanceErrorDetails.
   ///
   /// In en, this message translates to:
@@ -163,6 +217,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Settings'**
   String get settingsTitle;
+
+  /// No description provided for @assistantSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant'**
+  String get assistantSection;
+
+  /// No description provided for @automaticTaskAnalysis.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatically analyze tasks'**
+  String get automaticTaskAnalysis;
+
+  /// No description provided for @automaticTaskAnalysisHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Identify tasks from conversations and update their progress automatically. When off, show linked conversations and hide task lists.'**
+  String get automaticTaskAnalysisHelp;
+
+  /// No description provided for @taskAnalysisPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Task analysis prompt'**
+  String get taskAnalysisPrompt;
+
+  /// No description provided for @taskAnalysisPromptHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Only development tasks are identified by default. Customize which requests count as tasks.'**
+  String get taskAnalysisPromptHelp;
+
+  /// No description provided for @taskAnalysisPromptEditorHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'This prompt is saved on the current Bridge and shared by all clients. The next analysis will reassess existing tasks using these rules. Save an empty prompt to restore the default.'**
+  String get taskAnalysisPromptEditorHelp;
+
+  /// No description provided for @taskAnalysisPromptReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore default'**
+  String get taskAnalysisPromptReset;
+
+  /// No description provided for @taskAnalysisPromptLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading task analysis prompt…'**
+  String get taskAnalysisPromptLoading;
 
   /// No description provided for @save.
   ///
@@ -1057,6 +1159,252 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Run the Bridge service on your computer, then authorize this device to open projects and continue sessions.'**
   String get connectWelcomeBody;
+
+  /// No description provided for @connectDesktopWelcomeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Install Bridge on this computer, or connect to a Bridge that is already running.'**
+  String get connectDesktopWelcomeBody;
+
+  /// No description provided for @connectExistingBridgeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to an existing Bridge'**
+  String get connectExistingBridgeTitle;
+
+  /// No description provided for @connectExistingBridgeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the address of a Bridge running on this or another computer, then authorize this device.'**
+  String get connectExistingBridgeBody;
+
+  /// No description provided for @localBridgeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Run Bridge on this computer'**
+  String get localBridgeTitle;
+
+  /// No description provided for @localBridgeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Download, install, start, and connect in one click. Bridge starts automatically when you sign in and keeps running after you close the client.'**
+  String get localBridgeBody;
+
+  /// No description provided for @localBridgeInstallAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Install and enable auto-start'**
+  String get localBridgeInstallAction;
+
+  /// No description provided for @localBridgeChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking this computer…'**
+  String get localBridgeChecking;
+
+  /// No description provided for @localBridgeDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading Bridge…'**
+  String get localBridgeDownloading;
+
+  /// No description provided for @localBridgeInstalling.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying and installing…'**
+  String get localBridgeInstalling;
+
+  /// No description provided for @localBridgeConfiguring.
+  ///
+  /// In en, this message translates to:
+  /// **'Configuring auto-start…'**
+  String get localBridgeConfiguring;
+
+  /// No description provided for @localBridgeStarting.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting Bridge…'**
+  String get localBridgeStarting;
+
+  /// No description provided for @localBridgeAuthorizing.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorizing and connecting…'**
+  String get localBridgeAuthorizing;
+
+  /// No description provided for @localBridgeExistingError.
+  ///
+  /// In en, this message translates to:
+  /// **'A service is already using local port 8787. Use “Connect to an existing Bridge” below to avoid a duplicate installation.'**
+  String get localBridgeExistingError;
+
+  /// No description provided for @localBridgeIncompatibleError.
+  ///
+  /// In en, this message translates to:
+  /// **'This Bridge version is incompatible with the client. Update Bridge to a compatible release, or continue with Agent.'**
+  String get localBridgeIncompatibleError;
+
+  /// No description provided for @localBridgeDownloadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not download a Bridge release for this computer. Check your connection to GitHub and retry.'**
+  String get localBridgeDownloadError;
+
+  /// No description provided for @localBridgeVerifyError.
+  ///
+  /// In en, this message translates to:
+  /// **'The download failed verification or has no checksum and was not run. Retry the download.'**
+  String get localBridgeVerifyError;
+
+  /// No description provided for @localBridgeInstallError.
+  ///
+  /// In en, this message translates to:
+  /// **'Installation did not finish. Check your home directory permissions and system compatibility, then retry.'**
+  String get localBridgeInstallError;
+
+  /// No description provided for @localBridgeStartupError.
+  ///
+  /// In en, this message translates to:
+  /// **'Bridge has not started successfully. Check the logs in .omni-code-bridge in your home directory and startup permissions, then retry.'**
+  String get localBridgeStartupError;
+
+  /// No description provided for @localBridgeAuthError.
+  ///
+  /// In en, this message translates to:
+  /// **'Bridge is installed, but local authorization did not finish. Retry or use “Connect to an existing Bridge”.'**
+  String get localBridgeAuthError;
+
+  /// No description provided for @localBridgeUnsupportedError.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic installation is not supported on this system or processor. Connect to an existing Bridge.'**
+  String get localBridgeUnsupportedError;
+
+  /// No description provided for @localBridgeBusyError.
+  ///
+  /// In en, this message translates to:
+  /// **'Another window is installing Bridge. Wait for it to finish, then retry.'**
+  String get localBridgeBusyError;
+
+  /// No description provided for @bridgeAgentContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue with Agent'**
+  String get bridgeAgentContinue;
+
+  /// No description provided for @bridgeAgentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent-assisted Bridge setup'**
+  String get bridgeAgentTitle;
+
+  /// No description provided for @bridgeAgentIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Use your configured model to analyze the failure and local diagnostics and help finish installation. Repair commands are shown for you to run before they execute.'**
+  String get bridgeAgentIntro;
+
+  /// No description provided for @bridgeAgentConfigureModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure assistant model'**
+  String get bridgeAgentConfigureModel;
+
+  /// No description provided for @bridgeAgentSaveAndContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Save and continue'**
+  String get bridgeAgentSaveAndContinue;
+
+  /// No description provided for @bridgeAgentInvalidUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an HTTP or HTTPS API address without credentials, query parameters, or fragments.'**
+  String get bridgeAgentInvalidUrl;
+
+  /// No description provided for @bridgeAgentChooseModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose assistant model'**
+  String get bridgeAgentChooseModel;
+
+  /// No description provided for @bridgeAgentInitialRequest.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyze the failed installation. Help me install and start the local Bridge, enable startup at sign-in, and connect this desktop client.'**
+  String get bridgeAgentInitialRequest;
+
+  /// No description provided for @bridgeAgentModelRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'No usable model is configured. Enter the API address, credentials, and a specific model. Setup assistance continues after you save.'**
+  String get bridgeAgentModelRequired;
+
+  /// No description provided for @bridgeAgentSaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the model configuration. Check local settings storage permissions and retry.'**
+  String get bridgeAgentSaveError;
+
+  /// No description provided for @bridgeAgentAuthError.
+  ///
+  /// In en, this message translates to:
+  /// **'The model endpoint rejected the request. Check the API key, account permissions, and API format.'**
+  String get bridgeAgentAuthError;
+
+  /// No description provided for @bridgeAgentRateLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'The model endpoint is rate limited. Retry later or choose another model.'**
+  String get bridgeAgentRateLimit;
+
+  /// No description provided for @bridgeAgentTurnLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'This turn reached the automatic step limit. Add more information to continue with the agent.'**
+  String get bridgeAgentTurnLimit;
+
+  /// No description provided for @bridgeAgentRequestError.
+  ///
+  /// In en, this message translates to:
+  /// **'The model request did not finish. Check your connection, API address, model name, and API format, then retry.'**
+  String get bridgeAgentRequestError;
+
+  /// No description provided for @bridgeAgentRunCommand.
+  ///
+  /// In en, this message translates to:
+  /// **'Run this command'**
+  String get bridgeAgentRunCommand;
+
+  /// No description provided for @bridgeAgentDeclineCommand.
+  ///
+  /// In en, this message translates to:
+  /// **'Do not run'**
+  String get bridgeAgentDeclineCommand;
+
+  /// No description provided for @bridgeAgentMessageHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add environment details or tell the agent what to do next…'**
+  String get bridgeAgentMessageHint;
+
+  /// No description provided for @bridgeAgentActionDone.
+  ///
+  /// In en, this message translates to:
+  /// **'The local action finished.'**
+  String get bridgeAgentActionDone;
+
+  /// No description provided for @bridgeAgentCommandSkipped.
+  ///
+  /// In en, this message translates to:
+  /// **'Command skipped. The agent will consider another approach.'**
+  String get bridgeAgentCommandSkipped;
+
+  /// No description provided for @bridgeAgentActionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The local action did not finish. The agent will use the failure details to continue.'**
+  String get bridgeAgentActionFailed;
 
   /// No description provided for @connectBridgeHint.
   ///
@@ -5525,8 +5873,14 @@ abstract class AppLocalizations {
   /// No description provided for @shortcutSearchHint.
   ///
   /// In en, this message translates to:
-  /// **'Search projects and sessions…'**
+  /// **'Search tasks, projects and sessions…'**
   String get shortcutSearchHint;
+
+  /// No description provided for @shortcutConversationSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search projects and sessions…'**
+  String get shortcutConversationSearchHint;
 
   /// No description provided for @acceptanceVideoLoading.
   ///
@@ -5671,6 +6025,348 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Check Relay sign-in, service status and access in Settings.'**
   String get relayCheckConnection;
+
+  /// No description provided for @projectRuntimeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Project runtimes'**
+  String get projectRuntimeTitle;
+
+  /// No description provided for @projectRuntimeEntryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Start subprojects on the server or in Docker, and view their status and Agent leases'**
+  String get projectRuntimeEntryHint;
+
+  /// No description provided for @projectRuntimeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Each subproject remembers its location and defaults to the Bridge server. Docker uses frozen source and the configured acceptance image. Running means the process or container is alive; check application readiness separately. Agents can query and exclusively lease a running environment.'**
+  String get projectRuntimeHint;
+
+  /// No description provided for @projectRuntimeConfigure.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure project environment'**
+  String get projectRuntimeConfigure;
+
+  /// No description provided for @projectRuntimeAddTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'Add subproject'**
+  String get projectRuntimeAddTarget;
+
+  /// No description provided for @projectRuntimeEditTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit settings'**
+  String get projectRuntimeEditTarget;
+
+  /// No description provided for @projectRuntimeRenameTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get projectRuntimeRenameTarget;
+
+  /// No description provided for @projectRuntimeDeleteTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete subproject'**
+  String get projectRuntimeDeleteTarget;
+
+  /// No description provided for @projectRuntimeDeleteAfterStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop before deleting'**
+  String get projectRuntimeDeleteAfterStop;
+
+  /// No description provided for @projectRuntimeTargetActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Subproject actions'**
+  String get projectRuntimeTargetActions;
+
+  /// No description provided for @projectRuntimeTargetName.
+  ///
+  /// In en, this message translates to:
+  /// **'Display name'**
+  String get projectRuntimeTargetName;
+
+  /// No description provided for @projectRuntimeTargetDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Subproject directory'**
+  String get projectRuntimeTargetDirectory;
+
+  /// No description provided for @projectRuntimeTargetDirectoryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'An existing directory relative to the project root, such as backend. Use . for the root.'**
+  String get projectRuntimeTargetDirectoryHint;
+
+  /// No description provided for @projectRuntimeTargetCommandsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Commands run from the project root. Changes to a running service apply on its next start.'**
+  String get projectRuntimeTargetCommandsHint;
+
+  /// No description provided for @projectRuntimeTargetRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'This field is required.'**
+  String get projectRuntimeTargetRequired;
+
+  /// No description provided for @projectRuntimeDeleteTargetConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {name}?'**
+  String projectRuntimeDeleteTargetConfirm(String name);
+
+  /// No description provided for @projectRuntimeDeleteTargetHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this runtime configuration and exclude it from automatic detection. Source files are kept. You can add the directory again manually.'**
+  String get projectRuntimeDeleteTargetHint;
+
+  /// No description provided for @projectRuntimeAutoConfigure.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-configure all environments'**
+  String get projectRuntimeAutoConfigure;
+
+  /// No description provided for @projectRuntimeAutoConfiguring.
+  ///
+  /// In en, this message translates to:
+  /// **'Identifying subproject settings from project files; Agent will fill unresolved settings if needed…'**
+  String get projectRuntimeAutoConfiguring;
+
+  /// No description provided for @projectRuntimeAutoConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved settings for {total} subprojects; {ready} have a start command.'**
+  String projectRuntimeAutoConfigured(int total, int ready);
+
+  /// No description provided for @projectRuntimeStartRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'A start command is required. Edit settings or use auto-configuration.'**
+  String get projectRuntimeStartRequired;
+
+  /// No description provided for @projectRuntimeConfigHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Subproject settings are shared by manual runs and acceptance. Commands run from the project root. Host runs execute only the start command; image settings below apply to Docker.'**
+  String get projectRuntimeConfigHint;
+
+  /// No description provided for @projectRuntimeBuildTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Subproject build and start settings'**
+  String get projectRuntimeBuildTitle;
+
+  /// No description provided for @projectRuntimeBuildHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Select subprojects and edit their install, build, and start commands. Saved settings can be used for manual runs and acceptance.'**
+  String get projectRuntimeBuildHint;
+
+  /// No description provided for @projectRuntimeLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Next run location (saved automatically)'**
+  String get projectRuntimeLocation;
+
+  /// No description provided for @projectRuntimeHost.
+  ///
+  /// In en, this message translates to:
+  /// **'Bridge server'**
+  String get projectRuntimeHost;
+
+  /// No description provided for @projectRuntimeDocker.
+  ///
+  /// In en, this message translates to:
+  /// **'Acceptance Docker environment'**
+  String get projectRuntimeDocker;
+
+  /// No description provided for @projectRuntimeStarting.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting'**
+  String get projectRuntimeStarting;
+
+  /// No description provided for @projectRuntimeRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Running'**
+  String get projectRuntimeRunning;
+
+  /// No description provided for @projectRuntimeStopping.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopping'**
+  String get projectRuntimeStopping;
+
+  /// No description provided for @projectRuntimeStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped'**
+  String get projectRuntimeStopped;
+
+  /// No description provided for @projectRuntimeFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get projectRuntimeFailed;
+
+  /// No description provided for @projectRuntimeUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get projectRuntimeUnknown;
+
+  /// No description provided for @projectRuntimeStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start'**
+  String get projectRuntimeStart;
+
+  /// No description provided for @projectRuntimeStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get projectRuntimeStop;
+
+  /// No description provided for @projectRuntimeLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Runtime logs'**
+  String get projectRuntimeLogs;
+
+  /// No description provided for @projectRuntimeNoLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'No logs yet'**
+  String get projectRuntimeNoLogs;
+
+  /// No description provided for @projectRuntimeDesktop.
+  ///
+  /// In en, this message translates to:
+  /// **'View Docker desktop'**
+  String get projectRuntimeDesktop;
+
+  /// No description provided for @projectRuntimeEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No subprojects yet. Add one manually or use auto-configuration.'**
+  String get projectRuntimeEmpty;
+
+  /// No description provided for @projectRuntimeAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Available for an Agent to lease'**
+  String get projectRuntimeAvailable;
+
+  /// No description provided for @projectRuntimeOccupied.
+  ///
+  /// In en, this message translates to:
+  /// **'Leased by Agent: {session}'**
+  String projectRuntimeOccupied(String session);
+
+  /// No description provided for @projectRuntimeCurrentLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Current location: {location}'**
+  String projectRuntimeCurrentLocation(String location);
+
+  /// No description provided for @projectRuntimeSnapshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Frozen source revision: {revision}'**
+  String projectRuntimeSnapshot(String revision);
+
+  /// No description provided for @acceptanceRepairTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Repair history'**
+  String get acceptanceRepairTitle;
+
+  /// No description provided for @acceptanceRepairHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic repair has paused. Continue with Agent or adjust the configuration, then retry with the original test cases.'**
+  String get acceptanceRepairHint;
+
+  /// No description provided for @acceptanceRepairActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent is using the errors below to repair the environment. You can continue the conversation after automatic repair stops.'**
+  String get acceptanceRepairActive;
+
+  /// No description provided for @acceptanceRepairChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue repair with Agent'**
+  String get acceptanceRepairChat;
+
+  /// No description provided for @acceptanceRepairStartup.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit startup configuration'**
+  String get acceptanceRepairStartup;
+
+  /// No description provided for @acceptanceRepairEnvironment.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit environment and retry'**
+  String get acceptanceRepairEnvironment;
+
+  /// No description provided for @acceptanceRepairRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry after repair'**
+  String get acceptanceRepairRetry;
+
+  /// No description provided for @acceptanceRepairStartupJson.
+  ///
+  /// In en, this message translates to:
+  /// **'Startup configuration (JSON)'**
+  String get acceptanceRepairStartupJson;
+
+  /// No description provided for @acceptanceRepairInvalidStartup.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid JSON object for the startup configuration.'**
+  String get acceptanceRepairInvalidStartup;
+
+  /// No description provided for @acceptanceAnalysisTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyze acceptance results'**
+  String get acceptanceAnalysisTitle;
+
+  /// No description provided for @acceptanceAnalysisHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Agent to analyze the verdict, checks, errors, and evidence references.'**
+  String get acceptanceAnalysisHint;
+
+  /// No description provided for @acceptanceAnalyzeCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyze in current session'**
+  String get acceptanceAnalyzeCurrent;
+
+  /// No description provided for @acceptanceAnalyzeNew.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyze in new session'**
+  String get acceptanceAnalyzeNew;
+
+  /// No description provided for @acceptanceAnalysisNoSession.
+  ///
+  /// In en, this message translates to:
+  /// **'This run has no source session. You can analyze it in a new session.'**
+  String get acceptanceAnalysisNoSession;
 }
 
 class _AppLocalizationsDelegate

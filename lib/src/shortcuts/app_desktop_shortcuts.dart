@@ -3,10 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../widgets/app_snack_bar.dart';
 import '../app_routes.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
 import '../models.dart';
+import '../workspace_agent_models.dart';
+import '../utils/task_search.dart';
 import '../responsive/app_responsive_layout.dart';
 import '../services/desktop_window_service.dart';
 import '../settings/app_settings.dart';
@@ -139,7 +142,12 @@ class _AppDesktopShortcutsState extends State<AppDesktopShortcuts> {
                   DesktopSearchDialog(client: widget.client ?? bridgeClient),
             );
             if (!navigator.mounted) return;
-            if (result is ProjectSummary) {
+            if (result is WorkspaceTask) {
+              if (routeContext.mounted) {
+                unawaited(openTaskSearchResult(
+                    routeContext, widget.client ?? bridgeClient, result));
+              }
+            } else if (result is ProjectSummary) {
               unawaited(navigator.pushNamed(AppRoutes.project(result.id),
                   arguments: result));
             } else if (result is SessionSummary) {
@@ -185,7 +193,8 @@ class _AppDesktopShortcutsState extends State<AppDesktopShortcuts> {
     } catch (error) {
       if (!routeContext.mounted) return;
       final l10n = routeContext.l10n;
-      ScaffoldMessenger.of(routeContext).showSnackBar(SnackBar(
+      ScaffoldMessenger.of(routeContext).showSnackBar(AppSnackBar(
+        isError: true,
         content: Text(action == DesktopShortcutAction.newWindow
             ? l10n.desktopWindowFailed('$error')
             : '$error'),

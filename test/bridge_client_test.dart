@@ -1058,6 +1058,32 @@ void main() {
       expect(refreshed.single.label, 'Updated Agent');
     });
 
+    test(
+        'listAgentCommands supports project skills without an execution session',
+        () async {
+      final client = BridgeClient(httpClient: _FakeHttpClient((request) async {
+        expect(request.url.path, '/agents/commands');
+        expect(request.url.queryParameters, {'project_id': 'project-1'});
+        return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'kind': 'codex',
+                  'commands': [
+                    {'name': r'$review', 'description': 'Review changes'}
+                  ]
+                }
+              ]
+            }),
+            200,
+            headers: {'content-type': 'application/json'});
+      }));
+      final commands = await client.listAgentCommands(projectId: 'project-1');
+      expect(commands.single.name, r'$review');
+      expect(commands.single.agentId, 'codex');
+      client.dispose();
+    });
+
     test('listAgentCommands decodes slash metadata', () async {
       final client = BridgeClient(
         httpClient: _FakeHttpClient((request) async {

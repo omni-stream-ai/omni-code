@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
+import '../widgets/app_snack_bar.dart';
 import '../app_routes.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
@@ -15,6 +17,23 @@ import '../widgets/app_back_header.dart';
 import '../widgets/app_card.dart';
 import '../widgets/new_session_flow.dart';
 import '../../l10n/generated/app_localizations.dart';
+
+Future<ModelProviderConfig?> showModelProviderEditor(
+  BuildContext context, {
+  ModelProviderConfig? provider,
+  bool requireModel = false,
+  String? title,
+  String? saveLabel,
+}) =>
+    showDialog<ModelProviderConfig>(
+      context: context,
+      builder: (_) => _ProviderEditDialog(
+        provider: provider,
+        requireModel: requireModel,
+        title: title,
+        saveLabel: saveLabel,
+      ),
+    );
 
 class ModelProviderScreen extends StatefulWidget {
   const ModelProviderScreen({super.key});
@@ -31,6 +50,21 @@ class _ModelProviderScreenState extends State<ModelProviderScreen> {
   bool _loading = true;
   String? _error;
 
+  Future<void> _cacheDesktopProviders(
+      List<ModelProviderConfig> providers) async {
+    if (kIsWeb ||
+        !const [
+          TargetPlatform.linux,
+          TargetPlatform.macOS,
+          TargetPlatform.windows
+        ].contains(defaultTargetPlatform)) {
+      return;
+    }
+    await appSettingsController.save(
+      appSettingsController.settings.copyWith(localModelProviders: providers),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -44,6 +78,11 @@ class _ModelProviderScreenState extends State<ModelProviderScreen> {
     });
     try {
       final providers = await bridgeClient.getModelProviders();
+      try {
+        await _cacheDesktopProviders(providers);
+      } catch (_) {
+        // The connected Bridge remains usable if its offline cache cannot save.
+      }
       if (!mounted) return;
       setState(() {
         _providers = providers;
@@ -64,10 +103,13 @@ class _ModelProviderScreenState extends State<ModelProviderScreen> {
         appSettingsController.settings,
         modelProviders: _providers,
       );
+      await _cacheDesktopProviders(_providers);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.settingsSaveFailed('$e'))),
+        AppSnackBar(
+            isError: true,
+            content: Text(context.l10n.settingsSaveFailed('$e'))),
       );
     }
   }
@@ -761,9 +803,12 @@ class _FormatBadge extends StatelessWidget {
 }
 
 class _ProviderEditDialog extends StatefulWidget {
-  const _ProviderEditDialog({this.provider});
+  const _ProviderEditDialog(
+      {this.provider, this.requireModel = false, this.title, this.saveLabel});
 
   final ModelProviderConfig? provider;
+  final bool requireModel;
+  final String? title, saveLabel;
 
   @override
   State<_ProviderEditDialog> createState() => _ProviderEditDialogState();
@@ -833,7 +878,8 @@ class _ProviderEditDialogState extends State<_ProviderEditDialog> {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final dialogWidth = (screenWidth * 0.85).clamp(320.0, 400.0);
     return AlertDialog(
-      title: Text(_isEditing ? l10n.editProvider : l10n.addProvider),
+      title: Text(
+          widget.title ?? (_isEditing ? l10n.editProvider : l10n.addProvider)),
       content: SizedBox(
         width: dialogWidth,
         child: Form(
@@ -843,6 +889,7 @@ class _ProviderEditDialogState extends State<_ProviderEditDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextFormField(
+                  key: const Key('provider-editor-name'),
                   controller: _nameController,
                   style: formValueTextStyle,
                   decoration: InputDecoration(
@@ -858,6 +905,7 @@ class _ProviderEditDialogState extends State<_ProviderEditDialog> {
                 ),
                 const SizedBox(height: AppSpacing.stack),
                 TextFormField(
+                  key: const Key('provider-editor-url'),
                   controller: _baseUrlController,
                   style: formValueTextStyle,
                   decoration: InputDecoration(
@@ -868,11 +916,21 @@ class _ProviderEditDialogState extends State<_ProviderEditDialog> {
                     if (value == null || value.trim().isEmpty) {
                       return l10n.fieldRequired;
                     }
+                    final uri = Uri.tryParse(value.trim());
+                    if (uri == null ||
+                        !['https', 'http'].contains(uri.scheme) ||
+                        uri.host.isEmpty ||
+                        uri.userInfo.isNotEmpty ||
+                        uri.hasQuery ||
+                        uri.hasFragment) {
+                      return l10n.bridgeAgentInvalidUrl;
+                    }
                     return null;
                   },
                 ),
                 const SizedBox(height: AppSpacing.stack),
                 TextFormField(
+                  key: const Key('provider-editor-key'),
                   controller: _apiKeyController,
                   obscureText: true,
                   style: formValueTextStyle,
@@ -882,11 +940,18 @@ class _ProviderEditDialogState extends State<_ProviderEditDialog> {
                 ),
                 const SizedBox(height: AppSpacing.stack),
                 TextFormField(
+                  key: const Key('provider-editor-model'),
                   controller: _modelController,
+                  validator: (value) => widget.requireModel &&
+                          (value == null || value.trim().isEmpty)
+                      ? l10n.fieldRequired
+                      : null,
                   style: formValueTextStyle,
                   decoration: InputDecoration(
                     labelText: l10n.providerModel,
-                    hintText: l10n.providerModelHint,
+                    hintText: widget.requireModel
+                        ? l10n.fieldRequired
+                        : l10n.providerModelHint,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.stack),
@@ -937,7 +1002,7 @@ class _ProviderEditDialogState extends State<_ProviderEditDialog> {
         ),
         FilledButton(
           onPressed: _submit,
-          child: Text(l10n.save),
+          child: Text(widget.saveLabel ?? l10n.save),
         ),
       ],
     );

@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../widgets/app_snack_bar.dart';
 import '../acceptance_models.dart';
 import 'acceptance_video_screen.dart';
 import 'acceptance_environment_screen.dart';
@@ -21,6 +22,8 @@ import '../theme/app_spacing.dart';
 import '../widgets/app_card.dart';
 import '../widgets/acceptance_ui.dart';
 import '../widgets/acceptance_approval_dialog.dart';
+import '../widgets/acceptance_recovery_card.dart';
+import 'session_detail_screen.dart';
 
 class _AcceptanceRequestError extends StatelessWidget {
   const _AcceptanceRequestError({required this.error, this.onRefresh});
@@ -282,7 +285,7 @@ class _AcceptanceScreenState extends State<AcceptanceScreen>
                 ),
               IconButton(
                   onPressed: refreshing ? null : refresh,
-                  tooltip: l.retry,
+                  tooltip: l.acceptanceRefreshStatus,
                   icon: const Icon(Icons.refresh)),
             ]),
             floatingActionButton: installation?.ready == true
@@ -745,8 +748,10 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
   Uint8List? preview;
   Timer? timer;
   Object? error;
+  Object? operationError;
   bool busy = false, refreshing = false;
   int updateGeneration = 0;
+  final analysisRequests = <bool, String>{};
   @override
   void initState() {
     super.initState();
@@ -785,28 +790,138 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
       unawaited(presentAcceptanceApprovals(widget.client, [run], refresh));
       if (value.running) {
         final image = await widget.client.acceptancePreview(run.id);
-        if (mounted) setState(() => preview = image);
+        if (mounted && generation == updateGeneration) {
+          setState(() => preview = image);
+        }
       }
     } catch (e) {
-      if (mounted) setState(() => error = e);
+      if (mounted && generation == updateGeneration) {
+        setState(() => error = e);
+      }
     } finally {
       refreshing = false;
     }
   }
 
   Future<void> operation(Future<void> Function() action) async {
+    if (busy) return;
     setState(() {
+      updateGeneration++;
       busy = true;
       error = null;
+      operationError = null;
     });
     try {
       await action();
       await refresh();
     } catch (e) {
-      if (mounted) setState(() => error = e);
+      if (mounted) setState(() => operationError = e);
     } finally {
       if (mounted) setState(() => busy = false);
     }
+  }
+
+  Future<void> retry(
+          {Map<String, dynamic>? startup,
+          bool useCurrentEnvironment = false}) =>
+      operation(() async {
+        final value = run.phase == 'planning' && run.testPlan == null
+            ? await widget.client.retryAcceptanceTestPlan(run.id)
+            : await widget.client.retryAcceptanceRun(run.id,
+                startup: startup, useCurrentEnvironment: useCurrentEnvironment);
+        if (!mounted) return;
+        setState(() {
+          updateGeneration++;
+          run = value;
+          preview = null;
+        });
+      });
+
+  Future<void> repairChat() => operation(() async {
+        final id = run.repairSessionId;
+        if (id == null) return;
+        final detail = await widget.client.getSession(id);
+        if (!mounted) return;
+        await Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => SessionDetailScreen(
+                session: detail.session,
+                client: widget.client,
+                enableSpeechServices: false)));
+      });
+
+  Future<void> analyzeResult({required bool newSession}) => operation(() async {
+        final requestId =
+            analysisRequests.putIfAbsent(newSession, () => const Uuid().v4());
+        final session = await widget.client.analyzeAcceptanceRun(run.id,
+            newSession: newSession,
+            requestId: requestId,
+            projectId: run.projectId);
+        analysisRequests.remove(newSession);
+        if (!mounted) return;
+        await Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => SessionDetailScreen(
+                session: session,
+                client: widget.client,
+                enableSpeechServices: false)));
+      });
+
+  Future<void> editRepairEnvironment() async {
+    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
+        builder: (_) => AcceptanceEnvironmentScreen(
+            client: widget.client, projectId: run.projectId)));
+    if (saved == true && mounted) await retry(useCurrentEnvironment: true);
+  }
+
+  Future<void> editRepairStartup() async {
+    final controller = TextEditingController(
+        text: const JsonEncoder.withIndent('  ').convert(run.startup ??
+            {
+              'kind': 'desktop',
+              'command':
+                  run.command == '__OMNI_AGENT_START__' ? '' : run.command,
+              'app': ''
+            }));
+    String? validation;
+    final value = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+            builder: (context, update) => AlertDialog(
+                  title: Text(context.l10n.acceptanceRepairStartup),
+                  content: SizedBox(
+                      width: 680,
+                      child: TextField(
+                          key: const Key('acceptance-repair-startup-json'),
+                          controller: controller,
+                          minLines: 8,
+                          maxLines: 18,
+                          style: const TextStyle(
+                              fontFamily: 'monospace', fontSize: 13),
+                          decoration: InputDecoration(
+                              labelText:
+                                  context.l10n.acceptanceRepairStartupJson,
+                              errorText: validation))),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(context.l10n.cancel)),
+                    FilledButton(
+                        onPressed: () {
+                          try {
+                            final parsed = jsonDecode(controller.text);
+                            if (parsed is! Map<String, dynamic>) {
+                              throw const FormatException();
+                            }
+                            Navigator.pop(context, parsed);
+                          } catch (_) {
+                            update(() => validation =
+                                context.l10n.acceptanceRepairInvalidStartup);
+                          }
+                        },
+                        child: Text(context.l10n.acceptanceRepairRetry))
+                  ],
+                )));
+    Future<void>.delayed(const Duration(seconds: 1), controller.dispose);
+    if (value != null && mounted) await retry(startup: value);
   }
 
   Future<void> desktop() async {
@@ -933,9 +1048,24 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
     return Scaffold(
       appBar: AppBar(title: Text(l.acceptanceTitle), actions: [
         IconButton(
-            onPressed: refreshing ? null : refresh,
-            tooltip: l.retry,
-            icon: const Icon(Icons.refresh_rounded)),
+            key: const Key('acceptance-detail-primary-action'),
+            onPressed: busy
+                ? null
+                : run.canRetry
+                    ? retry
+                    : refreshing
+                        ? null
+                        : refresh,
+            tooltip:
+                run.canRetry ? l.acceptanceRetryRun : l.acceptanceRefreshStatus,
+            icon: busy
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : Icon(run.canRetry
+                    ? Icons.restart_alt_rounded
+                    : Icons.refresh_rounded)),
         if (!run.terminal)
           PopupMenuButton<String>(
             onSelected: (_) => operation(() async {
@@ -1022,6 +1152,11 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
             ]),
           ),
           if (busy) const LinearProgressIndicator(),
+          if (operationError != null || error != null)
+            AppCard(
+                color: colors.errorContainer,
+                child: SelectableText((operationError ?? error).toString(),
+                    style: TextStyle(color: colors.onErrorContainer))),
           if (run.testPlan != null)
             AcceptancePlanCard(
                 key: ValueKey(run.id),
@@ -1117,14 +1252,20 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
                       SelectableText(run.automationError!,
                           style: TextStyle(color: colors.onTertiaryContainer)),
                     ]))
-          else if (error != null ||
-              run.error != null ||
-              run.automationError != null)
+          else if (run.error != null || run.automationError != null)
             AppCard(
                 color: colors.errorContainer,
-                child: SelectableText(
-                    error?.toString() ?? run.error ?? run.automationError!,
+                child: SelectableText(run.error ?? run.automationError!,
                     style: TextStyle(color: colors.onErrorContainer))),
+          if (run.phase != 'planning' &&
+              (run.canRetry || run.repair?.failures.isNotEmpty == true))
+            AcceptanceRecoveryCard(
+                run: run,
+                onChat: busy || !run.canRetry ? null : repairChat,
+                onEditStartup: busy || !run.canRetry ? null : editRepairStartup,
+                onEditEnvironment:
+                    busy || !run.canRetry ? null : editRepairEnvironment,
+                onRetry: busy ? null : retry),
           if (run.phase == 'planning' &&
               run.testPlan == null &&
               run.automation == 'failed')
@@ -1136,6 +1277,39 @@ class _AcceptanceDetailScreenState extends State<AcceptanceDetailScreen>
                         }),
                 icon: const Icon(Icons.refresh_rounded),
                 label: Text(l.acceptancePlanRetry)),
+          if (run.canAnalyze)
+            AppCard(
+                key: const Key('acceptance-result-analysis'),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(l.acceptanceAnalysisTitle,
+                          style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 8),
+                      Text(l.acceptanceAnalysisHint),
+                      const SizedBox(height: 12),
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        FilledButton.tonalIcon(
+                            key: const Key('acceptance-analyze-current'),
+                            onPressed: busy || run.sessionId == null
+                                ? null
+                                : () => analyzeResult(newSession: false),
+                            icon: const Icon(Icons.chat_outlined),
+                            label: Text(l.acceptanceAnalyzeCurrent)),
+                        OutlinedButton.icon(
+                            key: const Key('acceptance-analyze-new'),
+                            onPressed: busy
+                                ? null
+                                : () => analyzeResult(newSession: true),
+                            icon: const Icon(Icons.add_comment_outlined),
+                            label: Text(l.acceptanceAnalyzeNew)),
+                      ]),
+                      if (run.sessionId == null) ...[
+                        const SizedBox(height: 8),
+                        Text(l.acceptanceAnalysisNoSession,
+                            style: theme.textTheme.bodySmall),
+                      ],
+                    ])),
           if (run.running)
             AppCard(
                 child: Column(
@@ -1572,8 +1746,9 @@ class _AcceptanceDesktopScreenState extends State<AcceptanceDesktopScreen>
           : [DeviceOrientation.portraitUp]);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.acceptanceOrientationFailed)));
+        ScaffoldMessenger.of(context).showSnackBar(AppSnackBar(
+            isError: true,
+            content: Text(context.l10n.acceptanceOrientationFailed)));
       }
     } finally {
       if (mounted) setState(() => changingOrientation = false);

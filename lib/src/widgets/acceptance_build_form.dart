@@ -22,6 +22,7 @@ class AcceptanceBuildForm extends StatelessWidget {
       required this.controllers,
       required this.onIdentify,
       this.busy = false,
+      this.generalPurpose = false,
       this.detecting = false,
       this.selectedDirectory,
       this.onSelectTarget,
@@ -33,6 +34,7 @@ class AcceptanceBuildForm extends StatelessWidget {
   final Map<String, TextEditingController> controllers;
   final VoidCallback onIdentify;
   final bool busy, detecting;
+  final bool generalPurpose;
   final AcceptanceBuildDetection? detection;
   final String? selectedDirectory;
   final ValueChanged<String?>? onSelectTarget;
@@ -78,11 +80,15 @@ class AcceptanceBuildForm extends StatelessWidget {
         Icon(Icons.inventory_2_outlined, color: acceptanceAccent(context)),
         const SizedBox(width: 10),
         Expanded(
-            child: Text(l.acceptanceBuildTitle,
+            child: Text(
+                generalPurpose
+                    ? l.projectRuntimeBuildTitle
+                    : l.acceptanceBuildTitle,
                 style: theme.textTheme.titleMedium)),
       ]),
       const SizedBox(height: 8),
-      Text(l.acceptanceBuildHint, style: theme.textTheme.bodySmall),
+      Text(generalPurpose ? l.projectRuntimeBuildHint : l.acceptanceBuildHint,
+          style: theme.textTheme.bodySmall),
       if (detecting) ...[
         const SizedBox(height: 12),
         const LinearProgressIndicator(),

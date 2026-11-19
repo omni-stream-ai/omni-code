@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../widgets/app_snack_bar.dart';
 import '../bridge_client.dart';
 import '../relay/relay_settings_card.dart';
 import '../l10n/app_locale.dart';
@@ -24,6 +25,7 @@ import '../widgets/app_card.dart';
 import '../widgets/app_navigation_scaffold.dart';
 import '../widgets/copyable_message.dart';
 import '../widgets/new_session_flow.dart';
+import '../widgets/task_analysis_prompt_dialog.dart';
 import 'model_provider_screen.dart';
 import 'mcp_servers_screen.dart';
 import 'pi_plugins_screen.dart';
@@ -70,6 +72,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _autoSpeakReplies;
   late bool _errorReportingEnabled;
   late bool _compressAssistantReplies;
+  late bool _autoTaskAnalysisEnabled;
   late NotificationSoundMode _notificationSoundMode;
   late String _appLanguage;
   String _currentVersion = '';
@@ -117,6 +120,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _autoSpeakReplies = settings.autoSpeakReplies;
     _errorReportingEnabled = settings.errorReportingEnabled;
     _compressAssistantReplies = settings.compressAssistantReplies;
+    _autoTaskAnalysisEnabled = settings.autoTaskAnalysisEnabled;
     _notificationSoundMode = settings.notificationSoundMode;
   }
 
@@ -246,7 +250,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _showCopyableErrorSnackBar(String message) {
     final brightness = Theme.of(context).brightness;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+      AppSnackBar(
+        isError: true,
         content: CopyableMessage(
           message: message,
           copyLabel: context.l10n.copy,
@@ -383,6 +388,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildHeader(context, l10n),
+          const SizedBox(height: AppSpacing.fieldGap),
+          _buildAssistantSection(context, l10n),
           const SizedBox(height: AppSpacing.fieldGap),
           _buildSpeechSection(context, l10n),
           const SizedBox(height: AppSpacing.fieldGap),
@@ -579,6 +586,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _buildAssistantSection(context, l10n),
+        const SizedBox(height: AppSpacing.fieldGap),
         _buildSpeechSection(context, l10n),
         const SizedBox(height: AppSpacing.fieldGap),
         _buildAcceptanceSection(context, l10n),
@@ -603,6 +612,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ],
     );
   }
+
+  Widget _buildAssistantSection(BuildContext context, AppLocalizations l10n) =>
+      _buildSectionCard(context, title: l10n.assistantSection, children: [
+        SwitchListTile(
+            key: const Key('automatic-task-analysis-toggle'),
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.automaticTaskAnalysis),
+            subtitle: Text(l10n.automaticTaskAnalysisHelp),
+            value: _autoTaskAnalysisEnabled,
+            onChanged: _saving
+                ? null
+                : (value) => _saveLocalToggle(
+                    applyLocalState: () => _autoTaskAnalysisEnabled = value,
+                    buildNextSettings: (settings) =>
+                        settings.copyWith(autoTaskAnalysisEnabled: value))),
+        ListTile(
+          key: const Key('task-analysis-prompt-settings'),
+          contentPadding: EdgeInsets.zero,
+          title: Text(l10n.taskAnalysisPrompt),
+          subtitle: Text(l10n.taskAnalysisPromptHelp),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: _saving
+              ? null
+              : () => showTaskAnalysisPromptDialog(context, client: _client),
+        ),
+      ]);
 
   Widget _buildKeyboardShortcutsSection(
           BuildContext context, AppLocalizations l10n) =>
@@ -1110,6 +1145,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         DropdownButtonFormField<NotificationSoundMode>(
           key: const Key('notification-sound-mode'),
+          isExpanded: true,
           initialValue: _notificationSoundMode,
           style: formValueTextStyle,
           decoration: InputDecoration(
@@ -1118,15 +1154,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           items: [
             DropdownMenuItem(
               value: NotificationSoundMode.all,
-              child: Text(l10n.notificationSoundAll),
+              child: Text(l10n.notificationSoundAll,
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
             DropdownMenuItem(
               value: NotificationSoundMode.importantOnly,
-              child: Text(l10n.notificationSoundImportantOnly),
+              child: Text(l10n.notificationSoundImportantOnly,
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
             DropdownMenuItem(
               value: NotificationSoundMode.muted,
-              child: Text(l10n.notificationSoundMuted),
+              child: Text(l10n.notificationSoundMuted,
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
           ],
           onChanged: _saving
@@ -1371,13 +1410,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: theme.textTheme.bodySmall),
-          Text(
+          Expanded(
+              child: Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall)),
+          const SizedBox(width: AppSpacing.compact),
+          Flexible(
+              child: Text(
             value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
             style: theme.textTheme.labelMedium?.copyWith(
               color: theme.colorScheme.onSurface,
             ),
-          ),
+          )),
         ],
       ),
     );
@@ -1433,6 +1481,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         aiApprovalModel: _aiApprovalModel.trim(),
         aiApprovalMaxRisk: _aiApprovalMaxRisk,
         autoSpeakReplies: _autoSpeakReplies,
+        autoTaskAnalysisEnabled: _autoTaskAnalysisEnabled,
         notificationSoundMode: _notificationSoundMode,
         compressAssistantReplies: _compressAssistantReplies,
         compressAssistantReplyMaxChars: _parsePositiveIntInput(
@@ -1469,7 +1518,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(feedback)),
+        AppSnackBar(content: Text(feedback)),
       );
       Navigator.of(context).pop(bridgeConnectionResult);
     } catch (error) {
@@ -1537,6 +1586,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() {
         _autoSpeakReplies = current.autoSpeakReplies;
         _compressAssistantReplies = current.compressAssistantReplies;
+        _autoTaskAnalysisEnabled = current.autoTaskAnalysisEnabled;
       });
       _showCopyableErrorSnackBar(context.l10n.settingsSaveFailed('$error'));
     }
@@ -1592,7 +1642,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       if (!result.hasUpdate) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          AppSnackBar(
             content: Text(
               result.isTargetedDownload
                   ? context.l10n.targetVersionNotFound(result.targetVersion)

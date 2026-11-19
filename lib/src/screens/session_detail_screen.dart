@@ -1,3 +1,10 @@
+import '../widgets/app_snack_bar.dart';
+import '../widgets/workspace_agent_panel.dart';
+import '../widgets/model_selection_panel.dart';
+import '../widgets/composer_settings_dropdown.dart';
+import '../widgets/approval_mode_selector.dart';
+import '../widgets/message_composer.dart';
+import '../widgets/message_markdown.dart';
 import 'acceptance_screen.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -7,10 +14,8 @@ import 'dart:math' as math;
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -198,7 +203,12 @@ class SessionDetailScreen extends StatefulWidget {
   State<SessionDetailScreen> createState() => _SessionDetailScreenState();
 }
 
-enum _ComposerSettingsPanelSection { profile, provider, reasoning, model }
+enum _ComposerSettingsPanelSection {
+  profile,
+  provider,
+  reasoning,
+  model,
+}
 
 class _SessionDetailScreenState extends State<SessionDetailScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
@@ -216,9 +226,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   );
   static const int _messagePageLimit = 12;
   static const int _initialVisibleMessageLimit = 6;
-  static final RegExp _assistantSectionDividerPattern = RegExp(
-    r'\n\s*\n[ \t]*---[ \t]*\n\s*\n|\n[ \t]*---[ \t]*\n',
-  );
   static const String _defaultProviderMenuValue =
       '__session_default_provider__';
   static const String _defaultReasoningEffortMenuValue =
@@ -231,7 +238,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   );
   final _composerTextFieldKey = GlobalKey();
   final _composerSuggestionsOverlayController = OverlayPortalController();
-  final _composerSettingsButtonKey = GlobalKey();
   final _composerSettingsOverlayController = OverlayPortalController();
   final _imagePickerFocusNode = FocusNode(
     debugLabel: 'session-image-picker-focus',
@@ -275,6 +281,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   final List<ChatMessage> _messages = [];
   final List<_SessionDiffEntry> _sessionDiffs = <_SessionDiffEntry>[];
   late String _speechRouteSignature;
+  bool _autoTaskAnalysisEnabled =
+      appSettingsController.settings.autoTaskAnalysisEnabled;
   List<_ConversationTurn>? _cachedTurns;
   int? _cachedTurnsFingerprint;
   final List<Map<String, dynamic>> _pendingBridgeEventsDuringRestore = [];
@@ -392,10 +400,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   int _modelUpdateGeneration = 0;
   List<ModelProviderConfig> _providers = const [];
   List<CodexProfileSummary> _profiles = const [];
-  List<String> _fetchedModels = const [];
   GitStatusDetail? _gitStatus;
   final MenuController _sessionHeaderMenuController = MenuController();
   _ComposerSettingsPanelSection? _composerSettingsPanelSection;
+  bool _savingApprovalMode = false;
+  int _approvalModeUpdateGeneration = 0;
+  Future<void>? _pendingApprovalModeUpdate;
 
   BridgeClient get _client => widget.client ?? bridgeClient;
 
@@ -744,7 +754,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       _voiceInputButtonFocusNode.hasFocus;
 
   bool get _composerHasInteractiveFocus =>
-      _messageInputFocusNode.hasFocus || _composerActionButtonsHaveFocus;
+      _messageInputFocusNode.hasFocus ||
+      _composerActionButtonsHaveFocus ||
+      _composerSettingsOverlayController.isShowing;
 
   @override
   void initState() {
@@ -1086,6 +1098,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final previousStatus = _session.status;
     final previousApprovalId = _pendingApproval?.requestId;
     final summaryChanged = _session.title != state.session.title ||
+        _session.approvalMode != state.session.approvalMode ||
         previousStatus != status ||
         _session.unreadCount != state.session.unreadCount ||
         _session.lastMessagePreview != state.session.lastMessagePreview ||
@@ -1109,6 +1122,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         ..addAll(diffsByKey.values);
       _session = _session.copyWith(
         title: state.session.title,
+        approvalMode: state.session.approvalMode,
         status: status,
         updatedAt: state.session.updatedAt,
         unreadCount: state.session.unreadCount,
@@ -1254,6 +1268,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     _voiceInputButtonFocusNode.removeListener(_handleComposerFocusChanged);
     _scrollController.removeListener(_handleMessageScrollChanged);
     _controller.dispose();
+    _modelCustomController.dispose();
     _messageInputFocusNode.dispose();
     _imagePickerFocusNode.dispose();
     _sendButtonFocusNode.dispose();
@@ -1275,6 +1290,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     }
     final previousSession = oldWidget.session;
     final nextSession = widget.session;
+    if (oldWidget.client != widget.client ||
+        previousSession.id != nextSession.id) {
+      _approvalModeUpdateGeneration++;
+      _savingApprovalMode = false;
+      _pendingApprovalModeUpdate = null;
+    }
     if (previousSession.id == nextSession.id &&
         previousSession.updatedAt.isAtSameMomentAs(nextSession.updatedAt) &&
         previousSession.title == nextSession.title &&
@@ -1286,6 +1307,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         previousSession.providerId == nextSession.providerId &&
         previousSession.reasoningEffort == nextSession.reasoningEffort &&
         previousSession.model == nextSession.model &&
+        previousSession.approvalMode == nextSession.approvalMode &&
         previousSession.profileId == nextSession.profileId &&
         previousSession.profileName == nextSession.profileName) {
       return;
@@ -1414,7 +1436,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
+            .showSnackBar(AppSnackBar(isError: true, content: Text('$error')));
       }
     }
   }
@@ -2385,6 +2407,26 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (appSettingsController.settings.autoTaskAnalysisEnabled)
+          _buildSessionHeaderActionTile(
+            key: const Key('session-header-tasks-button'),
+            label: agentText(context, '会话任务与助手', 'Tasks and workspace agent'),
+            icon: Icons.auto_awesome_outlined,
+            onTap: () {
+              _sessionHeaderMenuController.close();
+              showDialog<void>(
+                  context: context,
+                  builder: (_) => Dialog(
+                      child: SizedBox(
+                          width: 480,
+                          child: SingleChildScrollView(
+                              padding: const EdgeInsets.all(16),
+                              child: WorkspaceAgentPanel(
+                                  client: _client,
+                                  projectId: _session.projectId,
+                                  sessionId: _session.id)))));
+            },
+          ),
         _buildSessionHeaderActionTile(
           key: const Key('session-header-new-session-button'),
           label: context.l10n.newSession,
@@ -2695,6 +2737,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               ),
             ),
             const SizedBox(height: AppSpacing.compact),
+            if (appSettingsController.settings.autoTaskAnalysisEnabled)
+              WorkspaceAgentPanel(
+                  client: _client,
+                  projectId: _session.projectId,
+                  sessionId: _session.id,
+                  revision: _session.updatedAt),
             _buildDesktopRail(
               approvalCardMaxHeight: approvalCardMaxHeight,
             ),
@@ -3153,16 +3201,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
           tooltip: context.l10n.imageAttachment,
           onPressed:
               isSessionBusy || _pickingAttachments ? null : _pickAttachments,
-          style: TextButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            foregroundColor: AppColors.textSoftFor(brightness),
-            disabledForegroundColor: AppColors.mutedFor(brightness),
-            minimumSize: const Size.square(32),
-            fixedSize: const Size.square(32),
-            padding: EdgeInsets.zero,
-            shape: const CircleBorder(),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
+          style: MessageComposer.actionStyle(context),
           icon: _pickingAttachments
               ? const SizedBox(
                   width: 16,
@@ -3187,16 +3226,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
               buttonKey: const Key('session-send-button'),
               tooltip: context.l10n.send,
               onPressed: isSessionBusy ? null : _sendTextMessage,
-              style: TextButton.styleFrom(
-                backgroundColor: AppColors.primaryFor(brightness),
-                foregroundColor: AppColors.onPrimaryFor(brightness),
-                disabledForegroundColor: AppColors.mutedFor(brightness),
-                minimumSize: const Size.square(34),
-                fixedSize: const Size.square(34),
-                padding: EdgeInsets.zero,
-                shape: const CircleBorder(),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
+              style: MessageComposer.actionStyle(context, primary: true),
               icon: const Icon(
                 Icons.send_rounded,
                 size: 20,
@@ -3209,148 +3239,50 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     final showSessionSettings = !_voiceComposerMode &&
         (isDesktopPlatform || _composerHasInteractiveFocus);
     final sessionSettingButtons = showSessionSettings
-        ? <Widget>[_buildComposerSettingsButton()]
+        ? <Widget>[
+            _buildComposerSettingsButton(),
+            ApprovalModeSelector(
+              key: const Key('session-approval-mode-button'),
+              value: _session.approvalMode,
+              keyPrefix: 'session-approval-mode',
+              enabled: !_creatingSession,
+              saving: _savingApprovalMode,
+              onChanged: (mode) => unawaited(_applyApprovalMode(mode)),
+            ),
+          ]
         : const <Widget>[];
-    final messageInput = KeyedSubtree(
-      key: _composerTextFieldKey,
-      child: CallbackShortcuts(
-        bindings: {
-          const SingleActivator(
-            LogicalKeyboardKey.keyV,
-            control: true,
-          ): () => unawaited(_handlePasteShortcut()),
-          const SingleActivator(
-            LogicalKeyboardKey.keyV,
-            meta: true,
-          ): () => unawaited(_handlePasteShortcut()),
-        },
-        child: Focus(
-          onKeyEvent: _handleMessageInputKeyEvent,
-          child: TextField(
-            key: const Key('session-message-input'),
-            controller: _controller,
-            focusNode: _messageInputFocusNode,
-            enabled: !isSessionBusy,
-            maxLines: showExpandedComposer ? 4 : 1,
-            minLines: 1,
-            keyboardType: _isMobilePlatform ? TextInputType.multiline : null,
-            textInputAction: _isMobilePlatform ? TextInputAction.newline : null,
-            decoration: InputDecoration(
-              hintText: _isListening
-                  ? context.l10n.voiceInputInProgress
-                  : context.l10n.messageInputHint,
-              filled: false,
-              contentPadding: EdgeInsetsDirectional.only(
-                start: AppSpacing.card,
-                end: showExpandedComposer ? AppSpacing.card : AppSpacing.micro,
-                top: showExpandedComposer
-                    ? AppSpacing.stack
-                    : AppSpacing.compact,
-                bottom: showExpandedComposer
-                    ? AppSpacing.compact
-                    : AppSpacing.compact,
-              ),
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              disabledBorder: InputBorder.none,
-            ),
-          ),
-        ),
+    final textComposerSurface = OverlayPortal(
+      controller: _composerSuggestionsOverlayController,
+      overlayChildBuilder: (context) => _buildComposerSuggestionsOverlay(
+        deepSurface,
+        outlineStrong,
       ),
-    );
-    final textComposerSurface = SizedBox(
-      key: const Key('session-text-composer-surface'),
-      height: showExpandedComposer ? null : collapsedComposerHeight,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: deepSurface,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-          border: Border.all(color: inputBorderColor),
-        ),
-        child: Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(
-            0,
-            0,
-            AppSpacing.micro,
-            AppSpacing.micro,
-          ),
-          child: OverlayPortal(
-            controller: _composerSuggestionsOverlayController,
-            overlayChildBuilder: (context) => _buildComposerSuggestionsOverlay(
-              deepSurface,
-              outlineStrong,
-            ),
-            child: showExpandedComposer
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      messageInput,
-                      Padding(
-                        padding: const EdgeInsetsDirectional.fromSTEB(
-                          AppSpacing.compact,
-                          AppSpacing.micro,
-                          0,
-                          0,
-                        ),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: AppColors.panelFor(brightness).withValues(
-                              alpha: brightness == Brightness.dark ? 0.18 : 0.3,
-                            ),
-                            borderRadius: BorderRadius.circular(
-                              AppSpacing.radiusControl,
-                            ),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsetsDirectional.fromSTEB(
-                              AppSpacing.compact,
-                              AppSpacing.micro,
-                              AppSpacing.micro,
-                              AppSpacing.micro,
-                            ),
-                            child: FocusTraversalGroup(
-                              policy: OrderedTraversalPolicy(),
-                              child: SizedBox(
-                                height: 36,
-                                child: Stack(
-                                  children: [
-                                    if (sessionSettingButtons.isNotEmpty)
-                                      Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: sessionSettingButtons,
-                                        ),
-                                      ),
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: actionButtons,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Expanded(child: messageInput),
-                      FocusTraversalGroup(
-                        policy: OrderedTraversalPolicy(),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: actionButtons,
-                        ),
-                      ),
-                    ],
-                  ),
+      child: MessageComposer(
+        key: const Key('session-text-composer-surface'),
+        inputKey: const Key('session-message-input'),
+        controller: _controller,
+        focusNode: _messageInputFocusNode,
+        enabled: !isSessionBusy,
+        expanded: showExpandedComposer,
+        keyboardType: _isMobilePlatform ? TextInputType.multiline : null,
+        textInputAction: _isMobilePlatform ? TextInputAction.newline : null,
+        hintText: _isListening
+            ? context.l10n.voiceInputInProgress
+            : context.l10n.messageInputHint,
+        surfaceColor: deepSurface,
+        borderColor: inputBorderColor,
+        settings: sessionSettingButtons,
+        actions: actionButtons,
+        inputWrapper: (input) => KeyedSubtree(
+          key: _composerTextFieldKey,
+          child: CallbackShortcuts(
+            bindings: {
+              const SingleActivator(LogicalKeyboardKey.keyV, control: true):
+                  () => unawaited(_handlePasteShortcut()),
+              const SingleActivator(LogicalKeyboardKey.keyV, meta: true): () =>
+                  unawaited(_handlePasteShortcut()),
+            },
+            child: Focus(onKeyEvent: _handleMessageInputKeyEvent, child: input),
           ),
         ),
       ),
@@ -3455,204 +3387,43 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   Widget _buildComposerSettingsButton() {
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    return OverlayPortal(
-      controller: _composerSettingsOverlayController,
-      overlayChildBuilder: (context) => _buildComposerSettingsOverlay(),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          key: const Key('session-composer-settings-button'),
-          borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-          onTap: _toggleComposerSettingsOverlay,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 168),
-            child: DecoratedBox(
-              key: _composerSettingsButtonKey,
-              decoration: BoxDecoration(
-                color: AppColors.panelFor(brightness).withValues(
-                  alpha: brightness == Brightness.dark ? 0.44 : 0.58,
-                ),
-                borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.compact,
-                  vertical: AppSpacing.textTight,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        _composerSettingsSummaryLabel(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: AppColors.mutedFor(brightness),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.micro),
-                    Icon(
-                      _composerSettingsPanelSection == null
-                          ? Icons.keyboard_arrow_down_rounded
-                          : Icons.keyboard_arrow_up_rounded,
-                      size: 16,
-                      color: AppColors.mutedFor(brightness),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+    ComposerSettingsSection<_ComposerSettingsPanelSection> section(
+            _ComposerSettingsPanelSection value, String label, String key) =>
+        ComposerSettingsSection(
+            value: value,
+            label: label,
+            key: Key(key),
+            contentBuilder: (_) => _buildComposerSettingsSectionContent(value));
+    return ComposerSettingsDropdown<_ComposerSettingsPanelSection>(
+        key: const Key('session-composer-settings-button'),
+        enabled: !_creatingSession && !_savingApprovalMode,
+        controller: _composerSettingsOverlayController,
+        label: _composerSettingsSummaryLabel(),
+        selectedSection: _composerSettingsPanelSection,
+        onSectionChanged: (value) =>
+            setState(() => _composerSettingsPanelSection = value),
+        sections: [
+          if (_session.agentId == 'codex')
+            section(_ComposerSettingsPanelSection.profile, 'Profile',
+                'session-profile-settings-button'),
+          if (_providers.isNotEmpty || isAutoProviderId(_overrideProviderId))
+            section(
+                _ComposerSettingsPanelSection.provider,
+                context.l10n.providerSessionLabel,
+                'session-provider-settings-button'),
+          section(_ComposerSettingsPanelSection.model,
+              context.l10n.modelSessionLabel, 'session-model-button'),
+          section(
+              _ComposerSettingsPanelSection.reasoning,
+              context.l10n.reasoningEffortSessionLabel,
+              'session-reasoning-effort-button'),
+        ]);
   }
 
-  void _toggleComposerSettingsOverlay() {
-    if (_composerSettingsOverlayController.isShowing) {
-      setState(() {
-        _composerSettingsOverlayController.hide();
-        _composerSettingsPanelSection = null;
-      });
-      return;
-    }
-    setState(() {});
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_composerSettingsOverlayController.isShowing) {
-        setState(() {
-          _composerSettingsOverlayController.show();
-        });
-      }
-    });
-  }
-
-  Widget _buildComposerSettingsOverlay() {
-    final brightness = Theme.of(context).brightness;
-    final rect = _targetRectFor(_composerSettingsButtonKey);
-    if (rect == null) {
-      return const SizedBox.shrink();
-    }
-    final mediaQuery = MediaQuery.of(context);
-    final screenSize = mediaQuery.size;
-    final safeLeft = AppSpacing.screenX;
-    final safeRight = screenSize.width - AppSpacing.screenX;
-    final safeTop = mediaQuery.padding.top + AppSpacing.compact;
-    final safeBottom = screenSize.height -
-        mediaQuery.viewInsets.bottom -
-        mediaQuery.padding.bottom;
-    const primaryPanelWidth = 156.0;
-    const secondaryPanelWidth = 240.0;
-    const maxPanelHeight = 360.0;
-    final availableBelow = safeBottom - (rect.bottom + AppSpacing.micro);
-    final availableAbove = (rect.top - AppSpacing.micro) - safeTop;
-    final showBelow =
-        availableBelow >= math.min(maxPanelHeight, availableAbove);
-    final availableHeight =
-        (showBelow ? availableBelow : availableAbove).clamp(0, maxPanelHeight);
-    final primaryMaxLeft = math.max(safeLeft, safeRight - primaryPanelWidth);
-    final primaryLeft = rect.left.clamp(safeLeft, primaryMaxLeft).toDouble();
-    final top = showBelow ? rect.bottom + AppSpacing.micro : null;
-    final bottom =
-        showBelow ? null : screenSize.height - rect.top + AppSpacing.micro;
-    final preferSecondaryRight = primaryLeft +
-            primaryPanelWidth +
-            AppSpacing.micro +
-            secondaryPanelWidth <=
-        safeRight;
-    final secondaryLeft = preferSecondaryRight
-        ? primaryLeft + primaryPanelWidth + AppSpacing.micro
-        : (primaryLeft - AppSpacing.micro - secondaryPanelWidth)
-            .clamp(safeLeft, safeRight - secondaryPanelWidth)
-            .toDouble();
-
-    return Material(
-      color: Colors.transparent,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: () {
-                setState(() {
-                  _composerSettingsOverlayController.hide();
-                  _composerSettingsPanelSection = null;
-                });
-              },
-            ),
-          ),
-          Positioned(
-            left: primaryLeft,
-            top: top,
-            bottom: bottom,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: primaryPanelWidth,
-                maxWidth: primaryPanelWidth,
-                maxHeight: availableHeight.toDouble(),
-              ),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceFor(brightness),
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-                  border: Border.all(color: AppColors.outlineFor(brightness)),
-                ),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(AppSpacing.compact),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (_session.agentId == 'codex') ...[
-                        _buildComposerSettingsSectionTile(
-                          key: const Key('session-profile-settings-button'),
-                          label: 'Profile',
-                          section: _ComposerSettingsPanelSection.profile,
-                        ),
-                        const SizedBox(height: AppSpacing.compact),
-                      ],
-                      if (_providers.isNotEmpty ||
-                          isAutoProviderId(_overrideProviderId))
-                        _buildProviderSettingsRow(),
-                      if (_providers.isNotEmpty ||
-                          isAutoProviderId(_overrideProviderId))
-                        const SizedBox(height: AppSpacing.compact),
-                      _buildModelSettingsRow(),
-                      const SizedBox(height: AppSpacing.compact),
-                      _buildReasoningSettingsRow(),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          if (_composerSettingsPanelSection != null)
-            Positioned(
-              left: secondaryLeft,
-              top: top,
-              bottom: bottom,
-              child: _buildComposerSecondarySettingsPanel(
-                brightness: brightness,
-                maxHeight: availableHeight.toDouble(),
-                width: secondaryPanelWidth,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildComposerSecondarySettingsPanel({
-    required Brightness brightness,
-    required double maxHeight,
-    required double width,
-  }) {
+  Widget _buildComposerSettingsSectionContent(
+      _ComposerSettingsPanelSection section) {
     final l10n = context.l10n;
-    final children = switch (_composerSettingsPanelSection) {
+    final children = switch (section) {
       _ComposerSettingsPanelSection.profile => <Widget>[
           ..._profiles.map((profile) => _buildComposerOptionTile(
                 key: Key('session-profile-option-${profile.id}'),
@@ -3701,80 +3472,23 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
             ),
           ),
         ],
-      _ComposerSettingsPanelSection.model => <Widget>[
-          _buildComposerOptionTile(
-            key: const Key('session-model-option-default'),
-            label: l10n.modelDefault,
-            selected: _overrideModel == null,
-            onTap: () => _applyModelOverride(_defaultModelMenuValue),
-          ),
-          ..._modelOptionsForCurrentProvider.map(
-            (model) => _buildComposerOptionTile(
-              key: Key('session-model-option-$model'),
-              label: model,
-              selected: _overrideModel == model,
-              onTap: () => _applyModelOverride(model),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.compact,
-              AppSpacing.stack,
-              AppSpacing.compact,
-              AppSpacing.stack,
-            ),
-            child: TextField(
-              key: const Key('session-model-custom-input'),
-              controller: _modelCustomController,
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: l10n.customModel,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.compact,
-                  vertical: AppSpacing.compact,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-                ),
-              ),
-              onSubmitted: (value) {
-                if (value.trim().isNotEmpty) {
-                  _applyModelOverride(value.trim());
-                }
-              },
-              textInputAction: TextInputAction.done,
-            ),
-          ),
-        ],
-      null => const <Widget>[],
+      _ComposerSettingsPanelSection.model => const <Widget>[],
     };
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        minWidth: width,
-        maxWidth: width,
-        maxHeight: maxHeight,
-      ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: AppColors.surfaceFor(brightness),
-          borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-          border: Border.all(color: AppColors.outlineFor(brightness)),
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.compact),
-          child: _buildComposerOptionsPanel(children: children),
-        ),
-      ),
-    );
-  }
-
-  Rect? _targetRectFor(GlobalKey key) {
-    final renderObject = key.currentContext?.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.hasSize) {
-      return null;
-    }
-    final origin = renderObject.localToGlobal(Offset.zero);
-    return origin & renderObject.size;
+    return section == _ComposerSettingsPanelSection.model
+        ? ModelSelectionPanel(
+            client: _client,
+            provider: _providers
+                .where((p) => p.id == _overrideProviderId)
+                .firstOrNull,
+            models: _modelOptionsForCurrentProvider,
+            selectedModel: _overrideModel,
+            customController: _modelCustomController,
+            customHint: l10n.customModel,
+            defaultLabel: l10n.modelDefault,
+            keyPrefix: 'session-model',
+            onSelected: (model) =>
+                _applyModelOverride(model ?? _defaultModelMenuValue))
+        : _buildComposerOptionsPanel(children: children);
   }
 
   Widget _buildPendingAttachmentStrip({
@@ -4333,84 +4047,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
-  Widget _buildProviderSettingsRow() {
-    if (_providers.isEmpty && !isAutoProviderId(_overrideProviderId)) {
-      return const SizedBox.shrink();
-    }
-    return _buildComposerSettingsSectionTile(
-      key: const Key('session-provider-settings-button'),
-      label: context.l10n.providerSessionLabel,
-      section: _ComposerSettingsPanelSection.provider,
-    );
-  }
-
-  Widget _buildReasoningSettingsRow() {
-    return _buildComposerSettingsSectionTile(
-      key: const Key('session-reasoning-effort-button'),
-      label: context.l10n.reasoningEffortSessionLabel,
-      section: _ComposerSettingsPanelSection.reasoning,
-    );
-  }
-
-  Widget _buildModelSettingsRow() {
-    return _buildComposerSettingsSectionTile(
-      key: const Key('session-model-button'),
-      label: context.l10n.modelSessionLabel,
-      section: _ComposerSettingsPanelSection.model,
-      onSectionOpened:
-          _composerSettingsPanelSection != _ComposerSettingsPanelSection.model
-              ? _fetchModelsFromProviderApi
-              : null,
-    );
-  }
-
-  Future<void> _fetchModelsFromProviderApi() async {
-    final providerId = _overrideProviderId;
-    if (providerId == null || isAutoProviderId(providerId)) {
-      return;
-    }
-    final provider = _providers.where((p) => p.id == providerId).firstOrNull;
-    if (provider == null) return;
-
-    final baseUrl = provider.baseUrl;
-    final modelsUrl =
-        baseUrl.endsWith('/') ? '${baseUrl}models' : '$baseUrl/models';
-    final apiKey = provider.apiKey;
-    try {
-      final response = await http.get(
-        Uri.parse(modelsUrl),
-        headers: {
-          if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
-          'Content-Type': 'application/json',
-        },
-      );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final models = data['data'] as List<dynamic>?;
-        if (models != null) {
-          final modelIds = models
-              .map((m) => (m as Map<String, dynamic>)['id'] as String?)
-              .where((m) => m != null)
-              .cast<String>()
-              .toList()
-            ..sort();
-          if (modelIds.isNotEmpty && mounted) {
-            setState(() {
-              _fetchedModels = modelIds;
-            });
-          }
-        }
-      }
-    } catch (_) {
-      // Silently ignore — fall back to configured models
-    }
-  }
-
   List<String> get _modelOptionsForCurrentProvider {
     final models = <String>{};
-    if (_fetchedModels.isNotEmpty) {
-      models.addAll(_fetchedModels);
-    }
     if (_overrideProviderId != null && !isAutoProviderId(_overrideProviderId)) {
       final provider =
           _providers.where((p) => p.id == _overrideProviderId).firstOrNull;
@@ -4453,82 +4091,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     return labels.join(' • ');
   }
 
-  Widget _buildComposerSettingsSectionTile({
-    required Key key,
-    required String label,
-    required _ComposerSettingsPanelSection section,
-    VoidCallback? onSectionOpened,
-  }) {
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    final selected = _composerSettingsPanelSection == section;
-    Widget child = Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: key,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-        onTap: () {
-          setState(() {
-            final opening = _composerSettingsPanelSection != section;
-            _composerSettingsPanelSection =
-                _composerSettingsPanelSection == section ? null : section;
-            if (opening && onSectionOpened != null) {
-              onSectionOpened();
-            }
-          });
-        },
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.panelFor(brightness).withValues(
-                    alpha: brightness == Brightness.dark ? 0.62 : 0.78,
-                  )
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.compact,
-              vertical: AppSpacing.compact,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    label,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 16,
-                  color: AppColors.mutedFor(brightness),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    if (!_isMobilePlatform) {
-      child = MouseRegion(
-        onEnter: (_) {
-          setState(() {
-            final wasDifferent = _composerSettingsPanelSection != section;
-            _composerSettingsPanelSection = section;
-            if (wasDifferent && onSectionOpened != null) {
-              onSectionOpened();
-            }
-          });
-        },
-        child: child,
-      );
-    }
-    return child;
-  }
-
   Widget _buildComposerOptionsPanel({required List<Widget> children}) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -4537,54 +4099,48 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     );
   }
 
-  Widget _buildComposerOptionTile({
-    required Key key,
-    required String label,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: key,
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.compact,
-            vertical: AppSpacing.compact,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: selected
-                        ? theme.colorScheme.tertiary
-                        : AppColors.textFor(brightness),
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.compact),
-              SizedBox(
-                width: 18,
-                child: selected
-                    ? Icon(
-                        Icons.check_rounded,
-                        size: 18,
-                        color: theme.colorScheme.tertiary,
-                      )
-                    : null,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  Widget _buildComposerOptionTile(
+          {required Key key,
+          required String label,
+          required bool selected,
+          required VoidCallback onTap}) =>
+      ComposerSettingsOption(
+          key: key, label: label, selected: selected, onTap: onTap);
+
+  Future<void> _applyApprovalMode(ApprovalMode mode) async {
+    if (_savingApprovalMode) return;
+    final generation = ++_approvalModeUpdateGeneration;
+    final sessionId = _session.id;
+    final client = _client;
+    bool isCurrent() =>
+        mounted &&
+        generation == _approvalModeUpdateGeneration &&
+        _session.id == sessionId &&
+        identical(client, _client);
+    setState(() {
+      _savingApprovalMode = true;
+      _composerSettingsPanelSection = null;
+      _composerSettingsOverlayController.hide();
+    });
+    final update = () async {
+      try {
+        final saved = await client.updateSessionApprovalMode(sessionId, mode);
+        if (!mounted || !isCurrent()) return;
+        setState(() =>
+            _session = _session.copyWith(approvalMode: saved.approvalMode));
+        _syncSessionSummaryCache();
+      } catch (_) {
+        if (mounted && isCurrent()) {
+          ScaffoldMessenger.of(context).showSnackBar(AppSnackBar(
+              isError: true,
+              content: Text(context.l10n.approvalModeSaveFailed)));
+        }
+      } finally {
+        if (isCurrent()) setState(() => _savingApprovalMode = false);
+      }
+    }();
+    _pendingApprovalModeUpdate = update;
+    await update;
   }
 
   void _applyProviderOverride(String value) {
@@ -4613,7 +4169,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         });
         _syncSessionSummaryCache();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          AppSnackBar(
+            isError: true,
             content: Text(context.l10n.providerOverrideFailed),
             duration: const Duration(seconds: 3),
           ),
@@ -4656,7 +4213,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         });
         _syncSessionSummaryCache();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          AppSnackBar(
+            isError: true,
             content: Text(context.l10n.reasoningEffortOverrideFailed),
             duration: const Duration(seconds: 3),
           ),
@@ -4697,7 +4255,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       });
       _syncSessionSummaryCache();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        AppSnackBar(
+          isError: true,
           content: Text(context.l10n.modelOverrideFailed),
           duration: const Duration(seconds: 3),
         ),
@@ -5686,81 +5245,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     required Widget Function(MessageImageReference reference, int index)
         imageCardBuilder,
   }) {
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    final codeStyle = theme.textTheme.bodyMedium?.copyWith(
-      fontSize: 13,
-      height: 1.55,
-      color: textColor,
-      letterSpacing: 0.1,
-    );
-    final styleSheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
-      p: theme.textTheme.bodyLarge?.copyWith(height: 1.45, color: textColor),
-      a: theme.textTheme.bodyLarge?.copyWith(
-        height: 1.45,
-        color: textColor,
-        decoration: TextDecoration.underline,
-        decorationColor: textColor,
-      ),
-      code: codeStyle?.copyWith(
-        backgroundColor: AppColors.tintSurfaceFor(
-          brightness,
-          textColor,
-          base: Colors.transparent,
-          darkAlpha: 0.18,
-          lightAlpha: 0.10,
-        ),
-      ),
-      strong: theme.textTheme.bodyLarge?.copyWith(
-        color: textColor,
-        fontWeight: FontWeight.w700,
-      ),
-      em: theme.textTheme.bodyLarge?.copyWith(
-        color: textColor,
-        fontStyle: FontStyle.italic,
-      ),
-      listBullet: theme.textTheme.bodyLarge?.copyWith(color: textColor),
-      blockquote: theme.textTheme.bodyLarge?.copyWith(
-        color: textColor.withValues(alpha: 0.9),
-      ),
-      blockquoteDecoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(
-            color: textColor.withValues(alpha: 0.28),
-            width: 3,
-          ),
-        ),
-      ),
-      blockquotePadding: const EdgeInsets.only(left: AppSpacing.compact),
-      blockSpacing: AppSpacing.compact,
-      pPadding: const EdgeInsets.symmetric(vertical: 1),
-      horizontalRuleDecoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            width: 0.6,
-            color: textColor.withValues(alpha: 0.22),
-          ),
-        ),
-      ),
-      codeblockPadding: const EdgeInsets.fromLTRB(
-        AppSpacing.tileX,
-        AppSpacing.tileY,
-        AppSpacing.tileX,
-        AppSpacing.tileX,
-      ),
-      codeblockDecoration: BoxDecoration(
-        color: AppColors.tintSurfaceFor(
-          brightness,
-          textColor,
-          base: Colors.transparent,
-          darkAlpha: 0.14,
-          lightAlpha: 0.08,
-        ),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusPanel),
-        border: Border.all(color: textColor.withValues(alpha: 0.22)),
-      ),
-    );
-
     Widget buildImageReferences() {
       return Align(
         alignment: imageAlignment,
@@ -5776,52 +5260,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
       );
     }
 
-    Widget buildMarkdownSection(String sectionContent) {
-      return _SessionMarkdownSection(
-        data: sectionContent,
-        theme: theme,
+    final markdown = MessageMarkdown(
+        data: content,
+        theme: Theme.of(context),
         textColor: textColor,
-        styleSheet: styleSheet,
         onTapLink: _handleAssistantMarkdownLinkTap,
-      );
-    }
-
-    final markdownSections = _assistantSectionDividerPattern.hasMatch(content)
-        ? content.split(_assistantSectionDividerPattern)
-        : <String>[content];
-    final markdown = markdownSections.length == 1
-        ? buildMarkdownSection(content)
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (var index = 0;
-                  index < markdownSections.length;
-                  index += 1) ...[
-                buildMarkdownSection(markdownSections[index]),
-                if (index < markdownSections.length - 1)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.compact / 2,
-                    ),
-                    child: DecoratedBox(
-                      key: const ValueKey('markdown-horizontal-rule'),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          top: BorderSide(
-                            width: 0.6,
-                            color: textColor.withValues(alpha: 0.22),
-                          ),
-                        ),
-                      ),
-                      child: const SizedBox(
-                        width: double.infinity,
-                        height: 1,
-                      ),
-                    ),
-                  ),
-              ],
-            ],
-          );
+        showImages: false);
 
     if (shrinkToContent && imageReferences.isNotEmpty) {
       return IntrinsicWidth(
@@ -5916,7 +5360,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         onOpenLink: (href) =>
             _handleAssistantMarkdownLinkTap(href, sourceFile: file),
         sourceBuilder: (context, content) => SelectableText.rich(
-          _AssistantCodeSyntaxHighlighter(Theme.of(context)).format(content),
+          MessageCodeSyntaxHighlighter(Theme.of(context)).format(content),
           key: const ValueKey('markdown-file-preview-content'),
         ),
       ),
@@ -7954,7 +7398,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
                   .trim();
           if (message.isNotEmpty) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(message)),
+              AppSnackBar(
+                  isError: ['error', 'warning'].contains(
+                      request.payload['level'] ??
+                          request.payload['severity'] ??
+                          request.payload['type']),
+                  content: Text(message)),
             );
           }
           value = true;
@@ -9507,12 +8956,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
         _pendingApproval != null) {
       return;
     }
-    final busy =
-        _session.status == SessionStatus.running ||
+    final busy = _session.status == SessionStatus.running ||
         _session.status == SessionStatus.waiting;
     final turnId = _domainController?.state?.session.activeTurnId;
-    final canSteer =
-        busy &&
+    final canSteer = busy &&
         _session.agentId == 'codex' &&
         !_steeringUnavailable &&
         turnId != null;
@@ -9703,6 +9150,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
 
     try {
       await _pendingModelUpdate?.timeout(const Duration(seconds: 15));
+      await _pendingApprovalModeUpdate?.timeout(const Duration(seconds: 15));
       final domainController = _domainController;
       if (domainController == null) {
         throw StateError('Session controller is not ready');
@@ -10366,6 +9814,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
   }
 
   void _handleSpeechSettingsChanged() {
+    final autoTaskAnalysisEnabled =
+        appSettingsController.settings.autoTaskAnalysisEnabled;
+    if (mounted && autoTaskAnalysisEnabled != _autoTaskAnalysisEnabled) {
+      setState(() => _autoTaskAnalysisEnabled = autoTaskAnalysisEnabled);
+    }
     final nextSignature = _currentSpeechRouteSignature();
     if (nextSignature == _speechRouteSignature) {
       return;
@@ -11273,7 +10726,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen>
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$error')));
+          .showSnackBar(AppSnackBar(isError: true, content: Text('$error')));
     }
   }
 
@@ -12985,7 +12438,7 @@ class _DiffViewer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final brightness = theme.brightness;
-    final highlighter = _AssistantCodeSyntaxHighlighter(theme);
+    final highlighter = MessageCodeSyntaxHighlighter(theme);
     final lines = _parseDiffLines(patch);
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -13004,7 +12457,7 @@ class _DiffViewer extends StatelessWidget {
 
   Widget _buildSelectableView(
     List<_DiffDisplayLine> lines,
-    _AssistantCodeSyntaxHighlighter highlighter,
+    MessageCodeSyntaxHighlighter highlighter,
     Brightness brightness,
   ) =>
       Scrollbar(
@@ -13033,7 +12486,7 @@ class _DiffViewer extends StatelessWidget {
 
   Widget _buildVirtualizedView(
     List<_DiffDisplayLine> lines,
-    _AssistantCodeSyntaxHighlighter highlighter,
+    MessageCodeSyntaxHighlighter highlighter,
     Brightness brightness,
   ) =>
       LayoutBuilder(
@@ -13062,7 +12515,7 @@ class _DiffViewer extends StatelessWidget {
 
   TextSpan _buildLineSpan(
     _DiffDisplayLine diffLine,
-    _AssistantCodeSyntaxHighlighter highlighter,
+    MessageCodeSyntaxHighlighter highlighter,
     Brightness brightness,
     bool addNewline,
   ) {
@@ -13187,143 +12640,6 @@ extension on _DiffLineKind {
       };
 }
 
-class _SessionMarkdownSection extends StatefulWidget {
-  const _SessionMarkdownSection({
-    required this.data,
-    required this.theme,
-    required this.textColor,
-    required this.styleSheet,
-    required this.onTapLink,
-  });
-
-  final String data;
-  final ThemeData theme;
-  final Color textColor;
-  final MarkdownStyleSheet styleSheet;
-  final ValueChanged<String?> onTapLink;
-
-  @override
-  State<_SessionMarkdownSection> createState() =>
-      _SessionMarkdownSectionState();
-}
-
-class _SessionMarkdownSectionState extends State<_SessionMarkdownSection> {
-  late Widget _content;
-
-  @override
-  void initState() {
-    super.initState();
-    _content = _buildContent();
-  }
-
-  @override
-  void didUpdateWidget(covariant _SessionMarkdownSection oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // The stylesheet derives from theme and textColor. Reusing the existing
-    // subtree keeps selection and parsed markdown stable during other updates.
-    if (oldWidget.data != widget.data ||
-        oldWidget.theme != widget.theme ||
-        oldWidget.textColor != widget.textColor) {
-      _content = _buildContent();
-    }
-  }
-
-  Widget _buildContent() => SelectionArea(
-        child: MarkdownBody(
-          data: widget.data,
-          fitContent: true,
-          selectable: false,
-          shrinkWrap: true,
-          softLineBreak: true,
-          styleSheet: widget.styleSheet,
-          syntaxHighlighter: _AssistantCodeSyntaxHighlighter(widget.theme),
-          sizedImageBuilder: (_) => const SizedBox.shrink(),
-          onTapLink: (text, href, title) => widget.onTapLink(href),
-        ),
-      );
-
-  @override
-  Widget build(BuildContext context) => _content;
-}
-
-class _AssistantCodeSyntaxHighlighter extends SyntaxHighlighter {
-  _AssistantCodeSyntaxHighlighter(this.theme);
-
-  final ThemeData theme;
-
-  static final RegExp _tokenPattern = RegExp(
-    r'''(?<comment>//.*$|#.*$)|(?<string>"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(?<keyword>\b(?:abstract|async|await|break|case|catch|class|const|continue|def|default|else|enum|export|extends|false|final|finally|for|from|function|if|import|in|interface|let|new|null|override|print|return|static|super|switch|this|throw|true|try|var|void|while|with|yield)\b)|(?<number>\b\d+(?:\.\d+)?\b)''',
-    multiLine: true,
-  );
-
-  @override
-  TextSpan format(String source) {
-    final brightness = theme.brightness;
-    final baseStyle = theme.textTheme.bodyMedium?.copyWith(
-      color: AppColors.textFor(brightness),
-      fontSize: (theme.textTheme.bodyLarge?.fontSize ?? 14) * 0.93,
-      height: 1.55,
-      letterSpacing: 0.1,
-    );
-    final commentStyle = baseStyle?.copyWith(
-      color: AppColors.mutedSoftFor(brightness),
-      fontStyle: FontStyle.italic,
-    );
-    final stringStyle = baseStyle?.copyWith(
-      color: brightness == Brightness.dark
-          ? const Color(0xFFFFC47A)
-          : const Color(0xFF9A5200),
-    );
-    final keywordStyle = baseStyle?.copyWith(
-      color: brightness == Brightness.dark
-          ? const Color(0xFF8ED0FF)
-          : const Color(0xFF005CC5),
-      fontWeight: FontWeight.w700,
-    );
-    final numberStyle = baseStyle?.copyWith(
-      color: brightness == Brightness.dark
-          ? const Color(0xFFB7F287)
-          : const Color(0xFF2F7D32),
-    );
-
-    final spans = <TextSpan>[];
-    var currentIndex = 0;
-    for (final match in _tokenPattern.allMatches(source)) {
-      if (match.start > currentIndex) {
-        spans.add(
-          TextSpan(
-            text: source.substring(currentIndex, match.start),
-            style: baseStyle,
-          ),
-        );
-      }
-
-      final token = match.group(0)!;
-      TextStyle? style = baseStyle;
-      if (match.namedGroup('comment') != null) {
-        style = commentStyle;
-      } else if (match.namedGroup('string') != null) {
-        style = stringStyle;
-      } else if (match.namedGroup('keyword') != null) {
-        style = keywordStyle;
-      } else if (match.namedGroup('number') != null) {
-        style = numberStyle;
-      }
-
-      spans.add(TextSpan(text: token, style: style));
-      currentIndex = match.end;
-    }
-
-    if (currentIndex < source.length) {
-      spans.add(
-        TextSpan(text: source.substring(currentIndex), style: baseStyle),
-      );
-    }
-
-    return TextSpan(style: baseStyle, children: spans);
-  }
-}
-
 enum _LocalMessageState { queued, steering, pending, submitted, failed }
 
 class _LocalMessageDraft {
@@ -13344,17 +12660,18 @@ class _LocalMessageDraft {
   final List<DomainAttachment> attachments;
 
   _LocalMessageDraft withState(_LocalMessageState value) => _LocalMessageDraft(
-    state: value,
-    inputMode: inputMode,
-    createdAt: createdAt,
-    clientMessageId: clientMessageId,
-    content: content,
-    attachments: attachments,
-  );
+        state: value,
+        inputMode: inputMode,
+        createdAt: createdAt,
+        clientMessageId: clientMessageId,
+        content: content,
+        attachments: attachments,
+      );
 
   String label(BuildContext context) {
     return switch (state) {
-      _LocalMessageState.queued || _LocalMessageState.steering =>
+      _LocalMessageState.queued ||
+      _LocalMessageState.steering =>
         context.l10n.draftQueued,
       _LocalMessageState.pending => context.l10n.draftPending,
       _LocalMessageState.submitted => context.l10n.draftPending,
@@ -13510,9 +12827,8 @@ class _UserMessageBubble extends StatelessWidget {
                     constraints: const BoxConstraints(minHeight: 34),
                     child: Row(
                       key: ValueKey('user-message-status-$messageId'),
-                      mainAxisSize: shrinkToContent
-                          ? MainAxisSize.min
-                          : MainAxisSize.max,
+                      mainAxisSize:
+                          shrinkToContent ? MainAxisSize.min : MainAxisSize.max,
                       children: [
                         Flexible(
                           fit: shrinkToContent ? FlexFit.loose : FlexFit.tight,
@@ -13540,7 +12856,8 @@ class _UserMessageBubble extends StatelessWidget {
                                   Flexible(
                                     child: Text(
                                       stateLabel!,
-                                      style: theme.textTheme.bodySmall?.copyWith(
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
                                         color: statusColor,
                                         fontWeight: FontWeight.w500,
                                       ),

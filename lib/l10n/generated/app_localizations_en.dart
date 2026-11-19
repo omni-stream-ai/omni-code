@@ -9,6 +9,34 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get approvalMode => 'Approval mode';
+
+  @override
+  String get approvalModeManual => 'Manual approval';
+
+  @override
+  String get approvalModeSmart => 'Smart approval';
+
+  @override
+  String get approvalModeAuto => 'Auto approve';
+
+  @override
+  String get approvalModeManualDescription =>
+      'Ask you to approve tool requests.';
+
+  @override
+  String get approvalModeSmartDescription =>
+      'Use rules and configured AI review; ask when uncertain.';
+
+  @override
+  String get approvalModeAutoDescription =>
+      'Approve all supported tool requests, including high-risk actions.';
+
+  @override
+  String get approvalModeSaveFailed =>
+      'Could not save approval mode. Please try again.';
+
+  @override
   String get recentSessionsScope => 'Recent session scope';
 
   @override
@@ -36,6 +64,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get acceptanceRefreshStatus => 'Refresh status';
 
   @override
+  String get acceptanceRetryRun => 'Retry acceptance';
+
+  @override
   String get acceptanceErrorDetails => 'View error details';
 
   @override
@@ -43,6 +74,33 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsTitle => 'Settings';
+
+  @override
+  String get assistantSection => 'Assistant';
+
+  @override
+  String get automaticTaskAnalysis => 'Automatically analyze tasks';
+
+  @override
+  String get automaticTaskAnalysisHelp =>
+      'Identify tasks from conversations and update their progress automatically. When off, show linked conversations and hide task lists.';
+
+  @override
+  String get taskAnalysisPrompt => 'Task analysis prompt';
+
+  @override
+  String get taskAnalysisPromptHelp =>
+      'Only development tasks are identified by default. Customize which requests count as tasks.';
+
+  @override
+  String get taskAnalysisPromptEditorHelp =>
+      'This prompt is saved on the current Bridge and shared by all clients. The next analysis will reassess existing tasks using these rules. Save an empty prompt to restore the default.';
+
+  @override
+  String get taskAnalysisPromptReset => 'Restore default';
+
+  @override
+  String get taskAnalysisPromptLoading => 'Loading task analysis prompt…';
 
   @override
   String get save => 'Save';
@@ -555,6 +613,153 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get connectWelcomeBody =>
       'Run the Bridge service on your computer, then authorize this device to open projects and continue sessions.';
+
+  @override
+  String get connectDesktopWelcomeBody =>
+      'Install Bridge on this computer, or connect to a Bridge that is already running.';
+
+  @override
+  String get connectExistingBridgeTitle => 'Connect to an existing Bridge';
+
+  @override
+  String get connectExistingBridgeBody =>
+      'Enter the address of a Bridge running on this or another computer, then authorize this device.';
+
+  @override
+  String get localBridgeTitle => 'Run Bridge on this computer';
+
+  @override
+  String get localBridgeBody =>
+      'Download, install, start, and connect in one click. Bridge starts automatically when you sign in and keeps running after you close the client.';
+
+  @override
+  String get localBridgeInstallAction => 'Install and enable auto-start';
+
+  @override
+  String get localBridgeChecking => 'Checking this computer…';
+
+  @override
+  String get localBridgeDownloading => 'Downloading Bridge…';
+
+  @override
+  String get localBridgeInstalling => 'Verifying and installing…';
+
+  @override
+  String get localBridgeConfiguring => 'Configuring auto-start…';
+
+  @override
+  String get localBridgeStarting => 'Starting Bridge…';
+
+  @override
+  String get localBridgeAuthorizing => 'Authorizing and connecting…';
+
+  @override
+  String get localBridgeExistingError =>
+      'A service is already using local port 8787. Use “Connect to an existing Bridge” below to avoid a duplicate installation.';
+
+  @override
+  String get localBridgeIncompatibleError =>
+      'This Bridge version is incompatible with the client. Update Bridge to a compatible release, or continue with Agent.';
+
+  @override
+  String get localBridgeDownloadError =>
+      'Could not download a Bridge release for this computer. Check your connection to GitHub and retry.';
+
+  @override
+  String get localBridgeVerifyError =>
+      'The download failed verification or has no checksum and was not run. Retry the download.';
+
+  @override
+  String get localBridgeInstallError =>
+      'Installation did not finish. Check your home directory permissions and system compatibility, then retry.';
+
+  @override
+  String get localBridgeStartupError =>
+      'Bridge has not started successfully. Check the logs in .omni-code-bridge in your home directory and startup permissions, then retry.';
+
+  @override
+  String get localBridgeAuthError =>
+      'Bridge is installed, but local authorization did not finish. Retry or use “Connect to an existing Bridge”.';
+
+  @override
+  String get localBridgeUnsupportedError =>
+      'Automatic installation is not supported on this system or processor. Connect to an existing Bridge.';
+
+  @override
+  String get localBridgeBusyError =>
+      'Another window is installing Bridge. Wait for it to finish, then retry.';
+
+  @override
+  String get bridgeAgentContinue => 'Continue with Agent';
+
+  @override
+  String get bridgeAgentTitle => 'Agent-assisted Bridge setup';
+
+  @override
+  String get bridgeAgentIntro =>
+      'Use your configured model to analyze the failure and local diagnostics and help finish installation. Repair commands are shown for you to run before they execute.';
+
+  @override
+  String get bridgeAgentConfigureModel => 'Configure assistant model';
+
+  @override
+  String get bridgeAgentSaveAndContinue => 'Save and continue';
+
+  @override
+  String get bridgeAgentInvalidUrl =>
+      'Enter an HTTP or HTTPS API address without credentials, query parameters, or fragments.';
+
+  @override
+  String get bridgeAgentChooseModel => 'Choose assistant model';
+
+  @override
+  String get bridgeAgentInitialRequest =>
+      'Analyze the failed installation. Help me install and start the local Bridge, enable startup at sign-in, and connect this desktop client.';
+
+  @override
+  String get bridgeAgentModelRequired =>
+      'No usable model is configured. Enter the API address, credentials, and a specific model. Setup assistance continues after you save.';
+
+  @override
+  String get bridgeAgentSaveError =>
+      'Could not save the model configuration. Check local settings storage permissions and retry.';
+
+  @override
+  String get bridgeAgentAuthError =>
+      'The model endpoint rejected the request. Check the API key, account permissions, and API format.';
+
+  @override
+  String get bridgeAgentRateLimit =>
+      'The model endpoint is rate limited. Retry later or choose another model.';
+
+  @override
+  String get bridgeAgentTurnLimit =>
+      'This turn reached the automatic step limit. Add more information to continue with the agent.';
+
+  @override
+  String get bridgeAgentRequestError =>
+      'The model request did not finish. Check your connection, API address, model name, and API format, then retry.';
+
+  @override
+  String get bridgeAgentRunCommand => 'Run this command';
+
+  @override
+  String get bridgeAgentDeclineCommand => 'Do not run';
+
+  @override
+  String get bridgeAgentMessageHint =>
+      'Add environment details or tell the agent what to do next…';
+
+  @override
+  String get bridgeAgentActionDone => 'The local action finished.';
+
+  @override
+  String get bridgeAgentCommandSkipped =>
+      'Command skipped. The agent will consider another approach.';
+
+  @override
+  String get bridgeAgentActionFailed =>
+      'The local action did not finish. The agent will use the failure details to continue.';
 
   @override
   String get connectBridgeHint =>
@@ -3094,7 +3299,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get shortcutSearchHint => 'Search projects and sessions…';
+  String get shortcutSearchHint => 'Search tasks, projects and sessions…';
+
+  @override
+  String get shortcutConversationSearchHint => 'Search projects and sessions…';
 
   @override
   String get acceptanceVideoLoading => 'Loading acceptance recording…';
@@ -3170,4 +3378,201 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get relayCheckConnection =>
       'Check Relay sign-in, service status and access in Settings.';
+
+  @override
+  String get projectRuntimeTitle => 'Project runtimes';
+
+  @override
+  String get projectRuntimeEntryHint =>
+      'Start subprojects on the server or in Docker, and view their status and Agent leases';
+
+  @override
+  String get projectRuntimeHint =>
+      'Each subproject remembers its location and defaults to the Bridge server. Docker uses frozen source and the configured acceptance image. Running means the process or container is alive; check application readiness separately. Agents can query and exclusively lease a running environment.';
+
+  @override
+  String get projectRuntimeConfigure => 'Configure project environment';
+
+  @override
+  String get projectRuntimeAddTarget => 'Add subproject';
+
+  @override
+  String get projectRuntimeEditTarget => 'Edit settings';
+
+  @override
+  String get projectRuntimeRenameTarget => 'Rename';
+
+  @override
+  String get projectRuntimeDeleteTarget => 'Delete subproject';
+
+  @override
+  String get projectRuntimeDeleteAfterStop => 'Stop before deleting';
+
+  @override
+  String get projectRuntimeTargetActions => 'Subproject actions';
+
+  @override
+  String get projectRuntimeTargetName => 'Display name';
+
+  @override
+  String get projectRuntimeTargetDirectory => 'Subproject directory';
+
+  @override
+  String get projectRuntimeTargetDirectoryHint =>
+      'An existing directory relative to the project root, such as backend. Use . for the root.';
+
+  @override
+  String get projectRuntimeTargetCommandsHint =>
+      'Commands run from the project root. Changes to a running service apply on its next start.';
+
+  @override
+  String get projectRuntimeTargetRequired => 'This field is required.';
+
+  @override
+  String projectRuntimeDeleteTargetConfirm(String name) {
+    return 'Delete $name?';
+  }
+
+  @override
+  String get projectRuntimeDeleteTargetHint =>
+      'Remove this runtime configuration and exclude it from automatic detection. Source files are kept. You can add the directory again manually.';
+
+  @override
+  String get projectRuntimeAutoConfigure => 'Auto-configure all environments';
+
+  @override
+  String get projectRuntimeAutoConfiguring =>
+      'Identifying subproject settings from project files; Agent will fill unresolved settings if needed…';
+
+  @override
+  String projectRuntimeAutoConfigured(int total, int ready) {
+    return 'Saved settings for $total subprojects; $ready have a start command.';
+  }
+
+  @override
+  String get projectRuntimeStartRequired =>
+      'A start command is required. Edit settings or use auto-configuration.';
+
+  @override
+  String get projectRuntimeConfigHint =>
+      'Subproject settings are shared by manual runs and acceptance. Commands run from the project root. Host runs execute only the start command; image settings below apply to Docker.';
+
+  @override
+  String get projectRuntimeBuildTitle => 'Subproject build and start settings';
+
+  @override
+  String get projectRuntimeBuildHint =>
+      'Select subprojects and edit their install, build, and start commands. Saved settings can be used for manual runs and acceptance.';
+
+  @override
+  String get projectRuntimeLocation =>
+      'Next run location (saved automatically)';
+
+  @override
+  String get projectRuntimeHost => 'Bridge server';
+
+  @override
+  String get projectRuntimeDocker => 'Acceptance Docker environment';
+
+  @override
+  String get projectRuntimeStarting => 'Starting';
+
+  @override
+  String get projectRuntimeRunning => 'Running';
+
+  @override
+  String get projectRuntimeStopping => 'Stopping';
+
+  @override
+  String get projectRuntimeStopped => 'Stopped';
+
+  @override
+  String get projectRuntimeFailed => 'Failed';
+
+  @override
+  String get projectRuntimeUnknown => 'Unknown';
+
+  @override
+  String get projectRuntimeStart => 'Start';
+
+  @override
+  String get projectRuntimeStop => 'Stop';
+
+  @override
+  String get projectRuntimeLogs => 'Runtime logs';
+
+  @override
+  String get projectRuntimeNoLogs => 'No logs yet';
+
+  @override
+  String get projectRuntimeDesktop => 'View Docker desktop';
+
+  @override
+  String get projectRuntimeEmpty =>
+      'No subprojects yet. Add one manually or use auto-configuration.';
+
+  @override
+  String get projectRuntimeAvailable => 'Available for an Agent to lease';
+
+  @override
+  String projectRuntimeOccupied(String session) {
+    return 'Leased by Agent: $session';
+  }
+
+  @override
+  String projectRuntimeCurrentLocation(String location) {
+    return 'Current location: $location';
+  }
+
+  @override
+  String projectRuntimeSnapshot(String revision) {
+    return 'Frozen source revision: $revision';
+  }
+
+  @override
+  String get acceptanceRepairTitle => 'Repair history';
+
+  @override
+  String get acceptanceRepairHint =>
+      'Automatic repair has paused. Continue with Agent or adjust the configuration, then retry with the original test cases.';
+
+  @override
+  String get acceptanceRepairActive =>
+      'Agent is using the errors below to repair the environment. You can continue the conversation after automatic repair stops.';
+
+  @override
+  String get acceptanceRepairChat => 'Continue repair with Agent';
+
+  @override
+  String get acceptanceRepairStartup => 'Edit startup configuration';
+
+  @override
+  String get acceptanceRepairEnvironment => 'Edit environment and retry';
+
+  @override
+  String get acceptanceRepairRetry => 'Retry after repair';
+
+  @override
+  String get acceptanceRepairStartupJson => 'Startup configuration (JSON)';
+
+  @override
+  String get acceptanceRepairInvalidStartup =>
+      'Enter a valid JSON object for the startup configuration.';
+
+  @override
+  String get acceptanceAnalysisTitle => 'Analyze acceptance results';
+
+  @override
+  String get acceptanceAnalysisHint =>
+      'Ask Agent to analyze the verdict, checks, errors, and evidence references.';
+
+  @override
+  String get acceptanceAnalyzeCurrent => 'Analyze in current session';
+
+  @override
+  String get acceptanceAnalyzeNew => 'Analyze in new session';
+
+  @override
+  String get acceptanceAnalysisNoSession =>
+      'This run has no source session. You can analyze it in a new session.';
 }

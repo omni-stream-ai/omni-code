@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../widgets/app_snack_bar.dart';
 import '../acceptance_models.dart';
 import '../bridge_client.dart';
 import '../l10n/app_locale.dart';
@@ -20,12 +21,14 @@ class AcceptanceEnvironmentScreen extends StatefulWidget {
       this.sessionId,
       this.requirements,
       this.onRequirementsSaved,
+      this.generalPurpose = false,
       this.reviewBeforeStart = false});
   final BridgeClient client;
   final String projectId;
   final String? sessionId, requirements;
   final ValueChanged<String>? onRequirementsSaved;
   final bool reviewBeforeStart;
+  final bool generalPurpose;
   @override
   State<AcceptanceEnvironmentScreen> createState() =>
       _AcceptanceEnvironmentScreenState();
@@ -142,8 +145,9 @@ class _AcceptanceEnvironmentScreenState
   Future<void> load() async {
     var identifyAutomatically = false;
     try {
-      final value =
-          await widget.client.getAcceptanceEnvironment(widget.projectId);
+      final value = await widget.client.getAcceptanceEnvironment(
+          widget.projectId,
+          generalPurpose: widget.generalPurpose);
       if (!mounted) return;
       setState(() {
         settings = value;
@@ -210,11 +214,12 @@ class _AcceptanceEnvironmentScreenState
               buildReasoning: buildReasoning,
               dockerfile: mode == 'dockerfile' ? dockerfile.text : '',
               image: mode == 'image' ? image.text.trim() : ''),
-          rebuild: rebuild);
+          rebuild: rebuild,
+          generalPurpose: widget.generalPurpose);
       if (!mounted) return;
       widget.onRequirementsSaved?.call(requirements.text.trim());
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.acceptanceEnvironmentSaved)));
+          AppSnackBar(content: Text(context.l10n.acceptanceEnvironmentSaved)));
       Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) setState(() => error = e);
@@ -232,6 +237,7 @@ class _AcceptanceEnvironmentScreenState
     try {
       final result = await widget.client.detectAcceptanceBuild(widget.projectId,
           agent: true,
+          generalPurpose: widget.generalPurpose,
           sessionId: widget.sessionId,
           requirements: requirements.text.trim(),
           currentTargets: buildTargets,
@@ -315,7 +321,8 @@ class _AcceptanceEnvironmentScreenState
     } catch (e) {
       if (mounted) {
         setState(() => error = e);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(AppSnackBar(
+            isError: true,
             content: Text(e.toString(),
                 maxLines: 3, overflow: TextOverflow.ellipsis)));
       }
@@ -334,7 +341,10 @@ class _AcceptanceEnvironmentScreenState
       'image': l.acceptanceEnvironmentImageHint
     };
     return Scaffold(
-      appBar: AppBar(title: Text(l.acceptanceEnvironmentTitle)),
+      appBar: AppBar(
+          title: Text(widget.generalPurpose
+              ? l.projectRuntimeConfigure
+              : l.acceptanceEnvironmentTitle)),
       bottomNavigationBar: settings == null
           ? null
           : SafeArea(
@@ -370,10 +380,14 @@ class _AcceptanceEnvironmentScreenState
                         padding: const EdgeInsets.all(16),
                         children: [
                           AcceptanceIntro(
-                              title: l.acceptanceEnvironmentOverview,
-                              subtitle: widget.reviewBeforeStart
-                                  ? l.acceptanceBuildReview
-                                  : l.acceptanceEnvironmentHint,
+                              title: widget.generalPurpose
+                                  ? l.projectRuntimeTitle
+                                  : l.acceptanceEnvironmentOverview,
+                              subtitle: widget.generalPurpose
+                                  ? l.projectRuntimeConfigHint
+                                  : widget.reviewBeforeStart
+                                      ? l.acceptanceBuildReview
+                                      : l.acceptanceEnvironmentHint,
                               icon: Icons.layers_outlined),
                           const SizedBox(height: 16),
                           if (error != null) ...[
@@ -386,10 +400,13 @@ class _AcceptanceEnvironmentScreenState
                               TextButton(onPressed: load, child: Text(l.retry)),
                           ],
                           if (settings != null) ...[
-                            if (mode == 'auto') ...[
+                            if (mode == 'auto' || widget.generalPurpose) ...[
                               AcceptanceBuildForm(
                                   controllers: buildFields,
-                                  requirements: requirements,
+                                  generalPurpose: widget.generalPurpose,
+                                  requirements: widget.generalPurpose
+                                      ? null
+                                      : requirements,
                                   onIdentify: () => identify(),
                                   busy: saving || detecting,
                                   detecting: detecting,

@@ -36,6 +36,7 @@ class AppSettings {
   const AppSettings({
     this.desktopShortcuts = const {},
     this.relay = const RelaySettings(),
+    this.localModelProviders = const [],
     required this.bridgeUrl,
     required this.bridgeToken,
     required this.clientId,
@@ -72,6 +73,10 @@ class AppSettings {
     required this.lastSelectedProviderByProject,
     this.lastSelectedModelByProject = const {},
     required this.desktopNavigationCollapsed,
+    this.homeShowMainAgent = true,
+    this.homeShowRecentSessions = true,
+    this.homeShowRecentTasks = true,
+    this.autoTaskAnalysisEnabled = true,
     this.recentSessionsCurrentProjectOnly = true,
     required this.desktopHomeRailCollapsed,
     required this.desktopSessionRailCollapsed,
@@ -87,6 +92,9 @@ class AppSettings {
   final String bridgeUrl;
   final Map<DesktopShortcutAction, DesktopKeyBinding?> desktopShortcuts;
   final RelaySettings relay;
+  // Bootstrap tools must work before a Bridge is available. This list is saved
+  // in the same encrypted store as the other client credentials.
+  final List<ModelProviderConfig> localModelProviders;
   String get connectionUrl => relay.enabled ? relay.serviceUrl : bridgeUrl;
   final String bridgeToken;
   final String clientId;
@@ -123,6 +131,10 @@ class AppSettings {
   final Map<String, String?> lastSelectedProviderByProject;
   final Map<String, String?> lastSelectedModelByProject;
   final bool desktopNavigationCollapsed;
+  final bool homeShowMainAgent;
+  final bool homeShowRecentSessions;
+  final bool homeShowRecentTasks;
+  final bool autoTaskAnalysisEnabled;
   final bool recentSessionsCurrentProjectOnly;
   final bool desktopHomeRailCollapsed;
   final bool desktopSessionRailCollapsed;
@@ -218,6 +230,7 @@ class AppSettings {
   AppSettings copyWith({
     Map<DesktopShortcutAction, DesktopKeyBinding?>? desktopShortcuts,
     RelaySettings? relay,
+    List<ModelProviderConfig>? localModelProviders,
     String? bridgeUrl,
     String? bridgeToken,
     String? clientId,
@@ -254,6 +267,10 @@ class AppSettings {
     Map<String, String?>? lastSelectedProviderByProject,
     Map<String, String?>? lastSelectedModelByProject,
     bool? desktopNavigationCollapsed,
+    bool? homeShowMainAgent,
+    bool? homeShowRecentSessions,
+    bool? homeShowRecentTasks,
+    bool? autoTaskAnalysisEnabled,
     bool? recentSessionsCurrentProjectOnly,
     bool? desktopHomeRailCollapsed,
     bool? desktopSessionRailCollapsed,
@@ -274,6 +291,9 @@ class AppSettings {
       desktopShortcuts:
           Map.unmodifiable(desktopShortcuts ?? this.desktopShortcuts),
       relay: relay ?? this.relay,
+      localModelProviders: List.unmodifiable(
+        localModelProviders ?? this.localModelProviders,
+      ),
       bridgeUrl: bridgeUrl ?? this.bridgeUrl,
       bridgeToken: bridgeToken ?? this.bridgeToken,
       clientId: clientId ?? this.clientId,
@@ -332,6 +352,12 @@ class AppSettings {
       ),
       desktopNavigationCollapsed:
           desktopNavigationCollapsed ?? this.desktopNavigationCollapsed,
+      homeShowMainAgent: homeShowMainAgent ?? this.homeShowMainAgent,
+      homeShowRecentSessions:
+          homeShowRecentSessions ?? this.homeShowRecentSessions,
+      homeShowRecentTasks: homeShowRecentTasks ?? this.homeShowRecentTasks,
+      autoTaskAnalysisEnabled:
+          autoTaskAnalysisEnabled ?? this.autoTaskAnalysisEnabled,
       recentSessionsCurrentProjectOnly: recentSessionsCurrentProjectOnly ??
           this.recentSessionsCurrentProjectOnly,
       desktopHomeRailCollapsed:
@@ -378,6 +404,9 @@ class AppSettings {
           entry.key.name: entry.value?.toJson(),
       },
       'relay': relay.toJson(),
+      'local_model_providers': [
+        for (final provider in localModelProviders) provider.toJson(),
+      ],
       'bridge_url': bridgeUrl,
       'bridge_token': bridgeToken,
       'client_id': clientId,
@@ -413,6 +442,10 @@ class AppSettings {
       'last_selected_provider_by_project': lastSelectedProviderByProject,
       'last_selected_model_by_project': lastSelectedModelByProject,
       'desktop_navigation_collapsed': desktopNavigationCollapsed,
+      'home_show_main_agent': homeShowMainAgent,
+      'home_show_recent_sessions': homeShowRecentSessions,
+      'home_show_recent_tasks': homeShowRecentTasks,
+      'auto_task_analysis_enabled': autoTaskAnalysisEnabled,
       'recent_sessions_current_project_only': recentSessionsCurrentProjectOnly,
       'desktop_home_rail_collapsed': desktopHomeRailCollapsed,
       'desktop_session_rail_collapsed': desktopSessionRailCollapsed,
@@ -431,6 +464,11 @@ class AppSettings {
     return AppSettings(
       desktopShortcuts: parseDesktopShortcuts(json['desktop_shortcuts']),
       relay: RelaySettings.fromJson(json['relay']),
+      localModelProviders: List.unmodifiable(
+        (json['local_model_providers'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(ModelProviderConfig.fromJson),
+      ),
       bridgeUrl: _readString(json, 'bridge_url').trim().isNotEmpty
           ? _readString(json, 'bridge_url').trim()
           : defaults.bridgeUrl,
@@ -557,6 +595,14 @@ class AppSettings {
         'desktop_navigation_collapsed',
         defaults.desktopNavigationCollapsed,
       ),
+      homeShowMainAgent:
+          _readBool(json, 'home_show_main_agent', defaults.homeShowMainAgent),
+      homeShowRecentSessions: _readBool(
+          json, 'home_show_recent_sessions', defaults.homeShowRecentSessions),
+      homeShowRecentTasks: _readBool(
+          json, 'home_show_recent_tasks', defaults.homeShowRecentTasks),
+      autoTaskAnalysisEnabled: _readBool(
+          json, 'auto_task_analysis_enabled', defaults.autoTaskAnalysisEnabled),
       recentSessionsCurrentProjectOnly: _readBool(
         json,
         'recent_sessions_current_project_only',

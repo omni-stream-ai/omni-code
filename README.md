@@ -41,6 +41,19 @@ Current Flutter screens · Mobile and desktop · Light and dark themes
 
 ## Install
 
+On desktop, the welcome screen offers **Install and enable auto-start** or
+**Connect to an existing Bridge**. One click downloads and verifies the official
+Bridge release, installs it for the current user, enables startup at sign-in,
+starts it, and authorizes and connects the desktop client. Bridge keeps running
+when the client closes. No separate Bridge download or terminal command is needed.
+Mobile and web clients connect to a Bridge running on a computer.
+
+If setup fails, **Continue with Agent** offers local assistance. Without an
+available model configuration, it prompts for one first and continues after save.
+
+See [Desktop Bridge setup](docs/desktop-bridge-setup.md) for service locations,
+logs, and how to disable auto-start.
+
 | Platform | Download |
 | --- | --- |
 | Android | [APK (arm64)](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-android-arm64-v8a.apk) · [APK (arm)](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-android-armeabi-v7a.apk) · [APK (x86_64)](https://github.com/omni-stream-ai/omni-code/releases/latest/download/omni-code-android-x86_64.apk) |
